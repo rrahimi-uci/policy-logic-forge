@@ -1,0 +1,41 @@
+# Dependencies
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Secrets
+.env
+.env.*
+!.env.example
+config.json
+
+# Local databases (adaptive limiter state)
+*.sqlite
+*.sqlite3
+*.db-wal
+*.db-shm
+
+# Generated pipeline output (regenerable; see benchmarks/README.md and
+# k-to-code.md for how to reproduce a run)
+pipeline-output/
+
+# Redistribution-restricted benchmark pilot samples (OPP-115, MAPP — see
+# README.md "Data and licensing"). CUAD and ContractNLI pilots ARE committed
+# under compliance-files/ since both are CC BY 4.0.
+compliance-files/privacy_policy_pilot/
+compliance-files/mobile_app_privacy_pilot/
+
+# Benchmark corpora (downloaded, not vendored — see benchmarks/README.md)
+benchmarks/data/
+benchmarks/raw/
+benchmarks/*-source-docs/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/

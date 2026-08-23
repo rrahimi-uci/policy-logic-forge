@@ -1,0 +1,109 @@
+{
+  "openai": {
+    "api_key": "${OPENAI_API_KEY}",
+    "models": {
+      "reasoning": "gpt-5.2",
+      "reasoning_effort": "medium",
+      "optimizer": "gpt-5.2"
+    },
+    "rate_limiting": {
+      "max_retries": 1,
+      "timeout": 900
+    }
+  },
+  "llm": {
+    "default_temperature": 0.7,
+    "default_max_tokens": 8192,
+    "default_model": "gpt-5.2"
+  },
+  "pipeline": {
+    "max_workers": 40,
+    "document_workers": 6,
+    "performance": {
+      "llm_concurrency": 16,
+      "reasoning_max_completion_tokens": 32768,
+      "global_llm_concurrency_initial": 12,
+      "global_llm_concurrency_max": 32,
+      "global_llm_concurrency_min": 1,
+      "global_llm_success_window": 3,
+      "global_llm_lease_seconds": 900,
+      "global_llm_poll_seconds": 0.1,
+      "readiness_workers": 40,
+      "readiness_llm_concurrency": 16,
+      "readiness_rules_per_request": 4,
+      "remediation_workers": 40,
+      "remediation_llm_concurrency": 16,
+      "remediation_rules_per_request": 4,
+      "remediation_pairs_per_request": 12,
+      "remediation_max_passes": 3,
+      "grounding_workers": 40,
+      "grounding_llm_concurrency": 24,
+      "grounding_rules_per_request": 4,
+      "grounding_claims_per_request": 48,
+      "grounding_relationships_per_request": 12,
+      "entity_early_stop": true,
+      "entity_min_iterations": 2
+    },
+    "supported_extensions": [".pdf", ".txt", ".md", ".docx"]
+  },
+  "directories": {
+    "source": "compliance-files"
+  },
+  "document_organizer": {
+    "chunk_size_target": 2000,
+    "max_chunk_size": 3000,
+    "min_chunk_size": 500,
+    "chunk_overlap": 200,
+    "csv_rows_per_chunk": 50,
+    "max_content_for_analysis": 12000,
+    "simple_chunk_size": 3000,
+    "docx_fallback_chunk_size": 2000
+  },
+  "entity_extractor": {
+    "n_iterations": 3,
+    "temperature": 0.7,
+    "max_tokens": 8192
+  },
+  "rules_extractor": {
+    "target_rules": 30,
+    "rules_per_batch": 5,
+    "rules_per_batch_openai": 5,
+    "batch_size": 8,
+    "max_content_length": 8000,
+    "target_words_per_batch": 4500,
+    "temperature": 0.7,
+    "max_tokens": 32768,
+    "low_confidence_threshold": 70,
+    "default_confidence_score": 75,
+    "confidence_weights": {
+      "extraction_clarity": 0.3,
+      "numeric_precision": 0.25,
+      "context_completeness": 0.2,
+      "source_authority": 0.15,
+      "logical_consistency": 0.1
+    }
+  },
+  "optimizer": {
+    "model": "gpt-5.2",
+    "dedup_temperature": 0.2,
+    "dedup_max_tokens": 8192,
+    "dependency_temperature": 0.7,
+    "dependency_max_tokens": 16384,
+    "batch_size": 25,
+    "description_truncation_length": 500,
+    "batched_temperature": 0.2,
+    "batched_max_tokens": 16384,
+    "cross_batch_temperature": 0.2,
+    "cross_batch_max_tokens": 8192
+  },
+  "domain": {
+    "active": "nda_confidentiality",
+    "prompts_base_dir": "domain-prompts",
+    "available": [
+      "nda_confidentiality",
+      "privacy_policy",
+      "mobile_app_privacy",
+      "commercial_contracts"
+    ]
+  }
+}
