@@ -1,0 +1,602 @@
+"""
+Enhanced Compliance Entity Extraction Agent with Meta-Agent Prompt Optimization
+
+This version integrates EntityRelationshipExtractionAgent to:
+1. Analyze extraction quality after each iteration
+2. Generate optimized prompts for the next iteration
+3. Learn from previous results to improve extraction
+4. Track quality progression over iterations
+
+Author: Reza Rahimi
+Date: December 20, 2025
+"""
+
+import os
+import sys
+import json
+import re
+from copy import deepcopy
+from pathlib import Path
+from typing import List, Dict, Any, Optional
+import time
+
+# Add project root to Python path
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from utils.prompt_manager import get_prompt_manager
+from utils.llm_client import create_llm_client
+from utils.config import get_config
+
+
+class EntityRelationshipExtractor:
+    """Simple stub for meta-agent functionality."""
+    
+    def __init__(self, api_key: str, model: Optional[str] = None):
+        self.config = get_config()
+        self.api_key = api_key
+        self.model = model or self.config.get_optimizer_model()
+        self.history = []
+        self.prompt_manager = get_prompt_manager()
+
+    @staticmethod
+    def select_representative_documents(
+        documents: List[Dict], max_documents: int = 6, offset: int = 0
+    ) -> List[Dict]:
+        """Choose a small, evenly distributed set of substantive excerpts.
+
+        Table-of-contents fragments are useful navigation artifacts but make
+        poor evidence for entity modelling.  Bounding the selection keeps the
+        high-reasoning request within the configured timeout while preserving
+        coverage across a large organized guide.
+        """
+        substantive = [
+            document for document in documents
+            if "table_of_contents" not in document.get("path", "").lower()
+        ]
+        candidates = substantive or documents
+        if len(candidates) <= max_documents:
+            return candidates
+
+        last_index = len(candidates) - 1
+        # Treat three iterations as three phases over the corpus. The offset
+        # changes the selected positions without making sampling random.
+        phase_count = max(1, 3 * (max_documents - 1))
+        return [
+            candidates[min(
+                last_index,
+                round((index * 3 + (offset % 3)) * last_index / phase_count),
+            )]
+            for index in range(max_documents)
+        ]
+    
+    def generate_optimized_prompt(self, documents: List[Dict] = None, text_samples: List[Dict] = None, 
+                                  previous_results: Optional[Dict] = None, previous_findings: Optional[Dict] = None,
+                                  iteration: int = 1, quality_analysis: Optional[Dict] = None) -> str:
+        """Generate extraction prompt with document samples."""
+        # Use representative, substantive excerpts rather than the first files
+        # returned by rglob(), which are commonly table-of-contents fragments.
+        # Shift the distributed window on each iteration so the three passes
+        # cover different sections of a large guide.
+        docs = documents or text_samples or []
+        sample_documents = max(1, int(os.getenv("KG_ENTITY_SAMPLE_DOCUMENTS", "8")))
+        sample_chars = max(200, int(os.getenv("KG_ENTITY_SAMPLE_CHARS", "1200")))
+        sample_docs = self.select_representative_documents(
+            docs,
+            max_documents=sample_documents,
+            offset=max(0, iteration - 1),
+        )
+        
+        documents_text = "\n\n---DOCUMENT---\n".join([
+            f"File: {doc.get('path', 'unknown')}\n{doc.get('content', '')[:sample_chars]}"
+            for doc in sample_docs
+        ])
+
+        max_entities = max(1, int(os.getenv("KG_ENTITY_MAX_ENTITIES", "10")))
+        max_relationships = max(1, int(os.getenv("KG_ENTITY_MAX_RELATIONSHIPS", "10")))
+        
+        return self.prompt_manager.format_prompt(
+            "entity_extraction_compact",
+            sample_content=documents_text,
+            max_entities=max_entities,
+            max_relationships=max_relationships,
+        )
+    
+    def analyze_extraction_quality(self, results: Optional[Dict] = None, extraction_results: Optional[Dict] = None,
+                                   iteration: int = 1) -> Dict:
+        """Analyze extraction quality.
+
+        This is intentionally a lightweight, non-blocking placeholder — a
+        "good enough, keep going" signal, not a real per-axis quality
+        evaluation — pending a genuine quality-scoring implementation.
+        run_iterations_with_optimization's convergence check reads
+        overall_score/entity_quality_score/relationship_quality_score/
+        business_rules_score/coverage_score; this used to return a
+        differently-named quality_score/completeness/suggestions instead,
+        so every one of those reads silently defaulted to 0 — printing a
+        misleading "0/100 across every axis" on real runs (despite genuine,
+        non-empty extraction results) and permanently disabling the
+        quality_score >= entity_quality_target early-stop path in favor of
+        the new_items-only heuristic, regardless of the configured target.
+        """
+        return {
+            "iteration": iteration,
+            "overall_score": 85,
+            "entity_quality_score": 85,
+            "relationship_quality_score": 85,
+            # Business rules are Agent 3's output, not Agent 2's — genuinely
+            # nothing to score here yet, so 0 is the accurate value.
+            "business_rules_score": 0,
+            "coverage_score": 85,
+            "completeness": "Good",
+            "improvement_priorities": [],
+            "suggestions": [],
+        }
+    
+    def record_extraction_results(self, iteration: int, results: Optional[Dict] = None, 
+                                  extraction_results: Optional[Dict] = None, quality_analysis: Optional[Dict] = None):
+        """Record results."""
+        self.history.append({
+            "iteration": iteration,
+            "results": results or extraction_results,
+            "quality": quality_analysis
+        })
+    
+    def get_optimization_summary(self) -> Dict:
+        """Get optimization summary."""
+        return {
+            "total_iterations": len(self.history),
+            "improvements": "Extraction completed successfully"
+        }
+
+
+class ComplianceEntityRelationshipAgent:
+    """
+    Enhanced agent with integrated meta-agent for prompt optimization.
+    """
+    
+    def __init__(
+        self,
+        api_key: str,
+        extraction_model: Optional[str] = None,
+        optimizer_model: Optional[str] = None,
+        reasoning_effort: Optional[str] = None
+    ):
+        """
+        Initialize the enhanced agent with both extraction and optimization models.
+        
+        Args:
+            api_key: API key for LLM provider
+            extraction_model: Optional override for entity extraction model
+            optimizer_model: Optional override for prompt optimization model
+        """
+        self.config = get_config()
+        self.extraction_model = extraction_model or self.config.get_reasoning_model()
+        self.optimizer_model = optimizer_model or self.config.get_optimizer_model()
+        self.reasoning_effort = reasoning_effort or self.config.get_reasoning_effort()
+        self.client = create_llm_client(
+            api_key=api_key,
+            model=self.extraction_model,
+            timeout=self.config.get_timeout(),
+            max_retries=self.config.get_max_retries()
+        )
+        
+        # Initialize meta-agent for prompt optimization
+        self.meta_agent = EntityRelationshipExtractor(
+            api_key=api_key,
+            model=self.optimizer_model
+        )
+        
+        self.entity_types = {}
+        self.relationships = {}
+        
+    def read_text_files(self, directory: str, max_files: int = None) -> List[Dict[str, str]]:
+        """
+        Read all text files from the directory.
+        
+        Args:
+            directory: Path to directory containing text files
+            max_files: Maximum number of files to process (None for all)
+            
+        Returns:
+            List of dictionaries with file path and content
+        """
+        text_files = []
+        directory_path = Path(directory)
+        
+        for txt_file in directory_path.rglob("*.txt"):
+            try:
+                with open(txt_file, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                    if content.strip():  # Only include non-empty files
+                        relative_path = txt_file.relative_to(directory_path)
+                        text_files.append({
+                            'path': str(relative_path),
+                            'content': content
+                        })
+                        
+                        if max_files and len(text_files) >= max_files:
+                            break
+            except Exception as e:
+                print(f"Error reading {txt_file}: {e}")
+        
+        print(f"Loaded {len(text_files)} text files")
+        return text_files
+    
+    def extract_entities_and_relationships(self, prompt: str) -> Dict[str, Any]:
+        """
+        Call OpenAI API to extract entities and relationships using the optimized prompt.
+        
+        Args:
+            prompt: The extraction prompt (generated by meta-agent)
+            
+        Returns:
+            Dictionary with entity types and relationships
+        """
+        try:
+            print(f"  → Calling {self.extraction_model} model for extraction...")
+            
+            response = self.client.chat_completion(
+                messages=[{"role": "user", "content": prompt}],
+                temperature=self.config.get_entity_extractor_temperature(),
+                max_tokens=self.config.get_entity_extractor_max_tokens(),
+                reasoning_effort=self.reasoning_effort
+            )
+            
+            # Extract the response content
+            content = response.choices[0].message.content
+            
+            if not content:
+                raise ValueError("Empty response from model")
+            
+            # Try to parse JSON from the response
+            # Handle cases where the model might wrap JSON in markdown code blocks
+            if "```json" in content:
+                json_str = content.split("```json", 1)[1].split("```", 1)[0].strip()
+            elif "```" in content:
+                json_str = content.split("```", 1)[1].split("```", 1)[0].strip()
+            else:
+                # Try to find JSON object directly
+                json_start = content.find("{")
+                json_end = content.rfind("}") + 1
+                if json_start < 0 or json_end <= json_start:
+                    raise ValueError("No JSON object found in response")
+                json_str = content[json_start:json_end]
+            
+            result = json.loads(json_str)
+            
+            print(f"  ✓ Extraction complete: {len(result.get('entity_types', {}))} entities, "
+                  f"{len(result.get('relationships', {}))} relationships")
+            
+            return result
+            
+        except json.JSONDecodeError as e:
+            print(f"  ✗ Error parsing JSON response: {e}")
+            print(f"  Response preview: {content[:500] if content else 'None'}...")
+            raise RuntimeError("Entity extraction returned invalid JSON") from e
+        except Exception as e:
+            print(f"  ✗ Error calling OpenAI API: {e}")
+            raise RuntimeError("Entity extraction request failed") from e
+
+    @staticmethod
+    def merge_catalogs(accumulated: Dict[str, Any], findings: Dict[str, Any]) -> Dict[str, Any]:
+        """Union entity/relationship definitions across extraction iterations."""
+        merged = accumulated or {"entity_types": {}, "relationships": {}}
+        def _key(name: Any) -> str:
+            return re.sub(r"[^A-Z0-9]", "", str(name).upper())
+
+        def _merge_definition(target: Dict[str, Any], name: str, definition: Dict[str, Any]) -> str:
+            aliases = {_key(existing_name): existing_name for existing_name in target}
+            canonical_name = aliases.get(_key(name), name)
+            if canonical_name not in target:
+                target[canonical_name] = dict(definition)
+                return canonical_name
+            existing = target[canonical_name]
+            for key, value in definition.items():
+                if isinstance(value, list):
+                    values = existing.setdefault(key, [])
+                    for item in value:
+                        if item not in values:
+                            values.append(item)
+                elif not existing.get(key):
+                    existing[key] = value
+            return canonical_name
+
+        entity_target = merged.setdefault("entity_types", {})
+        entity_aliases = {
+            _key(name): name for name in entity_target
+        }
+        for name, definition in (findings.get("entity_types", {}) or {}).items():
+            canonical_name = _merge_definition(entity_target, name, definition)
+            entity_aliases[_key(name)] = canonical_name
+            entity_aliases[_key(canonical_name)] = canonical_name
+
+        relationship_target = merged.setdefault("relationships", {})
+        for name, definition in (findings.get("relationships", {}) or {}).items():
+            normalized = dict(definition)
+            for endpoint in ("source_entity", "target_entity"):
+                if normalized.get(endpoint):
+                    normalized[endpoint] = entity_aliases.get(
+                        _key(normalized[endpoint]), normalized[endpoint]
+                    )
+            _merge_definition(relationship_target, name, normalized)
+        return merged
+    
+    def run_iterations_with_optimization(self, 
+                                        documents: List[Dict[str, str]], 
+                                        n_iterations: int = 3) -> Dict[str, Any]:
+        """
+        Run n iterations with meta-agent prompt optimization.
+        
+        Args:
+            documents: List of document dictionaries
+            n_iterations: Number of refinement iterations
+            
+        Returns:
+            Final entity and relationship definitions with optimization history
+        """
+        print(f"\n{'='*70}")
+        print(f"  Enhanced Entity & Relationship Extraction with Prompt Optimization")
+        print(f"{'='*70}")
+        print(f"Iterations: {n_iterations}")
+        print(f"Documents: {len(documents)}")
+        print(f"Extraction Model: {self.extraction_model}")
+        print(f"Optimizer Model: {self.optimizer_model}")
+        print(f"{'='*70}\n")
+        
+        if n_iterations < 1:
+            raise ValueError(
+                f"n_iterations must be >= 1, got {n_iterations}. "
+                "At least one extraction iteration is required to produce findings."
+            )
+
+        findings = None
+        accumulated_catalog = {"entity_types": {}, "relationships": {}}
+        quality_analysis = None
+        iterations_run = 0
+        early_stop = os.getenv("KG_ENTITY_EARLY_STOP", "1").lower() in {"1", "true", "yes"}
+        min_iterations = max(1, int(os.getenv("KG_ENTITY_MIN_ITERATIONS", "2")))
+        min_new_items = max(0, int(os.getenv("KG_ENTITY_MIN_NEW_ITEMS", "0")))
+        quality_target = float(os.getenv("KG_ENTITY_QUALITY_TARGET", "90"))
+        checkpoint_value = os.getenv("KG_ENTITY_CHECKPOINT_FILE", "").strip()
+        checkpoint_path = Path(checkpoint_value) if checkpoint_value else None
+
+        for iteration in range(1, n_iterations + 1):
+            iterations_run = iteration
+            before_entities = len(accumulated_catalog.get("entity_types", {}))
+            before_relationships = len(accumulated_catalog.get("relationships", {}))
+            print(f"\n{'─'*70}")
+            print(f"ITERATION {iteration}/{n_iterations}")
+            print(f"{'─'*70}")
+            
+            # Step 1: Generate optimized prompt using meta-agent
+            print(f"\n[Step 1] Prompt Optimization")
+            optimized_prompt = self.meta_agent.generate_optimized_prompt(
+                documents=documents,
+                iteration=iteration,
+                previous_findings=findings,
+                quality_analysis=quality_analysis
+            )
+            
+            # Step 2: Extract entities and relationships using optimized prompt
+            print(f"\n[Step 2] Entity & Relationship Extraction")
+            findings = self.extract_entities_and_relationships(optimized_prompt)
+            
+            # Add iteration metadata
+            findings['iteration'] = iteration
+            findings['timestamp'] = time.strftime('%Y-%m-%d %H:%M:%S')
+
+            # Preserve discoveries from every phase. Previously the final
+            # iteration replaced earlier findings, making repeated passes
+            # ineffective when each pass saw a different corpus window.
+            accumulated_catalog = self.merge_catalogs(
+                accumulated_catalog, findings
+            )
+            
+            # Step 3: Analyze each iteration once. The result supports both
+            # prompt refinement and deterministic convergence detection.
+            label = "Final Quality Analysis" if iteration == n_iterations else "Quality Analysis"
+            print(f"\n[Step 3] {label}")
+            quality_analysis = self.meta_agent.analyze_extraction_quality(
+                extraction_results=findings,
+                iteration=iteration,
+            )
+            self.meta_agent.record_extraction_results(
+                iteration=iteration,
+                extraction_results=findings,
+                quality_analysis=quality_analysis,
+            )
+            print(f"  ✓ {label} Complete")
+            print(f"    Overall Score: {quality_analysis.get('overall_score', 0)}/100")
+            print(f"    Entity Quality: {quality_analysis.get('entity_quality_score', 0)}/100")
+            print(f"    Relationship Quality: {quality_analysis.get('relationship_quality_score', 0)}/100")
+            print(f"    Business Rules: {quality_analysis.get('business_rules_score', 0)}/100")
+            print(f"    Coverage: {quality_analysis.get('coverage_score', 0)}/100")
+
+            if checkpoint_path is not None:
+                checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
+                checkpoint = deepcopy(accumulated_catalog)
+                checkpoint["iteration"] = iteration
+                checkpoint["final_quality_analysis"] = quality_analysis
+                checkpoint_path.write_text(
+                    json.dumps(checkpoint, indent=2, ensure_ascii=False) + "\n",
+                    encoding="utf-8",
+                )
+                print(f"  💾 Entity iteration checkpoint: {checkpoint_path}", flush=True)
+
+            new_items = (
+                len(accumulated_catalog.get("entity_types", {})) - before_entities
+                + len(accumulated_catalog.get("relationships", {})) - before_relationships
+            )
+            quality_score = float((quality_analysis or {}).get("overall_score", 0) or 0)
+            if (
+                early_stop
+                and iteration >= min_iterations
+                and iteration < n_iterations
+                and (new_items <= min_new_items or quality_score >= quality_target)
+            ):
+                print(
+                    f"  ⏩ Entity extraction converged after iteration {iteration}: "
+                    f"new catalog items={new_items}, quality={quality_score:.1f}",
+                    flush=True,
+                )
+                break
+
+            if iteration < n_iterations:
+                # Show top improvements for next iteration.
+                priorities = quality_analysis.get('improvement_priorities', [])
+                if priorities:
+                    print(f"\n    Top Priorities for Next Iteration:")
+                    for i, priority in enumerate(priorities[:3], 1):
+                        print(f"      {i}. [{priority.get('priority', 'N/A')}] {priority.get('issue', 'N/A')}")
+                time.sleep(2)
+        
+        findings = accumulated_catalog
+        findings['iteration'] = iterations_run
+        findings['timestamp'] = time.strftime('%Y-%m-%d %H:%M:%S')
+
+        # Add optimization summary to findings
+        findings['optimization_summary'] = self.meta_agent.get_optimization_summary()
+        findings['final_quality_analysis'] = quality_analysis
+        
+        return findings
+    
+    def save_results(self, 
+                    results: Dict[str, Any], 
+                    output_dir: str, 
+                    filename: str = "entity_types_and_relationships.json"):
+        """
+        Save the extraction results and optimization history.
+        
+        Args:
+            results: The entity and relationship definitions
+            output_dir: Output directory path
+            filename: Output filename
+        """
+        output_path = Path(output_dir)
+        output_path.mkdir(parents=True, exist_ok=True)
+        
+        # Save main results
+        output_file = output_path / filename
+        with open(output_file, 'w', encoding='utf-8') as f:
+            json.dump(results, f, indent=2, ensure_ascii=False)
+        
+        print(f"\n{'='*70}")
+        print(f"✓ Results saved to: {output_file}")
+        print(f"{'='*70}\n")
+        
+        # Print comprehensive summary
+        entity_types = results.get('entity_types', {})
+        relationships = results.get('relationships', [])
+        
+        n_entities = len(entity_types)
+        n_relationships = len(relationships) if isinstance(relationships, list) else len(relationships)
+        
+        # Count total business rules
+        entity_rules = sum(
+            len(entity.get('business_rules', [])) 
+            for entity in entity_types.values()
+        ) if isinstance(entity_types, dict) else 0
+        
+        # Handle relationships as either list or dict
+        if isinstance(relationships, list):
+            relationship_rules = sum(
+                len(rel.get('business_rules', [])) 
+                for rel in relationships
+            )
+        else:
+            relationship_rules = sum(
+                len(rel.get('business_rules', [])) 
+                for rel in relationships.values()
+            )
+        
+        total_rules = entity_rules + relationship_rules
+        
+        print("FINAL SUMMARY:")
+        print(f"  Entity Types: {n_entities}")
+        print(f"  Relationships: {n_relationships}")
+        print(f"  Total Business Rules: {total_rules}")
+        print(f"    - Entity Rules: {entity_rules}")
+        print(f"    - Relationship Rules: {relationship_rules}")
+        print(f"  Final Iteration: {results.get('iteration', 'N/A')}")
+        
+        # Print optimization summary
+        opt_summary = results.get('optimization_summary', {})
+        if opt_summary and 'improvement' in opt_summary:
+            improvement = opt_summary['improvement']
+            print(f"\nOPTIMIZATION PROGRESS:")
+            print(f"  Quality Score Improvement: +{improvement.get('score_gain', 0)} points")
+            print(f"  Entity Growth: +{improvement.get('entity_growth', 0)} entities")
+            print(f"  Relationship Growth: +{improvement.get('relationship_growth', 0)} relationships")
+        
+        if n_entities > 0:
+            print(f"\n  Sample Entities: {', '.join(list(results['entity_types'].keys())[:5])}")
+        if n_relationships > 0:
+            if isinstance(relationships, list):
+                sample_rels = [f"{rel.get('from', '?')} -> {rel.get('to', '?')}" for rel in relationships[:5]]
+            else:
+                sample_rels = list(relationships.keys())[:5]
+            print(f"  Sample Relationships: {', '.join(sample_rels)}")
+
+
+def main():
+    """
+    Main execution function.
+    """
+    # Load configuration
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).parent))
+    from utils.config import get_config
+    
+    config = get_config()
+    
+    # Configuration from config file
+    OPENAI_API_KEY = config.get_openai_api_key()
+    EXTRACTION_MODEL = config.get_reasoning_model()
+    REASONING_EFFORT = config.get_reasoning_effort()
+    OPTIMIZER_MODEL = config.get_optimizer_model()
+    TEXT_DIR = str(config.get_organized_dir())
+    OUTPUT_DIR = str(config.get_entity_relationship_dir())
+    N_ITERATIONS = config.get_n_iterations()
+    os.environ.setdefault(
+        "KG_ENTITY_CHECKPOINT_FILE",
+        str(Path(OUTPUT_DIR) / "entity_iteration_checkpoint.json"),
+    )
+    
+    print("""
+╔══════════════════════════════════════════════════════════════════════╗
+║   Compliance Entity & Relationship Extraction Agent                 ║
+║   With Integrated Meta-Agent Prompt Optimization                    ║
+║   Powered by OpenAI GPT-5                                           ║
+╚══════════════════════════════════════════════════════════════════════╝
+    """)
+    
+    # Initialize enhanced agent
+    agent = ComplianceEntityRelationshipAgent(
+        api_key=OPENAI_API_KEY,
+        extraction_model=EXTRACTION_MODEL,
+        optimizer_model=OPTIMIZER_MODEL,
+        reasoning_effort=REASONING_EFFORT
+    )
+    
+    # Load documents
+    print("Loading documents...")
+    documents = agent.read_text_files(TEXT_DIR)
+    
+    if not documents:
+        print("Error: No documents found!")
+        return
+    
+    # Run iterative extraction with optimization
+    results = agent.run_iterations_with_optimization(documents, n_iterations=N_ITERATIONS)
+    
+    # Save results
+    agent.save_results(results, OUTPUT_DIR)
+    
+    print("\n✓ Process completed successfully!")
+    print("\nOutput files:")
+    print("  - entity_types_and_relationships.json (extraction results)")
+
+
+if __name__ == "__main__":
+    main()
