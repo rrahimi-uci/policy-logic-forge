@@ -1,8 +1,17 @@
 openai>=1.59.7
 python-dotenv>=1.0.0
 PyPDF2>=3.0.1
-langchain-text-splitters>=0.2.0
-python-docx>=1.1.0
+
+# OCR for scanned PDFs
+pytesseract>=0.3.10               # Tesseract OCR wrapper
+pdf2image>=1.17.0                 # Convert PDF pages to images for OCR
+Pillow>=10.0.0                    # Image processing (pdf2image dependency)
+
+# Document Chunking Libraries
+langchain-text-splitters>=0.2.0  # Markdown/text splitting with header metadata
+pandas>=2.0.0                     # CSV/Excel processing
+openpyxl>=3.1.0                   # Excel file support for pandas
+python-docx>=1.1.0                # Word document (.docx) support
 
 # compiler/ (DMN/BPMN emission) — see k-to-code.md. Declared explicitly rather
 # than relying on a transitive install (flagged in k-to-code.md's risk table).
