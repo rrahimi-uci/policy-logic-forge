@@ -35,6 +35,16 @@ benchmarks/data/
 benchmarks/raw/
 benchmarks/*-source-docs/
 
+# Full benchmark corpora copied into compliance-files/<domain>/ for
+# full-corpus runs (see benchmarks/README.md "Run the pipeline per
+# benchmark"). Regenerable from benchmarks/*-source-docs/ — not committed,
+# regardless of license; only the small curated *_pilot/ samples above are.
+# (Distinct from compliance-files/<domain>_pilot/ above: no _pilot suffix.)
+compliance-files/commercial_contracts/
+compliance-files/nda_confidentiality/
+compliance-files/privacy_policy/
+compliance-files/mobile_app_privacy/
+
 # OS / editor
 .DS_Store
 .idea/
