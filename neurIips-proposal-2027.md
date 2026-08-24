@@ -1078,6 +1078,332 @@ repository*.
 
 ---
 
+## Review — repository-grounded comments and concerns (2026-08-24)
+
+### Overall assessment
+
+The proposal has a credible paper inside it, but the current version is not yet
+an executable research protocol. Its strongest idea is **C2, instrument
+validation**, supported by a deliberately small compiler/interpreter that makes
+the comparison possible. The present six-contribution program is too broad for
+the evidence and infrastructure in this repository, and several formal claims
+are stronger than the v2 contract can support.
+
+My recommendation is **conditional go, with a scope cut**: make the paper's first
+decision point a per-document, reproducible experiment on the executable subset
+of the Dutch corpus; treat CEGIR, RL, LEXEC-Perturb, cross-lingual transfer, and
+four target languages as follow-ons that earn their place only after that result.
+Passing the current test suite establishes useful engineering invariants, not
+scientific readiness.
+
+### What is genuinely strong
+
+- The proposal correctly separates extraction, deterministic compilation, and
+  external verification. That is the right safety and measurement boundary.
+- It is unusually explicit about prior art, negative outcomes, inherited
+  evidence, and fallbacks. Keeping the `(measured)` / `(target)` / `(published)`
+  distinctions will materially improve reviewer trust.
+- The Dutch gold-DMN corpus is the right first external anchor, and the proposal
+  is right to reproduce another team's harness before building a large internal
+  benchmark.
+- The repository already provides useful substrate: a typed candidate contract,
+  fail-closed readiness/grounding states, evidence pointers, and deterministic
+  graph partitioning. Those are meaningful implementation assets even though
+  they are not yet an executable semantic instrument.
+
+### Blocking concerns
+
+#### R1. The repository has source-corpus adapters, not four evaluated benchmark domains
+
+`benchmarks/datasets.json` and `benchmarks/scripts/build_source_docs.py` download
+and normalize source text, but there are no committed label loaders, query
+builders, fixed splits, scoring code, run manifests, or result artifacts for
+CUAD, ContractNLI, OPP-115, or MAPP. The README also states that `pytest` makes no
+model calls and tests fixed graphs/prompts rather than live extraction. Therefore
+“4 benchmark-backed domains” currently means **four input adapters and prompt
+packs**, not four benchmark results. §12.3 should not summarize the extraction
+half as “built and tested” without this qualification.
+
+**Required before claims:** add a deterministic evaluation contract per corpus,
+with document IDs, gold-query construction, train/dev/test boundaries, metrics,
+and immutable run manifests. Report live pipeline runs separately from the 770
+provider-free tests.
+
+#### R2. A full-corpus CLI invocation does not currently process the full corpus for rules
+
+`BusinessRulesExtractor.read_text_files_batch()` sorts organized chunks by word
+count, truncates every chunk to `max_content_length` (8,000 characters by
+default), then returns only
+`target_rules // rules_per_batch + 10` batches. With the CLI default of 30 target
+rules and five rules per OpenAI batch, that is at most 16 batches even if hundreds
+of documents were organized. The result is biased toward the longest chunks and
+is not a document-complete extraction. In addition, Agent 1 targets roughly
+2,000-word chunks while Agent 3 clips by characters, so long organized chunks can
+lose substantial trailing content before extraction.
+
+This invalidates the current reading of “run one full corpus as one batch,” and
+would make cross-domain DA, EY, defect density, and cost denominators ambiguous.
+
+**Required before G1:** execute one model/artifact per gold document (or define an
+explicit, frozen multi-document unit), process every chunk for that unit, record
+chunk coverage, and fail the run if any required chunk is skipped or truncated.
+`target_rules` may cap a pilot, but a capped run must not be scored as corpus
+coverage.
+
+#### R3. The optimizer's v2 handoff is broken for both deduplication and dependency analysis
+
+Agent 3's compact prompts explicitly forbid the legacy prose fields
+`conditions` and `consequences`. However,
+`KnowledgeGraphOptimizer._deduplicate_rules_single()`,
+`analyze_dependencies()`, and both batched dependency paths still construct
+their LLM summaries from exactly those legacy fields. For v2-only rules, the
+optimizer mainly sees a truncated description, type, and entity attachments—not
+the structured predicates, Boolean logic, outcomes, scope, or exceptions that
+the proposed solver semantics depend on.
+
+The batched dependency pass is also intentionally incomplete: it samples only a
+small prefix of each batch for cross-batch checks and caps the number of batch
+pairs (20 by default). `utils/dag_builder.py` guarantees 100% **node coverage** of
+whatever edges it receives; it does not guarantee dependency-edge recall or
+semantic correctness. Condensing a cycle preserves nodes but does not produce a
+valid execution order within the cycle.
+
+This directly undermines CEGIR's “cross-rule inconsistency,” the cross-reference
+perturbation, semantic deduplication baselines, and the proposal's inherited DAG
+counts.
+
+**Required before using any graph result:** pass the full v2 fields to the
+optimizer, make candidate-pair generation deterministic and recall-auditable,
+and evaluate dependency precision/recall on a human-reviewed fixture. Keep “DAG
+partition coverage” distinct from “dependency discovery coverage.”
+
+#### R4. The v2 contract is not yet the formal language described in §5
+
+The contract currently leaves several semantics open:
+
+- `applicability_scope` is only checked as a mapping. Final readiness inserts
+  mortgage-shaped keys (`loan_types`, `occupancy_types`, `transaction_types`)
+  even for the four non-mortgage domains; no typed predicate semantics for
+  scope exist.
+- There is no deontic modality field. Variable roles are only `input`,
+  `derived`, and `output`, so §11's `shall→may` relation cannot be represented as
+  an output-role change.
+- The eight variable types are `number`, `boolean`, `enum`, `date`, `date_time`,
+  `duration`, `string`, and `list`; predicate/outcome values additionally admit
+  `range` and `variable_reference`. §5 calls this seven value types and then
+  describes the fragment as linear arithmetic. Dates, durations, strings,
+  lists, ranges, and cross-variable references need explicit theories and type
+  rules or must be rejected.
+- Validation does not establish operator/type compatibility, globally canonical
+  variable identity, total definitions for derived variables, or a Boolean
+  combination for multiple exception predicates.
+- A recommended hit policy is stored per extracted rule, while DMN hit policy is
+  a table-level property. The rule-to-table grouping and shared output signature
+  are not part of the formal setup.
+
+**Required before P1/P2 or solver implementation:** publish a contract v3 (or a
+separate compiler IR) with typed scope, modality/norm kind, exception logic,
+derived expressions, global symbol resolution, table grouping, null/missing
+semantics, and an explicit supported subset. Every unsupported construct should
+produce a measured refusal, not be silently projected.
+
+#### R5. P2's `UNIQUE→FIRST` fallback is not semantics-preserving
+
+Proving that rows overlap can show `UNIQUE` is unsafe, but switching to `FIRST`
+chooses an answer according to row order. The current formal setup does not give
+that order legal meaning. If overlapping rows produce the same output, `ANY` may
+be appropriate; if they differ, the artifact is unresolved unless a source-backed
+priority or defeater relation exists. Recording the downgrade does not make the
+arbitrary choice sound.
+
+**Required change:** make hit-policy reconciliation a proof obligation. Use
+`ANY` only with output-equivalence proof, `PRIORITY`/`FIRST` only with explicit
+precedence semantics, and otherwise refuse or preserve the conflict.
+
+#### R6. P3 is false as stated
+
+Endpoints plus one interior point per observed cell do not distinguish a table
+from **any other** interval table. A candidate can insert a new threshold between
+the sampled interior point and an endpoint and agree on every certificate point
+while differing elsewhere. Completeness holds only under additional restrictions,
+for example when both tables are limited to a known finite threshold set and the
+certificate covers every induced cell with correctly handled open/closed bounds.
+
+The current readiness check is much weaker still: it requires only that at least
+one numeric input appear in one `boundary_condition: true` vector, and Agent 5.7
+checks only that vector keys name declared variables/outcomes; it explicitly does
+not execute the predicates or validate the expected value.
+
+**Required change:** either prove a correctly restricted theorem and test ties,
+open/closed endpoints, multiple dimensions, missing/default outputs, and
+non-interval predicates, or demote P3 to a hypothesis about test-suite reduction.
+Do not use it to replace exhaustive enumeration until the restrictions are met.
+
+#### R7. P4/CQI is a determinism property, not evidence of legal consistency
+
+“CQI = 0 by construction” is true only after defining a total deterministic
+function and asking extensionally identical queries. A partial artifact, a
+`COLLECT` table, an unresolved conflict, or two differently encoded queries can
+still make the metric undefined or nonzero. More importantly, any deterministic
+but wrong program obtains the same headline advantage. CQI therefore cannot be
+an unconditional scientific contribution.
+
+**Required change:** define query equivalence classes, handling of abstentions and
+multi-valued outputs, and the baseline consistency protocol. Present CQI as a
+reliability/cost property conditional on successful compilation, never as a
+correctness metric.
+
+#### R8. Instrument validation is not operationalized and currently mismatches the anchor study
+
+Graus reports outcome equivalence on **58 testable models**, not all 95: 24
+Outcome models and 34 Requirements models with alignable interfaces. The
+published best condition uses I/O specifications derived from the gold model and
+five generations per condition. §9 currently says to run all 95, derive queries
+without the gold artifact, and correlate “gold-free DA” with OE, but it does not
+define:
+
+- who supplies the gold answer for each gold-free query;
+- how queries are sampled without leaking gold I/O, rules, or threshold values;
+- whether correlation is across documents, systems, random generations, or all
+  three;
+- how repeated runs and unequal scenario counts are modeled;
+- how the 37 non-executable/interface-incompatible models are handled;
+- what confidence interval, null, and minimum useful effect make the instrument
+  valid.
+
+It is also not fair to claim a win over 42.6%/60.4% unless both systems receive
+the same interface information and are evaluated with the same run-selection
+rule; the paper's 33% full-equivalence result is a **best-of-five per model**
+analysis, not a single-run rate.
+
+**Required before G1/G3:** preregister the estimand and sampling unit; reproduce
+the exact 58-model protocol first; freeze a gold-hidden query-generation process;
+compare matched information conditions; retain all stochastic runs; and report
+hierarchical uncertainty plus false-positive/false-negative disagreement cases.
+Treat “metric failure is publishable” as a possible outcome, not a guaranteed
+acceptance argument.
+
+#### R9. Several proposed rewards and metrics are circular or reward trivial artifacts
+
+The repository's vectors are emitted by the same extraction process and are not
+currently executed by the grounding verifier. Rewarding vector replay therefore
+measures compiler fidelity to a self-generated rule/vector pair, not fidelity to
+the source. “Compiles,” “no SMT conflict,” low defect density, and assumption
+minimality can all be improved by emitting fewer rules, constant outputs, disjoint
+symbols, or no useful coverage. A simple abstention penalty does not close these
+paths.
+
+**Required before C5:** define adversarial reward-hacking tests and independent
+coverage/completeness rewards. Use held-out source-grounded queries and evidence
+spans that are not generated by the policy being trained. Report every reward
+component, Pareto front, output size, symbol reuse, and omission rate; never train
+and evaluate on the same solver-derived witnesses.
+
+#### R10. Assumption minimality does not make arbitrary assumptions legitimate
+
+Dropping each assumption one at a time proves deletion-minimality relative to a
+particular formalization; it does not prove minimum cardinality, uniqueness,
+legal permissibility, consistency with background law, or source grounding. A
+model can still add one decisive assumption equivalent to the desired hypothesis.
+The proposal needs a typed assumption language, admissibility policy, provenance,
+and a human-review protocol.
+
+The novelty delta must also be narrower. *Know Your Limits* already proposes
+surfacing Minimal Correction Subsets with SMT and presenting them to legal
+practitioners, in addition to calling for solver feedback. The new claim can be a
+document-level, provenance-bound implementation and evaluation—not assumption
+surfacing or minimal correction in the abstract.
+
+#### R11. The statistical plan is not sufficient for the number of comparisons
+
+The headline table mixes accuracy, coverage, correlation, AUROC, AURC, cost,
+defect density, and many target effect sizes across corpora, model families,
+target languages, repair rounds, and ablations. “Pre-registered targets” alone do
+not address multiplicity, stochastic model variance, document clustering, or
+selection of the best prompt/run. AUROC > 0.93 on another task is not a directly
+comparable threshold for AURC on this task.
+
+**Required change:** identify one primary endpoint and a small number of
+confirmatory endpoints; specify macro vs. micro aggregation, seeds/runs, paired
+tests, hierarchical bootstrap or mixed-effects analysis, confidence intervals,
+multiple-comparison control, and power/sensitivity analysis. Everything else
+should be exploratory and labeled that way.
+
+#### R12. Baselines need matched information and execution safety
+
+Direct Python, DMN, SMT-LIB, ASP/Datalog, RAG, and long-context QA do not naturally
+receive the same interface, retrieval, context, or execution budget. In
+particular, the Dutch `+io` condition receives gold-derived interface information;
+a raw-text pipeline does not. Direct-to-Python also introduces sandboxing and
+nontermination concerns that are absent from a bounded decision table.
+
+**Required change:** define matched-input baseline families, give every system the
+same source slice and interface condition, separate representation failure from
+executor failure, sandbox generated code, and report both per-generation and
+best-of-*k* results. Do not interpret target-language differences as model
+preferences until backend capability and test strength are comparable.
+
+#### R13. The schedule and budget do not match the proposed scope
+
+Within roughly eight months the plan asks for: external reproduction; a compiler,
+interpreter, DMN backend, SMT backend, Python backend, ASP/Datalog backend; six
+resource adapters; a new annotated perturbation suite; 500 human scenarios;
+CEGIR; multi-model studies; cross-domain/language/jurisdiction/task transfer; and
+2–4 RL runs. The stated $15k–$30k cap is presented mainly as extraction spend and
+does not reconcile 8×H100 weeks, qualified annotation, repeated frontier-model
+runs, or engineering time. The repository has not yet completed one committed
+end-to-end benchmark run.
+
+**Required change:** budget compute, API, annotation, storage, and labor separately.
+Commit now to a minimum paper: Dutch reproduction + compiler correctness +
+instrument validation + one non-Dutch external-validation domain. Add CEGIR only
+after the instrument passes; add RL only after CEGIR yields a stable, non-gameable
+reward. Move the remaining target languages and LEXEC-Perturb to explicit
+follow-on work.
+
+### Important non-blocking corrections
+
+- The deadline row should say only what is confirmed: NeurIPS lists **2027 —
+  Europe**; the 2027 dates and CFP are not announced. “December 2027” is a
+  historical expectation, not a confirmed date. Also re-check the 2027 track
+  name rather than assuming “Datasets & Benchmarks.”
+- Resolve the Dutch artifact's CC BY 4.0 vs. paper-page CC BY-SA 4.0 discrepancy
+  before cloning data into a release or deriving redistribution permissions.
+- Fix the filename's `neurIips` spelling before it becomes a cited artifact, or
+  explicitly preserve it as a compatibility path.
+- Replace categorical novelty statements such as “Nobody” / “first” with a
+  documented search protocol and bounded phrasing (“we found no prior work that
+  combines ...”). The related-work map is strong, but absence claims remain
+  difficult to prove.
+- “98% grounding-verifier over-rejection vs. 6% vector-replay failure” is not yet
+  a calibration result because the two mechanisms check different targets, the
+  artifacts are absent, and the denominator is one mortgage run. Call it a
+  motivating dissociation until independently labeled grounding truth exists.
+
+### Recommended go/no-go sequence
+
+1. **G0 — make the measurement unit real.** Fix document/chunk coverage, the v2
+   optimizer handoff, and compiler-IR semantics; add deterministic label/query
+   adapters and run manifests.
+2. **G1 — reproduce before extending.** Reproduce the published Dutch harness on
+   its 58 testable models, including all five runs and matched I/O conditions.
+3. **G2 — validate the compiler.** Differentially test the reference interpreter,
+   SMT encoding, and one real DMN engine; retain exhaustive enumeration until a
+   restricted P3 is proved.
+4. **G3 — validate the instrument.** Freeze gold-hidden queries and a statistical
+   analysis plan, then estimate DA↔OE association with uncertainty and structured
+   disagreement review.
+5. **G4 — choose the paper after the result.** If G3 succeeds, add one
+   non-Dutch domain and CEGIR. If it fails, write the diagnostic paper. Attempt
+   solver-reward RL only if a non-trivial, held-out, omission-resistant reward has
+   already survived adversarial tests.
+
+Until G0–G3 pass, the defensible claim is: **this repository contains a promising,
+well-tested extraction contract and a proposal for an executable measurement
+instrument. It does not yet contain or validate that instrument.**
+
+---
+
 ## Appendix A — Naming
 
 | Name | What it is |
