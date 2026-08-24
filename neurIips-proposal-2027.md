@@ -1,821 +1,1033 @@
-# NeurIPS 2027 Research Proposal
+# NeurIPS 2027 Research Proposal — v2 (literature-grounded)
 
-**Working title:** *No Gold Program: Extensional and Relational Evaluation of
-Document-to-Logic Extraction, and the Verifiable Reward It Buys*
+**Working title:** *Verified Compilation of Normative Text: Instrument Validation,
+Assumption-Explicit Semantics, and Solver Rewards for Document-to-Logic Extraction*
 
-**Umbrella project name:** **LEXEC** — compile normative documents into
-executable decision logic, and use the compiler as the measuring instrument.
+**Umbrella project name:** **LEXEC** — compile normative documents into executable
+decision logic, and use the compiler as the measuring instrument.
 
 | | |
 | --- | --- |
 | Target venue | NeurIPS 2027 main track (primary); Datasets & Benchmarks track (secondary/spin-off) |
-| Target deadline | Abstract/full paper historically mid-to-late May — **verify against the 2027 CFP** |
-| Time available | ~9 months from 2026-08-24 |
-| Substrate | This repository (`compliance-to-code`): 10-stage extraction pipeline, v2 rule contract, four-invariant readiness gate, claim-level grounding verifier, 100%-coverage dependency DAGs, 4 benchmark-backed domains |
-| Status of this document | Proposal for discussion. Every number marked *(measured)* comes from a real run; every number marked *(target)* is a pre-registered success criterion, not a result. |
+| Target deadline | **NeurIPS 2027 is December 2027, in Europe. Deadline not yet announced; recent years were May 6 (2026), May 16 (2025), May 22 (2024) — plan for ~May 1, 2027 and verify on the CFP.** |
+| Time available | ~8.5 months from 2026-08-24 |
+| Substrate | This repository: 10-stage extraction pipeline, v2 rule contract, four-invariant readiness gate, claim-level grounding verifier, 100%-coverage dependency DAGs, 4 benchmark-backed domains, `pytest` 770 passed (verified 2026-08-24) |
+| Status | Proposal for discussion. `(measured)` = a real run. `(target)` = pre-registered success criterion. `(published)` = a number from cited prior work, verified this session. |
 
 ---
 
-## 0. The one-sentence claim
+## 0. The one-sentence claim (revised)
 
-> Compiling a normative document into an executable decision artifact converts
-> an unmeasurable NLP task into a decidable one — which yields (i) a benchmark
-> that needs no gold formalization, (ii) a verifiable reward that trains
-> models, and (iii) an inference regime that is self-consistent by
-> construction and ~10²–10³× cheaper per query than long-context QA.
+> Compiling a normative document into an executable decision artifact makes
+> extraction quality *decidable* — and once you can decide it, you can
+> **calibrate** the metric against real gold artifacts, **name** the unstated
+> assumptions the gold labels smuggle in, and **train** on a solver's verdict
+> instead of a judge's opinion.
 
-Everything below is in service of making that sentence true, measured, and
-defensible against a hostile reviewer.
+Version 1 of this proposal claimed something broader ("no gold program exists,
+so extensional evaluation is the only escape"). The literature review below
+forced three corrections, and the claim above is what survives them — narrower,
+and considerably better defended.
 
 ---
 
-## 1. Read this first: why the obvious version of this project gets rejected
+## 1. What the literature review changed (read this section first)
+
+I searched the legal-NLP, law-as-code, neurosymbolic, BPM, autoformalization,
+and RLVR literatures. Seven findings changed the proposal; three of them
+invalidate specific v1 claims outright.
+
+### 1.1 The premise "there is no gold program" is false in one important case
+
+**Graus, *From Legal Text to Executable Decision Models*, ICAIL 2026**
+(arXiv:2604.17153) released **95 production-grade DMN decision models paired
+with their source legal text** — the Dutch Environment and Planning Act
+(*Omgevingswet*), powering the government's *Omgevingsloket* permit portal —
+under CC BY 4.0, **with an execution-based evaluation harness**
+(`github.com/opengov-lab/legal-text-to-decision-model`).
+
+Worse for v1: their primary metric, *outcome equivalence* — run gold and
+generated models on exhaustive input combinations and compare decisions — **is
+exactly my "Decision Agreement."** Someone published the core evaluation idea
+four months ago.
+
+Better for v2: their results are the strongest possible empirical support for
+the *canonical-form* argument v1 could only assert. Best condition reaches
+**42.6% outcome equivalence** on Outcome models and **60.4%** on Requirements
+models; only **33% of models achieve full equivalence**; and generated models
+contain just **26–35% of the gold models' nodes**, while **45–55% of gold nodes
+are identity/pass-through** *(all published)*. Behavior and form come apart, at
+scale, measured. And a task at 42.6% is nowhere near saturated.
+
+**So: adopt their dataset, don't compete with it.** §9 turns it into the single
+most valuable thing in this proposal — a way to *validate the measuring
+instrument itself*.
+
+### 1.2 ContractNLI-as-SMT-entailment is done, and it found a problem with the oracle
+
+**Wang et al., *Know Your Limits: On the Faithfulness of LLMs as Solvers and
+Autoformalizers in Legal Reasoning*** (arXiv:2606.16118, June 2026) re-annotated
+**400 ContractNLI examples** (expanded to 610 with minimal pairs) under *strict
+formal entailment*, and ran pure-LLM classification vs. LLM-based formal
+reasoning vs. Z3 solver-based formal reasoning across five LLMs.
+
+Their findings hit v1's flagship benchmark design directly:
+
+- **71 entailment cases had to be reclassified as neutral** — ContractNLI's gold
+  labels encode *pragmatic legal interpretation*, and a substantial share of
+  legally sound inferences are not formally grounded without unstated
+  assumptions *(published)*.
+- **"Scope laundering":** LLMs report solver-inconsistent classifications
+  without actually executing the formal reasoning — **15.3% (GPT) to 52.5%
+  (Qwen)** *(published)*.
+- **Z3 program-synthesis failure rates: 25.5% (Claude) to 63.2% (Llama)**
+  *(published)*.
+- Best accuracy: LLM-based formal reasoning, **Claude 83.0%** *(published)* —
+  yet the paper's whole point is that this number does not imply faithfulness.
+
+Consequences for this proposal, all of them design changes rather than
+inconveniences:
+
+1. **Strict SMT entailment against ContractNLI's original labels is the wrong
+   oracle.** v1's ContractNLI design would have measured the gold set's pragmatics, not the
+   artifact's quality. §10 replaces it with **assumption-explicit compilation**.
+2. **"Scope laundering" is direct empirical support for this project's core
+   architectural decision** — the compiler makes *no LLM calls*, and
+   verification is external rather than self-reported. A model asked to
+   self-verify will, between 15% and 53% of the time, report a formal-looking
+   verdict it never computed.
+3. **Their stated future work is my §12.2**: "solver-based feedback training
+   objectives for legal-domain LLMs." Someone is likely already building it.
+   That is a competitive risk, not a validation — see §19.
+
+### 1.3 Metamorphic evaluation via formal equivalence is already published
+
+**Zhou et al., *LGMT: Logic-Grounded Metamorphic Testing*** (arXiv:2605.23965,
+July 2026) is an oracle-free framework that derives metamorphic relations from
+first-order-logic equivalences and detects reasoning defects by cross-case
+consistency across six LLMs. Also relevant: **METAL** (arXiv:2312.06056), the
+**metamorphic-testing-and-LLMs survey** (arXiv:2605.13898), and metamorphic
+prompting that validates generated SQL by comparing *execution results* of
+transformed queries.
+
+v1 called relational/metamorphic evaluation "the strongest part of the design."
+That was overclaiming. What survives is narrow but real, and stated as such in
+§11: LGMT perturbs *the reasoning problem* and checks *answer* consistency; we
+perturb *the source document* and check *logical equivalence of the compiled
+artifact*. And the **meaning-changing, direction-annotated** relations
+(scope tightening ⇒ applicability set strictly shrinks) appear genuinely
+underexplored — so the emphasis moves from invariance to *refinement*.
+
+### 1.4 Three more things exist that v1 treated as open
+
+- **ContractCheck** (Khoja, Kölbl, Leue & Wilhelmi, *Artificial Intelligence and
+  Law*; arXiv:2504.18422) encodes Share Purchase Agreements into decidable
+  FOL fragments and uses an SMT solver to find conflicting clauses — via a
+  manual, ontology-driven "blocks" encoding, on one realistic-size SPA with
+  seeded inconsistencies.
+- **PolicyGuard** (Malik, Singh & Azad, arXiv:2606.32004, July 2026) builds
+  neuro-symbolic compliance-review engines from organizational policies,
+  grounds retrieved contract clauses into atom-level truth values, uses Z3, and
+  evaluates on **CUAD and ContractNLI**.
+- **Horner, Mateis, Governatori & Ciabattoni** (arXiv:2506.08899) formalize
+  legal text into **Defeasible Deontic Logic** with LLMs — atomic-snippet
+  segmentation, deontic rule extraction, coherence evaluation — on the
+  Australian Telecommunications Consumer Protections Code.
+
+So: LLM → formal legal representation → solver is an established line. The
+uncontested space is *corpus-scale, learned, and behaviorally validated*.
+
+### 1.5 "Verifiable rewards beyond math and code" is too broad a claim
+
+RLVR already covers text-to-SQL (**Reasoning-SQL**, arXiv:2503.23157),
+information extraction (**LA-RL**, arXiv:2607.23420), structured output
+(**RL-Struct**, arXiv:2512.00319), cyber threat intelligence (**Minerva**,
+arXiv:2602.00513), knowledge-intensive QA (**K2V**), and autoformalization
+(**ReForm**, arXiv:2510.24592; **StepFun-Formalizer**, arXiv:2508.04440;
+process-verified Lean RL, arXiv:2606.20068). *RL with Symbolic Feedback* is a
+named family. The narrowed claim is in §12.2.
+
+### 1.6 The BPM community already evaluates generated models extensionally
+
+LLM-generated process models are routinely scored by **conformance checking** —
+simulate event logs from the ground-truth model, replay them, and/or compare
+behavioral-footprint similarity (PM4Py). See **ProMoAI** (arXiv:2403.04327),
+BPMN Assistant, Nala2BPMN, "Do LLMs Speak BPMN?", and the SoSyM benchmark study.
+The **PET** dataset — the field's standard — has **47 text/BPMN pairs**.
+
+Two consequences: extensional evaluation of generated formal artifacts has prior
+art that must be cited (not claimed), and BPMN's evidence base is thin enough
+that **de-scoping BPMN from this paper is now well-supported** rather than a
+retreat.
+
+### 1.7 Two gifts I did not have in v1
+
+- **RuleArena** (arXiv:2412.08972, ACL 2025): 95 real-world rules, 816 problems,
+  three domains (airline baggage, NBA transactions, tax). LLMs "perform poorly,"
+  struggle to select the right rule, and improve markedly when given external
+  tools for math and logic *(published)*. That is a ready-made, published
+  measurement of the failure a compiled artifact is supposed to eliminate — so
+  §14.3 adds a direct head-to-head.
+- **Grammars of Formal Uncertainty** (Ganguly et al., **NeurIPS 2025**,
+  arXiv:2505.20047): SMT autoformalization swings from **+34.8%** on logical
+  tasks to **−44.5%** on factual ones; token-entropy UQ fails to catch the
+  errors; a PCFG-based grammar-entropy signal reaches **AUROC > 0.93** on logic
+  *(published)*. This is both proof NeurIPS takes this subject seriously and a
+  strong, concrete baseline for my selective-compilation arm — I no longer have
+  to invent one.
+
+---
+
+## 2. Why the obvious version of this project still gets rejected
 
 The obvious paper is *"we built an LLM pipeline that turns compliance documents
-into a knowledge graph and then into DMN/BPMN."* At NeurIPS that is desk-reject
-territory, and it is worth being blunt about why, because every design choice
-downstream is a response to one of these:
+into a knowledge graph and then into DMN/BPMN."* Six standing objections, now
+with evidence attached:
 
-1. **"This is engineering, not research."** A pipeline is an artifact, not a
-   claim. There must be a falsifiable hypothesis and an experiment that could
-   have come out the other way.
-2. **"No ground truth, so no evaluation."** There is no gold DMN for any real
-   contract, and there never will be — two competent lawyers formalize the same
-   clause into non-isomorphic but equally correct logic. Any metric based on
-   matching a reference artifact is dead on arrival.
-3. **"Why not just prompt a frontier model per query?"** With 1M-token context,
-   "extract a KG first" needs an argument, not an assumption. If direct
-   long-context QA matches the pipeline's accuracy, the pipeline needs a
-   different justification (and it has one — see §11.3 — but it must be
-   *measured*, not asserted).
-4. **"DMN/BPMN is a niche industrial standard."** The choice of target language
-   must be ablated, not assumed. It is entirely possible that Python, SMT-LIB,
-   or ASP is an easier target for an LLM, and that would be an interesting
-   result rather than a problem.
-5. **"Where is the learning?"** NeurIPS rewards a training signal, a
-   generalization claim, or a theoretical result. A prompt chain is none of
-   those.
-6. **"Legal-NLP already does this."** PolicyLint/PoliCheck, Catala, LegalRuleML,
-   Logic-LM/SatLM, and text-to-SQL all overlap. Positioning must be explicit
-   and generous (see §17).
+1. **"This is engineering."** A pipeline is an artifact, not a claim.
+2. **"Your KG intermediate isn't novel."** Correct, and now demonstrably so:
+   **GraphCompliance** (arXiv:2510.26309) aligns policy and context graphs for
+   GDPR compliance (+4.1–7.2pp micro-F1 over LLM-only and RAG on 300 scenarios);
+   **Baldwin & Ghanavati** (arXiv:2604.27713) build KGs from AI-policy documents
+   and beat baselines on 42 QA tasks; **SOLAR** (CIKM 2025, arXiv:2509.00710)
+   uses formalized intermediate representations with symbolic inference for
+   statutory reasoning. Drop every KG novelty claim.
+3. **"Why not prompt a frontier model per query?"** Needs measurement, not
+   assertion (§14.4).
+4. **"DMN is niche."** Must be ablated against SMT-LIB, Python, and ASP (§14.2).
+5. **"Where's the learning?"** §12.2, narrowed.
+6. **"Legal NLP already did this."** Partly true (§1, §21). The paper must say
+   exactly what is left.
 
-The proposal below answers all six. Objection 2 is the one that becomes the
-paper's intellectual core, so it is treated first.
+Venue reality check: the closest paper went to **ICAIL 2026**; the CUAD-based
+benchmark went to **NLLP 2025**; **LegalBench** went to NeurIPS D&B 2023;
+**Grammars of Formal Uncertainty** went to NeurIPS 2025 main track. NeurIPS is
+reachable — but only with the method and theory load-bearing, not the pipeline.
 
 ---
 
-## 2. The core intellectual problem: there is no gold program
+## 3. The premise, corrected
 
-For document-to-logic extraction, the standard supervised setup is unavailable:
+Gold formal artifacts for normative text are **rare, jurisdiction-bound, and
+non-canonical** — not nonexistent.
 
-- **No gold artifact.** Nobody has hand-written DMN for CUAD's 510 contracts.
-- **No canonical form.** Even given a gold artifact, correctness is invariant
-  under renaming, reordering, DNF/CNF choice, table splitting, predicate
-  factoring, and defeater placement. Form-matching metrics measure style.
-- **Surface metrics measure the wrong thing.** ROUGE, span-F1, and LLM-judge
-  scores are computed over *text*. Two extractions that quote the same clause
-  can encode opposite thresholds; two that quote different clauses can encode
-  the same decision function.
+- **Rare and bound:** the one substantial public collection is 95 models, one
+  country, one language, one statute (§1.1). Nothing comparable exists for
+  commercial contracts, NDAs, or privacy policies.
+- **Non-canonical, and now measured:** correctness is invariant under renaming,
+  reordering, DNF/CNF choice, table splitting, predicate factoring, and defeater
+  placement. Graus's numbers show what that does to form-matching metrics —
+  generated models with **26–35%** of gold's nodes reach **42.6%** behavioral
+  equivalence, and **45–55%** of gold nodes are pass-throughs carrying no logic
+  *(published)*. Structural similarity is measuring plumbing.
+- **The gold labels themselves carry pragmatics:** ContractNLI's expert labels
+  presume unstated assumptions (**71 entailment→neutral** re-annotations,
+  §1.2) *(published)*.
 
-There are exactly two escapes, and the paper's contribution is to take both
-seriously and combine them:
+Three consequences, and they are the paper:
 
-**(A) Extensional evaluation — judge behavior, not form.**
-Compile the extraction to an artifact with a semantics, then evaluate the
-*function* it denotes: given a fact binding, what does it decide? Given a
-hypothesis, does it entail it? This is the move that made text-to-SQL tractable
-(execution accuracy on Spider) and it is *stated as inherited* rather than
-claimed as novel. The novelty is the setting: long normative documents, no gold
-programs at all, defeasible/open-world semantics, and thousands of gold labels
-already sitting in existing legal-NLP corpora that nobody has yet used
-extensionally.
+**(A) Extensional evaluation, calibrated rather than assumed.** Judge behavior,
+not form — and then *validate that judgment against the 95 gold artifacts*
+(§9). Execution accuracy as a metric is inherited from semantic parsing (Spider;
+**BIRD**, arXiv:2305.03111, 12,751 pairs / 95 DBs / ~73% execution accuracy;
+Spider 2.0 at ~21.3% under agentic evaluation) and from BPM conformance checking
+(§1.6). Saying so is the honest framing, and the contribution is that nobody has
+checked whether a *gold-free* extensional metric agrees with a *gold-based* one.
 
-**(B) Relational evaluation — judge how behavior changes, not what it is.**
-Annotate a *perturbation and its intended semantic effect*, never a target
-artifact. For a meaning-preserving edit π, require the compiled function to be
-logically equivalent before and after — and check that equivalence *exactly*
-with an SMT solver, not with string similarity. For a meaning-changing edit with
-a known direction (tighten scope, add a defeater, flip a modality), require a
-specific refinement relation to hold.
+**(B) Assumption-explicit semantics.** If the gold answer needs an unstated
+assumption, the artifact should *name* it rather than silently absorb it (§10).
 
-Relational gold is dramatically cheaper to produce than absolute gold (annotate
-an edit, not a formalization) and is *immune to the canonical-form problem* —
-which is precisely why it is the right instrument for this task. This is the
-single most transferable idea in the proposal: it applies to any text →
-formal-artifact task (clinical guidelines, tax code, benefits eligibility, API
-contracts, spec-to-test).
+**(C) Relational evaluation, narrowly.** Annotate an edit and its intended
+semantic effect; check with a solver (§11), positioned against LGMT.
 
 ---
 
-## 3. Contributions
+## 4. Contributions, with explicit novelty deltas
 
-**C1 — LEXEC-Verify: a compiler-and-solver as a measuring instrument.**
-A deterministic, LLM-free compiler from the repository's v2 rule contract to
-(a) DMN 1.3 decision tables over a bounded FEEL subset, (b) SMT-LIB, and
-(c) a reference interpreter. Plus a solver layer that decides row disjointness,
-rule subsumption, pairwise co-firing conflict, coverage gaps, vacuity, and
-logical equivalence. Everything the extraction claims becomes a decidable
-question. *This is the instrument, and it is also the reward machine in C3.*
-
-**C2 — LEXEC-Bench: a decision-level benchmark with no new gold artifacts.**
-Three query modes, all with gold derived from existing expert annotations:
-
-| Mode | Question form | Gold source | Approx. scale |
+| # | Contribution | Closest prior work | What is actually new |
 | --- | --- | --- | --- |
-| **Entailment** | Does the document's rule set entail hypothesis *h*? | ContractNLI: 607 NDAs × 17 expert-labeled hypotheses | ~10.3k labeled queries |
-| **Presence/value** | Does clause category *c* exist, and with what value? | CUAD: 510 contracts × 41 categories, 13k+ spans | ~20.9k QA pairs |
-| **Practice decision** | Is data practice *p* permitted/disclosed for actor *a*, purpose *u*? | OPP-115 (~23k practices) + MAPP (bilingual EN/DE, GDPR legal-basis axis) | ~23k practices, 270 policies |
-
-Plus **LEXEC-Perturb** (the one genuinely new dataset): ~1.5–2k expert-verified
-perturbation pairs across the four corpora, each labeled with a *metamorphic
-relation* rather than a target artifact.
-
-**C3 — CEGIR: counterexample-guided iterative repair, and RLVR beyond math and
-code.** Two coupled methods that only exist because C1 exists:
-- *CEGIR* (inference time): compile → solve → the solver returns a concrete
-  counterexample (a fact binding where two rules co-fire contradictorily, or
-  where the artifact disagrees with a gold hypothesis) → feed the counterexample
-  back as a repair instruction → iterate to a fixed point. CEGIS, applied to
-  information extraction.
-- *RLVR* (training time): the verifier's composite pass/fail becomes a
-  programmatic reward for GRPO-style RL on an open-weight model. The headline
-  claim is deliberately broad: **verifiable rewards are not limited to math,
-  code, and theorem proving; a compiler can manufacture a verifier for any
-  domain whose output has a semantics.**
-
-**C4 — Two empirical findings we expect to be the most-cited part of the paper.**
-- **The surface–semantics dissociation.** Span-F1 / LLM-judge scores are weakly
-  predictive of decision agreement. Pre-registered prediction: Spearman ρ < 0.4
-  between per-document span-F1 and per-document decision agreement *(target)*.
-- **LLM self-verification is badly miscalibrated on this task.** In the one
-  certified run we have, the claim-level grounding verifier flagged **345/352
-  rules (98%)** as requiring review while **94.0% of the same rules'
-  source-attested test vectors replayed correctly** through generated DMN
-  *(measured, n=1 — see §13)*. If that dissociation survives replication across
-  four domains and several verifier models, it is a substantive result about
-  LLM self-verification, independent of compliance.
+| **C1** | **LEXEC-Verify** — LLM-free compiler (v2 rule contract → DMN 1.3/FEEL, SMT-LIB, reference interpreter) + solver layer deciding row disjointness, subsumption, equivalence, co-firing conflict, coverage gaps, vacuity, entailment | ContractCheck (manual blocks, one SPA); PolicyGuard (Z3, contract-vs-policy review); Graus (executor, **no solver checking**) | Solver-decided *internal* consistency of **LLM-extracted** rule sets at corpus scale; witness extraction for repair; UNIQUE-safety proofs |
+| **C2** | **Instrument validation** — does gold-free decision agreement predict gold-artifact outcome equivalence? | Nobody | Calibrates the metric that the whole no-gold methodology rests on (§9). **The most defensible contribution in the proposal.** |
+| **C3** | **Assumption-explicit compilation** — the artifact emits the minimal assumption set needed to reach the pragmatic answer; measure necessity/minimality | *Know Your Limits* documents the gap and names "assumption-surfacing tools" as future work | Turns a measured negative result into a compilation requirement and a metric |
+| **C4** | **LEXEC-Bench** — decision-level benchmark over 6 existing resources, 4 query modes, no new gold artifacts | LegalBench (162 tasks, label-level); PrivacyGLUE (7 tasks); ObliQA (27,869 questions); ContractEval; RuleArena | First *extensional, artifact-level* benchmark spanning contracts, NDAs, privacy policies, regulation, and a gold-DMN anchor |
+| **C5** | **CEGIR + solver-reward RL** | LLM-CEGIS repair (AAAI 2025, arXiv:2502.07786); Logic-LM self-refinement; RLVR for SQL/IE/structured output | Counterexamples from *cross-rule* consistency inside one extracted artifact (no external spec, no gold artifact); reward is a solver verdict on the artifact's *denotation* |
+| **C6** | **Two findings**: (a) LLM grounding-verification is miscalibrated on this task; (b) surface metrics are weakly predictive of decision agreement across four domains | *Know Your Limits* (scope laundering, faithfulness); Graus (structure vs. outcome) | (a) is unclaimed and we have striking `(measured)` n=1 evidence; (b) becomes a *replication at corpus scale across domains*, honestly framed |
 
 ---
 
-## 4. Formal setup
+## 5. Formal setup
 
-**Objects.** A document *d* (a normative text: contract, policy, regulation).
-An extraction function *f* (the LLM system) producing a *rule set*
-*R* = *f*(*d*). A compiler *γ* producing an artifact *A* = *γ*(*R*) with a
-denotational semantics ⟦*A*⟧.
+**Objects.** Document *d*; extraction *R* = *f*(*d*); compiler *γ*; artifact
+*A* = *γ*(*R*) with semantics ⟦*A*⟧.
 
-**Semantics.** Each rule *r* ∈ *R* is
-( *V*, *C*, *X*, *O*, *σ*, *π* ) where *V* is a typed variable set
-(number / boolean / enum / date / date_time / duration / list; role ∈
-{input, derived, output}), *C* is a boolean combination of atomic predicates
-over *V* (operators `== != < <= > >= in not_in`), *X* is a set of *defeaters*
-(the contract's `exceptions`), *O* is a set of output assignments (`=` only),
-*σ* an applicability scope, and *π* a hit policy ∈ {UNIQUE, FIRST, PRIORITY,
-COLLECT, ANY}.
+**Rules.** Each *r* ∈ *R* is ( *V*, *C*, *X*, *O*, *σ*, *π* ): typed variables
+*V* (number/boolean/enum/date/date_time/duration/string/list; role ∈
+{input, derived, output}); condition *C* over predicates with operators
+`== != < <= > >= in not_in`; defeaters *X*; output assignments *O* (`=` only);
+scope *σ*; hit policy *π* ∈ {UNIQUE, FIRST, PRIORITY, COLLECT, ANY}. This is the
+repository's existing v2 contract (`utils/rule_contract.py`), not a new one.
 
-**Defeater semantics (the P4 decision, resolved).** The repository's contract
-deliberately keeps `exceptions` separate from `condition_logic` and never
-specifies how they combine — and in the one run we have, **155/352 rules carry
-exceptions and 125 of those introduce variables absent from the condition**
-*(measured)*, so the choice materially changes the compiled input signature.
-We fix it, and make the choice a stated, testable part of the paper:
+**Defeater semantics.** The contract keeps `exceptions` separate from
+`condition_logic` and never specifies the combination. In the one run available,
+**155/352 rules carry exceptions and 125 of those introduce variables absent
+from the condition** *(measured)* — so the reading changes the compiled input
+signature, not just the logic. We fix:
 
-> **effective condition** ⟦*r*⟧ ≡ *C* ∧ ¬( ⋁_{x ∈ X} *x* )
+> ⟦*r*⟧ ≡ *C* ∧ ¬( ⋁_{x ∈ X} *x* )
 
-i.e. exceptions are *defeaters*: any one holding means the rule does not apply.
-This is the weakest-commitment reading, it matches how legal exceptions read,
-and — crucially — it is *empirically checkable* against the vector suite and
-against LEXEC-Perturb's defeater-insertion relation. If the data contradicts it,
-that is a finding, and the alternative readings (independent single-predicate
-exceptions; conjunctive exceptions) are pre-registered as the comparison.
+Exceptions are **defeaters**. This is the reading Defeasible Deontic Logic and
+LegalRuleML are built around (LegalRuleML Core v1.0, OASIS Standard, 30 Aug 2021,
+models defeasibility, deontic operators, and norm classification explicitly),
+and it is the weakest commitment consistent with how legal exceptions read. The
+alternatives (independent single-predicate exceptions; conjunctive exceptions)
+are **pre-registered as the empirical comparison**, decided by vector replay and
+by LEXEC-Perturb's defeater-insertion relation — not by assertion.
 
 **Worked example** (NDA, abbreviated):
 
-> *"Recipient shall not disclose Confidential Information to any third party
-> for a period of three (3) years from the Effective Date, provided that
-> disclosure compelled by judicial order shall not constitute a breach."*
+> *"Recipient shall not disclose Confidential Information to any third party for
+> a period of three (3) years from the Effective Date, provided that disclosure
+> compelled by judicial order shall not constitute a breach."*
 
 ```
-variables:  disclosure_to_third_party : boolean  (input)
-            years_since_effective_date: number   (input, unit=years)
-            compelled_by_judicial_order: boolean (input)
-            breach_of_confidentiality : boolean  (output)
+variables:  disclosure_to_third_party    : boolean (input)
+            years_since_effective_date   : number  (input, years)
+            compelled_by_judicial_order  : boolean (input)
+            breach_of_confidentiality    : boolean (output)
 condition:  all[ disclosure_to_third_party == true,
                  years_since_effective_date <= 3 ]
-exceptions: [ compelled_by_judicial_order == true ]     # defeater
+exceptions: [ compelled_by_judicial_order == true ]      # defeater
 outcomes:   breach_of_confidentiality = true
 hit policy: UNIQUE
 ```
 
-Compiles to one DMN row (`true`, `<= 3`, `false` → `true`) after defeater
-negation, and to the SMT assertion
-`(=> (and dttp (<= yse 3) (not cbjo)) breach)`. The ContractNLI hypothesis
-*"Receiving Party may share some Confidential Information with third parties"*
-becomes the entailment query
-`(check-sat (and rules (exists binding: dttp ∧ ¬breach)))` — decidable, and
-gradable against the corpus's expert label.
+One DMN row after defeater negation (`true`, `<= 3`, `false` → `true`); SMT
+assertion `(=> (and dttp (<= yse 3) (not cbjo)) breach)`. The ContractNLI
+hypothesis *"Receiving Party may share some Confidential Information with third
+parties"* becomes an entailment query — **and, per §1.2, one that needs an
+explicit assumption record to be gradable against the corpus label.** See §10.
 
-**Fragment and decidability.** The measured corpus uses 8 operators, one output
-operator, and 7 value types. That fragment is linear arithmetic over
-integers/rationals plus finite enums plus equality — decidable, and in the
-quantifier-free case handled directly by an off-the-shelf SMT solver. We
-implement a bounded FEEL renderer/evaluator and **fail loudly** on anything
-outside it (notably `duration` and `range`, which the schema permits but the
-observed corpus never exercised). "Fail loudly" is a research choice, not
-laziness: silent coercion would contaminate the measurement.
+**Fragment.** 8 operators, 1 output operator, 7 value types → linear arithmetic
+over integers/rationals + finite enums + equality. Decidable; quantifier-free
+cases go straight to an SMT solver. We implement a bounded FEEL renderer and
+evaluator and **fail loudly** outside it (notably `duration` and `range`, which
+the schema permits and the observed corpus never exercised). Silent coercion
+would contaminate the measurement.
 
 ---
 
-## 5. Propositions (the paper's theoretical content)
+## 6. Propositions
 
-Small, provable, and load-bearing. Not a theory paper — but enough that the
-correctness argument is stated rather than gestured at.
+**P1 (Compilation soundness).** Under §5's defeater semantics, DNF expansion of
+*C* ∧ ¬(⋁*X*) into rows, with the hit policy assigned per P2, denotes exactly
+⟦*r*⟧ on the declared domain.
 
-**P1 (Compilation soundness).** Under the defeater semantics of §4, the DNF
-expansion of *C* ∧ ¬(⋁*X*) into decision-table rows, with the hit policy
-assigned by P2's rule, denotes exactly ⟦*r*⟧ on the declared variable domain.
-*Sketch:* DNF expansion is semantics-preserving; the only risk is hit-policy
-misassignment, which P2 governs.
-
-**P2 (UNIQUE-safety is decidable).** A multi-row table may be declared UNIQUE
-iff its rows are pairwise disjoint. In the fragment of §4 this is an
-unsatisfiability check per row pair — decidable; NP-complete in the
-propositional part; practical at observed table sizes (87.5% of rules expand to
-a single row; worst case 7 rows *(measured)*). When disjointness is not
-provable, the compiler must **downgrade to FIRST and record the downgrade with
-its reason** (42 rules hit this in the measured run) rather than emit a false
-UNIQUE.
+**P2 (UNIQUE-safety is decidable).** UNIQUE is admissible iff rows are pairwise
+disjoint — an unsatisfiability check per pair in this fragment. NP-complete
+propositionally; practical at observed sizes (**87.5% of rules expand to a
+single row; worst case 7** *(measured)*). Where disjointness is not provable the
+compiler **downgrades to FIRST and records the reason** (**42 rules**
+*(measured)*), never emitting a false UNIQUE.
 
 **P3 (Boundary vectors are a complete certificate for interval tables).** For a
-decision table whose rows are conjunctions of interval constraints over
-independent numeric inputs and finite enums, a test suite containing each
-interval endpoint (and one interior point per cell) is *complete*: it
-distinguishes the table from any other table in the same class. Consequence:
-the LLM-generated `boundary_condition` test vectors the contract already
-requires are not a heuristic smoke test — inside this fragment they are a
-verification certificate. This is the proposition that turns an existing
-pipeline requirement into a guarantee, and it is the most useful of the four.
+table whose rows are conjunctions of interval constraints over independent
+numeric inputs and finite enums, a suite containing each interval endpoint plus
+one interior point per cell is *complete*: it distinguishes the table from any
+other in the class. Two payoffs: the contract's existing
+`boundary_condition` test vectors become a verification certificate rather than
+a smoke test; and it **obviates exhaustive enumeration** — Graus brute-forced
+**2,712 + 10,368 test cases** across 58 models by enumerating 2^n input
+combinations *(published)*, which P3 replaces with a suite linear in the number
+of thresholds. This is the cleanest theoretical result available here and it has
+an immediate practical consequence.
 
-**P4 (Consistency by construction).** A compiled artifact's answers to any set
-of queries are consistent with a single underlying function by construction. Per-query
-LLM answering carries no such guarantee. We therefore report *cross-query
-inconsistency rate* as a metric on which the compiled system is 0 by
-construction and the long-context baseline is measured — a guaranteed,
-non-cherry-picked axis of comparison (§11.3).
+**P4 (Consistency by construction).** A compiled artifact's answers are
+consistent with one function by construction; per-query LLM answering is not.
+Report *cross-query inconsistency* (CQI): 0 for compiled, measured for the
+baseline.
 
 ---
 
-## 6. What LEXEC-Verify must decide
+## 7. What the solver must decide
 
-Each of these is an SMT query, and each is a metric in the paper:
-
-| Check | Query | Why it matters |
+| Check | Query | Role |
 | --- | --- | --- |
 | Row disjointness | `UNSAT(row_i ∧ row_j)` | UNIQUE-safety (P2) |
-| Subsumption | `UNSAT(C_a ∧ ¬C_b)` | semantic dedup, replacing text-similarity dedup |
-| Logical equivalence | `UNSAT(⟦A₁⟧ ⊕ ⟦A₂⟧)` | the metamorphic invariance check (§8) |
-| Co-firing conflict | `SAT(C_a ∧ C_b ∧ O_a ≠ O_b)` | contradictory obligations; returns a **counterexample binding** for CEGIR |
-| Coverage gap | `SAT(¬⋁_i C_i)` under scope | unhandled scenarios; audit-relevant |
+| Subsumption | `UNSAT(C_a ∧ ¬C_b)` | **semantic dedup**, replacing the pipeline's text-similarity dedup |
+| Equivalence | `UNSAT(⟦A₁⟧ ⊕ ⟦A₂⟧)` | metamorphic invariance (§11); round-trip checks |
+| Co-firing conflict | `SAT(C_a ∧ C_b ∧ O_a ≠ O_b)` | contradictory obligations; **returns the witness** CEGIR needs |
+| Coverage gap | `SAT(¬⋁_i C_i)` under σ | unhandled scenarios; audit-relevant |
 | Vacuity | `UNSAT(C_r)` | a rule that can never fire = extraction error |
-| Entailment | `UNSAT(⟦A⟧ ∧ ¬h)` | ContractNLI query mode |
+| Entailment | `UNSAT(⟦A⟧ ∧ ¬h)` | query modes (§8), with assumptions per §10 |
 
-Two things to note. First, **semantic dedup by logical equivalence/subsumption
-replaces the pipeline's current similarity-based deduplication** — a concrete,
-measurable improvement with its own ablation. Second, the conflict check returns
-a *witness*, and the witness is what makes CEGIR possible; a boolean verifier
-would not be enough.
-
----
-
-## 7. Benchmark design: where the gold actually comes from
-
-The feasibility of this whole proposal rests on this section. No new artifact
-annotation is required for the main results.
-
-**7.1 ContractNLI → entailment mode (the flagship).**
-607 NDAs, 17 fixed hypotheses each, three-way expert labels *plus evidence
-spans*. Each hypothesis becomes an SMT entailment query against the compiled
-artifact; the corpus label is the gold answer; the evidence spans give a *free*
-provenance-precision metric (did the artifact's cited sections overlap the
-expert's evidence spans?). ~10.3k gold decision-level labels, zero new
-annotation. This corpus alone can carry the paper.
-
-**7.2 CUAD → presence/value mode.** 510 contracts, 41 clause categories,
-`master_clauses.csv` normalized answers. Queries: "is there a governing-law
-clause, and what jurisdiction?", "is there a change-of-control restriction?".
-Tests whether the compiled artifact captured the clause *as a decision*, not
-just as a span.
-
-**7.3 OPP-115 / MAPP → practice-decision mode.** Data practices as
-(actor, data type, purpose, permitted?) tuples — a natural fit for fact-binding
-evaluation. MAPP adds the GDPR `legal_basis` axis and a bilingual EN/DE split,
-which gives a **cross-lingual generalization** experiment essentially for free
-(compile German policies, query in the shared formal language).
-
-**7.4 Scenario mode (the one place we synthesize).** For fact-binding
-evaluation we need scenarios. Three sources, in decreasing order of trust:
-(i) the rules' own `source_attested` test vectors; (ii) solver-generated
-boundary bindings from P3; (iii) human-authored scenarios for a small
-gold subset. We will hand-verify a stratified sample (~500 scenarios) with
-domain experts to bound the noise in (i) and (ii), and report agreement.
-
-**7.5 Contamination.** CUAD, ContractNLI, OPP-115 are all public and pre-cutoff
-for every model we will test. This must be addressed head-on:
-- Report performance on **LEXEC-Perturb** separately — perturbed clauses are
-  new text and are the contamination-resistant number.
-- Include a **held-out fresh corpus** collected after the newest model's
-  cutoff (e.g. newly published privacy policies / SEC-filed contracts).
-- Run a memorization probe (can the model reproduce the gold labels from
-  document ID alone?).
+Contrast with prior art: ContractCheck does conflict detection from a *manual*
+encoding of one contract type; PolicyGuard uses Z3 to review contracts *against*
+external policies; Graus has an executor but **no solver layer at all**. Nobody
+runs these seven checks over LLM-extracted rule sets at corpus scale, and the
+per-100-rule defect densities they yield are themselves a new measurement of
+extraction quality that needs no human and no gold.
 
 ---
 
-## 8. LEXEC-Perturb: relational gold
+## 8. LEXEC-Bench: six resources, four modes, no new gold artifacts
 
-~1.5–2k clause-level perturbation pairs, each annotated with a metamorphic
-relation, not a target artifact. Checked with the SMT layer, so "unchanged"
-means *logically equivalent*, not *string-identical*.
+| Resource | Scale (verified) | Mode | Gold |
+| --- | --- | --- | --- |
+| **Dutch DMN corpus** (Graus, ICAIL 2026, CC BY 4.0) | 95 production DMN models + legal text; 58 executable; harness included | **Gold-artifact anchor** | Real DMN + outcome equivalence |
+| **ContractNLI** (Koreeda & Manning, Findings EMNLP 2021) | 607 NDAs × 17 hypotheses, 3-way labels + evidence spans | Entailment (assumption-explicit, §10) | Expert labels; **plus 400/610 strict-entailment re-annotations from arXiv:2606.16118 if obtainable** |
+| **CUAD** (Hendrycks et al., NeurIPS D&B 2021) | 510 contracts, 41 categories, 13k+ spans, 20,910 QA pairs | Presence/value | `master_clauses.csv` normalized answers |
+| **OPP-115** (Wilson et al., ACL 2016) | 115 policies, 3,792 segments, ~23k practices | Practice decision | Consolidated majority-vote annotations |
+| **MAPP** (Arora et al., LREC 2022) | 64 EN (292k words) + 91 DE (478k words); 8k + 19k practices; GDPR/CCPA-aware scheme | Practice decision, **cross-lingual** | Bilingual annotations |
+| **ObliQA / RegNLP** (arXiv:2409.05677) | 27,869 obligation-centric questions over ADGM financial regulation (40 docs, ~640k words) | Obligation entailment | Question–passage pairs; RePASs contradiction metric |
 
-**Meaning-preserving (invariance required):**
-`⟦γ(f(d))⟧ ≡ ⟦γ(f(π(d)))⟧`
-- lexical paraphrase; active↔passive; legalese↔plain language
-- clause reordering; splitting one clause into two; merging two into one
-- defined-term substitution ("Recipient" ↔ "Receiving Party")
-- unit-preserving numeric restatement ("three years" ↔ "36 months")
-- redundant-defeater insertion (an exception that is already implied)
+**Scenario mode** (fact bindings) draws on, in decreasing order of trust: the
+rules' own `source_attested` test vectors; solver-generated boundary bindings
+per P3; and ~500 human-authored scenarios on a stratified sample, with reported
+agreement.
 
-**Meaning-changing (a specific relation required):**
-- **scope tightening** → applicability set must strictly shrink:
-  `SAT(σ_old ∧ ¬σ_new)` and `UNSAT(σ_new ∧ ¬σ_old)`
-- **threshold shift** ("3 years" → "5 years") → the decision boundary must move
-  in the named direction
-- **modality flip** ("shall" → "may") → obligation must become permission
-  (output variable changes role, not just value)
-- **defeater addition** → the firing set must strictly shrink
-- **negation insertion** → outcome must flip on the affected region
-- **cross-reference redirect** ("subject to Section 5" → "Section 7") → the
-  dependency edge must move
+**Positioning against existing suites, explicitly.** LegalBench (162 expert-built
+tasks) and PrivacyGLUE (7 tasks: OPP-115, PI-Extract, Policy-Detection,
+PolicyIE-A/B, PolicyQA, PrivacyQA) evaluate *labels and spans*. ContractEval
+(NLLP 2025, arXiv:2508.03080) scores clause-level risk on CUAD across 4
+proprietary + 15 open models and even measures "laziness" (spurious "no related
+clause"), which is an abstention metric precedent worth borrowing. None of them
+evaluates an *artifact's behavior*. That is the gap, and it is a narrow, true
+claim.
 
-**Why this is the strongest part of the design.** A model that always outputs
-the same thing scores perfectly on invariance and zero on sensitivity; a model
-that is noisy scores the reverse. Only a model that actually tracks meaning
-scores well on both. We therefore report the **Semantic Discrimination Index**
-(Youden's J): `SDI = SR + SE − 1`, where SR is invariance rate on
-meaning-preserving edits and SE is correct-change rate on meaning-changing
-edits. One number, gameable in neither direction.
-
-**Annotation cost.** Annotators write an edit and pick a relation from a closed
-list. No logic, no formalization. Estimated ~2–4 minutes/item → ~100–130 hours
-→ tractable with 2–3 law-school or privacy-compliance annotators, double-annotated
-on a 20% overlap for IAA.
-
-**Licensing constraint (already known in this repo).** OPP-115 and MAPP carry no
-redistribution grant. LEXEC-Perturb ships as **edit scripts + offsets against
-the upstream corpora**, never as derived text — the same posture
-`benchmarks/datasets.json` already takes for the source documents.
+**Contamination.** CUAD, ContractNLI, OPP-115, and the Dutch corpus are public
+and pre-cutoff. Mitigations: report LEXEC-Perturb separately (new text); include
+a post-cutoff held-out corpus; run a memorization probe. Prior art warns this is
+real — "Knowledge-Driven Hallucination in LLMs: Process Modeling"
+(arXiv:2509.15336) documents models overriding the given text with prior
+knowledge; "Pervasive Annotation Errors Break Text-to-SQL Benchmarks"
+(arXiv:2601.08778) is a reminder to audit borrowed gold before trusting it.
 
 ---
 
-## 9. Method
+## 9. Instrument validation — the contribution I did not have in v1
 
-### 9.1 CEGIR — counterexample-guided iterative repair (inference time)
+**The question.** Every gold-free extensional metric assumes that agreeing with
+query answers means having built the right artifact. *Nobody has checked that.*
+The Dutch DMN corpus makes it checkable, because it has both the artifact and
+the behavior.
+
+**The experiment.**
+
+1. Run the pipeline on the 95 documents' legal text → compiled artifacts.
+2. Compute **gold-based** outcome equivalence against the 95 gold DMN models
+   using their released harness (reproducing Graus's protocol so numbers are
+   comparable).
+3. Compute **gold-free** decision agreement, using only queries and scenarios
+   derived without touching the gold artifacts.
+4. Report the correlation, the rank agreement, and — most importantly — the
+   **disagreement cases**: where does the gold-free metric say "good" and the
+   gold artifact say "wrong," and why?
+
+**Why this matters more than another accuracy number.** If gold-free DA tracks
+gold-based equivalence, every result on the five corpora *without* gold
+artifacts inherits credibility. If it does not, that is a finding that should
+change how this entire subfield evaluates itself — and either way the paper has
+something a reviewer cannot dismiss as an application.
+
+**Bonus, free from the same data:** re-run Graus's four input conditions (text;
++semantic roles; +I/O specs; +both) with our compiler and solver in the loop, and
+report whether solver-checked compilation beats their best condition
+(**42.6% / 60.4%** *(published)*). A published number to beat, on a published
+harness, is the cheapest credibility available.
+
+---
+
+## 10. Assumption-explicit compilation
+
+**The problem, measured by others.** ContractNLI's gold labels reflect pragmatic
+legal interpretation; **71 entailment cases become neutral** under strict formal
+entailment *(published, arXiv:2606.16118)*. Graded naively, the entailment mode
+punishes an artifact for being *more* rigorous than the annotator.
+
+**The fix.** The artifact answers with a pair — a verdict *and* the minimal
+assumption set it needed:
 
 ```
-R₀ ← f(d)                                # LLM extraction
-loop k = 0,1,2,…
-    A ← γ(R_k)                           # deterministic compile
-    if compile fails → witness = the refusal reason
-    else W ← Solve(A)                    # conflicts, vacuity, gaps, vector replay,
-                                         #   and (train split only) gold-query disagreements
-    if W = ∅ → return A                  # fixed point
-    R_{k+1} ← f_repair(R_k, W, d)         # repair prompt carries the *concrete binding*
+query   : "Receiving Party may share some Confidential Information with third parties"
+verdict : ENTAILED under assumptions { third_party ⊑ permitted_recipient,
+                                       written_consent_obtainable = true }
+strict  : NOT ENTAILED
 ```
 
-The key detail: the repair prompt contains a **concrete counterexample**
-("under `loan_amount = 250000, occupancy = investment`, rules R-014 and R-031
-both fire and assign `max_ltv` to 80 and 75 respectively — here are both cited
-clauses"), not a generic "there is a conflict". This is the difference between
-CEGIS and self-critique, and the ablation (witness vs. no-witness repair
-prompts) is a required experiment.
+**Three metrics fall out**, and each is solver-computable:
 
-Report accuracy and yield vs. repair round *k*, and the token cost of each
-round. Expect diminishing returns by *k* = 3 *(target)*.
+- **Assumption-free accuracy** — strict entailment vs. re-annotated strict labels.
+- **Assumption-augmented accuracy** — accuracy against original pragmatic labels
+  when the artifact is allowed to declare assumptions.
+- **Assumption minimality** — is each declared assumption *necessary*? Drop it
+  and re-check: if the verdict survives, the assumption was padding. Minimality
+  is exactly what stops a model from "assuming" its way to any answer, and it is
+  decided by the solver, not by a judge.
 
-### 9.2 RLVR — the verifier as reward (training time)
+This converts someone else's negative result into a design requirement, a
+metric, and a defense of the benchmark's oracle. It also answers the sharpest
+reviewer question about the entailment mode before it is asked.
 
-Train an open-weight model (8–14B dense, or LoRA on ~32B) with GRPO-style
-policy optimization on a composite programmatic reward:
+---
 
-```
-r =  w₁ · 1[compiles]
-   + w₂ · (fraction of test vectors replayed)
-   + w₃ · 1[no unresolved SMT conflict]         # solver, not a model
-   + w₄ · (provenance precision vs. cited spans)
-   + w₅ · (decision agreement on train-split gold queries)
-   − w₆ · (abstention rate)                     # so abstaining isn't free
-```
+## 11. LEXEC-Perturb, narrowed
 
-Three properties worth stating explicitly because they are what make this a
-NeurIPS contribution rather than a fine-tuning report:
+~1.5–2k clause-level perturbation pairs, each labeled with a metamorphic
+relation, never a target artifact.
 
-1. **The reward is not a learned judge.** w₁–w₄ are computed by a compiler and
-   a solver. No reward model, no LLM-as-judge in the training loop, hence no
-   reward hacking through judge persuasion.
-2. **The reward is dense in a domain that had none.** Before compilation, the
-   only signal on "did you extract this policy correctly" was a human or an LLM
-   judge. Compilation manufactures a dense, cheap, automatic signal.
-3. **Abstention is priced.** The pipeline's readiness gate already produces an
-   honest "unresolved" state. Left unpriced, RL will learn to abstain on
-   everything; w₆ makes selective prediction a trade-off the model must
-   navigate, which is exactly what we then measure with risk–coverage curves.
+**Meaning-preserving (invariance):** paraphrase; active↔passive;
+legalese↔plain; clause reordering; splitting/merging; defined-term substitution;
+unit-preserving numeric restatement ("three years" ↔ "36 months"); redundant
+(already-implied) defeater insertion. Required: ⟦γ(f(d))⟧ ≡ ⟦γ(f(π(d)))⟧, checked
+by SMT equivalence — not string similarity.
 
-**Headline result to aim for:** an 8–14B open model, RLVR-trained on the
-verifier, exceeds a frontier prompted model on decision agreement at equal or
-better coverage *(target)*. That is the result that makes this a main-track
-paper rather than a benchmark paper.
+**Meaning-changing (directional refinement — the emphasis, post-LGMT):**
 
-### 9.3 Where this repository already sits
-
-The repo is the substrate; roughly half the verifier exists as a *self*-report
-and needs to become an *external* instrument:
-
-| Needed | Status in this repo |
+| Edit | Required relation |
 | --- | --- |
-| v2 typed rule contract + validator | ✅ `utils/rule_contract.py`, closed enums, unit-tested |
-| Four-invariant hard gate (corpus / naming / schema / referential integrity) | ✅ `agents/agent_07_executable_readiness.py` |
-| Claim-level grounding certification | ✅ `agents/agent_09_grounding_verifier.py` (6 of 12 claim types LLM-verified; rest structural) |
-| Dependency DAG partition, 100% coverage, SCC condensation | ✅ `utils/dag_builder.py` |
-| DMN/BPMN *projection* | ⚠️ 12-line column manifest (`_project_execution`) — a hint, not a model |
-| **DMN 1.3 XML / FEEL renderer + evaluator** | ❌ does not exist |
-| **SMT-LIB backend + solver queries** | ❌ does not exist |
-| **Vector-replay conformance gate** | ❌ does not exist (a throwaway spike existed; see §13) |
-| **Metamorphic harness** | ❌ does not exist |
-| **RL environment wrapping the verifier** | ❌ does not exist |
-| Benchmark corpora, checksummed, license-clean | ✅ `benchmarks/` — CUAD, ContractNLI, OPP-115, MAPP |
+| scope tightening | `SAT(σ_old ∧ ¬σ_new)` ∧ `UNSAT(σ_new ∧ ¬σ_old)` |
+| threshold shift | decision boundary moves in the named direction |
+| modality flip (shall→may) | obligation becomes permission (output *role* changes) |
+| defeater addition | firing set strictly shrinks |
+| negation insertion | outcome flips on the affected region |
+| cross-reference redirect | the dependency edge moves |
 
-So: the extraction half is built and tested (`pytest`: 770 passed, verified
-2026-08-24); the *measurement* half is the research build.
+**Position against LGMT explicitly.** LGMT (arXiv:2605.23965) derives MRs from
+FOL equivalences and checks *answer* consistency on reasoning problems. Here the
+perturbation is applied to a *real normative document*, the object checked is a
+*compiled artifact*, and the interesting half is *refinement* rather than
+invariance. That is the whole delta, and the paper should say so in one sentence
+rather than dressing it up.
+
+**Scoring.** **SDI = SR + SE − 1** (Youden's J): invariance rate plus
+correct-change rate minus one. A constant model scores 0; a noisy model scores 0.
+One number, gameable in neither direction.
+
+**Annotation cost.** Write an edit, pick a relation from a closed list — no logic
+required. ~2–4 min/item → ~120–160 annotator hours with 20% double annotation.
+
+**Licensing.** OPP-115 and MAPP carry no redistribution grant. Ship **edit
+scripts and offsets**, never derived text — the posture
+`benchmarks/datasets.json` already takes.
 
 ---
 
-## 10. Metrics
+## 12. Method
 
-Defined precisely, because vague metrics are how this kind of paper dies.
+### 12.1 CEGIR — counterexample-guided iterative repair
+
+```
+R₀ ← f(d)
+loop k = 0,1,2,…
+    A ← γ(R_k)                          # deterministic compile, no LLM
+    W ← Solve(A)                        # conflicts, vacuity, gaps, vector replay,
+                                        #   train-split gold-query disagreements
+    if W = ∅ → return A
+    R_{k+1} ← f_repair(R_k, W, d)         # repair prompt carries the CONCRETE binding
+```
+
+The repair prompt carries a witness: *"under `loan_amount = 250000, occupancy =
+investment`, rules R-014 and R-031 both fire and assign `max_ltv` to 80 and 75 —
+here are both cited clauses."* Report accuracy and yield vs. round *k* and the
+token cost per round; expect diminishing returns by *k* = 3 *(target)*.
+
+**Novelty, honestly bounded.** CEGIS-with-LLMs is established: MaxSAT-localized
+counterexample-guided program repair (AAAI 2025, arXiv:2502.07786; 1,431 student
+programs), Logic-LM's solver-error self-refinement, SCAFFOLD-CEGIS,
+property-guided synthesis for planning. The delta here is the *source* of the
+counterexample: not an external specification or a test suite, but
+**cross-rule inconsistency inside a single extracted artifact** — a signal that
+only exists because the extraction target is a rule *set* over shared variables.
+The required ablation is witness vs. no-witness repair prompts.
+
+### 12.2 Solver-reward RL, narrowed
+
+GRPO-style RL on an open-weight model (8–14B dense, or LoRA on ~32B) with a
+composite programmatic reward:
+
+```
+r =  w₁·1[compiles]
+   + w₂·(fraction of test vectors replayed)
+   + w₃·1[no unresolved SMT conflict]         # solver, not a model
+   + w₄·(provenance precision vs. cited spans)
+   + w₅·(decision agreement on train-split gold queries)
+   + w₆·(assumption minimality, §10)
+   − w₇·(abstention rate)                     # abstaining must not be free
+```
+
+**The narrowed claim.** Not "RLVR beyond math and code" — that is taken (§1.5).
+The claim is: *RL where the reward is a **solver verdict on the denotation of an
+artifact extracted from a long document with no gold artifact**.* RLVR for
+text-to-SQL rewards execution against a gold query; for IE, agreement with gold
+labels; for structured output, schema validity plus label match; for
+autoformalization, prover success on a gold theorem statement. Here there is no
+gold artifact, no gold label for the artifact, and the reward is *internal
+logical consistency plus behavioral agreement*. Wang et al. name exactly this as
+future work ("solver-based feedback training objectives for legal-domain LLMs"),
+which is both the strongest citation for the gap and the reason to move fast.
+
+Three properties worth stating: the reward is computed by a compiler and a
+solver, so there is no judge to persuade; the signal is dense in a domain that
+had none; and abstention is priced, which makes selective prediction a trade-off
+the model must navigate — then measured with risk–coverage curves against the
+grammar-entropy UQ baseline from **Grammars of Formal Uncertainty** (NeurIPS
+2025), which reaches **AUROC > 0.93** on logic tasks *(published)* and is the
+number to beat.
+
+**Headline target:** an 8–14B open model, solver-reward-trained, exceeds a
+frontier prompted model on decision agreement at equal or better coverage
+*(target)*.
+
+### 12.3 Where this repository already sits
+
+| Needed | Status |
+| --- | --- |
+| v2 typed rule contract + validator, closed enums | ✅ `utils/rule_contract.py` |
+| Four-invariant hard gate | ✅ `agents/agent_07_executable_readiness.py` |
+| Claim-level grounding certification | ✅ `agents/agent_09_grounding_verifier.py` (6 of 12 claim types LLM-verified; rest structural) |
+| DAG partition, 100% coverage, SCC condensation | ✅ `utils/dag_builder.py` |
+| Selective-prediction machinery (`readiness`, `unresolved`) | ✅ `utils/readiness.py`, `utils/kg_readiness.py` |
+| DMN/BPMN *projection* | ⚠️ 12-line column manifest (`_project_execution`) — a hint, not a model |
+| DMN 1.3 XML / FEEL renderer + evaluator | ❌ |
+| SMT-LIB backend + the seven queries | ❌ |
+| Vector-replay conformance gate | ❌ |
+| Metamorphic harness | ❌ |
+| Assumption extraction/minimization | ❌ |
+| RL environment wrapping the verifier | ❌ |
+| Benchmark corpora, checksummed, license-clean | ✅ `benchmarks/` (4 corpora; +2 to add) |
+
+Extraction half: built and tested. Measurement half: the research build.
+
+---
+
+## 13. Metrics
 
 | Metric | Definition |
 | --- | --- |
-| **DA** — Decision Agreement | over a query distribution *Q*, `E_q[ 1(⟦A⟧(q) = gold(q)) ]`; the primary metric |
-| **EA** — Entailment Accuracy | 3-way accuracy on ContractNLI queries answered by SMT over ⟦*A*⟧ |
-| **EY** — Executable Yield | fraction of documents producing a compiled, gate-passing artifact (coverage) |
-| **S-DA@c** | selective decision agreement at coverage *c*; the risk–coverage curve, summarized by **AURC** |
-| **SR / SE / SDI** | invariance rate, correct-change rate, and `SR + SE − 1` on LEXEC-Perturb |
-| **PP** — Provenance Precision | overlap of artifact-cited sections with expert evidence spans (free from ContractNLI/CUAD) |
-| **CQI** — Cross-Query Inconsistency | fraction of query pairs whose answers cannot come from one consistent function; **0 by construction** for compiled artifacts (P4) |
-| **VR** — Vector Replay | fraction of source-attested test vectors reproduced by the *emitted* artifact |
-| **Conflict / gap / vacuity density** | solver-detected defects per 100 rules — a graph-quality measure with no human in the loop |
-| **Cost** | USD and tokens per document to *build* the artifact; USD per query to *use* it |
+| **DA** | Decision Agreement: `E_q[1(⟦A⟧(q) = gold(q))]` — primary |
+| **OE** | Outcome Equivalence vs. gold DMN artifacts (Graus protocol; §9) |
+| **EA_strict / EA_assumed / AM** | assumption-free accuracy, assumption-augmented accuracy, assumption minimality (§10) |
+| **EY** | Executable Yield: fraction of documents producing a compiled, gate-passing artifact |
+| **S-DA@c, AURC** | selective decision agreement at coverage *c*; risk–coverage summary |
+| **SR / SE / SDI** | invariance rate, correct-change rate, `SR + SE − 1` |
+| **PP** | Provenance Precision vs. expert evidence spans (free from ContractNLI/CUAD) |
+| **CQI** | Cross-Query Inconsistency; **0 by construction** for compiled artifacts (P4) |
+| **VR** | Vector Replay on the *emitted* artifact |
+| **Defect density** | solver-detected conflicts / gaps / vacuities per 100 rules |
+| **Cost** | USD + tokens to *build* an artifact; USD per query to *use* it |
 
-Note the deliberate pairing: EY and DA trade off, so neither may be reported
-alone. Every table reports (DA, EY) jointly or an S-DA@c curve.
-
----
-
-## 11. Experiments and baselines
-
-### 11.1 Baselines that must be in the paper
-
-1. **Prompt-only frontier models**, one-shot document → v2 rule set (no
-   pipeline, no repair). Several model families.
-2. **The full existing pipeline, unchanged** — 10 stages, no compiler feedback.
-   This is the "does the elaborate pipeline earn its cost" ablation, and it
-   must be allowed to lose.
-3. **Direct-to-Python.** "Write a Python function that decides *X* from this
-   contract." Code LLMs are extremely strong at this. **This baseline may well
-   beat DMN on DA, and the paper must say so if it does** — the defense is then
-   auditability, provenance, consistency, and standards-compatibility, all of
-   which are separately measured (PP, CQI), not asserted.
-4. **Direct long-context QA.** Whole document in context, answer each query
-   directly. No artifact. This is the strongest accuracy baseline and the most
-   important comparison.
-5. **RAG QA** over chunked documents — the industrial default.
-6. **Fine-tuned span extraction** (a CUAD/ContractNLI-style supervised model)
-   for the surface-metric arm of the dissociation study.
-7. **Ablations of ours:** −CEGIR; −witness (repair without the concrete
-   counterexample); −defeater semantics (exceptions as conjunction / ignored);
-   −semantic dedup (text-similarity dedup instead); −SMT (vector replay only).
-
-### 11.2 Target-language ablation (answers objection 4)
-
-Same extraction, four compilation targets: **DMN 1.3 + FEEL**, **SMT-LIB**,
-**Python**, **ASP/Datalog (defeasible-friendly)**. Measure DA, EY, and defect
-density per target. The scientific question — *which formal target can an LLM
-hit most reliably, and does defeasible-native representation help?* — is
-interesting whichever way it lands, and it converts "why DMN?" from a weakness
-into a section.
-
-### 11.3 The amortization and consistency experiment (answers objection 3)
-
-For each document, answer *N* queries under each regime:
-
-- **Compiled:** one compile (~document-length tokens, once) + *N* free solver
-  calls. Marginal query cost ≈ 0. CQI = 0 by construction.
-- **Long-context QA:** *N* × (document + query) tokens. **Report with and
-  without prompt caching** — caching narrows the gap substantially and a
-  reviewer will raise it, so we raise it first. Measure CQI empirically.
-
-Report the break-even *N*. For ContractNLI's 17 hypotheses per NDA the gap is
-modest; for scenario sweeps (10³–10⁴ fact bindings, which is the actual
-industrial use — "what does this policy decide across our whole book of
-business?") it is ~10²–10³×. The honest claim is therefore conditional on *N*,
-and stated that way. The unconditional claim is CQI: guaranteed 0 vs. measured.
-
-### 11.4 Generalization experiments
-
-- **Cross-domain:** train RLVR on one corpus, evaluate on the other three.
-  Domain vocabularies barely overlap (NDA propositions vs. privacy practice
-  categories vs. CUAD clause types), so this is a real transfer test — and the
-  repository already has direct evidence that domain-specific coupling breaks
-  silently (the `rule_type`-keyed BPMN gate produced zero targets for five of
-  eight domains until it was fixed).
-- **Cross-lingual:** MAPP's German half, evaluated through the shared formal
-  language.
-- **Cross-task transfer (the generality claim):** apply the same
-  compile-and-verify recipe to one non-compliance domain — clinical practice
-  guidelines or benefits eligibility rules — to support "this is a recipe, not
-  a compliance system." Even a small-scale version strengthens the paper
-  considerably.
+DA and EY trade off, so neither is ever reported alone: every table gives
+(DA, EY) jointly or an S-DA@c curve.
 
 ---
 
-## 12. Pre-registered headline table (what "strong enough" looks like)
+## 14. Experiments and baselines
 
-Filling this in with these magnitudes is roughly the accept threshold. These
-are **targets**, and the proposal is written so that missing them still yields a
-publishable paper (§18).
+### 14.1 Required baselines
 
-| Result | Target |
-| --- | --- |
-| DA, best baseline (long-context QA) on ContractNLI entailment | strong — assume it is the number to beat |
-| DA, ours (pipeline + CEGIR + RLVR) | ≥ baseline, at ≥ 90% EY |
-| DA gain from CEGIR alone | +6–12 points absolute |
-| DA gain from RLVR over SFT on the same data | +5–10 points absolute |
-| 8–14B RLVR model vs. frontier prompted model | ours ≥ theirs on DA |
-| ρ(span-F1, DA) — the dissociation | < 0.4 |
-| LLM grounding-verifier flag rate vs. VR failure rate | ≥ 5× over-rejection, replicated across 4 domains |
-| SDI on LEXEC-Perturb, best system | < 0.7 (i.e. the benchmark is *not* saturated — a benchmark everyone solves is worthless) |
-| CQI, compiled vs. long-context QA | 0 vs. > 5% |
-| Solver-detected conflict density, before vs. after CEGIR | ≥ 60% reduction |
-| Amortized cost at N = 10³ scenario queries | ≥ 100× cheaper than per-query QA (with caching enabled for the baseline) |
+1. **Prompt-only frontier models**, document → v2 rule set, several families.
+2. **The existing 10-stage pipeline, unchanged** — the "does the pipeline earn
+   its cost" ablation. It must be allowed to lose.
+3. **Graus's four input conditions** on the Dutch corpus (text / +SRL / +I/O /
+   +both), reproduced on their harness — a published number to beat.
+4. **Direct-to-Python.** Code LLMs are strong here; this baseline may win on DA,
+   and the paper must say so if it does. The defense is then PP, CQI, and
+   standards-compatibility — separately measured.
+5. **Direct long-context QA** — the strongest accuracy baseline.
+6. **RAG QA** — the industrial default.
+7. **Fine-tuned span extraction** (CUAD/ContractNLI-style) for the surface-metric
+   arm of C6(b). ContractEval's 19-model CUAD results give a published reference
+   point.
+8. **Ours, ablated:** −CEGIR; −witness; −defeater semantics (conjunctive /
+   ignored); −semantic dedup; −SMT (vector replay only); −assumptions.
+
+### 14.2 Target-language ablation
+
+Same extraction → **DMN 1.3 + FEEL**, **SMT-LIB**, **Python**, **ASP/Datalog**
+(defeasible-native). Report DA, EY, defect density per target. *Which formal
+target can an LLM hit most reliably, and does a defeasible-native
+representation help?* — interesting whichever way it lands, and it retires the
+"why DMN?" objection. Grounding: Horner et al. target Defeasible Deontic Logic,
+LegalRuleML models defeasibility natively, DMN does not.
+
+### 14.3 Compile-then-execute vs. in-context rule application (new)
+
+**RuleArena** (ACL 2025) already measured the failure mode: given 95 real rules
+in context and 816 problems across airline/NBA/tax, LLMs "perform poorly,"
+confuse similar regulations, botch the arithmetic, and improve markedly with
+external math/logic tools *(published)*. Head-to-head: LLM applies rules in
+context vs. LEXEC compiles the rule text once and executes deterministically.
+This is a cheap experiment on an existing benchmark that isolates exactly what
+compilation is supposed to buy, and it is the most direct available answer to
+"why not just prompt the model?"
+
+### 14.4 Amortization and consistency
+
+Per document, answer *N* queries under each regime. Compiled: one compile, then
+~free solver calls, CQI = 0 by construction. Long-context QA: *N* × (document +
+query) tokens, CQI measured. **Report with and without prompt caching** —
+caching narrows the gap and a reviewer will raise it, so raise it first. Report
+break-even *N*. For ContractNLI's 17 hypotheses the gap is modest; for scenario
+sweeps (10³–10⁴ bindings — the actual industrial use) it is ~10²–10³×. The
+unconditional claim is CQI; the cost claim is conditional on *N* and stated that
+way.
+
+### 14.5 Generalization
+
+- **Cross-domain:** train on one corpus, evaluate on the others. Vocabularies
+  barely overlap, and this repo already has evidence that domain coupling fails
+  silently (a `rule_type`-keyed BPMN gate produced zero targets for five of eight
+  domains until fixed).
+- **Cross-lingual:** MAPP's 91 German policies, evaluated through the shared
+  formal language.
+- **Cross-jurisdiction:** the Dutch corpus is a different legal system, language,
+  and document genre from the four English corpora — transfer here is a real
+  test, not a courtesy experiment.
+- **Cross-task:** clinical guidelines or benefits eligibility, to support "recipe,
+  not compliance system." Note that **CPGPrompt** (arXiv:2601.03475) already
+  translates clinical guidelines into LLM-executable guidance trees, so this
+  transfer has prior art to build on rather than virgin territory.
 
 ---
 
-## 13. Preliminary evidence already in hand — and its limits
+## 15. Pre-registered headline table
 
-A throwaway spike (built against this pipeline's predecessor monorepo, on a
-352-rule certified graph) produced these numbers. They are the reason to
-believe the compiler is feasible at all. **All of them come from one run, one
-domain (mortgage), n = 1**, and the artifacts are not in this repository.
+Now anchored to *published* numbers rather than invented ones.
+
+| Result | Reference point (published) | Target |
+| --- | --- | --- |
+| Outcome equivalence, Dutch corpus (Outcome / Requirements models) | **42.6% / 60.4%** (Graus, best condition, GPT-5.1, 1-shot) | **≥ 55% / ≥ 70%** with solver-checked compilation + CEGIR |
+| Models reaching full outcome equivalence | **33%** | **≥ 45%** |
+| Instrument validation: ρ(gold-free DA, gold-based OE) | none exists | **≥ 0.6**, with the disagreement cases characterized |
+| ContractNLI, strict-entailment accuracy | **83.0%** (Claude, LLM-based formal reasoning) | ≥ comparable *from a compiled artifact*, at ≥ 90% EY |
+| Assumption minimality | none exists | ≥ 80% of declared assumptions provably necessary |
+| Scope-laundering analogue in our loop | **15.3–52.5%** in LLM self-reported formal reasoning | **0 by construction** (compiler makes no LLM calls) — a design claim, verified by audit |
+| Selective prediction: AURC vs. grammar-entropy UQ | **AUROC > 0.93** on logic tasks (NeurIPS 2025) | beat it on document-scale extraction |
+| ρ(span-F1, DA) — the dissociation | Graus: structural similarity ≈ 0.43 alongside outcome equivalence ≈ 0.43 | **< 0.4**, replicated on ≥ 3 domains |
+| Grounding-verifier over-rejection | ours, n=1: **98% flagged vs. 6% vector-replay failure** | **≥ 5×**, replicated across 4 domains and ≥ 3 verifier models |
+| RuleArena head-to-head | LLMs "perform poorly"; tools help | compile-then-execute **≥ +15 points** over in-context application |
+| CEGIR gain | — | **+6–12** DA points |
+| Solver-reward RL over SFT | — | **+5–10** DA points; 8–14B ≥ frontier prompted |
+| SDI, best system | — | **< 0.7** (benchmark not saturated) |
+| CQI, compiled vs. long-context QA | — | **0 vs. > 5%** |
+| Conflict density, before vs. after CEGIR | — | **≥ 60%** reduction |
+| Amortized cost at N = 10³ | — | **≥ 100×** cheaper, with caching enabled for the baseline |
+
+---
+
+## 16. Preliminary evidence in hand, and its limits
+
+From a throwaway spike against this pipeline's predecessor monorepo on a
+352-rule certified graph. **One run, one domain (mortgage), n = 1**; the
+artifacts are not in this repository.
 
 | Measurement | Result *(measured, n=1)* |
 | --- | --- |
 | Rules with complete DMN-critical structure | 352/352 (100%) |
 | Rules emitting well-formed DMN 1.3 XML | 352/352 (100%) |
-| Predicate/outcome literals not renderable as FEEL | 0 of 1,385 |
-| Distinct operators in use (all FEEL-expressible) | 8 |
+| Literals not renderable as FEEL | 0 of 1,385 |
+| Distinct operators (all FEEL-expressible) | 8 |
 | DNF expansion | 429 rows from 352 rules; 87.5% single-row; worst case 7 |
-| Rules requiring negation nodes | 0 |
+| Rules needing negation nodes | 0 |
 | **Test vectors reproduced by generated row logic** | **361/384 (94.0%)** |
 | Vectors where a rule fired with a *wrong* value | **0** |
-| Grounding verifier flagged as requiring review | 345/352 (98%) ← the dissociation |
+| Grounding verifier flagged as requiring review | **345/352 (98%)** ← the dissociation |
 | Rules with exceptions | 155/352; **125 introduce variables absent from the condition** |
 | Hit-policy mix | 324 UNIQUE / 24 COLLECT / 4 ANY |
-| Rules needing UNIQUE→FIRST downgrade | 42 |
-| Output-signature groups | 336 groups for 352 rules; 323 singletons |
+| UNIQUE→FIRST downgrades required | 42 |
+| Output-signature groups | 336 for 352 rules; 323 singletons |
 | Dependency-edge types | prerequisite 138, complementary 46, conditional 45, sequential 37, validation 18, override 16, contradictory 5 |
 
-**What should generalize:** the operator/type/hit-policy inventories and the DMN
-column derivation are *schema-level* properties of the v2 contract, not domain
-properties. FEEL mappability and DNF tractability should hold for any
-contract-conformant domain.
+**Should generalize** (schema-level properties of the v2 contract, not of
+mortgage data): operator/type/hit-policy inventories, FEEL mappability, DNF
+tractability, DMN column derivation.
 
-**What almost certainly will not:** the 94% replay rate, the 87.5% single-row
-share, the conflict count, and anything keyed to `rule_type` — there is direct
-in-repo evidence that `rule_type`-dependent behavior breaks across domains.
+**Probably will not:** the 94% replay rate, the 87.5% single-row share, the
+conflict count, and anything keyed to `rule_type`.
 
-**Therefore the first experiment of the project is a replication**, not a build:
-re-run one benchmark domain (ContractNLI or OPP-115 — the vocabularies furthest
-from mortgage) under the v2 contract and re-measure every row of that table.
-If the replay rate collapses on a non-mortgage domain, the project's shape
-changes, and it is far better to learn that in month 1 than in month 6.
+**Cross-check against the literature.** Graus's 42.6% outcome equivalence
+against *gold artifacts* and our 94% *self*-vector replay are not in conflict —
+they measure different things (fidelity to the extracted rule vs. fidelity to
+the correct rule), and the gap between them is roughly the size of the
+extraction problem. Stating that plainly is important: it is exactly why §9's
+instrument validation, not another replay number, is the load-bearing
+experiment.
 
-Also inherited from that analysis, and relevant to the paper's honesty section:
-the grounding verifier LLM-checks only 6 of 12 claim types against actual corpus
-quotes (`description`, `condition`, `outcome`, `party`, `scope`, `exception`);
-`test_vector`, `condition_logic`, `variable`, `classification`,
-`entity_attachment`, and `execution` are checked structurally only. So
-"certified" does **not** mean "the DMN projection was verified against source
-text." The correctness argument is a *chain* — the verifier checks conditions
-and outcomes against source; vector replay checks the artifact against
-conditions and outcomes — and the paper must claim only the composition.
+Also inherited: the grounding verifier LLM-checks only 6 of 12 claim types
+against corpus quotes (`description`, `condition`, `outcome`, `party`, `scope`,
+`exception`); `test_vector`, `condition_logic`, `variable`, `classification`,
+`entity_attachment`, and `execution` are structural-only. "Certified" does **not**
+mean the DMN projection was verified against source text. The correctness
+argument is a *chain* — the verifier checks conditions/outcomes against source;
+vector replay checks the artifact against conditions/outcomes — and the paper
+claims only the composition.
 
 ---
 
-## 14. Timeline (2026-08 → 2027-05) with go/no-go gates
+## 17. Timeline (2026-08 → 2027-05), tightened
+
+NeurIPS deadlines have moved earlier three years running (May 22 → May 16 →
+May 6). Plan for **~May 1, 2027**, results frozen **April 15**.
 
 | Month | Work | Gate |
 | --- | --- | --- |
-| **Sep 2026** | Replicate §13 on one non-mortgage benchmark domain. Build `utils/feel.py` (renderer + evaluator) and `utils/dmn_builder.py` (DNF → rows, hit-policy reconciliation). Decide defeater semantics empirically. | **G1:** ≥ 90% of certified rules emit schema-valid DMN and ≥ 85% of positive vectors replay, on a non-mortgage domain. *If not: pivot to Plan B (§18).* |
-| **Oct 2026** | SMT-LIB backend + the seven solver queries (§6). Semantic dedup/subsumption. Conformance gate (`cli/compile.py`, stages C1–C4). Provenance into artifacts. | **G2:** all seven queries running on a real graph; conflict/gap/vacuity densities measured on ≥ 2 domains. |
-| **Nov 2026** | LEXEC-Bench harness: ContractNLI entailment mode end-to-end; CUAD and OPP-115/MAPP query builders. First DA numbers. Write up an early version for a legal-NLP workshop (e.g. NLLP) to get external feedback and stake the claim. | **G3:** DA measurable on ≥ 5k gold queries; long-context QA baseline implemented. **This is the make-or-break gate** — if DA can't be computed, there is no paper. |
-| **Dec 2026** | The dissociation study (C4): span-F1 / LLM-judge vs. DA correlation; grounding-verifier over-rejection replication across 4 domains. Contamination probes. | **G4:** dissociation replicates on ≥ 3 domains, or is honestly reported as absent. |
-| **Jan 2027** | LEXEC-Perturb: annotation guidelines, closed relation list, tooling, annotator hiring, pilot (200 items, IAA). Then full annotation in parallel with Feb work. | **G5:** IAA ≥ 0.7 on relation labels. |
-| **Feb 2027** | CEGIR: repair loop, witness-vs-no-witness ablation, rounds-vs-accuracy curves. Target-language ablation (DMN / SMT-LIB / Python / ASP). | **G6:** CEGIR shows ≥ 5-point DA gain. |
-| **Mar 2027** | RLVR: RL environment wrapping the verifier, GRPO on an 8–14B model, reward shaping, abstention pricing, risk–coverage curves. | **G7:** RLVR beats SFT on the same data by ≥ 3 points DA. |
-| **Apr 2027** | Cross-domain / cross-lingual / cross-task transfer. Amortization + CQI experiment. Human validation of the scenario subset. Full results freeze by **Apr 30**. | **G8:** all headline table rows filled. |
-| **May 2027** | Writing, figures, artifact release (code, harness, perturbation edit scripts), reproducibility checklist, broader-impact statement. Submit. | — |
+| **Sep 2026** | **Start with the Dutch corpus, not our own.** Clone Graus's repo, run its harness, reproduce its baseline. Then run our pipeline on the same 95 documents and get a first OE number. In parallel: `utils/feel.py` (renderer + evaluator), `utils/dmn_builder.py` (DNF → rows, hit-policy reconciliation). | **G1:** we reproduce Graus's reported baseline on his harness, and our pipeline produces a measurable OE on the same data. *This is a far better month-1 gate than v1's self-replication, because it is externally checkable.* |
+| **Oct 2026** | SMT-LIB backend + the seven queries. Semantic dedup. Conformance gate (`cli/compile.py`, C1–C4). Provenance into artifacts. Replicate §16's table on one non-mortgage benchmark domain. | **G2:** seven queries running; defect densities on ≥ 2 domains; §16 replication done or its failure characterized. |
+| **Nov 2026** | **§9 instrument validation** — gold-free DA vs. gold-based OE on the Dutch corpus, with disagreement analysis. §10 assumption extraction + minimality. ContractNLI and CUAD query builders. Write up for a legal-NLP workshop (NLLP-style) to get external review early. | **G3:** the correlation exists (or provably doesn't) and the disagreement cases are characterized. **Make-or-break: without §9, the benchmark has no warrant.** |
+| **Dec 2026** | C6: span-F1 / LLM-judge vs. DA across 4 domains; grounding-verifier over-rejection replication across domains and verifier models. Contamination probes. RuleArena head-to-head (§14.3). | **G4:** both findings replicate, or are honestly reported as absent. |
+| **Jan 2027** | LEXEC-Perturb: closed relation list, guidelines, tooling, annotator hiring, 200-item pilot with IAA; full annotation runs in parallel with Feb. | **G5:** IAA ≥ 0.7 on relation labels. |
+| **Feb 2027** | CEGIR: repair loop, witness ablation, rounds-vs-accuracy. Target-language ablation (DMN / SMT-LIB / Python / ASP). | **G6:** ≥ 5-point DA gain from CEGIR. |
+| **Mar 2027** | Solver-reward RL: environment, GRPO on 8–14B, reward shaping, abstention pricing, risk–coverage vs. the grammar-entropy baseline. | **G7:** beats SFT on the same data by ≥ 3 DA points. |
+| **Apr 2027** | Cross-domain / cross-lingual / cross-jurisdiction / cross-task transfer. Amortization + CQI. Human validation of the scenario subset. **Freeze April 15.** | **G8:** headline table filled. |
+| **May 2027** | Writing, figures, artifact release, reproducibility checklist, broader impact. Submit ~May 1. | — |
 
-Two deliberate scheduling choices: the benchmark comes **before** the method
-(if DA is not measurable, no amount of method work saves the paper), and
-annotation starts early because it is the only irreducibly slow item.
-
----
-
-## 15. Compute and cost budget (rough, for planning)
-
-**LLM extraction.** The four corpora total 1,387 documents through a 10-stage
-pipeline with reasoning models. Order-of-magnitude: a few dollars per document
-per full pipeline run → **~$3k–$11k for one complete sweep of all four
-corpora**. Experiments need many sweeps (model conditions × ablations × CEGIR
-rounds), so:
-- Main results on a **stratified subsample** (~150 docs/corpus ≈ 600 docs).
-- One **full-corpus** run on ContractNLI (607 docs) for the flagship number.
-- Cheap models for ablation sweeps; frontier models only for headline rows.
-- Budget line: **$15k–$30k** in inference across the project, with a hard cap
-  and per-experiment cost logging from day one. (The pipeline already has an
-  adaptive global rate limiter, so concurrent batch runs are safe.)
-
-**RL training.** GRPO on an 8–14B dense model: ~8×H100 for 1–2 weeks per
-serious run, plus false starts. LoRA on ~32B as the cheaper alternative.
-Budget **2–4 such runs**. The verifier itself is CPU-bound (compiler + SMT), so
-plan for a solver farm — solver calls, not GPU, may be the throughput
-bottleneck in the RL loop. Cache aggressively: identical rule sets recur across
-rollouts.
-
-**Annotation.** ~1.5–2k perturbation items at 2–4 min, double-annotated at 20%
-→ ~120–160 annotator hours. Plus ~500 scenario validations. Budget for 2–3
-qualified annotators (law students / privacy-compliance practitioners).
+Two scheduling principles: the *instrument* is validated before it is used at
+scale, and annotation starts early because it is the only irreducibly slow item.
 
 ---
 
-## 16. Risks and mitigations
+## 18. Compute and cost budget
+
+**LLM extraction.** 1,387 documents across four corpora (plus 95 Dutch, plus
+ObliQA passages) through a 10-stage reasoning pipeline. Order-of-magnitude: a
+few dollars per document per full run → **~$3k–$11k per complete four-corpus
+sweep**. Therefore: main results on a stratified subsample (~150 docs/corpus);
+one full-corpus ContractNLI run for the flagship; the full 95-document Dutch set
+every time (it is small and it is the anchor); cheap models for ablation sweeps;
+frontier models only for headline rows. **Budget $15k–$30k with a hard cap and
+per-experiment cost logging from day one.** The repo's adaptive global rate
+limiter already makes concurrent batch runs safe.
+
+**RL training.** GRPO on 8–14B: ~8×H100 for 1–2 weeks per serious run, plus
+false starts; LoRA on ~32B as the cheaper path. Budget 2–4 runs. The verifier is
+CPU-bound, so **solver throughput, not GPU, is likely the RL bottleneck** — cache
+by rule-set hash, bound row counts, time-box solver calls and record the timeout
+rate.
+
+**Annotation.** ~1.5–2k perturbation items at 2–4 min, 20% double-annotated →
+~120–160 hours; plus ~500 scenario validations. 2–3 qualified annotators (law
+students / privacy-compliance practitioners), fair disclosed rates.
+
+---
+
+## 19. Risks and mitigations
 
 | Risk | Severity | Mitigation |
 | --- | --- | --- |
-| **Extraction quality is the bottleneck, not compilation** — garbage rules compile perfectly into garbage DMN | **High** | This is *the* central risk. Mitigated by making the benchmark the primary contribution: even if DA is low across the board, an honest benchmark showing "nobody can do this yet" is publishable and valuable. Also why G3 precedes method work. |
-| §13's numbers don't replicate off-mortgage | **High** | G1 in month 1; Plan B ready |
-| Direct long-context QA simply wins on DA | **High** | Pre-committed: report it, and pivot the claim to auditability + CQI + amortization, all pre-registered as separate measured axes. Do **not** hide it. |
-| Defeater semantics is wrong | Medium | Empirically compare all three readings; report which the vector suite and LEXEC-Perturb support |
-| Contamination inflates results | Medium | Perturbed + post-cutoff held-out splits; memorization probe |
-| ContractNLI hypotheses aren't answerable from compiled rules (representational mismatch) | Medium | Pilot 50 documents by hand in month 1; if a hypothesis class is systematically unanswerable, exclude it *and report the exclusion rate as a finding* about representational adequacy |
-| SMT throughput limits the RL loop | Medium | Cache by rule-set hash; bound row counts; time-box solver calls with a recorded timeout rate |
-| Annotation IAA too low on "meaning-preserving" | Medium | Closed relation list, pilot, adjudication pass, report IAA per relation |
-| Reviewers see "application paper" | Medium | Lead with the no-gold-program problem (§2) and the cross-task transfer experiment; the compliance corpora are the *testbed*, not the topic |
-| BPMN over-interpretation | Medium | Only `prerequisite`/`sequential` edges become sequence flows (of 305 edges, 175); everything else is reported as a modelling note. **De-scope BPMN from the paper** — DMN carries the logic and the guarantees; BPMN is orchestration with a much weaker correctness story. Mention it as future work. |
-| Scope creep across three contributions | **High** | Contributions are staged so each is independently publishable; §18 defines what to cut and when |
+| **Someone publishes the solver-reward RL first.** Wang et al. named it as future work in June 2026. | **High** | Move C5 earlier if G3 lands early; and make C2 (instrument validation) the paper's spine, since it does not depend on the method being first |
+| **Extraction quality, not compilation, is the bottleneck** — garbage rules compile perfectly | **High** | The benchmark is the primary contribution; a rigorous "nobody can do this yet" is publishable. Graus at 42.6% already establishes headroom |
+| §16's numbers don't replicate off-mortgage | High | G2; Plan B ready (§20) |
+| **The gold-free metric doesn't track gold-based OE** (§9 fails) | **High** | That *is* a publishable finding, and it redirects the paper to Plan B. But it must be discovered in Nov 2026, not April 2027 |
+| Direct long-context QA simply wins on DA | High | Pre-committed: report it; pivot to PP/CQI/amortization, all pre-registered. Do not hide it |
+| Dutch corpus is one jurisdiction/language/genre | Medium | It is the *anchor*, not the benchmark; five other corpora carry breadth. Graus lists this limitation himself |
+| Defeater semantics wrong | Medium | Compare all three readings empirically; report which the vectors and Perturb support |
+| Contamination inflates results | Medium | Perturbed + post-cutoff splits; memorization probe; cite arXiv:2509.15336 and arXiv:2601.08778 as prior warnings |
+| Borrowed gold has annotation errors | Medium | Audit a sample of every borrowed gold set before trusting it (arXiv:2601.08778) |
+| ContractNLI entailment mode ungradable | Medium→**mitigated** | §10 assumption-explicit compilation; and try to obtain the 400/610 strict re-annotation from arXiv:2606.16118 |
+| SMT throughput limits the RL loop | Medium | Cache by rule-set hash; bound rows; recorded timeouts |
+| Annotation IAA too low on "meaning-preserving" | Medium | Closed relation list, pilot, adjudication, per-relation IAA |
+| Reviewers see an application paper | Medium | Lead with §9 (instrument validation) and §10 (semantics), not with the pipeline; include cross-task transfer |
+| BPMN over-interpretation | Low (de-scoped) | **BPMN is out of the paper.** Only `prerequisite`/`sequential` are ordering (175 of 305 edges *(measured)*). PET's 47 pairs show how thin that evidence base is. Spin-off, not contribution |
+| Scope creep across six contributions | **High** | Staged so each is independently publishable (§20) |
 
 ---
 
-## 17. Related work and positioning
+## 20. Fallbacks
 
-To be filled in with verified citations — **none of the references below have
-been checked against a live database in preparing this document, so verify
-every one before use.** The map is what matters here:
-
-- **Law as code / manual formalization:** Catala (a DSL for statutory law),
-  LegalRuleML, OpenFisca, Blawx, Symboleo. *Difference:* these are hand-written
-  formalizations by experts. Ours is extracted and verified automatically. Their
-  existence is evidence the target representation is the right one — cite them
-  as motivation, not as competition.
-- **Legal/privacy NLP corpora:** CUAD (NeurIPS D&B 2021), ContractNLI (Findings
-  of EMNLP 2021), OPP-115 (ACL 2016), MAPP (LREC 2022), LexGLUE, SARA
-  (statutory reasoning), CLERC, Claudette. *Difference:* all evaluate at the
-  span or label level. We evaluate the same corpora **extensionally** — which is
-  precisely the novel use of them.
-- **Privacy-policy formal analysis:** PolicyLint, PoliCheck, Polisis, PolicyQA.
-  *Difference:* hand-built taxonomies and narrow flow logic for privacy only;
-  ours is learned, general, and executable. These are the closest prior art in
-  spirit and deserve careful, generous treatment.
-- **LLM + solver neurosymbolic:** Logic-LM, SatLM, LINC, program-of-thought,
-  and FOLIO/ProofWriter-style benchmarks. *Difference:* short synthetic
-  problems with gold logical forms; single questions, not documents; no
-  training from verifier feedback; no defeasibility; no amortized artifact.
-- **Semantic parsing / text-to-SQL:** Spider and execution accuracy. *This is
-  our methodological ancestor and we say so.* Difference: gold programs exist
-  there; documents (not utterances) are the input here; defeasible open-world
-  semantics; artifact must be audit-traceable.
-- **RLVR:** verifiable-reward RL in math, code, and theorem proving. *Difference:*
-  we manufacture the verifier for a domain that had none. The claim
-  "verifiable rewards beyond math and code" is the paper's most portable line.
-- **Metamorphic / behavioral testing of NLP:** CheckList and successors.
-  *Difference:* their invariance is checked on text-level outputs; ours is
-  checked by **exact logical equivalence** on formal outputs — a strictly
-  stronger instrument, available only because the output is compiled.
-- **Selective prediction / calibration:** risk–coverage, AURC. We frame the
-  readiness gate as selective compilation.
-- **Business process / decision management:** DMN 1.3, BPMN 2.0, FEEL, decision
-  hit policies, and the process-mining literature.
-
-**One-line positioning:** *prior work either formalizes law by hand, or
-evaluates legal NLP by string overlap. We do neither: we compile, and then we
-measure what the compiled thing decides.*
+- **Plan A (target).** Main track: instrument validation + assumption-explicit
+  semantics + solver layer + CEGIR + solver-reward RL + the two findings.
+- **Plan B (if §9 or G2 fails).** *"Why document-to-logic extraction fails: a
+  decidable diagnosis."* Use the compiler as a diagnostic and characterize which
+  semantic phenomena defeat extraction — defeasibility, cross-references,
+  temporal scope, deontic modality, vagueness ("reasonable efforts," "material
+  adverse change"). Graus's finding that generated models keep 26–35% of gold
+  nodes yet match behavior 42.6% of the time is the perfect opening figure for
+  this paper. No RL needed.
+- **Plan C (if RL doesn't beat SFT).** Datasets & Benchmarks track: LEXEC-Bench +
+  instrument validation + assumption-explicit metrics + CEGIR + the
+  miscalibration finding. LegalBench set the precedent for legal benchmarks at
+  NeurIPS D&B.
+- **Plan D (if annotation slips).** Ship without LEXEC-Perturb; the extensional
+  half plus §9 stands alone. Given LGMT, this is the most expendable piece.
+- **Spin-offs (keep out of the main paper):** BPMN orchestration from dependency
+  DAGs; semantic dedup by logical equivalence vs. embedding similarity; the RL
+  environment as a standalone released artifact.
 
 ---
 
-## 18. Fallbacks — what to cut, and when
+## 21. Related work, grounded
 
-Staged so that a failure at any gate still yields a paper.
+Every item below was located and checked in this session; Appendix C lists the
+identifiers. Organized by what each line of work leaves open.
 
-- **Plan A (target).** Main-track paper: benchmark + dissociation + CEGIR +
-  RLVR. All four contributions.
-- **Plan B (if G1 fails — compilation doesn't generalize off-mortgage).** The
-  paper becomes *"Why document-to-logic extraction fails: a decidable
-  diagnosis."* Use the compiler as a *diagnostic* instrument: characterize
-  exactly which semantic phenomena defeat extraction (defeasibility, cross
-  references, temporal scope, deontic modality, vagueness — "reasonable
-  efforts", "material adverse change"). A rigorous negative result with a
-  decidable taxonomy of failure is a genuinely good NeurIPS paper and needs no
-  RL at all.
-- **Plan C (if G7 fails — RLVR doesn't beat SFT).** Drop the method; submit
-  benchmark + dissociation + CEGIR to the **Datasets & Benchmarks** track. A
-  decision-level benchmark over four established corpora, plus the metamorphic
-  suite, plus the miscalibration finding, is a solid D&B contribution.
-- **Plan D (if annotation slips).** Ship LEXEC-Bench without LEXEC-Perturb;
-  hold the perturbation suite for a follow-up. The extensional half stands
-  alone.
-- **Deliberate spin-offs** (do not put these in the main paper):
-  - BPMN orchestration from dependency DAGs — weaker guarantees, separate venue.
-  - Semantic deduplication by logical equivalence vs. embedding similarity — a
-    tidy short paper on its own.
-  - The RL environment as a standalone released artifact ("a verifiable-reward
-    environment for document-to-logic extraction").
+**A. Manual formalization of law ("rules as code").** Catala (Merigoux,
+Chataing & Protzenko, ICFP 2021 / arXiv:2103.03198) — a DSL for statutory
+computation that found a bug in the official French benefits implementation.
+LegalRuleML (OASIS Standard v1.0, 30 Aug 2021; Athan, Governatori et al., ICAIL
+2013) — defeasibility, deontic operators, norm classification, rule/text
+isomorphism. Symboleo (IEEE RE 2020; SoSyM 2022) with Symboleo2SC (SoSyM 2024) —
+obligations/powers with statechart semantics, LTL/CTL model checking, smart-contract
+generation. Hublet, Kvamme & Krstić (arXiv:2402.17350) — enforceable GDPR
+specifications for runtime enforcement. OECD *Cracking the Code* — the policy
+framing. **Left open:** all hand-authored. This project's target representation
+is theirs; the extraction and the validation are not.
+
+**B. LLM → formal legal representation.** Horner, Mateis, Governatori &
+Ciabattoni (arXiv:2506.08899) — legal text → Defeasible Deontic Logic with
+atomic-snippet segmentation and coherence metrics. SOLAR (Sadowski & Chudziak,
+CIKM 2025 / arXiv:2509.00710) — multi-agent statutory reasoning with formalized
+intermediate representations and symbolic inference. ContractCheck (Khoja et al.,
+*AI and Law* / arXiv:2504.18422) — SPAs → decidable FOL → SMT conflict detection,
+from a manual ontology-driven encoding. PolicyGuard (arXiv:2606.32004) —
+neuro-symbolic NDA compliance review with Z3, evaluated on CUAD and ContractNLI.
+PropertyGPT (NDSS 2025) — retrieval-augmented formal property generation for
+smart contracts. **Left open:** corpus-scale behavioral validation, no learning
+from the verifier, and no calibration of the evaluation itself.
+
+**C. Document → executable decision model.** **Graus, ICAIL 2026
+(arXiv:2604.17153)** — the closest work: 95 production DMN models + Dutch
+statutory text, four input representations, structural (graph-kernel) *and*
+outcome-equivalence evaluation, released under CC BY 4.0 with a harness. Earlier,
+pre-LLM: Text2Dec (Springer 2020) and DMN extraction via dependency parsing /
+deep learning; the field's own literature notes that *"a paucity of
+gold-standard, scalable annotated datasets currently hinders objective
+evaluations."* **Left open, per his own limitations:** one jurisdiction/language/
+domain, one LLM, 1-shot, no solver-based consistency checking, exhaustive-enumeration
+testing, and I/O specs supplied by experts. Each is a line item in §4.
+
+**D. LLM → process models (BPMN).** ProMoAI (arXiv:2403.04327), BPMN Assistant,
+Nala2BPMN, "Do LLMs Speak BPMN?", the SoSyM benchmark study; PET (47 text/BPMN
+pairs) as the standard dataset; evaluation via conformance checking and
+behavioral-footprint similarity (PM4Py); knowledge-driven hallucination in
+process modeling (arXiv:2509.15336). **This is prior art for extensional
+evaluation of generated formal artifacts and must be cited as such.** It is also
+why BPMN is out of scope here.
+
+**E. Legal / privacy / regulatory benchmarks.** LegalBench (Guha et al., NeurIPS
+D&B 2023 / arXiv:2308.11462; 162 expert-built tasks). CUAD (NeurIPS D&B 2021).
+ContractNLI (Findings EMNLP 2021 / arXiv:2110.01799). MAUD; ACORD
+(arXiv:2501.06582; 114 queries, 126k query–clause pairs); ContractEval (NLLP
+2025 / arXiv:2508.03080; CUAD, 4 proprietary + 15 open models, plus a "laziness"
+metric). SARA (arXiv:2005.05257; 9 IRC sections, 96 hand-crafted cases).
+RuleArena (ACL 2025 / arXiv:2412.08972; 95 rules, 816 problems). ObliQA/RIRAG
+(arXiv:2409.05677; 27,869 obligation-centric questions). OPP-115 (ACL 2016);
+MAPP (LREC 2022); PolicyQA (arXiv:2010.02557); PrivacyGLUE (*Applied Sciences*
+2023, 7 tasks); PLUE (arXiv:2212.10011). PolicyLint (USENIX Security 2019;
+11,430 apps, 14.2% with contradictions), PoliCheck (USENIX Security 2020),
+Polisis (USENIX Security 2018). Survey: *AI/NLP's Role in Regulatory Compliance*
+(Findings of ACL 2025). **Left open:** every one of these scores labels, spans,
+retrieval, or free text. None scores an artifact's behavior.
+
+**F. Compliance with KG / graph intermediates.** GraphCompliance
+(arXiv:2510.26309; policy + context graphs, 300 GDPR scenarios, +4.1–7.2pp
+micro-F1). Baldwin & Ghanavati (arXiv:2604.27713; KGs from AI-policy documents,
+42 QA tasks, 5 LLMs, LLM-discovered schema ≥ formal ontology). Automated privacy
+policy analysis with KGs (USENIX Security 2023). **Consequence: the KG
+intermediate is not a contribution of this project.**
+
+**G. Neurosymbolic LLM + solver.** Logic-LM (Findings EMNLP 2023 /
+arXiv:2305.12295; +39.2% over standard prompting, with solver-error
+self-refinement), SatLM, LINC. *Know Your Limits* (arXiv:2606.16118) — the
+faithfulness study that reshapes §8 and §10. *Grammars of Formal Uncertainty*
+(NeurIPS 2025 / arXiv:2505.20047) — autoformalization swings +34.8% to −44.5%;
+grammar-entropy UQ at AUROC > 0.93. nl2spec; Verus-SpecGym (arXiv:2605.26457);
+neurosymbolic auditing of NL requirements (arXiv:2605.13817). **Left open:**
+these operate on short problems or single utterances with gold formal targets,
+not long normative documents with none.
+
+**H. Execution-based evaluation and semantic parsing.** Spider; BIRD
+(arXiv:2305.03111); Spider 2.0; Reasoning-SQL (arXiv:2503.23157). Also the
+annotation-error caution (arXiv:2601.08778). **Acknowledged ancestor:** execution
+accuracy is theirs. The delta is documents instead of utterances, no gold
+programs, defeasible semantics, and audit-traceability.
+
+**I. Metamorphic / behavioral testing.** LGMT (arXiv:2605.23965), METAL
+(arXiv:2312.06056), the MT-and-LLMs survey (arXiv:2605.13898), metamorphic
+prompting for SQL, search-based MR selection (arXiv:2507.05565), CheckList.
+**Left open (narrowly):** perturbing the *source document* and checking
+*compiled-artifact* equivalence, with directional refinement relations.
+
+**J. RLVR and symbolic feedback.** Tulu 3 (arXiv:2411.15124); RLVR for
+text-to-SQL (arXiv:2503.23157), information extraction (arXiv:2607.23420),
+structured output (arXiv:2512.00319), cyber threat intelligence
+(arXiv:2602.00513), knowledge-intensive domains (K2V); autoformalization RL
+(ReForm arXiv:2510.24592; StepFun-Formalizer arXiv:2508.04440; process-verified
+Lean RL arXiv:2606.20068); LLM-CEGIS program repair (AAAI 2025 /
+arXiv:2502.07786). **Left open:** a reward that is a solver verdict on the
+*denotation* of an artifact extracted from a long document with no gold artifact
+— named as future work by arXiv:2606.16118 and, as of this search, unpublished.
+
+**K. Policy-as-code in agent systems.** ToolGuard (NL policy → executable guard
+code at the tool boundary); PolicyBank (arXiv:2604.15505); PolicyGuard
+dialogue-grounded verifier (arXiv:2606.29225); Near-Miss (arXiv:2603.29665);
+implicit regulatory compliance in tool invocation (arXiv:2601.08196). **Left
+open:** per-policy imperative guards with no semantics, no cross-policy
+consistency checking, and no decision-level benchmark.
+
+**One-line positioning:** *prior work either formalizes law by hand, scores legal
+NLP by string overlap, or — in one recent case — compares generated decision
+models against 95 gold artifacts in one jurisdiction. We validate the gold-free
+metric against those gold artifacts, make the assumptions the gold labels hide
+explicit, decide consistency with a solver, and train on the solver's verdict.*
 
 ---
 
-## 19. Ethics, licensing, release
+## 22. Ethics, licensing, release
 
-- **Not legal advice.** Everything is decision *support*. The paper must state
-  it, and the artifact must carry it.
+- **Not legal advice.** Decision *support*. State it in the paper and ship it in
+  the artifact.
 - **Automation bias is the real harm.** A confidently wrong compiled artifact is
-  more dangerous than a confidently wrong sentence, precisely because it looks
-  authoritative and executes. Mitigations to state and measure: mandatory
-  provenance on every emitted row; the explicit `unresolved` state as a
-  first-class output; risk–coverage reporting rather than a single accuracy
-  number; refusal to emit from uncertified input by default.
-- **Licensing.** OPP-115 and MAPP carry no redistribution grant: release edit
-  scripts and offsets, not text. CUAD and ContractNLI are CC BY 4.0. Cite all
-  four papers. The repo's `benchmarks/datasets.json` (checksummed upstream URLs)
-  is already the right template for reproducibility without redistribution.
-- **Annotator treatment.** Fair pay, disclosed rates, disclosed IAA, published
-  guidelines.
-- **Dual use.** Low, but real: the same machinery could be used to find gaps in
-  a policy in order to exploit them. Worth a sentence in broader impact — and
-  the honest counterpoint is that the same capability is what makes compliance
-  auditable at all.
-- **Release plan.** Compiler, solver layer, benchmark harness, perturbation edit
-  scripts, RL environment, and trained adapter weights. Reproducibility
-  checklist filled honestly, including the cost of a full reproduction.
+  more dangerous than a confidently wrong sentence because it looks authoritative
+  and it executes. Measured mitigations: mandatory provenance per emitted row;
+  `unresolved` as a first-class output; risk–coverage instead of a single accuracy
+  number; refusal to emit from uncertified input by default. Note that §10's
+  assumption records are also a safety feature — an artifact that must name what
+  it assumed is auditable in a way a bare verdict is not.
+- **Licensing.** CUAD and ContractNLI: CC BY 4.0. Dutch DMN corpus: CC BY 4.0 per
+  the repository (the paper page indicated CC BY-SA — **verify before
+  redistribution**). OPP-115 and MAPP: research use, no redistribution grant →
+  ship edit scripts and offsets, never derived text. ObliQA: check ADGM terms.
+  Cite every corpus paper. `benchmarks/datasets.json` (checksummed upstream URLs)
+  is the template.
+- **Annotators:** fair disclosed pay, published guidelines, reported IAA.
+- **Dual use:** the same machinery finds gaps in a policy, which can serve
+  exploitation as well as audit. One honest sentence in broader impact; the
+  counterpoint is that this capability is what makes compliance auditable at all.
+- **Release:** compiler, solver layer, benchmark harness, assumption extractor,
+  perturbation edit scripts, RL environment, adapter weights; reproducibility
+  checklist including the true cost of a full reproduction.
 
 ---
 
-## 20. Immediate next four weeks
+## 23. Immediate next four weeks
 
-Concrete, ordered, and all of it is month-1 gate work:
+Reordered by the literature review. The first action is now *someone else's
+repository*.
 
-1. **Pick the flagship corpus.** Recommendation: **ContractNLI** — 607 NDAs,
-   17 expert-labeled hypotheses each, evidence spans included. It is the only
-   corpus that hands us ~10.3k decision-level gold labels *and* free provenance
-   gold, and its `rule_type` vocabulary is far from mortgage's, which makes it
-   the right replication target for §13.
-2. **Hand-pilot 50 ContractNLI documents.** For each of the 17 hypotheses, ask:
-   *is this answerable as an SMT query over a compiled rule set at all?*
-   Record the unanswerable classes. This is the cheapest possible test of the
-   paper's central assumption, and it costs days, not weeks.
-3. **Run the existing pipeline on that 50-doc subset** and re-measure every row
-   of §13's table. This is G1.
-4. **Build `utils/feel.py` + `utils/dmn_builder.py`** (renderer, evaluator, DNF
-   expansion, hit-policy reconciliation with recorded downgrades) with the
-   repo's existing dependency-free, unit-tested style. Note: the two tests in
-   `tests/test_inter_agent_contract_alignment.py` pin `_project_execution`'s key
-   set to what `final_rule_issues` reads — the compiler must sit strictly
-   downstream and treat `execution` as read-only input.
-5. **Resolve the defeater semantics empirically** on that subset: compile under
-   all three readings, replay the vectors, and see which reading the data
-   supports. Then write the winner into the contract documentation.
-6. **Draft the ContractNLI query builder** (hypothesis → SMT entailment query)
-   and get a first DA number on 50 documents, however bad. A bad number in
-   month 1 is worth more than a good number in month 6.
-7. **Start annotation logistics now** (guidelines, closed relation list,
-   annotator sourcing) — it is the long-lead item.
+1. **Clone and run `github.com/opengov-lab/legal-text-to-decision-model`.**
+   Reproduce Graus's reported outcome-equivalence baseline on his harness. Until
+   that reproduces, nothing else is trustworthy. Cheap, external, and decisive.
+2. **Run our pipeline on the same 95 documents** and produce a first OE number
+   through his harness. This is a real, externally comparable month-1 result
+   rather than a self-report.
+3. **Read arXiv:2606.16118 in full and email the authors** about the 400/610
+   strict-entailment re-annotation. If it is available, §8's entailment mode gets
+   a correct oracle for free; if not, budget the re-annotation.
+4. **Build `utils/feel.py` + `utils/dmn_builder.py`** in the repo's
+   dependency-free, unit-tested style. Constraint verified in code: the two tests
+   in `tests/test_inter_agent_contract_alignment.py` pin `_project_execution`'s
+   key set to exactly what `final_rule_issues` reads, so the compiler must sit
+   strictly downstream and treat `execution` as read-only.
+5. **Resolve the defeater semantics empirically** on the Dutch corpus (which has
+   gold behavior to check against — a strictly better testbed than our own
+   vectors) by compiling under all three readings and comparing OE.
+6. **Replicate §16's table on one non-mortgage benchmark domain** (ContractNLI or
+   OPP-115 — vocabularies furthest from mortgage).
+7. **Start annotation logistics** (guidelines, closed relation list, sourcing) —
+   the long-lead item.
+8. **Set up a citation-verification pass.** Everything in §21 was located this
+   session, but venues/years for a few items (MAUD, SatLM, LINC, CheckList,
+   Spider) still need a primary-source check before submission.
 
 ---
 
@@ -823,30 +1035,87 @@ Concrete, ordered, and all of it is month-1 gate work:
 
 | Name | What it is |
 | --- | --- |
-| **LEXEC** | umbrella project name |
-| **LEXEC-Verify** | the compiler + solver layer; the measuring instrument and the reward machine |
-| **LEXEC-Bench** | the extensional benchmark (entailment / presence-value / practice-decision / scenario modes) |
-| **LEXEC-Perturb** | the relational (metamorphic) suite |
+| **LEXEC** | umbrella project |
+| **LEXEC-Verify** | compiler + solver layer; measuring instrument and reward machine |
+| **LEXEC-Bench** | extensional benchmark (gold-anchor / entailment / presence-value / practice-decision / scenario modes) |
+| **LEXEC-Perturb** | relational (metamorphic) suite |
 | **CEGIR** | Counterexample-Guided Iterative Repair |
 | **SDI** | Semantic Discrimination Index, `SR + SE − 1` |
+| **OE / DA** | gold-based Outcome Equivalence / gold-free Decision Agreement — the two sides of §9 |
 
-## Appendix B — Provenance of the claims in this document
+## Appendix B — Provenance of every claim
 
-- **Verified by reading this repository's code:** the v2 contract's closed
-  enums (`utils/rule_contract.py`); the four invariants and the DMN/BPMN
-  projection (`agents/agent_07_executable_readiness.py`); which grounding claim
-  types reach the LLM verifier vs. are checked structurally
-  (`agents/agent_09_grounding_verifier.py`); the DAG partition and SCC
-  condensation (`utils/dag_builder.py`); the readiness/selective-prediction
-  logic (`utils/readiness.py`, `utils/kg_readiness.py`); the absence of any
-  FEEL/DMN/BPMN XML or SMT code anywhere in the repo; corpus sizes, licenses,
-  and checksums (`benchmarks/datasets.json`, `benchmarks/README.md`).
-- **Inherited from a prior feasibility study** (a 520-line analysis written
-  against this pipeline's predecessor monorepo, removed from this repo in commit
-  `1dea9c8` and recovered from git history for this proposal): every *(measured)*
-  number in §13. One run, one domain, n = 1. The artifacts it measured are not
-  in this repository.
-- **Not verified and requiring work before use:** every citation in §17; all
-  cost and compute estimates in §15; every *(target)* number in §12; the
-  assumption that ContractNLI hypotheses are answerable as SMT queries over
-  compiled rules (item 2 of §20 exists to test exactly this).
+**Verified by reading this repository's code (2026-08-24):** the v2 contract's
+closed enums (`utils/rule_contract.py`); the four invariants and
+`_project_execution` (`agents/agent_07_executable_readiness.py`); which grounding
+claim types reach the LLM verifier vs. are structural
+(`agents/agent_09_grounding_verifier.py`, `MODEL_CLAIM_TYPES`); the DAG partition
+and SCC condensation (`utils/dag_builder.py`); readiness/selective-prediction
+(`utils/readiness.py`, `utils/kg_readiness.py`); the absence of any FEEL/DMN/BPMN
+XML or SMT code in the repo (grep); the `_project_execution` key-set pinning in
+`tests/test_inter_agent_contract_alignment.py`; corpus sizes/licenses/checksums
+(`benchmarks/datasets.json`, `benchmarks/README.md`); `pytest` → 770 passed.
+
+**Verified against primary sources this session (web search + fetch):** every
+`(published)` number and every citation in §21 and Appendix C — titles, authors, venues,
+arXiv IDs, dataset scales, and the specific figures quoted (Graus's 42.6%/60.4%/33%
+and node ratios; Wang et al.'s 400/610, 15.3–52.5%, 25.5–63.2%, 71 label
+transitions, 83.0%; Ganguly et al.'s +34.8%/−44.5%/AUROC>0.93; RuleArena's 95
+rules / 816 problems; ObliQA's 27,869 questions; MAPP's 64/91 policies and
+292k/478k words; PET's 47 pairs; BIRD's 12,751 pairs; PolicyLint's 11,430 apps
+and 14.2%); and the contents/license/harness of
+`github.com/opengov-lab/legal-text-to-decision-model`.
+
+**Inherited from a prior feasibility study** (a 520-line analysis written against
+this pipeline's predecessor monorepo, removed in commit `1dea9c8` and recovered
+from git history): every `(measured)` number in §16. **One run, one domain,
+n = 1**; those artifacts are not in this repository.
+
+**Still unverified, and flagged as such:** venues/years for MAUD, SatLM, LINC,
+CheckList, and Spider (located but not primary-source-checked); all cost and
+compute estimates in §18; every `(target)` in §15; the Dutch corpus's exact
+license (CC BY 4.0 in the repo vs. CC BY-SA 4.0 on the paper page); whether the
+arXiv:2606.16118 re-annotation is obtainable; NeurIPS 2027's actual deadline.
+
+## Appendix C — Key references (verified this session)
+
+| Work | Identifier |
+| --- | --- |
+| Graus, *From Legal Text to Executable Decision Models*, ICAIL 2026 | arXiv:2604.17153 · `github.com/opengov-lab/legal-text-to-decision-model` |
+| Wang et al., *Know Your Limits* (LLM faithfulness, ContractNLI + Z3) | arXiv:2606.16118 |
+| Zhou et al., *LGMT* (logic-grounded metamorphic testing) | arXiv:2605.23965 |
+| Ganguly et al., *Grammars of Formal Uncertainty*, NeurIPS 2025 | arXiv:2505.20047 |
+| Khoja et al., *Automated Consistency Analysis for Legal Contracts* (ContractCheck), *AI and Law* | arXiv:2504.18422 |
+| Malik et al., *PolicyGuard* (neuro-symbolic compliance review) | arXiv:2606.32004 |
+| Horner, Mateis, Governatori & Ciabattoni, *Legal Text → Defeasible Deontic Logic* | arXiv:2506.08899 |
+| Sadowski & Chudziak, *SOLAR*, CIKM 2025 | arXiv:2509.00710 |
+| Guha et al., *LegalBench*, NeurIPS D&B 2023 | arXiv:2308.11462 |
+| Hendrycks et al., *CUAD*, NeurIPS D&B 2021 | DOI 10.5281/zenodo.4595826 |
+| Koreeda & Manning, *ContractNLI*, Findings EMNLP 2021 | arXiv:2110.01799 |
+| Wilson et al., *OPP-115*, ACL 2016 | — |
+| Arora et al., *MAPP*, LREC 2022 | ACL 2022.lrec-1.585 |
+| *RuleArena*, ACL 2025 | arXiv:2412.08972 |
+| *RIRAG / ObliQA* | arXiv:2409.05677 |
+| *ContractEval*, NLLP 2025 | arXiv:2508.03080 |
+| *ACORD* | arXiv:2501.06582 |
+| Holzenberger et al., *SARA* | arXiv:2005.05257 |
+| *PrivacyGLUE*, Applied Sciences 2023 | DOI 10.3390/app13063701 |
+| *PolicyQA* / *PLUE* | arXiv:2010.02557 / arXiv:2212.10011 |
+| Andow et al., *PolicyLint*, USENIX Security 2019 | — |
+| Merigoux, Chataing & Protzenko, *Catala*, ICFP 2021 | arXiv:2103.03198 |
+| LegalRuleML Core v1.0, OASIS Standard (30 Aug 2021) | — |
+| Symboleo (IEEE RE 2020; SoSyM 2022) / Symboleo2SC (SoSyM 2024) | — |
+| Hublet, Kvamme & Krstić, *Enforceable GDPR Specification* | arXiv:2402.17350 |
+| *GraphCompliance* | arXiv:2510.26309 |
+| Baldwin & Ghanavati, *KG for LLM Policy Compliance Reasoning* | arXiv:2604.27713 |
+| Pan et al., *Logic-LM*, Findings EMNLP 2023 | arXiv:2305.12295 |
+| *ProMoAI* | arXiv:2403.04327 |
+| *BIRD* (text-to-SQL) | arXiv:2305.03111 |
+| *Reasoning-SQL* (RL for text-to-SQL) | arXiv:2503.23157 |
+| LLM-CEGIS program repair, AAAI 2025 | arXiv:2502.07786 |
+| *Tulu 3* (RLVR) | arXiv:2411.15124 |
+| *CPGPrompt* (clinical guidelines → executable) | arXiv:2601.03475 |
+| MT + LLM survey / *METAL* | arXiv:2605.13898 / arXiv:2312.06056 |
+| Annotation errors in text-to-SQL benchmarks | arXiv:2601.08778 |
+| Knowledge-driven hallucination in process modeling | arXiv:2509.15336 |
+| OECD, *Cracking the Code* (Rules as Code) | OECD Working Papers on Public Governance No. 42 |
