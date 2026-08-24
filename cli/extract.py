@@ -82,7 +82,7 @@ def _count_business_rules(data: dict) -> int:
 
 class ExtractionPipeline:
     def __init__(self, source_dir: Path, domain: str, target_rules: int, max_workers: int | None,
-                 skip_optimize: bool, batch_name: str | None):
+                 skip_optimize: bool, batch_name: str | None, pilot_batch_limit: int | None = None):
         self.config = get_config(domain=domain)
         self.source_dir = source_dir
         self.domain = domain
@@ -90,6 +90,7 @@ class ExtractionPipeline:
         self.max_workers = max_workers
         self.skip_optimize = skip_optimize
         self.batch_name = batch_name or source_dir.name
+        self.pilot_batch_limit = pilot_batch_limit
         self.config.set_batch_name(self.batch_name)
 
         self.organized_dir = self.config.get_organized_dir()
@@ -117,6 +118,8 @@ class ExtractionPipeline:
         print(f"  source:       {source_dir}")
         print(f"  batch name:   {self.batch_name}")
         print(f"  target rules: {target_rules}")
+        if pilot_batch_limit is not None:
+            print(f"  ⚠ pilot batch limit: {pilot_batch_limit} (NOT a full-coverage run)")
         print(f"  output:       {self.config.get_pipeline_base_path()}")
         print("=" * 80)
 
@@ -131,6 +134,12 @@ class ExtractionPipeline:
         if self.max_workers:
             env["MAX_WORKERS"] = str(self.max_workers)
         env["TARGET_RULES"] = str(self.target_rules)
+        # Unset unless explicitly requested: absence means full coverage
+        # (see agents/agent_03_rules_extractor.py::read_text_files_batch).
+        # `--target-rules` never controls chunk/batch coverage -- only how
+        # many rules Agent 3 tries to extract per batch.
+        if self.pilot_batch_limit is not None:
+            env["PILOT_BATCH_LIMIT"] = str(self.pilot_batch_limit)
         return env
 
     def _run(self, step: str, label: str, script: str, args: list[str]) -> bool:
@@ -261,7 +270,8 @@ def main():
     parser.add_argument("--dir", required=True, help="Directory of source documents under compliance-files/")
     parser.add_argument("--domain", required=True, choices=DOMAINS)
     parser.add_argument("--batch-name", default=None, help="Output folder name under pipeline-output/ (default: --dir's basename)")
-    parser.add_argument("--target-rules", type=int, default=30, help="Target business rules to extract (default: 30 -- tuned for small pilot batches, not a 300+-document corpus)")
+    parser.add_argument("--target-rules", type=int, default=30, help="Target business rules Agent 3 tries to extract per batch (default: 30). Does NOT bound chunk/batch coverage -- see --pilot-batch-limit for that.")
+    parser.add_argument("--pilot-batch-limit", type=int, default=None, help="Cap the number of word-balanced batches Agent 3 processes, for a cheap smoke run. Omit for full coverage (default): every organized chunk is read whole and every batch is processed. A capped run is never corpus coverage.")
     parser.add_argument("--workers", type=int, default=None, help="Local scheduling workers (default: config.json pipeline.max_workers)")
     parser.add_argument("--skip-optimize", action="store_true", help="Skip steps 5/5.5/5.6/5.7 (dedup, readiness, remediation, grounding)")
     parser.add_argument("--step", choices=["1", "2", "3", "3.5", "4", "5", "5.5", "5.6", "5.7", "6"], help="Run a single step only")
@@ -277,6 +287,7 @@ def main():
     pipeline = ExtractionPipeline(
         source_dir=source_dir, domain=args.domain, target_rules=args.target_rules,
         max_workers=args.workers, skip_optimize=args.skip_optimize, batch_name=args.batch_name,
+        pilot_batch_limit=args.pilot_batch_limit,
     )
     ok = pipeline.run_step(args.step) if args.step else pipeline.run_all()
     sys.exit(0 if ok else 1)

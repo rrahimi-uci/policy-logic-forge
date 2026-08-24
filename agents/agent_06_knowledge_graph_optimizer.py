@@ -137,6 +137,57 @@ class KnowledgeGraphOptimizer:
         print(f"  Reasoning Effort: {self.reasoning_effort}", flush=True)
         print(f"  Workers: {self.max_workers}", flush=True)
 
+    def _rule_summary_v2(self, rule: Dict[str, Any], include_related_entities: bool = False) -> Dict[str, Any]:
+        """Summarize a rule for the dedup/dependency LLM prompts, preferring
+        the v2 structured contract over the legacy v1 prose fields.
+
+        Agent 3's compact prompts explicitly forbid the legacy `conditions`/
+        `consequences` string fields for every domain this repo carries (see
+        domain-prompts/*/business_rules_extraction_compact.txt), so a v2-only
+        rule simply has neither field. All four summary sites in this class
+        used to read only `conditions`/`consequences`, which meant a v2 rule's
+        summary carried nothing but a truncated description and type — none
+        of its condition_predicates, condition_logic, outcomes, variables,
+        applicability_scope, or exceptions ever reached the dedup or
+        dependency-analysis prompts.
+
+        This reads whichever contract the rule actually carries: the v2
+        structured fields when the rule has them, and the legacy prose
+        fields otherwise, so an older v1 graph still summarizes exactly as
+        it did before. `include_related_entities` exists because one of the
+        four call sites (`_deduplicate_rules_single`) never included that
+        field and the other three always did — preserved here rather than
+        silently added to or dropped from any site.
+        """
+        summary: Dict[str, Any] = {
+            'rule_id': rule.get('rule_id'),
+            'rule_type': rule.get('rule_type'),
+            'title': rule.get('title'),
+            'description': rule.get('description', '')[:self.config.get_optimizer_description_truncation_length()],
+        }
+        is_v2 = bool(rule.get('condition_predicates') or rule.get('outcomes'))
+        if is_v2:
+            summary['condition_predicates'] = rule.get('condition_predicates', [])
+            summary['condition_logic'] = rule.get('condition_logic')
+            summary['outcomes'] = rule.get('outcomes', [])
+            summary['variables'] = [
+                {'name': v.get('name'), 'type': v.get('type'), 'role': v.get('role')}
+                for v in rule.get('variables', []) or []
+                if isinstance(v, dict)
+            ]
+            summary['applicability_scope'] = rule.get('applicability_scope')
+            summary['exceptions'] = rule.get('exceptions', [])
+            if rule.get('recommended_hit_policy'):
+                summary['recommended_hit_policy'] = rule.get('recommended_hit_policy')
+            if rule.get('responsible_party'):
+                summary['responsible_party'] = rule.get('responsible_party')
+        else:
+            summary['conditions'] = rule.get('conditions', [])
+            summary['consequences'] = rule.get('consequences', [])
+        if include_related_entities:
+            summary['related_entities'] = rule.get('related_entities', [])
+        return summary
+
     def _json_request(
         self,
         messages: List[Dict[str, str]],
@@ -339,20 +390,11 @@ class KnowledgeGraphOptimizer:
         print(f"📊 Preparing {len(rules)} rules for deduplication analysis...", flush=True)
         
         # Prepare rules summary for analysis
-        rules_summary = []
-        for rule in rules:
-            rules_summary.append({
-                'rule_id': rule.get('rule_id'),
-                'rule_type': rule.get('rule_type'),
-                'title': rule.get('title'),
-                'description': rule.get('description', '')[:self.config.get_optimizer_description_truncation_length()],
-                'conditions': rule.get('conditions', []),
-                'consequences': rule.get('consequences', [])
-            })
-        
+        rules_summary = [self._rule_summary_v2(rule) for rule in rules]
+
         rules_json = json.dumps(rules_summary, indent=2)
         total_rules = len(rules)
-        
+
         prompt = self.prompt_manager.format_prompt(
             "rule_deduplication",
             rules_json=rules_json,
@@ -526,18 +568,11 @@ class KnowledgeGraphOptimizer:
         print(f"📊 Preparing {len(rules)} rules for dependency analysis...", flush=True)
         
         # Prepare rules for analysis
-        rules_summary = []
-        for rule in rules:
-            rules_summary.append({
-                'rule_id': rule.get('rule_id'),
-                'rule_type': rule.get('rule_type'),
-                'title': rule.get('title'),
-                'description': rule.get('description', '')[:self.config.get_optimizer_description_truncation_length()],
-                'conditions': rule.get('conditions', []),
-                'consequences': rule.get('consequences', []),
-                'related_entities': rule.get('related_entities', [])
-            })
-        
+        rules_summary = [
+            self._rule_summary_v2(rule, include_related_entities=True)
+            for rule in rules
+        ]
+
         rules_json = json.dumps(rules_summary, indent=2)
         total_rules = len(rules)
         
@@ -696,17 +731,10 @@ class KnowledgeGraphOptimizer:
 
         def _call_within_batch(args):
             batch_idx, batch = args
-            rules_summary = []
-            for rule in batch:
-                rules_summary.append({
-                    'rule_id': rule.get('rule_id'),
-                    'rule_type': rule.get('rule_type'),
-                    'title': rule.get('title'),
-                    'description': rule.get('description', '')[:self.config.get_optimizer_description_truncation_length()],
-                    'conditions': rule.get('conditions', []),
-                    'consequences': rule.get('consequences', []),
-                    'related_entities': rule.get('related_entities', [])
-                })
+            rules_summary = [
+                self._rule_summary_v2(rule, include_related_entities=True)
+                for rule in batch
+            ]
             rules_json = json.dumps(rules_summary, indent=2)
             prompt = self.prompt_manager.format_prompt(
                 "dependency_analysis",
@@ -758,17 +786,10 @@ class KnowledgeGraphOptimizer:
             sample_j = batches[j][:cross_batch_sample_size]
             combined_sample = sample_i + sample_j
             print(f"   Cross-batch {i+1}↔{j+1}: {len(combined_sample)} sampled rules", flush=True)
-            rules_summary = []
-            for rule in combined_sample:
-                rules_summary.append({
-                    'rule_id': rule.get('rule_id'),
-                    'rule_type': rule.get('rule_type'),
-                    'title': rule.get('title'),
-                    'description': rule.get('description', '')[:self.config.get_optimizer_description_truncation_length()],
-                    'conditions': rule.get('conditions', []),
-                    'consequences': rule.get('consequences', []),
-                    'related_entities': rule.get('related_entities', [])
-                })
+            rules_summary = [
+                self._rule_summary_v2(rule, include_related_entities=True)
+                for rule in combined_sample
+            ]
             rules_json = json.dumps(rules_summary, indent=2)
             prompt = self.prompt_manager.format_prompt(
                 "dependency_analysis",
