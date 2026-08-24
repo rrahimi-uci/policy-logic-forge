@@ -570,18 +570,18 @@ class TestAgent5ToAgent6Contract:
 
     def test_agent5_writes_depends_on_rule(self):
         """Agent 5 must write 'depends_on_rule' (not 'source_rule_id') into rule deps."""
-        agent5_code = (PROJECT_ROOT / "agents" / "agent_5_knowledge_graph_optimizer.py").read_text()
+        agent5_code = (PROJECT_ROOT / "agents" / "agent_06_knowledge_graph_optimizer.py").read_text()
         assert '"depends_on_rule"' in agent5_code or "'depends_on_rule'" in agent5_code, (
             "Agent 5 must write 'depends_on_rule' key into rule dependencies "
             "(Agent 6 reads dep.get('depends_on_rule'))"
         )
 
     def test_agent5_writes_dependency_type(self):
-        agent5_code = (PROJECT_ROOT / "agents" / "agent_5_knowledge_graph_optimizer.py").read_text()
+        agent5_code = (PROJECT_ROOT / "agents" / "agent_06_knowledge_graph_optimizer.py").read_text()
         assert '"dependency_type"' in agent5_code or "'dependency_type'" in agent5_code
 
     def test_agent5_writes_deduplication_info(self):
-        agent5_code = (PROJECT_ROOT / "agents" / "agent_5_knowledge_graph_optimizer.py").read_text()
+        agent5_code = (PROJECT_ROOT / "agents" / "agent_06_knowledge_graph_optimizer.py").read_text()
         assert '"deduplication_info"' in agent5_code or "'deduplication_info'" in agent5_code
 
     def test_agent6_reads_depends_on_rule(self):
@@ -624,20 +624,20 @@ class TestAgent3NormalizationContract:
     """Agent 3 must handle both flat and nested rule formats."""
 
     def test_agent3_handles_flat_rules(self):
-        agent3_code = (PROJECT_ROOT / "agents" / "agent_3_rules_extractor.py").read_text()
+        agent3_code = (PROJECT_ROOT / "agents" / "agent_03_rules_extractor.py").read_text()
         assert "'rules'" in agent3_code or '"rules"' in agent3_code, (
             "Agent 3 must check for flat 'rules' array format"
         )
 
     def test_agent3_handles_entity_types(self):
-        agent3_code = (PROJECT_ROOT / "agents" / "agent_3_rules_extractor.py").read_text()
+        agent3_code = (PROJECT_ROOT / "agents" / "agent_03_rules_extractor.py").read_text()
         assert "'entity_types'" in agent3_code or '"entity_types"' in agent3_code, (
             "Agent 3 must handle nested 'entity_types' format"
         )
 
     def test_agent3_normalizes_flat_to_nested(self):
         """Agent 3 must convert flat rules → entity_types/relationships."""
-        agent3_code = (PROJECT_ROOT / "agents" / "agent_3_rules_extractor.py").read_text()
+        agent3_code = (PROJECT_ROOT / "agents" / "agent_03_rules_extractor.py").read_text()
         # Must have normalization: if 'rules' in result and 'entity_types' not in result
         assert "entity_types" in agent3_code and "rules" in agent3_code, (
             "Agent 3 must normalize flat rules to entity_types structure"
@@ -656,11 +656,11 @@ class TestAgent4EntityFormatContract:
     """Agent 4 must accept both dict and list entity formats."""
 
     def test_agent4_handles_entity_types_dict(self):
-        agent4_code = (PROJECT_ROOT / "agents" / "agent_4_rules_with_entities_merger.py").read_text()
+        agent4_code = (PROJECT_ROOT / "agents" / "agent_05_rules_with_entities_merger.py").read_text()
         assert "entity_types" in agent4_code
 
     def test_agent4_handles_entities_list(self):
-        agent4_code = (PROJECT_ROOT / "agents" / "agent_4_rules_with_entities_merger.py").read_text()
+        agent4_code = (PROJECT_ROOT / "agents" / "agent_05_rules_with_entities_merger.py").read_text()
         # Agent 4 must have fallback: entity_data.get('entity_types') or entity_data.get('entities', {})
         assert "entities" in agent4_code, (
             "Agent 4 must support 'entities' list format as fallback"

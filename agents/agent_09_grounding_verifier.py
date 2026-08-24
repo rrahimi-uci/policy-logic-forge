@@ -17,7 +17,7 @@ from typing import Any, Iterable, Mapping, Protocol
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from agents.agent_5_6_readiness_remediator import JsonlCheckpoint, _stable_hash
+from agents.agent_08_readiness_remediator import JsonlCheckpoint, _stable_hash
 from utils.config import get_config
 from utils.kg_readiness import mark_readiness, source_document_index
 from utils.llm_client import create_llm_client

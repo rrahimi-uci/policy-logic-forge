@@ -13,7 +13,7 @@ Planned modules (Phase C1):
 - `dmn_builder.py` — `condition_logic` -> DNF -> DMN decision-table rows, hit-policy
   reconciliation, provenance extension elements.
 - `bpmn_builder.py` (Phase C3) — one process per multi-rule dependency DAG
-  (`agents/agent_6_dag_generator.py` output), sequence flow from
+  (`agents/agent_10_dag_generator.py` output), sequence flow from
   `prerequisite`/`sequential` edges only.
 - `conformance.py` (Phase C4) — replay every rule's `test_vectors` through the
   emitted artifact; refuse to publish a decision that fails its own vectors.

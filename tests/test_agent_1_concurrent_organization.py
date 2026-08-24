@@ -25,7 +25,7 @@ import time
 from pathlib import Path
 from unittest.mock import patch
 
-from agents.agent_1_document_organizer import DocumentChunk, DocumentChunkingAgent
+from agents.agent_01_document_organizer import DocumentChunk, DocumentChunkingAgent
 
 
 def _agent() -> DocumentChunkingAgent:

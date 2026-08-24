@@ -8,7 +8,7 @@ from utils.kg_readiness import derive_dependency_chains, referential_integrity_i
 from utils.rule_contract import validate_rule_v2
 
 
-readiness_module = import_module("agents.agent_5_5_executable_readiness")
+readiness_module = import_module("agents.agent_07_executable_readiness")
 ExecutableReadinessCompleter = readiness_module.ExecutableReadinessCompleter
 normalise_graph_entity_names = readiness_module._normalise_graph_entity_names
 normalise_rule_contract = readiness_module._normalise_rule_contract
@@ -80,7 +80,7 @@ def test_completion_emits_ready_dmn_rules_and_required_report(tmp_path):
     assert report["conflicts_and_dependencies"]["dependency_chains_derived"] == 1
     # _project_execution's BPMN gate is domain-agnostic here (outputs +
     # responsible_party), not keyed off a fixed rule_type set — see
-    # agent_5_5_executable_readiness.py's docstring on _project_execution.
+    # agent_07_executable_readiness.py's docstring on _project_execution.
     # Both fixture rules have an output variable and a responsible_party, so
     # both should now also target BPMN, not just DMN.
     assert all(rule["execution"]["targets"] == ["DMN", "BPMN"] for rule in final_graph["business_rules"])

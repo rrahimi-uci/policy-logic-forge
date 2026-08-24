@@ -28,7 +28,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 class TestAgent5DependencyMissingKeys:
     @allure.title("A dependency missing keys is skipped, not fatal")
     def test_missing_keys_does_not_crash(self, monkeypatch):
-        from agents import agent_5_knowledge_graph_optimizer as a5
+        from agents import agent_06_knowledge_graph_optimizer as a5
 
         # Build the optimizer without touching real config/LLM construction.
         opt = a5.KnowledgeGraphOptimizer.__new__(a5.KnowledgeGraphOptimizer)

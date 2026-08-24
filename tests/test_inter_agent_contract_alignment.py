@@ -36,7 +36,7 @@ violations deep into a real paid extraction run.
 import re
 from pathlib import Path
 
-from agents.agent_5_5_executable_readiness import (
+from agents.agent_07_executable_readiness import (
     LEGACY_ENTITY_NAMES,
     _normalise_graph_entity_names,
     _project_execution,
@@ -163,11 +163,11 @@ def test_every_promised_completion_field_is_consumed_by_agent_5_5():
     for field in promised_top_level:
         assert f'"{field}"' in prompt, f"expected {field!r} in the prompt's own documented shape"
 
-    agent_5_5_source = (PROJECT_ROOT / "agents" / "agent_5_5_executable_readiness.py").read_text()
+    agent_5_5_source = (PROJECT_ROOT / "agents" / "agent_07_executable_readiness.py").read_text()
     for field in promised_top_level:
         assert f'"{field}"' in agent_5_5_source, (
             f"executable_readiness_completion.txt promises {field!r} but "
-            f"agent_5_5_executable_readiness.py never reads it back out of a completion"
+            f"agent_07_executable_readiness.py never reads it back out of a completion"
         )
 
 

@@ -1,4 +1,4 @@
-from agents.agent_3_rules_extractor import BusinessRulesExtractor
+from agents.agent_03_rules_extractor import BusinessRulesExtractor
 from tests.test_rule_contract import valid_rule
 
 

@@ -155,43 +155,43 @@ class ExtractionPipeline:
         if not files:
             print(f"No files found in {self.source_dir}")
             return False
-        return self._run("1", "Document Organizer", "agent_1_document_organizer.py",
+        return self._run("1", "Document Organizer", "agent_01_document_organizer.py",
                           [str(self.source_dir), str(self.organized_dir), "--files"] + [Path(f).name for f in files])
 
     def step2(self) -> bool:
-        return self._run("2", "Entity Extractor", "agent_2_entity_extractor.py", [])
+        return self._run("2", "Entity Extractor", "agent_02_entity_extractor.py", [])
 
     def step3(self) -> bool:
         # No CLI args: agent_3 reads TARGET_RULES purely via config.get_target_rules().
-        return self._run("3", "Rules Extractor", "agent_3_rules_extractor.py", [])
+        return self._run("3", "Rules Extractor", "agent_03_rules_extractor.py", [])
 
     def step3_5(self) -> bool:
         rules_file = self.rules_dir / "compliance_rules_with_entities.json"
         validation_dir = self.config.get_pipeline_base_path() / "agent-3-5-validation"
-        return self._run("3.5", "Rule Validator", "agent_3_5_rule_validator.py",
+        return self._run("3.5", "Rule Validator", "agent_04_rule_validator.py",
                           ["--rules-file", str(rules_file), "--source-dir", str(self.organized_dir),
                            "--output-dir", str(validation_dir)])
 
     def step4(self) -> bool:
-        return self._run("4", "Rules+Entities Merger", "agent_4_rules_with_entities_merger.py", [])
+        return self._run("4", "Rules+Entities Merger", "agent_05_rules_with_entities_merger.py", [])
 
     def step5(self) -> bool:
         if self.skip_optimize:
             print("\nSTEP 5: Knowledge Graph Optimizer -- SKIPPED (--skip-optimize)")
             return True
-        return self._run("5", "KG Optimizer", "agent_5_knowledge_graph_optimizer.py", [])
+        return self._run("5", "KG Optimizer", "agent_06_knowledge_graph_optimizer.py", [])
 
     def step5_5(self) -> bool:
-        return self._run("5.5", "Executable Readiness", "agent_5_5_executable_readiness.py", [])
+        return self._run("5.5", "Executable Readiness", "agent_07_executable_readiness.py", [])
 
     def step5_6(self) -> bool:
-        return self._run("5.6", "Readiness Remediator", "agent_5_6_readiness_remediator.py", [])
+        return self._run("5.6", "Readiness Remediator", "agent_08_readiness_remediator.py", [])
 
     def step5_7(self) -> bool:
-        return self._run("5.7", "Grounding Verifier", "agent_5_7_grounding_verifier.py", [])
+        return self._run("5.7", "Grounding Verifier", "agent_09_grounding_verifier.py", [])
 
     def step6(self) -> bool:
-        return self._run("6", "Dependency DAG Generator", "agent_6_dag_generator.py", [])
+        return self._run("6", "Dependency DAG Generator", "agent_10_dag_generator.py", [])
 
     def run_all(self) -> bool:
         start = datetime.now()

@@ -4,7 +4,7 @@ import time
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-from agents.agent_5_7_grounding_verifier import (
+from agents.agent_09_grounding_verifier import (
     MODEL_CLAIM_TYPES,
     GroundingVerifier,
     OpenAIGroundingResolver,

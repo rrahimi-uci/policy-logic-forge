@@ -179,7 +179,7 @@ def test_well_formed_verification_and_derivation_still_pass():
 # ─────────────────────────────────────────────────────────────────────────
 
 def _completer():
-    from agents.agent_5_5_executable_readiness import ExecutableReadinessCompleter
+    from agents.agent_07_executable_readiness import ExecutableReadinessCompleter
 
     completer = object.__new__(ExecutableReadinessCompleter)
     completer.resolver = MagicMock()

@@ -1,6 +1,6 @@
 from copy import deepcopy
 
-from agents.agent_5_6_readiness_remediator import ReadinessRemediator
+from agents.agent_08_readiness_remediator import ReadinessRemediator
 from tests.test_executable_readiness import graph_with_two_rules
 
 
