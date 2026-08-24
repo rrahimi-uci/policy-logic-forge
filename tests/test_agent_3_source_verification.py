@@ -21,7 +21,7 @@ from the middle).
 from difflib import SequenceMatcher
 from types import SimpleNamespace
 
-from agents.agent_3_rules_extractor import BusinessRulesExtractor, bridge_exact_span
+from agents.agent_03_rules_extractor import BusinessRulesExtractor, bridge_exact_span
 
 
 # ─────────────────────────────────────────────────────────────────────────

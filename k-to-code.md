@@ -76,7 +76,7 @@ Verified by reading the code, not inferred from names.
 | Entity-local co-firing conflict analysis | Implemented (Agent 5.5); conflict remediation + forced `COLLECT` hit policy (Agent 5.6) |
 | Independent claim-level grounding certification | Implemented (Agent 5.7), including claims over `recommended_hit_policy` and the `execution` block itself |
 | Dependency DAG partition with 100% rule coverage | Implemented (Agent 6, `utils/dag_builder.py`) |
-| **DMN/BPMN "projection"** | **Only a 12-line mechanical JSON hint** — `_project_execution()` in `agent_5_5_executable_readiness.py` emits `{targets, dmn:{input_columns, output_columns, hit_policy}, bpmn:{gateway_type, lane, true_path_outcome_variables}}` |
+| **DMN/BPMN "projection"** | **Only a 12-line mechanical JSON hint** — `_project_execution()` in `agent_07_executable_readiness.py` emits `{targets, dmn:{input_columns, output_columns, hit_policy}, bpmn:{gateway_type, lane, true_path_outcome_variables}}` |
 | DMN XML, BPMN XML, FEEL expressions, decision tables | **Do not exist anywhere in the repo.** Zero hits for `decision_table`, `FEEL`, DMN/BPMN XML generation. |
 
 So the `execution` block is a *column manifest and a hint*, not a decision
@@ -117,7 +117,7 @@ unknown — see Open question Q1.
 
 ### P2 — Contradictory extraction prompts undermine v2 reliability (pre-existing bug)
 
-`agent_3_rules_extractor.py:300` builds the extraction prompt as
+`agent_03_rules_extractor.py:300` builds the extraction prompt as
 `f"{domain_prompt}\n\n{load_rule_contract_v2()}"`. For `mortgage`, `healthcare`,
 `aml`, and `commercial_lending` there is no domain-specific
 `business_rules_extraction_compact.txt`, so it falls back to the shared one —

@@ -91,7 +91,7 @@ class DependencyDAGGenerator:
                 {
                     "metadata": {
                         "source_file": str(self.input_file),
-                        "generator": "agent_6_dag_generator",
+                        "generator": "agent_10_dag_generator",
                     },
                     **result,
                 },

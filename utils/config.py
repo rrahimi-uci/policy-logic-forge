@@ -241,7 +241,7 @@ class Config:
         return base / 'agent-5-optimized'
 
     def get_dag_dir(self) -> Path:
-        """Agent 6 (agent_6_dag_generator.py) output directory."""
+        """Agent 6 (agent_10_dag_generator.py) output directory."""
         base = self.get_pipeline_base_path()
         return base / 'agent-6-dag-generation'
 

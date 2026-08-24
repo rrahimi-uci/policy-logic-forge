@@ -28,7 +28,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from agents.agent_4_rules_with_entities_merger import KnowledgeEnricher
+from agents.agent_05_rules_with_entities_merger import KnowledgeEnricher
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -433,7 +433,7 @@ class TestAmlRealisticData:
 class TestAgent4SourceContainsNormalization:
     """The normalization block must be present in agent_4 source."""
 
-    AGENT4 = (PROJECT_ROOT / "agents" / "agent_4_rules_with_entities_merger.py").read_text()
+    AGENT4 = (PROJECT_ROOT / "agents" / "agent_05_rules_with_entities_merger.py").read_text()
 
     def test_canonical_map_built(self):
         assert "canonical_map" in self.AGENT4, (

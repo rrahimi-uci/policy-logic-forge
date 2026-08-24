@@ -24,7 +24,7 @@ valid without sharing a variable, so this only flags, never deletes.
 
 from unittest.mock import MagicMock
 
-from agents.agent_5_knowledge_graph_optimizer import (
+from agents.agent_06_knowledge_graph_optimizer import (
     KnowledgeGraphOptimizer,
     _rule_variable_names,
     annotate_dependency_structural_support,

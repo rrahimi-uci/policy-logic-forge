@@ -17,7 +17,7 @@ converts correctly, including an acronym run (QC) and a short word (Of), and
 already-canonical names are untouched (idempotent).
 """
 
-from agents.agent_5_5_executable_readiness import (
+from agents.agent_07_executable_readiness import (
     LEGACY_ENTITY_NAMES,
     _build_entity_name_map,
     _normalise_graph_entity_names,

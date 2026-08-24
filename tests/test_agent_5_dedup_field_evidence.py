@@ -21,7 +21,7 @@ invariant.
 
 from unittest.mock import patch
 
-from agents.agent_5_knowledge_graph_optimizer import KnowledgeGraphOptimizer
+from agents.agent_06_knowledge_graph_optimizer import KnowledgeGraphOptimizer
 
 
 def _optimizer() -> KnowledgeGraphOptimizer:
