@@ -20,13 +20,14 @@ config.json
 *.db-wal
 *.db-shm
 
-# Generated pipeline output (regenerable; see benchmarks/README.md and
-# k-to-code.md for how to reproduce a run)
+# Generated pipeline output (regenerable; see benchmarks/README.md for how
+# to reproduce a run)
 pipeline-output/
 
-# Redistribution-restricted benchmark pilot samples (OPP-115, MAPP — see
-# README.md "Data and licensing"). CUAD and ContractNLI pilots ARE committed
-# under compliance-files/ since both are CC BY 4.0.
+# Local pilot-sized samples for the redistribution-restricted domains
+# (OPP-115, MAPP — no redistribution grant; see README.md "Data and
+# licensing"). Nothing is committed under compliance-files/ for any domain
+# — this just covers the folder name if you create one locally by hand.
 compliance-files/privacy_policy_pilot/
 compliance-files/mobile_app_privacy_pilot/
 
@@ -38,8 +39,8 @@ benchmarks/*-source-docs/
 # Full benchmark corpora copied into compliance-files/<domain>/ for
 # full-corpus runs (see benchmarks/README.md "Run the pipeline per
 # benchmark"). Regenerable from benchmarks/*-source-docs/ — not committed,
-# regardless of license; only the small curated *_pilot/ samples above are.
-# (Distinct from compliance-files/<domain>_pilot/ above: no _pilot suffix.)
+# regardless of license. (Distinct from compliance-files/<domain>_pilot/
+# above: no _pilot suffix.)
 compliance-files/commercial_contracts/
 compliance-files/nda_confidentiality/
 compliance-files/privacy_policy/

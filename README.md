@@ -1,11 +1,9 @@
 # compliance-to-code
 
-Turns compliance policy text into a typed, source-grounded, **executable**
-knowledge graph: every rule is extracted with structured conditions and
-outcomes, independently verified against the source document, partitioned
-into dependency DAGs with a 100%-coverage guarantee, and — per the plan in
-[`k-to-code.md`](k-to-code.md) — compilable into DMN 1.3 decision models and
-BPMN 2.0 process models that a third-party engine can actually execute.
+Turns compliance policy text into a typed, source-grounded knowledge graph:
+every rule is extracted with structured conditions and outcomes,
+independently verified against the source document, and partitioned into
+dependency DAGs with a 100%-coverage guarantee.
 
 This is a focused research fork of the `policy-to-knowledge` monorepo's
 extraction pipeline. See **Scope** below for exactly what was kept, what was
@@ -40,8 +38,8 @@ DAG generation, 100%-coverage guarantee). A lean CLI orchestrator
   one.
 - **No HTML visualizer** (the source repo's Agent 6). Its job — an
   interactive network graph and rules table — doesn't serve this repo's
-  research question; the actual deliverable here is the DMN/BPMN compiler
-  described in `k-to-code.md`, not a picture of the graph.
+  research question, which stops at a grounding-certified,
+  dependency-partitioned knowledge graph, not a picture of it.
 - **Only 4 of the source repo's 8 compliance domains**: `nda_confidentiality`,
   `privacy_policy`, `mobile_app_privacy`, `commercial_contracts`. The other
   four (`mortgage`, `healthcare`, `aml`, `commercial_lending`) have no paired
@@ -49,9 +47,9 @@ DAG generation, 100%-coverage guarantee). A lean CLI orchestrator
   redistribution terms were never checked — inappropriate for a repo meant to
   produce checkable, citable results.
 
-**Fixed during the fork** (all three are pre-existing defects identified while
-studying feasibility — see `k-to-code.md`'s "Blockers and preconditions" P2,
-P3, P6 — that would otherwise have been silently inherited):
+**Fixed during the fork** (all three are pre-existing defects found while
+auditing the extraction/readiness pipeline, that would otherwise have been
+silently inherited):
 
 - **P2** — the extraction prompt used to instruct the model to emit both v1
   prose (`conditions`/`consequences`) and the v2 structured contract
@@ -144,11 +142,7 @@ scripts/generate_benchmark_domain_prompts.py
                             regenerate after editing a template, don't hand-edit
                             the committed .txt files
 benchmarks/                 dataset registry + download/build scripts
-compiler/                   scaffold for the k-to-code.md DMN/BPMN compiler
-                            (not implemented yet — read the plan first)
-k-to-code.md                feasibility study + phased plan for compiling the
-                            graph into executable DMN/BPMN
-tests/                      pytest suite (766 tests as of this writing)
+tests/                      pytest suite
 ```
 
 ## Testing
@@ -160,13 +154,3 @@ pytest
 No API key needed — the suite tests contract validation, readiness/grounding
 logic, dependency-DAG partitioning, and prompt-pack consistency against fixed
 graphs and prompt files, not live extraction runs.
-
-## Roadmap
-
-Read [`k-to-code.md`](k-to-code.md) before writing any code in `compiler/`. It
-measures DMN feasibility against a real certified graph (352/352 rules emit
-well-formed DMN; 0 wrong-value test-vector replays) and BPMN's materially
-weaker story, names the open design questions (exception-list semantics,
-which corpora to run under v2 first, single-vs-consolidated decision tables),
-and is explicit about what's measured evidence versus code-reading versus
-still genuinely unverified.
