@@ -94,8 +94,7 @@ not how many documents get read.
 
 > **Cost.** These corpora total 1,387 documents through a 7-8-stage LLM
 > pipeline. Start with a handful of files copied into your own
-> `compliance-files/<name>/` folder (see the pilot samples already committed
-> under `../compliance-files/`) before committing to a full-corpus run.
+> `compliance-files/<name>/` folder before committing to a full-corpus run.
 
 ## The corpora
 

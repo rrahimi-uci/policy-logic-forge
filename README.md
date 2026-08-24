@@ -77,11 +77,16 @@ pip install -r requirements-dev.txt
 cp config.example.json config.json
 cp .env.example .env   # add your OPENAI_API_KEY
 
-# Try it on the committed NDA pilot (3 real NDAs, CC BY 4.0 via ContractNLI):
-python3 cli/extract.py --dir nda_confidentiality_pilot --domain nda_confidentiality --target-rules 20
+# No sample documents are committed (see "Data and licensing" below) — build
+# one corpus first, e.g. ContractNLI's NDAs:
+cd benchmarks
+python3 scripts/download_benchmarks.py contract-nli
+python3 scripts/build_source_docs.py contract-nli
+cd ..
+mkdir -p compliance-files/nda_confidentiality
+cp benchmarks/contract-nli-source-docs/*.txt compliance-files/nda_confidentiality/
 
-# Or the CUAD commercial-contracts pilot (CC BY 4.0):
-python3 cli/extract.py --dir commercial_contracts_pilot --domain commercial_contracts --target-rules 20
+python3 cli/extract.py --dir nda_confidentiality --domain nda_confidentiality --target-rules 20
 ```
 
 Output lands under `pipeline-output/<batch-name>/`:
@@ -109,20 +114,19 @@ python3 scripts/download_benchmarks.py           # all 4, ~640 MB
 python3 scripts/build_source_docs.py             # normalize into flat .txt per corpus
 ```
 
-| Domain | Corpus | License | Committed pilot sample? |
+| Domain | Corpus | License | Local folder (after building) |
 | --- | --- | --- | --- |
-| `nda_confidentiality` | ContractNLI (607 NDAs) | CC BY 4.0 | Yes — `compliance-files/nda_confidentiality_pilot/` |
-| `commercial_contracts` | CUAD (510 contracts) | CC BY 4.0 | Yes — `compliance-files/commercial_contracts_pilot/` |
-| `privacy_policy` | OPP-115 (115 policies) | Free for research use; no redistribution grant | **No** — build locally after downloading |
-| `mobile_app_privacy` | MAPP | Free for research use; no redistribution grant | **No** — build locally after downloading |
+| `nda_confidentiality` | ContractNLI (607 NDAs) | CC BY 4.0 | `compliance-files/nda_confidentiality/` |
+| `commercial_contracts` | CUAD (510 contracts) | CC BY 4.0 | `compliance-files/commercial_contracts/` |
+| `privacy_policy` | OPP-115 (115 policies) | Free for research use; no redistribution grant | `compliance-files/privacy_policy/` |
+| `mobile_app_privacy` | MAPP | Free for research use; no redistribution grant | `compliance-files/mobile_app_privacy/` |
 
-CC BY 4.0 explicitly permits redistribution with attribution, so this repo
-commits a small (2-3 document) pilot sample for those two domains directly
-under `compliance-files/`, letting you run the quickstart above with zero
-setup. OPP-115 and MAPP's license permits research use but does not grant a
-redistribution right, so no sample from either is committed — run
-`benchmarks/scripts/build_source_docs.py` after downloading, then point
-`--dir` at a folder you create under `compliance-files/` yourself.
+None of the four are committed to this repo, regardless of license — build
+whichever domain you need (`benchmarks/scripts/download_benchmarks.py` then
+`build_source_docs.py`, see `benchmarks/README.md`), then copy that
+corpus's `benchmarks/<id>-source-docs/*.txt` into
+`compliance-files/<domain>/` as shown in the Quickstart above. `--dir`
+then points at whichever domain folder you built.
 
 ## Structure
 
