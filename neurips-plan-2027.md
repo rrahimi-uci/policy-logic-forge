@@ -674,3 +674,372 @@ Ordered so the first commit is a bug fix, not a new subsystem.
 document-complete and audited, the optimizer sees v2 fields, the anchor harness
 reproduces, and the IR's supported subset is declared with counted refusals.* No
 research claim yet — and that is the point.
+
+---
+
+## 14. Review — second-pass comments and required corrections (2026-08-24)
+
+### Overall assessment
+
+This is substantially stronger than the proposal reviewed in §24. It correctly
+withdraws P3, refuses unproved `FIRST`, separates adapters from results, makes
+failure/refusal visible, narrows the novelty claims, and turns most of the first
+review into named work. The plan is useful as an architectural backlog.
+
+It is **not yet an executable research protocol**. The remaining problems are
+not editorial: the central metric is mislabeled, several phases require code
+scheduled in later phases, the compiler-correctness gate has no independent
+semantic oracle, the leakage guard is not a guard, and the effort totals do not
+add up. The statement in proposal §25 that all 13 blocking concerns are
+“applied” should therefore be read as **acknowledged and translated into work**,
+not as closed.
+
+**Verdict: revise before execution.** PIPE-1..3 can begin as scoped bug fixes,
+and the released Dutch evaluator can be replayed independently. Do not freeze a
+preregistration, quote a corpus metric, or start paid generation from the present
+plan.
+
+### Disposition of the first review after reading the applied changes
+
+| Prior item | Second-pass status | Reason |
+| --- | --- | --- |
+| R1 adapters ≠ evaluated domains | **Applied as a limitation; implementation remains future work** | The proposal and plan now say this correctly. |
+| R2 corpus completeness | **Partially applied** | Reading every chunk does not imply extracting every rule: each batch prompt still requests only up to `rules_per_batch`, and the proposed unit does not yet preserve original-document identity end to end. |
+| R3 optimizer handoff / edge recall | **Partially applied** | `_rule_summary_v2()` is a good repair, but the 60-pair convenience fixture and deterministic pair selection do not establish end-to-end edge recall. |
+| R4 formal language mismatch | **Partially applied** | A separate IR is appropriate, but the proposed IR places modality on variables, reduces scope to a formula, hard-codes exception semantics before REPRO-4, and does not say how missing v2 semantics are obtained. |
+| R5 `UNIQUE→FIRST` | **Applied** | The proof-obligation table is the right fail-closed policy. |
+| R6 P3 | **Applied** | Withdrawal, P3′ restriction, and retention of enumeration are correct. |
+| R7 CQI | **Applied conceptually** | CQI is now described as conditional reliability, although the concrete estimand still needs preregistration. |
+| R8 instrument validation | **Not yet closed** | DA is defined using `gold(q)`, so it is not gold-free; the anchor reproduction and statistical model also remain under-specified. |
+| R9 reward circularity | **Partially applied** | The degenerate-policy gate helps, but the proposed “independent” inventories are not complete clause inventories and four hard-coded attacks are easy to overfit. |
+| R10 assumption legitimacy | **Partially applied** | Per-assumption `A → h` rejection misses conclusion laundering by a set of assumptions and does not establish legal admissibility. |
+| R11 statistics | **Partially applied** | The plan names clustering and multiplicity, but mixes a per-model Spearman estimand with run-level mixed effects and powers the wrong null for its stated success threshold. |
+| R12 matched baselines | **Partially applied** | The Dutch paper reports OE only for the two I/O-enriched conditions, so a raw-`text` OE headline is not available without defining a new interface-alignment intervention. |
+| R13 scope / schedule / budget | **Not yet closed** | Phase dependencies conflict and the person-day totals omit BENCH work and misstate the G0–G3 subtotal. |
+
+The non-blocking license item is **characterized, not resolved**. The released
+repository says CC BY 4.0, the arXiv page says CC BY-SA 4.0, and the upstream
+government models have no explicit license. “Do not re-host; seek written
+confirmation” is a sound interim posture, but receipt of permission or a
+documented legal basis is the resolution.
+
+### Blocking findings
+
+#### P1. “Gold-free DA” is not gold-free, and the proposed correlation does not validate the claimed instrument
+
+Proposal §13 defines DA as
+`E_q[1(⟦A⟧(q) = gold(q))]`; §9.3 says the answer is obtained by executing the
+gold DMN. That is a **gold-labeled sparse outcome-equivalence estimate**, not a
+gold-free metric. OE is the same candidate-versus-gold comparison over the
+anchor's exhaustive input set. Their correlation primarily tests whether one
+gold-labeled query sample approximates another gold-labeled query set. It does
+not validate a metric usable on corpora without gold artifacts, and it cannot
+license the sentence “every gold-free result inherits credibility.”
+
+**Required correction — choose one construct before STAT-1:**
+
+1. Rename DA to **sampled OE (sOE)**, define the independently source-generated
+   query distribution, and narrow C2 to *whether source-generated sparse tests
+   estimate exhaustive OE*. This is defensible, but not gold-free evaluation.
+2. Or define a genuinely gold-free signal whose expected answer comes from an
+   independent source: human-authored source-grounded scenarios, expert labels,
+   legally valid metamorphic relations, or held-out corpus annotations. Then
+   validate that signal against OE without using gold to construct either its
+   queries or labels.
+
+Whichever option is chosen, include negative controls: random query samples of
+equal size, stratified random samples over the gold interface, and deliberately
+biased samples. Otherwise a high correlation cannot be attributed to the
+proposed source-driven instrument.
+
+#### P2. The phase graph cannot execute in its stated order
+
+- REPRO-2 runs “our compiled artifacts” in G1, but the reference evaluator,
+  DMN builder, emitter, and solver are scheduled in G2.
+- REPRO-4 compiles all 58 models under three exception readings before the same
+  compiler exists.
+- IR-3 requires solver `UNSAT` proofs in G0, while `utils/smt.py` and BE-3 are
+  scheduled in G2.
+- The day 6–7 REPRO-1 measurement occurs before G0 is green, contradicting both
+  the non-negotiable and the critical-path diagram.
+
+**Required correction:** split reproduction into **A1 evaluator replay** and
+**A2 fresh generation replication**. A1 may run in parallel with PIPE work
+because it evaluates released upstream artifacts and does not consume this
+pipeline's measurements. Move REPRO-2 and REPRO-4 after the minimal compiler and
+solver core. Either move the solver core needed by IR-3 into G0 or move IR-3 to
+the backend phase. Publish a machine-readable task DAG and fail plan validation
+on missing or cyclic dependencies.
+
+#### P3. The effort arithmetic is internally inconsistent
+
+G0's listed tasks total **35 pd**, not 28:
+
+`PIPE (4+2+3+6) + IR (8+2+3) + BENCH (7) = 35`.
+
+Therefore G0–G4 plus writing totals **121 pd**, not 114. Even using the stated
+28 pd for G0, G0–G3 plus writing is **88 pd**, not 73; using the itemized G0 it
+is **95 pd**. The 73-pd scope-cut claim omits material work. Annotation,
+external-author correspondence, paid model runs, environment repair, and
+research iteration are also not represented in pd.
+
+**Required correction:** generate the summary table from a task registry rather
+than hand-entering totals. Separate engineering pd, research/analysis pd, legal
+reviewer hours, annotation hours, paid API/GPU cost, and external waiting time.
+Add contingency explicitly; do not infer staffing from the current totals.
+
+#### P4. REPRO-1 conflates deterministic evaluator replay with stochastic experimental replication
+
+The [released Dutch repository](https://github.com/opengov-lab/legal-text-to-decision-model)
+contains generated models, evaluation code, and results. Running
+`python -m evaluation.run_evaluation` over those released artifacts should be a
+deterministic **evaluator replay**, checked against exact files or a declared
+numeric tolerance—not “inside our bootstrap CI.” A fresh replication requires
+new GPT-5.1 generations at temperature 0.1, the original example-selection
+schedule, prompts, provider behavior, and five runs. These are different
+claims, costs, and failure modes.
+
+The [paper's outcome evaluation](https://arxiv.org/html/2604.17153) is also
+limited to **Text+io and Text+srl+io**, because only those conditions have fixed
+inputs alignable to gold. Four conditions × five runs describes the generation
+study (1,900 generations), not four-condition OE on 13,080 inputs.
+
+**Required correction:**
+
+- **A1:** pin upstream commit and environment; checksum released inputs,
+  generated artifacts, and expected result files; replay the evaluator; require
+  exact/tolerance-defined agreement.
+- **A2:** separately preregister whether fresh generation replication is in
+  scope; record model snapshot, prompts, examples, run mapping, API parameters,
+  failures, and cost; compare distributions with a declared equivalence margin.
+- Remove raw `text` versus raw `text` from the OE table unless a non-gold
+  interface-alignment protocol is defined. It is not an existing published OE
+  baseline.
+
+#### P5. Backend agreement is not compiler correctness
+
+BE-1..4 can all agree while sharing the same wrong v2→IR lowering or the same
+wrong interpretation of the source. XSD validation proves XML shape, not FEEL
+meaning. A generated conformance suite derived from the implementation can omit
+exactly the cases the implementation mishandles. Calling this gate “validate the
+compiler” overstates what it proves.
+
+**Required correction:** split G2 into two claims:
+
+1. **Lowering correctness:** hand-authored v2→IR fixtures with independently
+   specified denotations, mutation tests, refusal-oracle tests, and Dutch
+   source/gold cases. Include loss-accounting: every source field is consumed,
+   deliberately ignored with a reason, or causes refusal.
+2. **Backend semantic agreement:** independently generated IR programs covering
+   every operator×type×null×hit-policy branch, plus metamorphic tests and a
+   pinned third-party engine.
+
+The release gate may say four-way agreement only when the required engine job
+actually ran. A normally skipped test cannot support that claim.
+
+#### P6. The proposed IR encodes unsettled or incorrectly located semantics
+
+- `norm_kind` belongs to a norm, rule, or outcome—not a variable. The same
+  variable may be obligatory in one rule, permitted in another, and prohibited
+  in a third.
+- `scope: Formula` is insufficient for jurisdiction, parties, authority,
+  effective dates, document versions, and applicability metadata. Separate
+  executable scope predicates from non-executable scope metadata.
+- `defeaters` are hard-coded as `C ∧ ¬⋁X` in IR-1, but REPRO-4 later claims to
+  decide exception semantics empirically. The IR must represent exception
+  structure without deciding it, or version the selected interpretation after
+  the study.
+- v2 does not extract the richer modality, typed scope, derived expressions, or
+  source-backed precedence the IR requires. A downstream dataclass cannot
+  invent them. Define a versioned lowering/enrichment step with provenance and
+  refusal behavior; preserving 770 tests is not a reason to freeze an
+  insufficient schema.
+- Refusing `string` by default conflicts with the Dutch anchor's categorical and
+  `contains()`-based string inputs and string outputs. Run a provider-free corpus
+  feature census before freezing `SUPPORTED_THEORIES`; define a source-backed
+  string→enum normalization if that is the intended subset.
+
+**Required correction:** publish an IR semantics document and JSON/schema
+version before implementation, with denotational examples, field lineage,
+unknown/null behavior, exception interpretation as an explicit parameter, and a
+corpus feature-coverage report. The compiler must consume the complete rule,
+not treat `rule["execution"]`—which currently contains only columns, targets,
+and hit policy—as the semantic program.
+
+#### P7. Chunk coverage is not rule coverage, and PIPE-2 still permits loss
+
+The current compact extraction prompts request **up to five rules per batch**.
+Processing every chunk therefore proves source-read coverage, not semantic rule
+recall. A 4,500-word batch containing more than five obligations can be read
+successfully while omitting most rules. `target_rules` does not currently bound
+the final rule count; it controls how many batches are selected. Retaining that
+name after removing the batch cap would be misleading.
+
+PIPE-2 says clipping may remain if `bytes_dropped` is recorded, while PIPE-1/G0
+say any truncation fails. A chunk is already the organizer's boundary, so “clip
+only at a chunk boundary” does not define how an oversized chunk is subdivided.
+
+**Required correction:**
+
+- distinguish `source_chunk_coverage`, `successful_batch_coverage`, and measured
+  `rule_recall`; never call the first two document completeness;
+- replace `target_rules` with an explicit pilot batch limit, or remove it from
+  full mode;
+- re-split oversized chunks before prompting with stable source offsets and
+  overlap/deduplication rules; full mode must have zero dropped bytes;
+- define the original source document as the unit through Agent 1, extraction,
+  optimization, compilation, and scoring, including how cross-document
+  dependencies are isolated or intentionally modeled; and
+- annotate a small complete-rule gold set to estimate extraction recall or use a
+  preregistered saturation audit. Without one, G0 makes the denominator traceable
+  but not semantically complete.
+
+#### P8. The proposed filesystem leakage guard is not a security boundary
+
+A subprocess working directory that “cannot reach `gold_models/`” can still
+read absolute paths or parent directories. `_assert_gold_unreachable()` is only
+an assertion unless the gold files are genuinely absent from its mount or
+process sandbox. The proposed threshold-coincidence audit also confuses leakage
+with legitimate source thresholds: legal text and gold DMN should often share
+numbers.
+
+**Required correction:** generate queries in a separate checkout/container with
+only an allow-listed, content-addressed source packet mounted read-only. Pass the
+result across a one-way artifact boundary to a distinct labeler that has gold.
+Test denial with adversarial absolute, parent-relative, symlink, environment,
+and manifest paths. Audit provenance and information flow, not mere threshold
+coincidence.
+
+#### P9. The manifest is not sufficient to make a run immutable or reproducible
+
+Content-addressing a small metadata object does not make its referenced inputs
+or outputs immutable. The proposed manifest omits schema/metric versions,
+Python and dependency locks, OS/architecture, prompt hashes, provider/model
+snapshot, upstream commit, per-stage input/output hashes, retry/failure records,
+refusal counts, and artifact lineage. The repository currently ignores corpora
+and pipeline outputs, while the plan commits `results/`; the release boundary is
+not specified.
+
+**Required correction:** define a versioned run bundle and validator. Hash every
+referenced artifact, record environment and stage lineage, distinguish local
+restricted artifacts from publishable aggregates, and fail validation on a
+missing reference. Add a lock/constraints file: `z3-solver`, `lxml`, SciPy, and
+statsmodels include native components/wheels, so the statement that the added
+runtime is “pure Python” is false. Ordinary CI may stay offline, but the
+publication workflow needs required jobs for the pinned DMN engine and artifact
+validation.
+
+#### P10. The statistical plan mixes incompatible levels and powers the wrong decision rule
+
+The estimand is described as a **per-model** Spearman correlation, but also as
+“pooling all runs,” followed by a mixed model with a random intercept per model.
+If DA and OE are first aggregated per model, there are no repeated run-level
+observations left for that random intercept. If runs are retained, ordinary
+Spearman correlation does not define the stated mixed-effects analysis. Scores
+are bounded proportions with ties, refusals, unequal query counts, and likely
+missingness.
+
+Power against `H0: ρ = 0` does not establish the success rule “ρ ≥ 0.6 with CI
+lower bound > 0.3.” The relevant null for that decision is at least `ρ ≤ 0.3`,
+with sensitivity to ties and measurement error. Expanding to the excluded 37
+after seeing low power also changes the population and cannot be an automatic
+fix.
+
+**Required correction:** after P1 is resolved, specify one observation table,
+one aggregation rule, missing/refusal handling, the exact bootstrap nesting,
+and the estimand for repeated runs. Simulate power for the actual acceptance
+rule and plausible tie/missingness structure. G3 may proceed to a negative
+finding only when leakage, precision, power, and protocol-validity gates pass;
+an invalid or uninformative estimate is not the same as evidence of low
+association.
+
+#### P11. Dependency, assumption, repair, and reward audits remain too easy to pass
+
+- A hand-reviewed set of 60 selected pairs has no interpretable recall unless it
+  is sampled from a declared candidate universe with negatives, class balance,
+  annotation guidance, independent review, and adjudication. “Metric present”
+  is not an adequate G0 gate.
+- Rejecting each assumption where `A → h` misses a set where
+  `A₁ ∧ A₂ → h` even though neither assumption alone entails the conclusion. It
+  also does not establish legal permissibility. Report set-level entailment,
+  source/background-law provenance, and blinded expert admissibility separately.
+- A CEGIR witness proves an internal formal defect, not which extracted clause
+  should change. Repairs need source-evidence preservation, omission checks,
+  held-out evaluation, and a deletion/no-op baseline; otherwise deleting rules
+  is an attractive “repair.”
+- CUAD categories, 17 ContractNLI hypotheses, and Dutch gold I/O are not complete
+  clause inventories. They cannot make an omission-proof coverage reward. Four
+  hard-coded degenerate policies can be overfit; use held-out adversarial search
+  and never use evaluation gold in a training reward.
+
+**Required correction:** give each of these tasks a frozen sampling frame,
+independent oracle, quantitative failure threshold, and contamination boundary.
+Keep results `requires_review: true` when the oracle or adjudication is absent.
+
+#### P12. The plan's own definition of done is not satisfied
+
+The plan says every task has a named pytest or recorded artifact, but BENCH-1b
+has no acceptance block, RL-1/RL-2/RL-4 lack individual acceptance criteria,
+and `OPS-*` is announced but never defined. Some recorded-artifact acceptances
+check only existence, not schema validity or scientific adequacy. The claim
+“new code only; nothing existing is moved” also sits beside PIPE tasks that
+explicitly edit existing agents, CLI, and prompts.
+
+**Required correction:** create one task registry with ID, owner, inputs,
+dependencies, outputs, acceptance command, evidence tier, estimate, and status.
+Validate it in CI against the plan. “File exists” must be paired with a schema
+validator and substantive gate. Remove unused task families and resolve `C1..C4`
+versus `PIPE/IR/BE` naming.
+
+### Required replan before G0 is called green
+
+Use two tracks that join only after their prerequisites are real:
+
+```text
+Track A — external anchor
+  A1 evaluator replay on released artifacts
+  A2 optional fresh-generation replication
+                     ┐
+                     ├─> J1 matched adapter + minimal compiler
+Track B — this repo  │
+  B0 document identity / zero-loss source coverage
+  B1 v2 optimizer handoff + audited dependency sampling
+  B2 corpus feature census + versioned IR semantics
+  B3 lowering oracle + solver core + reference evaluator
+                     ┘
+
+J2 backend differential validation + third-party engine
+J3 instrument study, only after redefining DA/sOE and freezing statistics
+J4 one second-domain claim with its exact transfer boundary
+J5 CEGIR, then optional RL only after independent anti-omission gates
+```
+
+Minimum gate corrections:
+
+1. **G0:** all task acceptances pass; original-document lineage is complete;
+   zero source bytes and zero failed batches are silently dropped; extraction
+   recall/saturation and dependency recall have declared sampling frames; every
+   unsupported semantic construct is counted.
+2. **A1:** released Dutch evaluation replays under a pinned environment with
+   exact/tolerance-defined agreement. A2 is reported separately.
+3. **Compiler gate:** v2→IR lowering passes an independent semantic oracle, then
+   all required backends agree on a coverage-audited suite. Backend agreement
+   alone is not labeled compiler correctness.
+4. **Instrument gate:** the metric is correctly named and independently defined;
+   query generation is isolated by an actual information boundary; negative
+   controls, power, aggregation, missingness, and success/failure/invalid
+   outcomes are frozen before evaluation.
+5. **Publication gate:** result bundles validate, restricted inputs are absent,
+   all headline values trace to immutable manifests, and claims distinguish
+   implemented, run, valid, exploratory, refused, and unrun work.
+
+### Bottom line
+
+The revised proposal now contains a plausible research direction, and this plan
+contains much of the right engineering work. The immediate defensible work is
+PIPE-1..3, a provider-free corpus/IR census, and an exact replay of the released
+Dutch evaluator. The primary scientific claim should remain **uncommitted**
+until P1, P2, P4, P5, and P10 above are resolved. In particular, do not call the
+current DA gold-free, do not call four internally agreeing backends compiler
+correctness, and do not treat a low or high correlation as interpretable until
+the metric and sampling process have independent validity.
