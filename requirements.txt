@@ -12,7 +12,3 @@ langchain-text-splitters>=0.2.0  # Markdown/text splitting with header metadata
 pandas>=2.0.0                     # CSV/Excel processing
 openpyxl>=3.1.0                   # Excel file support for pandas
 python-docx>=1.1.0                # Word document (.docx) support
-
-# compiler/ (DMN/BPMN emission) — see k-to-code.md. Declared explicitly rather
-# than relying on a transitive install (flagged in k-to-code.md's risk table).
-lxml>=5.0.0
