@@ -16,6 +16,53 @@ decision logic, and use the compiler as the measuring instrument.
 
 ---
 
+## TL;DR
+
+**The claim.** Compile a normative document into an executable decision artifact
+and extraction quality becomes *decidable* — so you can measure it, verify it
+with a solver, and train on the solver's verdict instead of a judge's opinion.
+
+**The problem it solves.** There is no gold DMN for real contracts, and even
+where one exists, correctness is invariant under renaming, reordering, and table
+splitting — so form-matching metrics measure style, not meaning. Judge behavior
+instead: what does the artifact *decide*?
+
+**Four pieces**, in dependency order:
+
+1. **LEXEC-Verify** — an LLM-free compiler (v2 rule contract → DMN 1.3/FEEL,
+   SMT-LIB, reference interpreter) plus a solver layer deciding co-firing
+   conflict, subsumption, vacuity, coverage gaps, equivalence, and
+   UNIQUE-safety. Nobody runs these over LLM-extracted rule sets at corpus
+   scale. → §7
+2. **Instrument validation** (the spine) — does a *gold-free* decision metric
+   predict *gold-artifact* outcome equivalence? The 95-model Dutch DMN corpus
+   makes it checkable. If yes, every gold-free result inherits credibility; if
+   no, that finding should change how this subfield evaluates itself. It is also
+   the one contribution that does not depend on publishing first. → §9
+3. **Assumption-explicit compilation** — gold legal labels smuggle in unstated
+   assumptions (**71** ContractNLI entailments flip to neutral under strict
+   logic *(published)*). So the artifact emits a verdict *plus* the minimal
+   assumption set it needed, and the solver checks each assumption is
+   necessary. → §10
+4. **Solver-reward RL + counterexample-guided repair** — the verifier becomes a
+   programmatic reward; solver witnesses drive repair. Target: an 8–14B open
+   model beating a frontier prompted model on decision agreement at equal
+   coverage. → §12
+
+**Why it is worth doing now.** The closest published work sits at **42.6%**
+outcome equivalence *(published)* — the task is wide open. Extraction is already
+built and tested in this repo; the measurement half is the research. And every
+fallback is still a paper: if compilation does not generalize, the compiler
+becomes a *diagnostic* and the paper is a decidable taxonomy of why
+document-to-logic extraction fails (§20).
+
+**Three things this proposal explicitly does *not* claim**, after checking the
+literature: that gold artifacts never exist (§1.1), that ContractNLI-as-SMT-entailment
+is new (§1.2), or that metamorphic evaluation by formal equivalence is new
+(§1.3). What is left after those cuts is narrower and better defended.
+
+---
+
 ## 0. The one-sentence claim (revised)
 
 > Compiling a normative document into an executable decision artifact makes
