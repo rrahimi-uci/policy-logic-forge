@@ -36,7 +36,16 @@ with a solver, and train on the solver's verdict instead of a judge's opinion.
 **The problem it solves.** There is no gold DMN for real contracts, and even
 where one exists, correctness is invariant under renaming, reordering, and table
 splitting — so form-matching metrics measure style, not meaning. Judge behavior
-instead: what does the artifact *decide*?
+instead: what does the artifact *decide*? The thing no corpus has is a gold
+**formalization**, not a gold **label** — an equivocation that cost v3 its
+central metric (§9.2).
+
+**What this cannot claim.** A decision-table target cannot express deontic
+modality, temporal validity, defeasibility beyond a fixed negation, or vagueness
+("reasonable efforts"). The IR refuses most of that (§5). So the honest framing
+is not "we evaluate document understanding" but **"we evaluate the fraction of
+normative content a decision-table semantics can carry, and we measure that
+fraction"** (§14.6).
 
 **Four pieces**, in dependency order:
 
@@ -45,11 +54,14 @@ instead: what does the artifact *decide*?
    conflict, subsumption, vacuity, coverage gaps, equivalence, and
    UNIQUE-safety. We found no prior work applying these over LLM-extracted
    rule sets at corpus scale (§21 states the search protocol). → §7
-2. **Instrument validation** (the spine) — does a *gold-free* decision metric
-   predict *gold-artifact* outcome equivalence? The 95-model Dutch DMN corpus
-   makes it checkable. If yes, every gold-free result inherits credibility; if
-   no, that finding should change how this subfield evaluates itself. It is also
-   the one contribution that does not depend on publishing first. → §9
+2. **Instrument validation** (the spine) — do **artifact-free signals** predict
+   **artifact-based** outcome equivalence? The Dutch DMN corpus makes it testable
+   on **58** models. If yes, results on corpora with no gold formalization
+   inherit **bounded** credibility — bounded by one jurisdiction, one language,
+   one statute; if no, that finding should change how the subfield evaluates
+   itself. It is also the contribution that does not depend on publishing first.
+   → §9. *v3 called this "gold-free DA"; the metric was misnamed and §9.2 fixes
+   it — that correction is the most important change in this document.* → §9
 3. **Assumption-explicit compilation** — gold legal labels smuggle in unstated
    assumptions (**71** ContractNLI entailments flip to neutral under strict
    logic *(published)*). So the artifact emits a verdict *plus* the minimal
@@ -319,10 +331,10 @@ semantic effect; check with a solver (§11), positioned against LGMT.
 | # | Contribution | Closest prior work | What is actually new |
 | --- | --- | --- | --- |
 | **C1** | **LEXEC-Verify** — LLM-free compiler (v2 rule contract → DMN 1.3/FEEL, SMT-LIB, reference interpreter) + solver layer deciding row disjointness, subsumption, equivalence, co-firing conflict, coverage gaps, vacuity, entailment | ContractCheck (manual blocks, one SPA); PolicyGuard (Z3, contract-vs-policy review); Graus (executor, **no solver checking**) | Solver-decided *internal* consistency of **LLM-extracted** rule sets at corpus scale; witness extraction for repair; UNIQUE-safety proofs |
-| **C2** | **Instrument validation** — does gold-free decision agreement predict gold-artifact outcome equivalence? | None found (§21 search protocol) | Calibrates the metric the whole no-gold methodology rests on (§9). **The primary contribution, and the one that does not depend on publishing first.** |
+| **C2** | **Instrument validation** — do **artifact-free signals** (expert-label entailment, metamorphic relations, human scenarios) predict **artifact-based** OE, with sOE as positive control and random/stratified/biased samples as negative controls? | None found (§21 search protocol) | Calibrates the metric the whole methodology rests on (§9.2). **Primary contribution; does not depend on publishing first.** Bounded by one anchor corpus (§16) |
 | **C3** | **Assumption-explicit compilation** — the artifact emits the minimal assumption set needed to reach the pragmatic answer; measure necessity/minimality | *Know Your Limits* documents the gap and names "assumption-surfacing tools" as future work | Turns a measured negative result into a compilation requirement and a metric |
-| **C4** | **LEXEC-Bench** — decision-level benchmark; **scope-cut to 2 corpora for the minimum paper** (§25 D2) | LegalBench (162 tasks, label-level); PrivacyGLUE (7 tasks); ObliQA (27,869 questions); ContractEval; RuleArena | We found no *extensional, artifact-level* benchmark for normative documents; scale and breadth are the delta, stated as a bounded absence claim |
-| **C5** | **CEGIR + solver-reward RL** | LLM-CEGIS repair (AAAI 2025, arXiv:2502.07786); Logic-LM self-refinement; RLVR for SQL/IE/structured output | Counterexamples from *cross-rule* consistency inside one extracted artifact (no external spec, no gold artifact); reward is a solver verdict on the artifact's *denotation* |
+| **C4** | **LEXEC-Bench** — **2 committed corpora, 4 reserve** (§8) | LegalBench (162 tasks, label-level); PrivacyGLUE (7 tasks); ObliQA; ContractEval; RuleArena | We found no *extensional, artifact-level* benchmark for normative documents. With 2 corpora, **breadth is no longer a delta** — the delta is the artifact-level evaluation itself plus the instrument validation. Stated as a bounded absence claim |
+| **C5** | **CEGIR + solver-reward RL** *(conditional — not committed work; §17 G5)* | LLM-CEGIS repair (AAAI 2025, arXiv:2502.07786); Logic-LM self-refinement; RLVR for SQL/IE/structured output | Counterexamples from *cross-rule* consistency inside one extracted artifact (no external spec, no gold artifact); reward is a solver verdict on the artifact's *denotation* |
 | **C6** | **Two findings**: (a) LLM grounding-verification is miscalibrated on this task; (b) surface metrics are weakly predictive of decision agreement across four domains | *Know Your Limits* (scope laundering, faithfulness); Graus (structure vs. outcome) | (a) is unclaimed and we have striking `(measured)` n=1 evidence; (b) becomes a *replication at corpus scale across domains*, honestly framed |
 
 ---
@@ -470,7 +482,7 @@ each make CQI undefined or nonzero.
 **And a deterministic-but-wrong program earns the same CQI advantage**, so CQI
 is *not* a correctness metric and cannot be an unconditional contribution. It is
 reported as a **reliability/cost property conditional on successful
-compilation**, always paired with DA and EY, never alone. Reporting it requires
+compilation**, always paired with AFS/sOE and EY, never alone. Reporting it requires
 first defining query equivalence classes, abstention handling, multi-valued
 output handling, and the baseline's consistency protocol (§26 STAT-3).
 
@@ -500,21 +512,32 @@ against.
 
 ---
 
-## 8. LEXEC-Bench: six resources, four modes, no new gold artifacts
+## 8. LEXEC-Bench — two corpora committed, four held in reserve
 
-| Resource | Scale (verified) | Mode | Gold |
+**Corrected for consistency (this pass).** v3's header said "six resources" while
+§4's C4 row, §17's cut list, and the TL;DR all said the benchmark is scope-cut to
+two corpora. The table below now marks each resource **COMMITTED** or
+**RESERVE**; only committed resources may appear in a headline claim, and reserve
+resources return only if their gate passes early (§17).
+
+| Resource | Status | Scale (verified) | Mode | Gold |
 | --- | --- | --- | --- |
-| **Dutch DMN corpus** (Graus, ICAIL 2026, CC BY 4.0) | 95 production DMN models + legal text; 58 executable; harness included | **Gold-artifact anchor** | Real DMN + outcome equivalence |
-| **ContractNLI** (Koreeda & Manning, Findings EMNLP 2021) | 607 NDAs × 17 hypotheses, 3-way labels + evidence spans | Entailment (assumption-explicit, §10) | Expert labels; **plus 400/610 strict-entailment re-annotations from arXiv:2606.16118 if obtainable** |
-| **CUAD** (Hendrycks et al., NeurIPS D&B 2021) | 510 contracts, 41 categories, 13k+ spans, 20,910 QA pairs | Presence/value | `master_clauses.csv` normalized answers |
-| **OPP-115** (Wilson et al., ACL 2016) | 115 policies, 3,792 segments, ~23k practices | Practice decision | Consolidated majority-vote annotations |
-| **MAPP** (Arora et al., LREC 2022) | 64 EN (292k words) + 91 DE (478k words); 8k + 19k practices; GDPR/CCPA-aware scheme | Practice decision, **cross-lingual** | Bilingual annotations |
-| **ObliQA / RegNLP** (arXiv:2409.05677) | 27,869 obligation-centric questions over ADGM financial regulation (40 docs, ~640k words) | Obligation entailment | Question–passage pairs; RePASs contradiction metric |
+| **Dutch DMN corpus** (Graus, ICAIL 2026, CC BY 4.0) | **COMMITTED** | 95 production DMN models + legal text; 58 executable; harness included | **Gold-artifact anchor** | Real DMN + outcome equivalence |
+| **ContractNLI** (Koreeda & Manning, Findings EMNLP 2021) | **COMMITTED** | 607 NDAs × 17 hypotheses, 3-way labels + evidence spans | Entailment (assumption-explicit, §10) | Expert labels; **plus 400/610 strict-entailment re-annotations from arXiv:2606.16118 if obtainable** |
+| **CUAD** (Hendrycks et al., NeurIPS D&B 2021) | RESERVE | 510 contracts, 41 categories, 13k+ spans, 20,910 QA pairs | Presence/value | `master_clauses.csv` normalized answers |
+| **OPP-115** (Wilson et al., ACL 2016) | RESERVE | 115 policies, 3,792 segments, ~23k practices | Practice decision | Consolidated majority-vote annotations |
+| **MAPP** (Arora et al., LREC 2022) | RESERVE | 64 EN (292k words) + 91 DE (478k words); 8k + 19k practices; GDPR/CCPA-aware scheme | Practice decision, **cross-lingual** | Bilingual annotations |
+| **ObliQA / RegNLP** (arXiv:2409.05677) | RESERVE | 27,869 obligation-centric questions over ADGM financial regulation (40 docs, ~640k words) | Obligation entailment | Question–passage pairs; RePASs contradiction metric |
 
-**Scenario mode** (fact bindings) draws on, in decreasing order of trust: the
-rules' own `source_attested` test vectors; solver-generated boundary bindings
-per P3; and ~500 human-authored scenarios on a stratified sample, with reported
-agreement.
+**Scenario mode** (fact bindings). v3 sourced these partly from "solver-generated
+boundary bindings **per P3**" — but **P3 is withdrawn** (§6), so that clause is
+removed. Corrected sources, in decreasing order of trust: ~500 **human-authored,
+source-grounded scenarios** on a stratified sample with reported inter-annotator
+agreement; **exhaustive or solver-enumerated bindings** over the declared input
+domain (no completeness claim attached — see §6 P3′); and the rules' own
+`source_attested` test vectors, used **only** as a diagnostic and never as a
+reward or a headline, because they are generated by the same extraction pass they
+would be scoring (§12.2).
 
 **Positioning against existing suites, explicitly.** LegalBench (162 expert-built
 tasks) and PrivacyGLUE (7 tasks: OPP-115, PI-Extract, Policy-Detection,
@@ -537,8 +560,9 @@ knowledge; "Pervasive Annotation Errors Break Text-to-SQL Benchmarks"
 
 ## 9. Instrument validation — the primary contribution
 
-*Rewritten per §24 R8, which was correct on every factual point and understated
-two of them.*
+*Rewritten twice: per §24 R8 (which was right on every fact), and again per the
+second-pass §14 P1, which showed the central metric was misnamed. §9.2 explains
+the redefinition; it is the most important correction in this document.*
 
 **The question.** Every gold-free extensional metric assumes that agreeing with
 query answers means having built the right artifact. We found no prior work that
@@ -546,79 +570,189 @@ tests this assumption (§21 states the search protocol; this is a bounded
 absence claim, not a "nobody has"). The Dutch DMN corpus makes it testable
 because it has both the artifact and the behavior.
 
-### 9.1 The anchor study's actual protocol, which we must match
+### 9.1 The question
+
+Every extensional metric assumes that agreeing with query answers means having
+built the right artifact. We found no prior work testing that assumption (§21
+states the search protocol and its limits; this is a bounded absence claim). The
+Dutch DMN corpus makes it testable because it is the one public resource holding
+both the gold artifact and its behavior.
+
+**§9.2 then shows the metric v3 proposed for this test was not the metric it
+claimed to be.** Read §9.2 before §9.3.
+
+### 9.2 The metric was misnamed, and that changes the contribution
+
+*Second-pass review §14 P1 is correct, and it is the deepest finding in either
+review.* §13 defined DA as `E_q[1(⟦A⟧(q) = gold(q))]`, and §9.3 obtained
+`gold(q)` by **executing the gold DMN model**. So the quantity was never
+gold-free: it is a *sparse, gold-labeled* estimate of the same thing OE measures
+exhaustively. Correlating the two would mostly have tested whether one
+gold-labeled sample approximates another gold-labeled sample — a
+sample-sufficiency question, not an instrument-validity one — and it could never
+have licensed "results on corpora without gold artifacts inherit credibility."
+
+**The fix, and it makes the contribution better rather than smaller.** The
+equivocation was on the word *gold*. Separate two things that were conflated:
+
+| Term | Definition | Available where |
+| --- | --- | --- |
+| **sOE** — sampled outcome equivalence | agreement with the gold **artifact**, measured on a sampled query set instead of the exhaustive one | only where a gold DMN exists (Dutch) |
+| **OE** | agreement with the gold **artifact** over the exhaustive input set | only where a gold DMN exists (Dutch) |
+| **AFS** — artifact-free signal | any score computed **without ever touching a gold formal artifact**, whether or not it uses labels | everywhere |
+
+"Artifact-free" is the property that actually matters, because the thing no
+corpus has is a gold *formalization* — not a gold *label*. Three AFS instruments
+qualify, and all three already exist in this proposal:
+
+1. **Expert-label entailment** — ContractNLI's 17 hypotheses per NDA with
+   three-way expert labels (§8). Labels, but no artifact.
+2. **Metamorphic relations** — LEXEC-Perturb (§11). Needs neither artifact nor
+   label, only an annotated *relation*, and it is checked by SMT equivalence.
+3. **Human-authored source-grounded scenarios** — a stratified expert-labeled
+   scenario set (§8).
+
+**C2 restated.** *Do artifact-free signals predict artifact-based outcome
+equivalence?* With **sOE as the positive control** (it should track OE well — if
+it does not, the sampling is broken and nothing else is interpretable) and
+**random, stratified, and deliberately-biased query samples as negative
+controls** (a high correlation must be attributable to the AFS, not to the mere
+act of sampling).
+
+**Consequence that partially reverses the scope cut.** LEXEC-Perturb was demoted
+to "most expendable" in §20 Plan D on the grounds that LGMT overlaps it. Under
+the corrected framing it is the **only AFS that requires no new expert labels**,
+so it moves back onto the critical path. That is a real cost — see §17 — and it
+is the price of having a coherent primary claim.
+
+### 9.3 The anchor study's actual protocol, and the baseline that does not exist
 
 Verified against arXiv:2604.17153 directly *(published)*:
 
-| Fact | Value | Why it changes our design |
+| Fact | Value | Consequence |
 | --- | --- | --- |
-| Models released | 95 | but not all are usable |
-| Models used for outcome equivalence | **58** (24 Outcome + 34 Requirements) | the other 37 lack alignable interfaces — **we evaluate on 58, not 95** |
-| Testable input variations | **13,080**, exhaustive per model | exhaustive enumeration is the protocol; P3′ cannot replace it (§6) |
-| Runs per condition | **5 independent runs** (varying only the sampled example) | 1,900 generations total (95 × 4 × 5) |
-| 42.6% / 60.4% | **macro-averaged across all 5 runs** | this is the number to compare against |
-| 33% full equivalence, 50% ≥90% | **best-run per model** (19/58 and 29/58) | a *different estimator* — never compare our mean to their best-of-5 |
-| `+io` condition | I/O specs **derived from the gold models** | a gold-leaking condition; a raw-text pipeline is not comparable to it |
+| Models released | 95 | 37 lack alignable interfaces |
+| Models used for outcome equivalence | **58** = 24 Outcome + 34 Requirements | our n for the primary endpoint |
+| Input types | 24 Outcome models are **boolean-only, ≤10 inputs** (2^n enumeration). The **34 Requirements models require string-typed inputs**: categorical strings tested with `contains()`, binned numeric strings, and null-check strings | **see §9.4 — this is a blocker, not a detail** |
+| Testable input variations | **13,080**, exhaustive | P3′ cannot replace enumeration (§6) |
+| Runs per condition | **5** independent runs; 1,900 generations (95 × 4 × 5) | all runs retained |
+| **Conditions with OE reported** | **only `Text+io` and `Text+srl+io`** — verbatim: *"We limit ourselves to the io and srl+io conditions, as these have consistent inputs and outputs, enabling direct comparison."* | **there is no published raw-`text` OE baseline at all** |
+| 42.6% / 60.4% | `Text+srl+io`, **macro-averaged over 5 runs** | not a "best condition, 1-shot" figure |
+| 33% full / 50% ≥90% | **best-run per model** (19/58, 29/58) | a different estimator; never compared to a mean |
+| `+io` interface specs | **derived from the gold models** | a gold-leaking condition |
 
-Two consequences v2 of this proposal got wrong: it said "run the pipeline on the
-95 documents," and it proposed beating 42.6%/60.4% without matching either the
-information condition or the run-selection rule. Both are corrected below.
+**The comparison v3 designed does not exist.** §9.4 of v3 promised "raw-text vs.
+Graus's `text`" as the honest headline. The anchor reports no OE for `text`,
+because that condition produces no alignable interface. So the only conditions
+with a published OE number are both gold-leaking, and a raw-text run of ours has
+**nothing published to be compared against**.
 
-### 9.2 Preregistered analysis plan
+Three options, and the choice is preregistered before any run:
 
-- **Estimand.** The association between per-model gold-free DA and per-model
-  gold-based OE, on the 58 testable models, pooling all runs.
-- **Sampling unit.** The **decision model** (equivalently, the document), not the
-  query and not the run. Queries are nested in models; runs are repeated
-  measures on a model.
-- **Model.** A mixed-effects / hierarchical bootstrap with a random intercept per
-  model, so unequal scenario counts and 5 repeated runs are not treated as
-  independent observations.
-- **Primary estimate.** Spearman ρ(DA, OE) with a hierarchical bootstrap CI.
-  **Null:** ρ = 0. **Minimum useful effect:** ρ ≥ 0.6 with the CI lower bound
-  above 0.3 — declared before looking.
-- **Run retention.** *All* stochastic runs are retained and reported. Any
-  best-of-*k* figure is labeled as such and compared only against the anchor's
-  own best-of-5 figure.
-- **The 37 excluded models** are reported as an explicit exclusion with the
-  reason, not dropped silently, and we report whether our pipeline can produce
-  artifacts for any of them (an interface-adequacy finding in its own right).
-- **Disagreement review.** Structured false-positive (DA high, OE low) and
-  false-negative (DA low, OE high) analysis, with a taxonomy — this is the part
-  most likely to be the paper's most useful figure.
+1. **Report our raw-text OE as a standalone number** with no comparison claim,
+   and compare only within our own information conditions. Honest; weaker.
+2. **Define an interface-alignment intervention that does not use gold** — derive
+   the I/O signature from the source text alone, publish the derivation, and
+   report OE for it. Then our `self-derived-interface` number is comparable to
+   the anchor's `+io` *only if* we also report how often our derived signature
+   matches the gold signature. This is the interesting option and it becomes a
+   measured sub-result: **interface-derivation accuracy**.
+3. **Reproduce the anchor's `+io` condition exactly** and claim only a
+   gold-leaking comparison, clearly labeled.
 
-### 9.3 Gold-hidden query generation (frozen before any result is looked at)
+We will do (1) and (2), and (3) only as a reproduction check (§17 G1).
 
-The instrument is worthless if the queries leak the gold artifact. Frozen
-protocol:
+### 9.4 The string theory is a statistical blocker, not an implementation detail
 
-1. Queries are generated **only** from the source legal text and our own
-   extracted rule set — never from `gold_models/`, never from the gold I/O
-   specification, never from gold threshold values.
-2. Generation runs in a process with no filesystem access to the gold directory;
-   the harness asserts this.
-3. **The gold answer for a gold-free query comes from executing the gold model on
-   that query's binding** — the gold artifact supplies the *label*, but never the
-   *query*. This is the distinction v2 failed to make, and it is what makes the
-   comparison meaningful rather than circular.
-4. A leakage audit: for a held-out sample, check that no generated query's
-   threshold values coincide with gold thresholds more often than chance.
+The plan's proposed IR subset is `{bool, int, real, enum}`, refusing `string`.
+Applied to the anchor corpus that **refuses all 34 Requirements models** — 59% of
+the testable set, and the half where the anchor scores *higher* (60.4% vs.
+42.6%). The primary endpoint would then run at **n = 24**.
 
-### 9.4 Matched-information comparison
+That is not survivable, and the arithmetic is elementary (Fisher-z,
+se = 1/√(n−3)):
 
-We report our system under **matched conditions only**: raw-text vs. Graus's
-`text`; our-own-derived interface vs. Graus's `text`; and, separately and
-labeled as gold-leaking, gold-I/O-supplied vs. Graus's `+io`. **We do not claim
-a win over 42.6%/60.4% from a raw-text run.** If solver-checked compilation only
-beats the `text` condition, that is what gets claimed.
+| n | 95% CI for a true ρ = 0.6 | Power vs. H₀: ρ ≤ 0.3 |
+| --- | --- | --- |
+| 24 | **[0.26, 0.74]** — lower bound **below** the declared 0.3 threshold | **54%** |
+| 58 | [0.40, 0.74] | **88%** |
+| 95 | [0.45, 0.72] | 98% |
 
-### 9.5 Why this is the paper's spine
+**At n = 24 the study fails its own declared success criterion even when the
+true effect is exactly the target.** So a string theory covering `contains()`
+substring predicates, binned-numeric strings, and null-checks is a **G0
+deliverable**, not an IR-2 measurement — and note that a naive string→enum
+normalisation is *not* sound for `contains()`, which is a substring test rather
+than equality. Neither prior review reached this; it is the single most
+schedule-relevant correction in this pass.
 
-If gold-free DA tracks gold-based OE, every result on the corpora *without* gold
-artifacts inherits warranted credibility. If it does not, that finding should
-change how this subfield evaluates itself. Both outcomes are publishable — but
-"metric failure is publishable" is a *possible* outcome to plan for, **not a
-guaranteed acceptance argument**, and §20 treats it that way.
+### 9.5 Preregistered analysis plan (corrected)
+
+- **Estimand.** Spearman ρ between a per-model **AFS score** and a per-model
+  **OE**, on the 58 testable models. One number per model per run.
+- **Sampling unit.** The decision model. Queries are nested in models; runs are
+  repeated measures.
+- **Aggregation — the incoherence in v3 is fixed.** v3 said "per-model Spearman
+  pooling all runs" *and* "mixed-effects with a random intercept per model."
+  Those are incompatible: aggregating to one value per model leaves no run-level
+  residual for the random intercept. **Resolved:** the primary estimate is
+  computed on the **run-level observation table** (58 models × 5 runs = 290 rows,
+  minus refusals), with a **cluster bootstrap resampling models** (not rows, not
+  runs) for the CI, and a mixed-effects model on Fisher-z-transformed per-run
+  correlations as a sensitivity check — reported as sensitivity, never as the
+  headline.
+- **Null and power — also corrected.** v3 powered against ρ = 0 while declaring
+  success as "ρ ≥ 0.6 with CI lower bound > 0.3." The relevant null for that
+  decision rule is **H₀: ρ ≤ 0.3**, one-sided. Power at n = 58 against a true
+  ρ = 0.6 is **≈88%** (table above). ρ = 0 is not tested; it is not the decision.
+- **Ties, bounds, and missingness.** Both AFS and OE are bounded proportions with
+  ties and unequal query counts. Spearman handles ties by mid-ranks; we report the
+  tie fraction, and pre-declare that if >20% of models tie at 0 or 1 the primary
+  estimator switches to a censored-data alternative (declared now, not after
+  looking). Refusals are **not** imputed — they are a separate reported stratum.
+- **Attenuation.** Both variables are measured with error, which biases ρ toward
+  zero. We report a disattenuated estimate using the between-run variance as the
+  reliability estimate, **as a secondary number**, and never as the headline.
+- **Negative and positive controls.** Positive: sOE. Negative: equal-size random
+  samples, stratified random samples over the gold interface, and deliberately
+  biased samples. A high ρ that the negative controls also achieve is not
+  evidence for the instrument.
+- **Run retention.** All runs retained. Best-of-*k* labeled and compared only to
+  the anchor's own best-of-5.
+- **The 37 excluded models** are an explicit reported exclusion, plus whether our
+  pipeline can produce artifacts for any of them (an interface-adequacy result).
+- **Disagreement review.** Structured false-positive (AFS high, OE low) and
+  false-negative analysis with a taxonomy.
+
+### 9.6 Information isolation, not an assertion
+
+v3's leakage "guard" was a subprocess whose working directory could not reach
+`gold_models/`. That is not a boundary: absolute paths, parent traversal,
+symlinks, and environment variables all defeat it (second-pass §14 P8, correct).
+Replaced with an actual information boundary:
+
+1. Query generation runs in a **separate checkout or container** with only an
+   allow-listed, **content-addressed source packet** mounted read-only. The gold
+   files are *absent from the mount*, not merely unreachable by convention.
+2. The result crosses a **one-way artifact boundary** to a distinct labeler
+   process that has gold and no ability to influence generation.
+3. Denial is **tested adversarially**: absolute paths, `../` traversal, symlinks,
+   env-var indirection, and manifest-declared paths must all fail.
+4. v3's "threshold-coincidence audit" is dropped: legal text and gold DMN
+   *should* share numbers, so coincidence is not evidence of leakage. Replaced
+   with **information-flow provenance** — every query records the source spans it
+   was derived from, and any query without a source-span derivation is rejected.
+
+### 9.7 Why this is the paper's spine
+
+If artifact-free signals track artifact-based OE, results on corpora with no gold
+formalization inherit *bounded* credibility — bounded by the anchor's single
+jurisdiction, language, and statute (§21 states this limit). If they do not, that
+is a finding that should change how the subfield evaluates itself. Both outcomes
+are publishable, but **"metric failure is publishable" is a contingency, not an
+acceptance argument**, and G3 proceeds to a negative finding only after the
+leakage, precision, power, and protocol-validity gates pass — an *invalid or
+uninformative* estimate is not evidence of low association.
 
 ---
 
@@ -838,7 +972,8 @@ benchmark-backed domains" means four input adapters and four prompt packs. Live
 pipeline runs will be reported separately from the test suite, and every corpus
 needs a deterministic evaluation contract — document IDs, gold-query
 construction, frozen train/dev/test boundaries, metrics, and immutable run
-manifests — before any DA, EY, defect-density, or cost number is quoted (§26
+manifests — before any decision-score, EY, defect-density, or cost number is
+quoted (§26
 BENCH-1..3).
 
 ### 12.4 Two pipeline defects that invalidate corpus-level claims
@@ -859,8 +994,8 @@ Agent 1 chunks by ~2,000 *words* while Agent 3 clips by *characters*, long chunk
 lose trailing content before extraction.
 
 *Consequence:* `benchmarks/README.md`'s "each command above is one full corpus as
-one batch" is not what happens, and DA / EY / defect-density / cost denominators
-are ambiguous until fixed.
+one batch" is not what happens, and every decision-score, EY, defect-density,
+and cost denominator is ambiguous until it is fixed.
 
 *Required before G1:* **one artifact per gold document** (or an explicitly frozen
 multi-document unit), every chunk of that unit processed, chunk coverage
@@ -899,20 +1034,23 @@ dependency precision/recall against a human-reviewed fixture.
 
 | Metric | Definition |
 | --- | --- |
-| **DA** | Decision Agreement: `E_q[1(⟦A⟧(q) = gold(q))]` — primary |
-| **OE** | Outcome Equivalence vs. gold DMN artifacts (Graus protocol; §9) |
+| **AFS** | **Artifact-Free Signal** — any score computed without touching a gold formal artifact: expert-label entailment, metamorphic relations, or human scenarios (§9.2). **This, not DA, is the primary quantity.** |
+| **OE** | Outcome Equivalence vs. gold DMN artifacts, exhaustive input set (Graus protocol; §9.3) |
+| **sOE** | **sampled** outcome equivalence — same gold-artifact comparison on a sampled query set. v3 called this "gold-free DA"; it is not gold-free (§9.2). Retained only as the **positive control** |
+| ~~DA~~ | **Retired.** The name implied artifact-freedom the definition did not have. Every prior use of "DA" in this document means sOE where a gold artifact exists, and AFS otherwise |
 | **EA_strict / EA_assumed / AM** | assumption-free accuracy, assumption-augmented accuracy, assumption minimality (§10) |
 | **EY** | Executable Yield: fraction of documents producing a compiled, gate-passing artifact |
-| **S-DA@c, AURC** | selective decision agreement at coverage *c*; risk–coverage summary |
+| **S@c, AURC** | selective score at coverage *c*; risk–coverage summary |
 | **SR / SE / SDI** | invariance rate, correct-change rate, `SR + SE − 1` |
 | **PP** | Provenance Precision vs. expert evidence spans (free from ContractNLI/CUAD) |
-| **CQI** | Cross-Query Inconsistency; **0 by construction** for compiled artifacts (P4) |
+| **CQI** | Cross-Query Inconsistency — **conditional** on successful compilation, a total deterministic denotation, and extensionally equivalent queries (revised P4, §6). Not 0 unconditionally, and never a correctness metric |
 | **VR** | Vector Replay on the *emitted* artifact |
 | **Defect density** | solver-detected conflicts / gaps / vacuities per 100 rules |
 | **Cost** | USD + tokens to *build* an artifact; USD per query to *use* it |
 
-DA and EY trade off, so neither is ever reported alone: every table gives
-(DA, EY) jointly or an S-DA@c curve.
+AFS/sOE and EY trade off, so neither is ever reported alone: every table gives
+(score, EY) jointly or a selective risk–coverage curve. **`S-DA@c` is renamed
+`S@c`** for the same reason DA was retired.
 
 ### 13.1 Statistical analysis plan (§24 R11)
 
@@ -921,20 +1059,25 @@ repair rounds, and ablations, and treated "pre-registered targets" as if that
 handled inference. It does not: it addresses neither multiplicity, stochastic
 model variance, document clustering, nor best-run selection.
 
-**One primary endpoint.** ρ(gold-free DA, gold-based OE) on the 58 Dutch testable
-models (§9.2). Everything else is confirmatory or exploratory.
+**One primary endpoint.** ρ(**AFS**, **OE**) on the 58 Dutch testable models
+(§9.2, §9.5). Everything else is confirmatory or exploratory. *v3 wrote this as
+ρ(gold-free DA, gold-based OE); the first term was not gold-free (§9.2).*
 
 **Three confirmatory endpoints**, fixed in advance, with family-wise error
 controlled at α = 0.05 by Holm–Bonferroni across exactly these three:
 
-1. DA of solver-checked compilation vs. the matched raw-`text` condition.
-2. DA of CEGIR vs. no-CEGIR, paired by document.
+1. **OE** of solver-checked compilation vs. the matched raw-`text` condition —
+   **reported standalone**, since the anchor publishes no `text` OE (§9.3).
+2. **AFS** of CEGIR vs. no-CEGIR, paired by document.
 3. AURC of solver-signal selective compilation vs. the ported grammar-entropy
    baseline.
 
 **Everything else — target-language ablation, cross-domain/lingual transfer,
-SDI, CQI, cost, defect density, the dissociation studies — is exploratory and
-labeled as such in every table.** No exploratory result carries a target.
+CQI, cost, defect density, the dissociation studies — is exploratory and labeled
+as such in every table.** No exploratory result carries a target. **SDI moves out
+of "exploratory": it is now one of the artifact-free signals feeding the primary
+endpoint (§9.2), so it is reported as an input to C2, not as a standalone
+finding.**
 
 **Aggregation and inference.** Macro-average over documents (never micro over
 queries, which would let long documents dominate); document as the unit; ≥ 5
@@ -956,7 +1099,8 @@ cannot detect ρ ≥ 0.6 at 80% power, that is reported and the design changes.
    its cost" ablation. It must be allowed to lose.
 3. **Graus's four input conditions** on the Dutch corpus (text / +SRL / +I/O /
    +both), reproduced on their harness — a published number to beat.
-4. **Direct-to-Python.** Code LLMs are strong here; this baseline may win on DA,
+4. **Direct-to-Python.** Code LLMs are strong here; this baseline may win on the
+   decision scores,
    and the paper must say so if it does. The defense is then PP, CQI, and
    standards-compatibility — separately measured.
 5. **Direct long-context QA** — the strongest accuracy baseline.
@@ -989,7 +1133,7 @@ Dutch `+io` condition is **gold-derived** while a raw-text pipeline is not. So:
 ### 14.2 Target-language ablation
 
 Same extraction → **DMN 1.3 + FEEL**, **SMT-LIB**, **Python**, **ASP/Datalog**
-(defeasible-native). Report DA, EY, defect density per target. *Which formal
+(defeasible-native). Report AFS/sOE, EY, and defect density per target. *Which formal
 target can an LLM hit most reliably, and does a defeasible-native
 representation help?* — interesting whichever way it lands, and it retires the
 "why DMN?" objection. Grounding: Horner et al. target Defeasible Deontic Logic,
@@ -1033,6 +1177,39 @@ way.
   translates clinical guidelines into LLM-executable guidance trees, so this
   transfer has prior art to build on rather than virgin territory.
 
+### 14.6 Expressiveness census — the construct-validity experiment neither review demanded
+
+Nothing in v1–v3 argued that a **decision-table semantics is an adequate model of
+normative text at all.** §14.2 ablates target *languages* against each other, but
+if all four targets are inexpressive in the same way, the ablation is a
+comparison among equally wrong choices. And the IR (§5) *refuses* deontic
+modality, temporal validity, open-ended defeasibility, and vagueness — which is
+honest, but it means the pipeline is silently scoped to whatever survives those
+refusals.
+
+**The experiment, and it is cheap because it needs no model calls.** On both
+committed corpora, classify every source obligation/clause by whether a
+decision-table semantics can express it at all:
+
+| Category | Expressible in DMN + bounded FEEL? |
+| --- | --- |
+| threshold / eligibility conditions | yes |
+| enumerated categorical conditions | yes |
+| fixed-set defeaters | yes (as `C ∧ ¬⋁X`) |
+| deontic modality (obligation vs. permission vs. prohibition) | **no** — no modality in the target |
+| temporal validity / effective dates / supersession | **no** — needs a temporal theory |
+| open-textured standards ("reasonable", "material") | **no** |
+| cross-document or cross-clause reference resolution | partially |
+| discretionary authority ("the Minister may determine") | **no** |
+
+Report the fraction of source content in each bucket. **This number bounds every
+other result in the paper**, and publishing it is the difference between "we
+evaluate document understanding" (unsupportable) and "we evaluate the
+decision-table-expressible fraction of normative content, which is X%"
+(supportable, and interesting in its own right). If X turns out small, that is
+itself the most useful finding the project could produce — and it should be
+measured in G0, not discovered in April.
+
 ---
 
 ## 15. Pre-registered headline table
@@ -1041,18 +1218,18 @@ Now anchored to *published* numbers rather than invented ones.
 
 | Result | Reference point (published) | Target |
 | --- | --- | --- |
-| Outcome equivalence, Dutch corpus (Outcome / Requirements models) | **42.6% / 60.4%** (Graus, best condition, GPT-5.1, 1-shot) | **≥ 55% / ≥ 70%** with solver-checked compilation + CEGIR |
-| Models reaching full outcome equivalence | **33%** | **≥ 45%** |
-| Instrument validation: ρ(gold-free DA, gold-based OE) | none exists | **≥ 0.6**, with the disagreement cases characterized |
+| Outcome equivalence, Dutch corpus (Outcome / Requirements) | **42.6% / 60.4%** — Graus `Text+srl+io`, **macro-averaged over 5 runs**, and a **gold-leaking** condition (I/O specs from the gold models). **No raw-`text` OE baseline exists** (§9.3) | **≥ 55% / ≥ 70%** *in the matched `+io` condition only*, macro-averaged over ≥5 runs. Our raw-text and self-derived-interface numbers are reported **without a comparison claim** |
+| Models reaching full outcome equivalence | **33%** = 19/58, **best-of-5 per model** | **≥ 45% best-of-5** (estimator named, so it is comparable) |
+| **Instrument validation: ρ(AFS, OE)** — the primary endpoint | none exists | **ρ ≥ 0.6 with 95% CI lower bound > 0.3**, at n = 58. Achievable: CI ≈ [0.40, 0.74], power ≈ 88% vs. H₀: ρ ≤ 0.3. **At n = 24 (string theory unimplemented) the CI is [0.26, 0.74] and the criterion fails even at the true target** (§9.4) |
 | ContractNLI, strict-entailment accuracy | **83.0%** (Claude, LLM-based formal reasoning) | ≥ comparable *from a compiled artifact*, at ≥ 90% EY |
 | Assumption minimality | none exists | ≥ 80% of declared assumptions provably necessary |
-| Scope-laundering analogue in our loop | **15.3–52.5%** in LLM self-reported formal reasoning | **0 by construction** (compiler makes no LLM calls) — a design claim, verified by audit |
-| Selective prediction: AURC vs. grammar-entropy UQ | **AUROC > 0.93** on logic tasks (NeurIPS 2025) | beat it on document-scale extraction |
-| ρ(span-F1, DA) — the dissociation | Graus: structural similarity ≈ 0.43 alongside outcome equivalence ≈ 0.43 | **< 0.4**, replicated on ≥ 3 domains |
+| Scope-laundering analogue | **15.3–52.5%** in LLM self-reported formal reasoning | **Reworded — v3's "0 by construction, verified by audit" was incoherent** (either it needs no audit or it is not by construction). Correct claim: the compiler cannot launder a *verdict*, because it makes no LLM calls — but the failure **relocates** to extraction, where the model may assert a predicate it did not derive from the text. That relocated rate is **measured, not assumed to be zero**, via provenance precision against evidence spans |
+| Selective prediction: AURC vs. a **ported** grammar-entropy predictor | the published **AUROC > 0.93** is on *logic tasks*, a different task, metric family, and base rate — **not a threshold for us** (consistent with §12.2, which v3's table contradicted) | beat the ported baseline **on our data**, reported as AURC with CIs |
+| ρ(span-F1, AFS) — the dissociation | **no published reference point.** v3 cited "structural similarity ≈ 0.43 alongside outcome equivalence ≈ 0.43" — two unrelated quantities that happen to be numerically close, which is not a correlation and cannot anchor a target | **< 0.4** on **committed** corpora only (2, not 3 — §8), reported as exploratory (§13.1) |
 | Grounding-verifier / vector-replay **dissociation** (not a calibration result — §24 non-blocking) | ours, n=1: **98% flagged vs. 6% self-vector-replay failure** | dissociation **≥ 5×**, replicated across ≥ 3 domains and ≥ 3 verifier models, **and** an independently-labeled grounding-truth set built before it is called miscalibration |
 | RuleArena head-to-head | LLMs "perform poorly"; tools help | compile-then-execute **≥ +15 points** over in-context application |
-| CEGIR gain | — | **+6–12** DA points |
-| Solver-reward RL over SFT | — | **+5–10** DA points; 8–14B ≥ frontier prompted |
+| CEGIR gain | — | **+6–12** points on **AFS**, paired by document |
+| Solver-reward RL over SFT | — | **+5–10** points on **AFS**; 8–14B ≥ frontier prompted *(conditional phase — §17 G5)* |
 | SDI, best system | — | **< 0.7** (benchmark not saturated) |
 | CQI, compiled vs. long-context QA | — | **0 vs. > 5%** |
 | Conflict density, before vs. after CEGIR | — | **≥ 60%** reduction |
@@ -1097,6 +1274,26 @@ evidence until PIPE-3/PIPE-4 land.
 mortgage data): operator/type/hit-policy inventories, FEEL mappability, DNF
 tractability, DMN column derivation.
 
+**And the same criticism applies to the anchor, which no review has said out
+loud.** This section rightly discounts its own evidence as n = 1 (one run, one
+domain). The instrument-validation result in §9 rests on **n = 1 corpus**: one
+jurisdiction (Netherlands), one language (Dutch), one statute (*Omgevingswet*),
+one document genre (statutory permit rules), one generating model (GPT-5.1), one
+research group's formalization conventions. It is the only public gold-artifact
+corpus we found, so there is no alternative — but the paper must state the limit
+in the same words it uses for its own preliminary evidence, and the claim must be
+"artifact-free signals track OE **on this corpus**," never "in general."
+
+**Two mitigations, both cheap enough to commit to.** (a) Search for a second
+gold-artifact source — candidate leads: OpenFisca / PolicyEngine rule bases with
+paired legislation, Catala's formalized statutes, and government "rules as code"
+pilots; even 10–20 paired artifacts would turn n = 1 into n = 2 jurisdictions.
+(b) **Declare the abandonment condition now**, which v1–v3 never did: *if
+artifact-free signals do not predict OE on the anchor, and no second
+gold-artifact corpus can be obtained to check whether that is corpus-specific,
+the extensional-evaluation thesis is not supportable and the project reverts to
+the diagnostic paper (§20 Plan B) rather than arguing the anchor was unusual.*
+
 **Probably will not:** the 94% replay rate, the 87.5% single-row share, the
 conflict count, and anything keyed to `rule_type`.
 
@@ -1130,21 +1327,29 @@ unit has to be real before anything is measured.
 
 | Phase | Months | Work | Gate |
 | --- | --- | --- | --- |
-| **G0 — make the measurement unit real** | Sep–Oct 2026 | Fix D-1 (per-document unit, full chunk coverage, fail-on-skip) and D-2 (full v2 fields into the optimizer; deterministic, recall-auditable pair generation). Publish **compiler IR v1** with the supported subset, typed scope, modality, exception logic, derived expressions, global symbol resolution, table grouping, and null/missing semantics. Deterministic label/query adapters + immutable run manifests for the Dutch corpus and one non-Dutch corpus. | Chunk coverage = 100% on a frozen unit, or the run fails; dependency precision/recall measured on a human-reviewed fixture; every unsupported construct produces a measured refusal |
+| **G0 — make the measurement unit real** | Sep–Oct 2026 | Fix D-1 (per-document unit, full chunk coverage, fail-on-skip) and D-2 (full v2 fields into the optimizer; deterministic, recall-auditable pair generation). Publish **compiler IR v1** — and, per §9.4, the supported subset **must include a string theory** (`contains()` substring predicates, binned-numeric strings, null-checks) or the primary endpoint runs at n = 24 and fails its own criterion. Also: typed scope, modality located on the rule not the variable, exception structure as a *parameter* (not hard-coded before REPRO-4 decides it), derived expressions, global symbol resolution, table grouping, null/missing semantics. Run the **§14.6 expressiveness census** here. Deterministic label/query adapters + immutable run manifests. | Chunk coverage = 100% on a frozen unit or the run fails; dependency precision/recall measured on a declared sampling frame; every unsupported construct produces a counted refusal; **≥ 55 of 58 anchor models lower without refusal**; the expressiveness census is published |
 | **G1 — reproduce before extending** | Nov 2026 | Reproduce Graus's published protocol on **his** harness: 58 testable models, 4 conditions, **5 runs each**, 13,080 input variations, macro-averaged. | Our reproduction matches his reported numbers within CI. *Nothing downstream is trusted until this passes.* |
 | **G2 — validate the compiler** | Nov–Dec 2026 | Differential testing: reference interpreter vs. SMT encoding vs. **one real third-party DMN engine**, on generated and corpus tables. Retain exhaustive enumeration (P3 is withdrawn; P3′ is a comparison theorem only). Hit-policy proof obligations implemented per revised P2. | Three backends agree on 100% of a generated conformance suite; every disagreement is root-caused |
-| **G3 — validate the instrument** | Dec 2026–Jan 2027 | Freeze the gold-hidden query protocol (§9.3) and the statistical plan (§13.1) **before** looking at results. Estimate ρ(DA, OE) with hierarchical uncertainty; structured disagreement review. | Primary endpoint estimated with a CI; minimum useful effect declared in advance was ρ ≥ 0.6, CI lower bound > 0.3 |
+| **G3 — validate the instrument** | Dec 2026–Jan 2027 | Freeze the **information-isolation** protocol (§9.6) and the statistical plan (§9.5, §13.1) **before** looking at results. Estimate **ρ(AFS, OE)** with model-clustered uncertainty; run the positive (sOE) and negative (random / stratified / biased sample) controls; structured disagreement review. | Primary endpoint estimated with a CI; declared in advance: ρ ≥ 0.6 with CI lower bound > 0.3, achievable only at n = 58 (§9.4) |
 | **G4 — choose the paper from the result** | Feb 2027 | If G3 succeeds: add **one** non-Dutch domain (ContractNLI, with §10 assumption-explicit compilation) + CEGIR. If G3 fails: write the diagnostic paper (§20 Plan B). | A decision, recorded, with the evidence |
 | **G5 — method, only if earned** | Mar 2027 | Solver-reward RL **only if** an omission-resistant, held-out, adversarially-tested reward already survives §12.2's degenerate-policy gate. | Degenerate policies score worse than the honest baseline; then and only then, train |
 | **Freeze + write** | Apr 2027 (freeze **Apr 15**) → submit ~May 1 | Writing, figures, artifact release, reproducibility checklist, broader impact. | — |
 
-**Explicitly moved to follow-on work** (§24 R13): LEXEC-Perturb and its
-annotation programme; three of the four target-language backends
-(SMT-LIB is retained because G2 needs it; Python/ASP/Datalog are cut);
-cross-lingual (MAPP German) and cross-jurisdiction transfer; the cross-task
-(clinical/benefits) study; ObliQA, CUAD, OPP-115, and MAPP as *evaluated*
-corpora; and the 500 human-authored scenarios. Each returns only if its
-prerequisite gate passes early.
+**Explicitly moved to follow-on work** (§24 R13): three of the four
+target-language backends (SMT-LIB retained because G2 needs it; Python /
+ASP / Datalog cut); cross-lingual (MAPP German) and cross-jurisdiction transfer;
+the cross-task (clinical/benefits) study; and ObliQA, CUAD, OPP-115, MAPP as
+*evaluated* corpora (§8 RESERVE).
+
+**Restored to the critical path by §9.2's correction:** **LEXEC-Perturb** and the
+**~500 human-authored scenarios**. v3 cut both — Perturb as "most expendable"
+given LGMT, scenarios as annotation load. But once the metric is corrected, they
+are the *only* artifact-free signals available: Perturb needs no gold label at
+all, and the scenario set is the only expert-labeled artifact-free signal on the
+Dutch corpus. Cutting them leaves C2 with nothing to validate except expert
+labels on ContractNLI, which has no gold artifact to validate *against*. **This
+adds roughly 10 pd of engineering plus ~90 annotator hours to the committed
+scope, and it is not optional** — it is what a coherent primary claim costs.
 
 ## 18. Budget, separated by line (§24 R13)
 
@@ -1152,14 +1357,14 @@ v2 gave one `$15k–$30k` figure "presented mainly as extraction spend" and did 
 reconcile GPU weeks, annotation, or engineering time. Separated, with the
 scope-cut scope:
 
-| Line | Minimum paper (G0–G4) | Full programme (adds G5 + follow-ons) |
+| Line | **Minimum paper** (G0 + A + J + G2 + G3 + writing = **126 pd**) | Full programme (adds G4 + G5 + follow-ons) |
 | --- | --- | --- |
-| **API / inference** | Dutch 95 docs × 4 conditions × 5 runs, plus one non-Dutch corpus subsample (~150 docs) and CEGIR rounds → **$4k–$9k** | four-corpus sweeps, multi-model, ablations → **$15k–$30k** |
+| **API / inference** | Anchor: 58 testable models × 5 runs × the conditions we can match (§9.3), plus the A2 replication if in scope → **$3k–$7k**. **No CEGIR in the minimum paper** | four-corpus sweeps, multi-model, ablations → **$15k–$30k** |
 | **GPU** | none (no RL in the minimum paper) | 8×H100 × 1–2 weeks × 2–4 runs ≈ **600–1,300 GPU-hours**, plus false starts → **$8k–$25k** at commodity rates, or a cluster allocation |
 | **Solver / CPU** | modest, but the RL bottleneck later — cache by rule-set hash, bound row counts, time-box calls and report the timeout rate | a solver farm; budget separately from GPU |
-| **Annotation** | ~500 scenario validations + a stratified assumption-admissibility review → **~60–90 hours** | + LEXEC-Perturb 1.5–2k items at 2–4 min, 20% double-annotated → **+120–160 hours**, 2–3 qualified annotators at fair disclosed rates |
+| **Annotation** | **now includes LEXEC-Perturb**, restored to committed scope by §9.2: ~1.5–2k items at 2–4 min with 20% double annotation → **~120–160 hours**, plus ~500 scenario validations and a stratified assumption-admissibility review → **~60–90 hours**. **Total ~180–250 hours** | + the reserve corpora's scenario sets |
 | **Storage / artifacts** | run manifests, all 5 runs retained per condition, generated artifacts → tens of GB | hundreds of GB with RL rollouts |
-| **Engineering time** | **the dominant cost, and previously unbudgeted**: G0 alone is two pipeline fixes, a compiler IR, two backends, adapters, and a manifest system | + RL environment, four backends, perturbation tooling |
+| **Engineering time** | **the dominant cost, and previously unbudgeted.** G0 alone is **43 pd** (two pipeline fixes, the compiler IR with a string theory, the censuses, adapters, manifests). Minimum paper **126 pd ≈ 0.80 FTE** over ~157 working days *with zero research allowance* — see the plan's §9 | + G4 (26 pd) and G5 (20 pd) → 172 pd ≈ 1.10 FTE |
 
 Hard cap plus per-experiment cost logging from day one. The repo's adaptive
 global rate limiter already makes concurrent batch runs safe.
@@ -1171,13 +1376,16 @@ global rate limiter already makes concurrent batch runs safe.
 | Risk | Severity | Mitigation |
 | --- | --- | --- |
 | **D-1: corpus-level denominators are wrong today** — a "full corpus" run reads ≤16 batches of truncated, length-sorted chunks | **Blocking** | G0 / PIPE-1..2 before any measurement; fail-on-skip; a capped pilot is never scored as coverage (§12.4) |
-| **D-2: dependency-edge recall is unmeasured** — the optimizer reads forbidden legacy fields and samples ~25% of each batch | **Blocking** | G0 / PIPE-3..4; report dependency precision/recall on a human-reviewed fixture; keep DAG node coverage separate from discovery coverage (§12.4) |
+| **D-2: dependency-edge recall is unmeasured** — the optimizer reads forbidden legacy fields and samples ~25% of each batch | **Blocking** | G0 / PIPE-3..4; report dependency precision/recall on a declared sampling frame with negatives and adjudication; keep DAG node coverage separate from discovery coverage (§12.4) |
+| **D-3: no string theory ⇒ n = 24 ⇒ the primary endpoint fails its own criterion** even at the true target effect | **Blocking** | String theory (`contains()`, binned-numeric, null-check) is a G0 deliverable, not an IR-2 measurement (§9.4) |
+| **D-4: the anchor reports no raw-`text` OE**, so v3's headline comparison does not exist | **Blocking for the claim, not the work** | Report raw-text OE standalone; add *interface-derivation accuracy* as a measured sub-result; treat `+io` comparisons as gold-leaking and label them (§9.3) |
+| **D-5: the anchor is n = 1 corpus** — one jurisdiction, language, statute, genre, generating model | **High** | State the bound in the same words §16 uses for our own n = 1; hunt a second gold-artifact source; **abandonment condition declared** (§16) |
 | **Zero completed end-to-end benchmark runs behind the plan** | **High** | The minimum paper is defined so that one reproduction + one instrument-validation result is publishable (§25 D2) |
 | **Someone publishes the solver-reward RL first.** Wang et al. named it as future work in June 2026 (and separately proposed the MCS idea §10 builds on). | **High** | Move C5 earlier if G3 lands early; and make C2 (instrument validation) the paper's spine, since it does not depend on the method being first |
 | **Extraction quality, not compilation, is the bottleneck** — garbage rules compile perfectly | **High** | The benchmark is the primary contribution; a rigorous "nobody can do this yet" is publishable. Graus at 42.6% already establishes headroom |
 | §16's numbers don't replicate off-mortgage | High | G2; Plan B ready (§20) |
 | **The gold-free metric doesn't track gold-based OE** (§9 fails) | **High** | That *is* a publishable finding, and it redirects the paper to Plan B. But it must be discovered in Nov 2026, not April 2027 |
-| Direct long-context QA simply wins on DA | High | Pre-committed: report it; pivot to PP/CQI/amortization, all pre-registered. Do not hide it |
+| Direct long-context QA simply wins on the decision scores | High | Pre-committed: report it; pivot to PP/CQI/amortization, all pre-registered. Do not hide it |
 | Dutch corpus is one jurisdiction/language/genre | Medium | It is the *anchor*, not the benchmark; five other corpora carry breadth. Graus lists this limitation himself |
 | Defeater semantics wrong | Medium | Compare all three readings empirically; report which the vectors and Perturb support |
 | Contamination inflates results | Medium | Perturbed + post-cutoff splits; memorization probe; cite arXiv:2509.15336 and arXiv:2601.08778 as prior warnings |
@@ -1893,8 +2101,164 @@ acceptance test. This is the bridge to `neurips-plan-2027.md`.
 [`neurips-plan-2027.md`](neurips-plan-2027.md)** — which also adds the task
 families this list did not name (`REPRO-*` for the external reproduction,
 `BE-*` for the four backends, `CEGIR-*`), the module layout, the dependency
-additions and their justifications, an effort total of **114 pd for G0–G4 plus
-writing**, and the honest staffing conclusion that follows from it.
+additions and their justifications, a corrected effort total of **126 pd for the
+minimum paper** (v3 said 114 pd for a larger scope, and its arithmetic was
+wrong — see the plan's §9), and the staffing conclusion that follows.
+
+---
+
+## 27. Final review (third pass) — findings and corrections applied
+
+*Third and final review pass, 2026-08-24. §24 is the first review (R1–R13,
+applied in §25). The development plan's §14 is the second review (P1–P12). This
+section records the third pass: my disposition of P1–P12, plus **seventeen
+findings neither prior review made**, and the corrections applied for each.*
+
+**Verdict on the second-pass review: substantially correct.** I verified every
+checkable claim. Eleven of twelve findings confirmed outright, one needs a
+factual check before its remedy is schedulable (P4b below). P1 is the most
+important criticism made of this proposal in any pass, and it changed the primary
+contribution rather than merely refining it.
+
+### 27.1 Disposition of the second-pass findings P1–P12
+
+| # | Verdict | Applied where |
+| --- | --- | --- |
+| **P1** DA is not gold-free | **Confirmed — the deepest finding in three passes.** §13 defined DA with `gold(q)`; §9.3 obtained it by executing the gold DMN. Correlating a sparse gold-labeled score with an exhaustive gold-labeled score tests sampling, not instrument validity | **§9.2 rewritten.** DA retired; **sOE** (sampled, gold-artifact) separated from **AFS** (artifact-free signal); C2 restated as *do AFS predict OE*, with sOE as positive control and random/stratified/biased samples as negative controls. §13 metrics table, §4 C2, TL;DR all updated |
+| **P2** the phase graph cannot execute | Confirmed | Plan §15 + the two-track replan (plan §16) |
+| **P3** effort arithmetic is wrong | **Confirmed by recomputation.** G0 = 4+2+3+6+8+2+3+7 = **35**, not 28; totals **121** / **141**, not 114 / 134; "G0–G3 + writing" = **95** itemized, not 73 (that figure omitted writing *and* used the wrong G0) | Plan §9 regenerated |
+| **P4** replay ≠ replication; OE only for two conditions | **Confirmed verbatim:** *"We limit ourselves to the io and srl+io conditions, as these have consistent inputs and outputs, enabling direct comparison."* | §9.3 rewritten; §15 rows relabeled; plan REPRO split |
+| **P4b** — *my qualification* | **Partial.** P4 asserts the released repo "contains generated models, evaluation code, and results," making a deterministic evaluator replay the cheap first step. I could not confirm the **generated** models or expected result files are released — only gold models, source models, legal text, and the harness. If they are not, **A1 as specified is not executable** and the only route is A2 (fresh generation), which is a different cost and a different claim | Plan A1 now begins with a *release-contents audit* and treats replay as conditional |
+| **P5** backend agreement ≠ compiler correctness | Confirmed — four backends can share one wrong lowering | Plan G2 split into *lowering correctness* (independent oracle) and *backend agreement* |
+| **P6** the IR encodes unsettled/mislocated semantics | **Confirmed, and worse than stated** — see 27.2 N2 | §5, §17 G0, plan IR-1 |
+| **P7** chunk coverage ≠ rule coverage | Confirmed; and PIPE-1 ("fail on truncation") contradicted PIPE-2 ("record `bytes_dropped`") | Plan PIPE-1/2 reconciled; three coverage metrics separated |
+| **P8** the leakage guard is not a boundary | Confirmed | **§9.6 rewritten** as an information boundary (absent-from-mount, one-way artifact hand-off, adversarial denial tests); the threshold-coincidence audit is dropped as confounded and replaced with source-span provenance |
+| **P9** the manifest is insufficient; "pure Python" is false | **Confirmed by checking PyPI.** None of `z3-solver`, `lxml`, `scipy`, `statsmodels` ships a `py3-none-any` wheel; z3 ships `py3-none-<platform>` wheels carrying native libz3 | Plan §1 corrected; run-bundle spec added |
+| **P10** statistics mix levels and power the wrong null | Confirmed | **§9.5 rewritten:** run-level observation table with a model-clustered bootstrap; mixed-effects demoted to sensitivity; null corrected to **H₀: ρ ≤ 0.3**; ties/bounds/missingness/attenuation specified |
+| **P11** the audits are too easy to pass | Confirmed | Plan §15; sampling frames, set-level assumption entailment, deletion/no-op repair baseline, held-out adversarial search |
+| **P12** the plan violates its own definition of done | Confirmed — `OPS-*` declared and never used; BENCH-1b and RL-1/2/4 have no acceptance blocks; `C1..C4` survives only in a code comment; "new code only" sits above tasks editing four existing files | Plan task registry (§15) |
+
+**One framing from the second review is adopted verbatim**, because it is the
+correct status line for this document:
+
+> Do not freeze a preregistration, quote a corpus metric, or start paid
+> generation from the present plan.
+
+### 27.2 Seventeen findings neither prior review made
+
+Grouped by whether they change the science, the schedule, or only the text.
+
+**Changes the science**
+
+- **N1 — the headline comparison does not exist.** v3's §9.4 promised "raw-text
+  vs. Graus's `text`" as the honest headline. The anchor publishes **no OE for
+  `text`**, because that condition yields no alignable interface. Both published
+  OE conditions are gold-leaking. *Applied:* §9.3 offers three preregistered
+  options and commits to two, adding **interface-derivation accuracy** as a new
+  measured sub-result.
+- **N2 — refusing the `string` theory refuses 34 of 58 anchor models (59%)**, and
+  specifically the Requirements half where the anchor scores *higher* (60.4% vs.
+  42.6%). The anchor's Requirements models need `contains()` substring
+  predicates, binned-numeric strings, and null-checks; a naive string→enum
+  normalisation is **not sound** for `contains()`. *Applied:* string theory
+  promoted from an IR-2 measurement to a **G0 deliverable**.
+- **N3 — N2 is a statistical blocker, and this is the finding I would lead with
+  after P1.** Fisher-z, se = 1/√(n−3): at **n = 58** a true ρ = 0.6 gives 95% CI
+  **[0.40, 0.74]** and **88%** power against H₀: ρ ≤ 0.3. At **n = 24** it gives
+  **[0.26, 0.74]** and **54%** power — the CI lower bound falls **below the
+  study's own declared 0.3 threshold even when the true effect is exactly the
+  target.** So the string theory is not a coverage nicety; without it the primary
+  endpoint cannot succeed. *Applied:* §9.4, §15, §17 G0, §19 D-3.
+- **N16 — the anchor is n = 1 corpus, which is the criticism this proposal makes
+  of itself.** §16 rightly discounts its own preliminary evidence as one run, one
+  domain. The instrument result rests on one jurisdiction, one language, one
+  statute, one genre, one generating model, one group's formalization
+  conventions. *Applied:* §16 states the bound in the same words, names candidate
+  second sources (OpenFisca/PolicyEngine rule bases, Catala's statutes,
+  government "rules as code" pilots), and — new in this pass — **declares the
+  abandonment condition**, which v1–v3 never did.
+- **N17 — construct validity of the target language was never argued.** §14.2
+  ablates target *languages* against each other; if all four are inexpressive in
+  the same way, that compares equally wrong choices. And the IR *refuses* deontic
+  modality, temporal validity, open defeasibility, and vagueness — so the
+  pipeline is silently scoped to whatever survives refusal. *Applied:* **new
+  §14.6 expressiveness census**, a model-call-free experiment that reports the
+  fraction of source content a decision-table semantics can carry at all. That
+  number bounds every other result in the paper, and it is the difference between
+  "we evaluate document understanding" and "we evaluate the X% that is
+  expressible."
+
+**Changes the text, materially**
+
+- **N4** — §13 still said CQI is "**0 by construction**", contradicting the
+  corrected P4 in §6 that makes it conditional. *Fixed.*
+- **N5** — §8's header said "six resources" while §4 C4, §17, and the TL;DR said
+  two. *Fixed:* every resource is now marked **COMMITTED** or **RESERVE**, and
+  only committed resources may appear in a headline claim.
+- **N6** — §8's scenario mode still sourced bindings "**per P3**". **P3 is
+  withdrawn.** A retracted proposition was still load-bearing in the benchmark
+  design. *Fixed.*
+- **N7** — §15 labeled the anchor numbers "best condition, GPT-5.1, **1-shot**".
+  They are `Text+srl+io` **macro-averages over 5 runs**; and 33% is **best-of-5**,
+  so the "≥ 45%" target named no estimator and was uncomparable. *Fixed.*
+- **N8** — §15 said "AUROC > 0.93 … beat it" while §12.2 said explicitly that the
+  comparison is not direct. Same document, opposite instructions. *Fixed.*
+- **N9** — §15's dissociation row cited "structural similarity ≈ 0.43 alongside
+  outcome equivalence ≈ 0.43" as a reference point. Those are two unrelated
+  quantities that happen to be numerically close; it is not a correlation and
+  cannot anchor a target. *Fixed.*
+- **N10** — §15's scope-laundering row said "**0 by construction** … verified by
+  audit," which is self-contradictory, and it also missed that the failure
+  **relocates**: the compiler cannot launder a verdict, but the extractor can
+  still assert a predicate it never derived from the text. *Fixed:* the relocated
+  rate is measured via provenance precision, not assumed zero.
+- **N11** — plan §1 called `z3-solver` a "Pure-Python wheel, no system deps."
+  False. *Fixed*, with the useful corollary verified: **cp314 wheels exist** for
+  lxml/scipy/statsmodels/hypothesis and z3 ships platform-tagged `py3` wheels, so
+  this repo's Python 3.14 is fine — worth recording so it is not re-litigated.
+- **N12** — the pd arithmetic (confirming P3 with the numbers). *Fixed.*
+- **N13** — `results/` is **not** gitignored (only `pipeline-output/` is), yet the
+  plan commits `results/`. *Fixed* in the plan's release-boundary spec.
+- **N14** — plan §2's "New code only; nothing existing is moved" sits directly
+  above tasks that edit `agent_03`, `agent_06`, `cli/extract.py`, and prompts.
+  *Fixed.*
+- **N15** — `OPS-*` declared and never used; BENCH-1b and RL-1/2/4 without
+  acceptance blocks; `C1..C4` only in a code comment. *Fixed* by the task
+  registry.
+
+### 27.3 What is still not resolved, stated plainly
+
+1. **Whether the anchor's generated artifacts are released** (N/P4b). Until
+   checked, the cheap "evaluator replay" step may not exist.
+2. **Whether a second gold-artifact corpus is obtainable.** Without one, the
+   central result is bounded to a single jurisdiction and the abandonment
+   condition in §16 becomes live.
+3. **Whether the expressiveness census (§14.6) leaves enough content to be worth
+   evaluating.** If the decision-table-expressible fraction is small, the honest
+   paper is a much narrower one than any of v1–v3 describes.
+4. **Legal admissibility of assumptions** is not solver-decidable (§10 ASM-4) and
+   depends on recruiting qualified reviewers who have not been secured.
+5. **Whether the primary claim survives at all.** After three review passes the
+   defensible status line remains the one §25 preserved from the first review:
+   *this repository contains a promising, well-tested extraction contract and a
+   proposal for an executable measurement instrument; it does not yet contain or
+   validate that instrument.*
+
+### 27.4 The honest bottom line after three passes
+
+The direction is sound and the corpus opportunity is real. But the proposal has
+now had its **primary metric renamed once (P1), its headline comparison deleted
+(N1), its statistical power shown to depend on an unimplemented type theory
+(N2/N3), and its construct validity left unargued until this pass (N17).** None
+of that is fatal; all of it was found by reading rather than by running, which is
+the cheapest possible place to find it.
+
+What follows from that is a scheduling conclusion, not a scientific one: **the
+first month should produce measurements, not prose.** Specifically the
+expressiveness census (§14.6), the string-theory coverage check on the 58 anchor
+models (§9.4), and the anchor release-contents audit (§27.3 item 1). All three
+are model-call-free, all three can be done in days, and **any one of them coming
+back badly would change the paper more than another review pass would.**
 
 ---
 
