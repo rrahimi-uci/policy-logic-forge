@@ -22,6 +22,7 @@ decision logic, and use the compiler as the measuring instrument.
 | Time available | ~8.5 months from 2026-08-24 |
 | Substrate | This repository: 10-stage extraction pipeline, v2 *candidate* rule contract, four-invariant readiness gate, claim-level grounding verifier, deterministic DAG **node**-coverage partition, and **four corpus input adapters + prompt packs — not four benchmark results** (no label loaders, query builders, splits, scoring code, or run manifests exist; `pytest` 770 passed makes no model calls and tests fixed graphs/prompts). See §24 R1. |
 | Status | Proposal for discussion. `(measured)` = a real run. `(target)` = pre-registered success criterion. `(published)` = a number from cited prior work, verified against the source. `(verified-in-code)` = checked against this repo at commit time. |
+| Development plan | [`neurips-plan-2027.md`](neurips-plan-2027.md) — the buildable form of §26: task IDs, module layout, acceptance tests, effort in person-days, and the G0→G5 sequence |
 | Filename | `neurIips-proposal-2027.md` preserves a typo from the original request and is **deliberately retained as a compatibility path** so existing links do not break; the companion plan uses the correct `neurips-plan-2027.md`. Rename before this becomes a cited artifact. |
 
 ---
@@ -1887,6 +1888,13 @@ acceptance test. This is the bridge to `neurips-plan-2027.md`.
   data collection. **STAT-2** hierarchical bootstrap / mixed-effects
   implementation with a random intercept per document. **STAT-3** query
   equivalence classes, abstention and multi-valued handling for CQI.
+
+**Every item above is scheduled, sized, and given an acceptance test in
+[`neurips-plan-2027.md`](neurips-plan-2027.md)** — which also adds the task
+families this list did not name (`REPRO-*` for the external reproduction,
+`BE-*` for the four backends, `CEGIR-*`), the module layout, the dependency
+additions and their justifications, an effort total of **114 pd for G0–G4 plus
+writing**, and the honest staffing conclusion that follows from it.
 
 ---
 
