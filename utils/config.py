@@ -384,6 +384,36 @@ class Config:
             return int(env_val)
         return self.get('rules_extractor.target_words_per_batch', 4500)
 
+    def get_rules_chunk_overlap_words(self) -> int:
+        """Word overlap between re-split windows of an oversized organized chunk.
+
+        Full-coverage mode (the default -- see `read_text_files_batch`) never
+        truncates a chunk with content loss; instead a chunk longer than
+        `get_rules_max_content_length()` is re-split into overlapping windows
+        so a fact stated right at a hard cut is never split across two
+        windows with no shared context.
+        """
+        env_val = os.getenv('KG_RULES_CHUNK_OVERLAP_WORDS')
+        if env_val:
+            return int(env_val)
+        return self.get('rules_extractor.chunk_overlap_words', 150)
+
+    def get_pilot_batch_limit(self) -> Optional[int]:
+        """Cap on the number of word-balanced batches Agent 3 processes.
+
+        `None` (the default) means full coverage: every organized chunk is
+        read without truncation and every resulting batch is processed. Set
+        only for a deliberately cheap pilot/smoke run -- a capped run must
+        never be reported as corpus coverage (see
+        `agents/agent_03_rules_extractor.py::read_text_files_batch`, and
+        `chunk_coverage.json`'s `pilot_mode` field).
+        """
+        env_val = os.getenv('PILOT_BATCH_LIMIT')
+        if env_val:
+            return int(env_val)
+        configured = self.get('rules_extractor.pilot_batch_limit', None)
+        return int(configured) if configured is not None else None
+
     def get_rules_temperature(self) -> float:
         return self.get('rules_extractor.temperature', 0.7)
 

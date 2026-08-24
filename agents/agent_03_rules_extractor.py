@@ -10,8 +10,9 @@ Date: December 20, 2025
 import os
 import sys
 import json
+import hashlib
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 import time
 import threading
 from dataclasses import dataclass, asdict
@@ -93,6 +94,74 @@ def bridge_exact_span(
     return start_word, end_word, ' '.join(words[start_word:end_word])
 
 
+def split_oversized_content(
+    content: str,
+    max_chars: int,
+    overlap_words: int,
+) -> List[Tuple[int, int, str]]:
+    """Split `content` into overlapping, word-boundary-aligned windows so a
+    chunk longer than `max_chars` reaches the extractor with zero dropped
+    bytes (PIPE-2, neurips-plan-2027.md §3.2).
+
+    Returns `(start_char, end_char, text)` tuples with `text` always an exact
+    substring `content[start_char:end_char]`. Consecutive windows overlap by
+    up to `overlap_words` words (capped at half the window width so a large
+    `overlap_words` can never stall progress) so a fact stated right at a cut
+    boundary is never split with no shared context on either side.
+
+    A single window spanning the whole string is returned when `content`
+    already fits within `max_chars` -- callers do not need to branch on size
+    before calling this.
+    """
+    n = len(content)
+    if n <= max_chars or max_chars <= 0:
+        return [(0, n, content)]
+
+    windows: List[Tuple[int, int, str]] = []
+    start = 0
+    while start < n:
+        end = min(start + max_chars, n)
+        if end < n:
+            # Snap back to the last whitespace boundary inside the window so
+            # a window never ends mid-word. If none exists (a single token
+            # longer than max_chars), fall back to the hard cut -- still zero
+            # bytes lost, just an unavoidable mid-token split.
+            snap = content.rfind(' ', start, end)
+            if snap > start:
+                end = snap
+        windows.append((start, end, content[start:end]))
+        if end >= n:
+            break
+        overlap_chars = 0
+        if overlap_words > 0:
+            words_in_window = content[start:end].split(' ')
+            overlap_chars = len(' '.join(words_in_window[-overlap_words:]))
+            overlap_chars = min(overlap_chars, (end - start) // 2)
+        next_start = end - overlap_chars
+        start = next_start if next_start > start else start + 1
+    return windows
+
+
+def full_coverage_violation(coverage: Dict[str, Any]) -> Optional[str]:
+    """Return a human-readable reason a full-coverage run must fail closed,
+    or None if the report shows genuine full coverage.
+
+    Pilot-mode reports are exempt -- pilot mode's whole purpose is a cheap,
+    lossy run, and it already records what it dropped rather than hiding it.
+    Extracted as a pure function (rather than inlined in `main()`) so the
+    fail-closed contract is unit-testable without a live API key.
+    """
+    if coverage.get('pilot_mode'):
+        return None
+    bytes_dropped = coverage.get('bytes_dropped', 0)
+    if bytes_dropped > 0:
+        return (
+            f"full-coverage run dropped {bytes_dropped} bytes across "
+            f"{coverage.get('source_files_total', '?')} source files."
+        )
+    return None
+
+
 @dataclass
 class RulesExtractionConfig:
     """Configuration for business rules extraction."""
@@ -101,6 +170,13 @@ class RulesExtractionConfig:
     max_content_length: int = 8000
     reasoning_model: Optional[str] = None
     optimization_model: Optional[str] = None
+    # PIPE-1/PIPE-2 (neurips-plan-2027.md §3.1-3.2): None means full coverage
+    # -- every organized chunk is read whole (re-split, never truncated) and
+    # every resulting batch is processed. An int caps batch selection for a
+    # deliberately cheap pilot run and permits the old truncate-with-loss
+    # behavior; `target_rules_count` no longer caps batch count either way.
+    pilot_batch_limit: Optional[int] = None
+    chunk_overlap_words: int = 150
     
 
 class BusinessRulesExtractor:
@@ -170,40 +246,110 @@ class BusinessRulesExtractor:
     
     def read_text_files_batch(self, directory: str, batch_size: Optional[int] = None) -> List[List[Dict[str, str]]]:
         """Read text files and organize into word-balanced batches.
-        
+
         Instead of grouping a fixed number of files per batch, this method
         balances batches by total word count so each batch has roughly equal
         content for the LLM to process. This prevents one oversized chunk
         from dominating a batch while small chunks get crowded out.
+
+        PIPE-1/PIPE-2 (neurips-plan-2027.md §3.1-3.2). Full coverage is the
+        default (`self.config.pilot_batch_limit is None`): every organized
+        chunk is read whole -- a chunk longer than `max_content_length`
+        characters is re-split into overlapping windows via
+        `split_oversized_content` rather than truncated, and every resulting
+        batch is returned; `target_rules_count` no longer caps how many
+        batches come back, because it bounds how many rules Agent 3 tries to
+        extract per batch, not how much source gets read. Set
+        `self.config.pilot_batch_limit` to an int for a deliberately cheap
+        pilot/smoke run: chunks are truncated with recorded loss exactly as
+        before, and only that many batches are returned.
+
+        Either way, `self.last_coverage_report` is populated with per-file
+        and aggregate coverage facts (`bytes_dropped` must be 0 outside pilot
+        mode) so a caller can assert full coverage or fail closed rather than
+        silently trusting that a run touched the whole corpus.
         """
         if batch_size is None:
             batch_size = self.config.batch_size
-            
+        pilot_limit = self.config.pilot_batch_limit
+        pilot_mode = pilot_limit is not None
+
         all_files = []
+        per_file_report = []
+        source_files_total = 0
+        source_files_split = 0
         directory_path = Path(directory)
-        
-        for txt_file in directory_path.rglob("*.txt"):
+
+        for txt_file in sorted(directory_path.rglob("*.txt")):
+            # Skip metadata files
+            if txt_file.name.startswith('_'):
+                continue
             try:
-                # Skip metadata files
-                if txt_file.name.startswith('_'):
-                    continue
-                    
                 with open(txt_file, 'r', encoding='utf-8') as f:
                     content = f.read()
-                    if content.strip():
-                        relative_path = txt_file.relative_to(directory_path)
-                        truncated = content[:self.config.max_content_length]
-                        all_files.append({
-                            'path': str(relative_path),
-                            'content': truncated,
-                            'word_count': len(truncated.split())
-                        })
             except Exception as e:
                 print(f"Error reading {txt_file}: {e}", flush=True)
-        
+                continue
+            if not content.strip():
+                continue
+
+            source_files_total += 1
+            relative_path = str(txt_file.relative_to(directory_path))
+            char_length = len(content)
+            file_sha256 = hashlib.sha256(content.encode('utf-8')).hexdigest()
+
+            if pilot_mode:
+                # Legacy behavior, deliberately preserved for cheap smoke
+                # runs: hard-truncate at max_content_length and record what
+                # was lost rather than silently dropping it.
+                truncated = content[:self.config.max_content_length]
+                bytes_dropped = char_length - len(truncated)
+                all_files.append({
+                    'path': relative_path,
+                    'content': truncated,
+                    'word_count': len(truncated.split()),
+                    'source_path': relative_path,
+                    'chunk_index': 0,
+                    'start_char': 0,
+                    'end_char': len(truncated),
+                })
+                per_file_report.append({
+                    'path': relative_path, 'sha256': file_sha256,
+                    'char_length': char_length, 'chunks': 1,
+                    'bytes_dropped': bytes_dropped,
+                })
+            else:
+                windows = split_oversized_content(
+                    content, self.config.max_content_length, self.config.chunk_overlap_words,
+                )
+                if len(windows) > 1:
+                    source_files_split += 1
+                for idx, (start, end, text) in enumerate(windows):
+                    # `path` is deliberately the ORIGINAL relative path for
+                    # every window of a split file, not a suffixed one:
+                    # `_verify_source_references` re-reads the whole,
+                    # untruncated file by this same path when checking a
+                    # rule's quoted source_text, so a quote that happened to
+                    # fall in a different window than the one an LLM call
+                    # saw still resolves -- no downstream change needed.
+                    all_files.append({
+                        'path': relative_path,
+                        'content': text,
+                        'word_count': len(text.split()),
+                        'source_path': relative_path,
+                        'chunk_index': idx,
+                        'start_char': start,
+                        'end_char': end,
+                    })
+                per_file_report.append({
+                    'path': relative_path, 'sha256': file_sha256,
+                    'char_length': char_length, 'chunks': len(windows),
+                    'bytes_dropped': 0,
+                })
+
         # Sort by word count (largest first) for better bin-packing
         all_files.sort(key=lambda f: f['word_count'], reverse=True)
-        
+
         # Build word-balanced batches
         # Target ~batch_size files per batch, but also cap total words per batch
         # to keep LLM context usage consistent
@@ -211,10 +357,10 @@ class BusinessRulesExtractor:
         batches = []
         current_batch = []
         current_words = 0
-        
+
         for file_info in all_files:
             wc = file_info['word_count']
-            
+
             # If this single file exceeds target, it gets its own batch
             if wc >= target_words_per_batch:
                 if current_batch:
@@ -230,24 +376,54 @@ class BusinessRulesExtractor:
             else:
                 current_batch.append(file_info)
                 current_words += wc
-        
+
         if current_batch:
             batches.append(current_batch)
-        
-        # Calculate how many batches needed based on target rules
-        # Get rules_per_batch from config (4 for smaller models, 10 for OpenAI by default)
-        rules_per_batch = self.global_config.get_rules_per_batch()
-        needed_batches = min(len(batches), (self.config.target_rules_count // rules_per_batch) + 10)  # +10 for safety/failures
-        batches_to_process = needed_batches
-        
+
+        batches_to_process = min(len(batches), pilot_limit) if pilot_mode else len(batches)
+        total_bytes_dropped = sum(f['bytes_dropped'] for f in per_file_report)
+
+        self.last_coverage_report = {
+            'unit': 'corpus',
+            'pilot_mode': pilot_mode,
+            'pilot_batch_limit': pilot_limit,
+            'source_files_total': source_files_total,
+            'source_files_split': source_files_split,
+            'chunks_total': len(all_files),
+            'batches_total': len(batches),
+            'batches_processed': batches_to_process,
+            'bytes_dropped': total_bytes_dropped,
+            'per_file': sorted(per_file_report, key=lambda f: f['path']),
+        }
+
         # Log batch statistics
         batch_word_counts = [sum(f['word_count'] for f in b) for b in batches[:batches_to_process]]
         avg_words = sum(batch_word_counts) / len(batch_word_counts) if batch_word_counts else 0
-        print(f"✓ Loaded {len(all_files)} files organized into {len(batches)} word-balanced batches", flush=True)
-        print(f"  Processing {batches_to_process} batches to reach ~{self.config.target_rules_count} rules", flush=True)
+        print(f"✓ Loaded {source_files_total} files ({len(all_files)} chunks after re-splitting) into {len(batches)} word-balanced batches", flush=True)
+        if pilot_mode:
+            print(f"  ⚠ PILOT MODE: processing only {batches_to_process}/{len(batches)} batches, {total_bytes_dropped} bytes truncated across {source_files_total} files -- not a coverage-complete run", flush=True)
+        else:
+            print(f"  Processing all {batches_to_process} batches (full coverage; {total_bytes_dropped} bytes dropped)", flush=True)
         print(f"  Batch word counts: avg={int(avg_words)}, min={min(batch_word_counts) if batch_word_counts else 0}, max={max(batch_word_counts) if batch_word_counts else 0}", flush=True)
-        
+
         return batches[:batches_to_process]
+
+    def write_chunk_coverage_report(self, output_path: str) -> None:
+        """Persist `self.last_coverage_report` as `chunk_coverage.json`.
+
+        Called after `read_text_files_batch`; raises if that hasn't run yet,
+        since an empty/missing coverage report being silently written would
+        defeat the whole point of having one.
+        """
+        report = getattr(self, 'last_coverage_report', None)
+        if report is None:
+            raise RuntimeError(
+                "write_chunk_coverage_report called before read_text_files_batch; "
+                "there is no coverage report to write."
+            )
+        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+        with open(output_path, 'w', encoding='utf-8') as f:
+            json.dump(report, f, indent=2)
     
     def create_entity_context(self) -> str:
         """Create context from existing entity and relationship definitions."""
@@ -1442,16 +1618,21 @@ def main():
     print(f"  Reasoning Model: {REASONING_MODEL}", flush=True)
     print(f"  Reasoning Effort: {REASONING_EFFORT}", flush=True)
     print(f"  Output File: {OUTPUT_FILE}", flush=True)
+    PILOT_BATCH_LIMIT = config.get_pilot_batch_limit()
+    if PILOT_BATCH_LIMIT is not None:
+        print(f"  ⚠ Pilot batch limit: {PILOT_BATCH_LIMIT} (NOT a full-coverage run)", flush=True)
     print("="*80 + "\n", flush=True)
-    
+
     rules_config = RulesExtractionConfig(
         target_rules_count=TARGET_RULES,
         batch_size=config.get_rules_batch_size(),
         max_content_length=config.get_rules_max_content_length(),
         reasoning_model=REASONING_MODEL,
-        optimization_model=OPTIMIZER_MODEL
+        optimization_model=OPTIMIZER_MODEL,
+        pilot_batch_limit=PILOT_BATCH_LIMIT,
+        chunk_overlap_words=config.get_rules_chunk_overlap_words(),
     )
-    
+
     # Initialize extractor
     extractor = BusinessRulesExtractor(
         api_key=OPENAI_API_KEY,
@@ -1460,15 +1641,22 @@ def main():
         reasoning_effort=REASONING_EFFORT,
         config=rules_config
     )
-    
+
     # Load documents in batches
     batches = extractor.read_text_files_batch(SOURCE_DIRECTORY)
-    
+    extractor.write_chunk_coverage_report(
+        str(Path(OUTPUT_FILE).parent / "chunk_coverage.json")
+    )
+    coverage_error = full_coverage_violation(extractor.last_coverage_report)
+    if coverage_error:
+        print(f"❌ Error: {coverage_error} Refusing to proceed -- see chunk_coverage.json.", flush=True)
+        sys.exit(2)
+
     if not batches:
         print("❌ Error: No documents found!", flush=True)
         print(f"   Please check if {SOURCE_DIRECTORY} exists and contains .txt files", flush=True)
         return
-    
+
     print(f"\n{'='*80}", flush=True)
     print(f"PROCESSING {len(batches)} BATCHES (PARALLEL MODE)", flush=True)
     print(f"{'='*80}\n", flush=True)
