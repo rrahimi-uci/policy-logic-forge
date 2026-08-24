@@ -8,6 +8,21 @@
 > **string theory is a G0 blocker**, because refusing it drops the primary
 > endpoint to n = 24, where it fails its own success criterion (proposal §9.4).
 
+> **Implementation status (2026-08-24).** PIPE-1, PIPE-2, and PIPE-3 are
+> **done** — full corpus coverage and the v2-aware optimizer handoff both
+> landed with tests (826/826 passing) on
+> [PR #10](https://github.com/rrahimi-uci/compliance-to-code/pull/10). IR-2's
+> census **tool** is built and unit-tested on the same PR, but has **not yet
+> run against real pipeline output** — none exists in this repo yet, so
+> `docs/theory_coverage.md` / `docs/expressiveness_census.md` are not
+> populated. **A1a is done**: `docs/anchor_release_audit.md` (same PR)
+> resolves the open question in §4.1 and §15.3 below — the anchor's generated
+> models and result files **are** released, so **A1b is executable, not
+> conditional**, contrary to what §4.1 says further down. That section is
+> left as originally written (rather than silently rewritten) with a pointer
+> to this correction, matching this plan's own convention of recording what
+> changed and why rather than editing history quietly.
+
 **Companion to** [`neurIips-proposal-2027.md`](neurIips-proposal-2027.md) (v3).
 The proposal argues *what to claim*; this plan specifies *what to build, in what
 order, and what proves each step done*.
@@ -167,6 +182,14 @@ work in the plan because every later number depends on it.
 
 ### 3.1 PIPE-1 — per-document extraction unit with enforced chunk coverage — 4 pd
 
+**✅ Done — [PR #10](https://github.com/rrahimi-uci/compliance-to-code/pull/10).**
+Implemented as a `--pilot-batch-limit` opt-**out** rather than the
+`--unit document` opt-**in** sketched below: full coverage is now the
+*default*, with `chunk_coverage.json` and a standalone `full_coverage_violation()`
+providing the fail-closed check (extracted as a pure function specifically so
+it's testable without a live API key). See the PR description for the exact
+design deltas from what follows.
+
 **Problem** (proposal §12.4 D-1, verified in code): a "full corpus" run reads at
 most `target_rules // rules_per_batch + 10` batches — 16 with the CLI defaults —
 of length-sorted, character-truncated chunks.
@@ -191,6 +214,13 @@ of length-sorted, character-truncated chunks.
 `::test_run_fails_closed_when_a_chunk_is_truncated`.
 
 ### 3.2 PIPE-2 — re-split oversized chunks; zero dropped bytes in full mode — 2 pd
+
+**✅ Done — [PR #10](https://github.com/rrahimi-uci/compliance-to-code/pull/10),**
+alongside PIPE-1: `split_oversized_content()` re-splits at word boundaries
+with a configurable overlap (default 150 words) instead of truncating.
+Property-tested for zero-gap coverage across 5 size/overlap combinations plus
+two pathological cases (a single token wider than the window; an overlap
+larger than the window itself) — both still terminate and drop zero bytes.
 
 Agent 1 targets ~2,000-word chunks; Agent 3 clips at 8,000 characters. Long
 chunks silently lose their tails.
@@ -229,6 +259,12 @@ batch selection.
 audit — **new work, +3 pd**).
 
 ### 3.3 PIPE-3 — full v2 fields into the optimizer — 3 pd
+
+**✅ Done — [PR #10](https://github.com/rrahimi-uci/compliance-to-code/pull/10).**
+`_rule_summary_v2()` matches the design below exactly, including the
+`include_related_entities` parameter for the one call site that never
+included that field. 9 tests, including integration tests asserting the
+actual JSON handed to `prompt_manager.format_prompt` carries v2 structure.
 
 **Problem** (D-2, verified in code): `agent_06_knowledge_graph_optimizer.py`
 builds dedup and dependency summaries from the legacy `conditions` /
@@ -371,6 +407,16 @@ never silently drops).
 
 ### 3.6 IR-2 — corpus feature census **before** freezing the subset — 3 pd
 
+**⏳ Tool done, not yet run — [PR #10](https://github.com/rrahimi-uci/compliance-to-code/pull/10).**
+`utils/corpus_census.py` implements `variable_type_census`, `value_type_census`,
+`operator_census`, `coverage_at_subset` (the general form of "how many rules
+lower without a refusal under candidate subset S"), and `expressiveness_signal`,
+plus a `scripts/corpus_census.py` CLI, all with 19 unit tests against synthetic
+v2 fixtures. **What remains:** no real pipeline output exists in this repo yet,
+so the tool has not been run against a real graph and `docs/theory_coverage.md`
+/ `docs/expressiveness_census.md` are not populated — that run is still this
+task's actual acceptance criterion, and it is not yet met.
+
 **Order corrected (§14 P6).** v1 froze `SUPPORTED_THEORIES` and *then* measured
 frequency. That is backwards, and it is how the string blocker was missed. The
 census runs **first**, it is provider-free (pure parsing of v2 graphs and the
@@ -464,23 +510,52 @@ deterministic evaluator replay with a stochastic experimental replication. Split
 none of this pipeline's measurements. That resolves the v1 contradiction where
 day 6–7 measured something before G0 was green.
 
-**A1a — audit what is actually released (new, 0.5 pd, do this first).** §14 P4
-asserts the repo "contains generated models, evaluation code, and results." I
-could **not confirm** that the *generated* models or expected result files are
-published — only `source_models/`, `gold_models/`, `legal_text/`, and the
-harness. **If the generated artifacts are absent, a deterministic replay is
-impossible and A1b does not exist**; the only route is A2. Audit before
-scheduling.
+**✅ A1a done, and resolved in the favorable direction —
+[PR #10](https://github.com/rrahimi-uci/compliance-to-code/pull/10),
+`docs/anchor_release_audit.md`.** The paragraph below (kept as originally
+written, per this plan's convention of not editing history quietly) asked the
+right question and got it wrong. The actual repository tree was audited via
+the GitHub API (pinned commit `6a4844f`), not inferred from the README:
+`generated_models/` contains **exactly 1,900 files** (95 models × 4
+conditions × 5 runs — an exact match to the paper's own stated count), and
+`results/metrics.csv` is a real 428 KB, 1,900-row file with per-generation
+outcome-equivalence columns. `metrics/dmn_executor.py` and
+`graph_similarity.py` — the code that *produces* those metrics — are released
+too, so independent recomputation is possible, not just a replay of committed
+numbers. **A1b below is executable as scoped, not conditional; A2 is now
+genuinely optional follow-on work rather than the only route.**
 
-**A1b — evaluator replay (conditional on A1a).** Pin the upstream commit and
-environment; checksum released inputs, generated artifacts, and expected result
-files; run `evaluation/run_evaluation`; require **exact agreement, or a
-tolerance declared in advance**. v1's "within our bootstrap CI" was the wrong
-standard — a deterministic replay of released files has no sampling error.
+One caveat the audit surfaced and did not resolve, left as A1b's actual first
+task: a quick attempt to reproduce the paper's headline 42.6%/60.4% by
+macro-averaging `results/metrics.csv`'s `outcome_agreement` column directly
+did **not** reproduce those numbers (and recovered only 1 distinct testable
+Requirements `activity_id` against the paper's stated 34) — the exact
+aggregation the paper uses is not obvious from column names alone and needs
+to be read from `evaluation/run_evaluation.py` / `metrics/dmn_executor.py`,
+not guessed. See `docs/anchor_release_audit.md` for the full finding.
+
+**A1a — audit what is actually released (superseded by the above; kept for
+the historical record).** §14 P4 asserts the repo "contains generated models,
+evaluation code, and results." I could **not confirm** that the *generated*
+models or expected result files are published — only `source_models/`,
+`gold_models/`, `legal_text/`, and the harness. **If the generated artifacts
+are absent, a deterministic replay is impossible and A1b does not exist**;
+the only route is A2. Audit before scheduling.
+
+**A1b — evaluator replay (no longer conditional — see the resolution
+above).** Pin the upstream commit and environment; checksum released inputs,
+generated artifacts, and expected result files; run `evaluation/run_evaluation`;
+require **exact agreement, or a tolerance declared in advance**. v1's "within
+our bootstrap CI" was the wrong standard — a deterministic replay of released
+files has no sampling error. **Concretely, given the audit's caveat above:**
+before comparing anything against `metrics.csv`, first read
+`evaluation/run_evaluation.py` and `metrics/dmn_executor.py` closely enough to
+state the exact filter/aggregation that produces 42.6%/60.4%/33%/50%, and
+verify it against the raw 1,900 rows *before* trusting any further replay.
 
 **Acceptance.** `docs/anchor_release_audit.md` recording exactly what is
-published; and, if A1b is possible, `results/a1_replay/` with a byte- or
-tolerance-level match statement.
+published — **done**; and `results/a1_replay/` with a byte- or
+tolerance-level match statement — not yet done.
 
 ### 4.2 A2 — fresh-generation replication (separately preregistered) — 4 pd
 
@@ -889,25 +964,32 @@ v1's day 6–7 ran the anchor harness before G0 was green, contradicting its own
 non-negotiable (§14 P2). Under the two-track split that contradiction disappears:
 Track A consumes only upstream artifacts, so it runs in parallel by design.
 
+**Status (2026-08-24): days 1, 1–2, 3, and 4–5(B) are done — see
+[PR #10](https://github.com/rrahimi-uci/compliance-to-code/pull/10).** Day
+1's A1a came back favorable rather than blocking, which changes day 4–5(A):
+it is no longer "replay if possible, else preregister A2" — replay is
+possible, so that slot becomes A1b's real work (find the exact aggregation
+recipe in the evaluation code; see §4.1).
+
 | Day | Track | Task | Deliverable |
 | --- | --- | --- | --- |
-| 1 | A | **A1a release audit** | `docs/anchor_release_audit.md` — does the anchor publish generated models and expected results, or only gold + harness? **This determines whether A1b exists at all** |
-| 1–2 | B | PIPE-1 | `--unit document`, coverage contract, `chunk_coverage.json`, `test_chunk_coverage.py` green |
-| 3 | B | PIPE-2 | re-split oversized chunks, **zero dropped bytes in full mode**, `--pilot-batch-limit` rejected in full mode |
-| 4–5 | B | PIPE-3 | `_rule_summary_v2()` at all four call sites; `test_optimizer_v2_handoff.py` green |
-| 4–5 | A | A1b or A2 scoping | replay if possible; otherwise preregister A2 and stop |
-| 6–8 | B | **IR-2 census first** | `docs/theory_coverage.md` + `docs/expressiveness_census.md`. **Provider-free.** Confirms or refutes the 34/58 string finding on our own reading of the corpus |
-| 9–11 | B | IR-1 (part 1) | IR semantics document + JSON schema **before** dataclasses; then `utils/lexec_ir.py` with refusal codes |
-| 12–13 | B | PIPE-4 fixture | dependency sampling frame declared (universe, negatives, class balance, guidance, independent review, adjudication) — **not a 60-pair convenience sample** |
-| 14 | B | BENCH-1 | `bench/adapters/dutch_dmn.py` exposing the 58/37 split; `bench/manifest.py` |
+| 1 | A | ✅ **A1a release audit** | `docs/anchor_release_audit.md` — **done: generated models and results ARE published**, resolving the day-1 open question in the favorable direction |
+| 1–2 | B | ✅ PIPE-1 | full coverage by default, `chunk_coverage.json`, `full_coverage_violation()`; `test_chunk_coverage.py` green (28 tests) |
+| 3 | B | ✅ PIPE-2 | `split_oversized_content()` re-splits with zero dropped bytes; `--pilot-batch-limit` opts into the old lossy/capped behavior explicitly |
+| 4–5 | B | ✅ PIPE-3 | `_rule_summary_v2()` at all four call sites; `test_optimizer_v2_handoff.py` green (9 tests) |
+| 4–5 | A | A1b (re-scoped, not A2) | replay **is** possible per day 1's finding — this slot is now "read `evaluation/run_evaluation.py` / `metrics/dmn_executor.py` and state the exact aggregation," not a go/no-go decision |
+| 6–8 | B | ⏳ **IR-2 census** | tool built and unit-tested (`utils/corpus_census.py`, 19 tests); **not yet run** — needs a real optimized graph or the anchor's own gold models, neither yet in hand |
+| 9–11 | B | IR-1 (part 1) | not started — IR semantics document + JSON schema **before** dataclasses; then `utils/lexec_ir.py` with refusal codes |
+| 12–13 | B | PIPE-4 fixture | not started — dependency sampling frame declared (universe, negatives, class balance, guidance, independent review, adjudication) — **not a 60-pair convenience sample** |
+| 14 | B | BENCH-1 | not started — `bench/adapters/dutch_dmn.py` exposing the 58/37 split; `bench/manifest.py` |
 
 **Two weeks in, the honest status should read:** *the extraction unit is
 document-complete with zero dropped bytes, the optimizer sees v2 fields, we know
-exactly what the anchor released, and the corpus feature census has either
-confirmed or refuted the string blocker.* Still no research claim — and the
-census is the single most decision-relevant artifact in the list, because if the
-expressiveness fraction is small the paper changes shape before any money is
-spent.
+exactly what the anchor released — favorably — and the corpus feature census
+tool exists but has not yet run on real data.* Still no research claim — and
+running that census (once a real graph exists) remains the single most
+decision-relevant artifact in the list, because if the expressiveness fraction
+is small the paper changes shape before any money is spent.
 
 ---
 
@@ -1300,7 +1382,7 @@ needs a factual check that is now day 1 of the schedule.
 | **P2** phase graph cannot execute | **§0 rebuilt as two tracks.** Track A (anchor) consumes only upstream artifacts and runs in parallel; J1 (our artifacts through their executor) and J1b (defeater reading) move after the compiler core; the solver core moves into G0 so IR-3 can use it; a machine-readable `plan/tasks.yaml` is CI-validated against cycles and missing deps |
 | **P3** effort arithmetic wrong | **§9 is now generated from the task items.** G0 = **43 pd** (v1 said 28; its own items summed to 35, and this pass adds the string theory, the census reordering, and rule-recall measurement). Minimum paper = **126 pd / 0.80 FTE**; +G4 = 152 / 0.97; +G5 = 172 / 1.10. v1's "73 pd" omitted writing *and* used the wrong G0 |
 | **P4** replay ≠ replication; OE for two conditions only | **G1 split into A1a/A1b/A2 and J1/J1b.** Replay requires exact or declared-tolerance agreement, not "within our bootstrap CI." The comparison table is corrected: **no published raw-`text` OE exists**, both published conditions are gold-leaking, and **interface-derivation accuracy** becomes a new measured sub-result |
-| **P4b** *(third-pass qualification)* | §14 states the repo "contains generated models, evaluation code, and results." **I could not confirm the generated models or expected result files are released** — only source models, gold models, legal text, and the harness. If they are absent, **A1b does not exist**. So **A1a is now day 1**, ahead of everything, at 0.5 pd |
+| **P4b** *(third-pass qualification — now resolved, 2026-08-24)* | §14 states the repo "contains generated models, evaluation code, and results." **This was checked, not just claimed**: [PR #10](https://github.com/rrahimi-uci/compliance-to-code/pull/10)'s `docs/anchor_release_audit.md` audited the actual repository tree via the GitHub API and confirmed `generated_models/` (1,900 files, matching 95×4×5 exactly) and `results/metrics.csv` (1,900 rows) are both released. **A1a is done; A1b is executable, not conditional** — see §4.1 above for the one honest caveat the audit surfaced (the exact headline-figure aggregation is not obvious from column names and still needs to be read from the evaluation code) |
 | **P5** agreement ≠ correctness | **G2 split into two claims:** *lowering correctness* (independent-denotation fixtures, mutation testing, refusal oracle, loss accounting — +8 pd) and *backend agreement* (branch-coverage-audited suite over operator × theory × null × hit-policy). "Four-way agreement" may only be claimed when the engine job actually ran |
 | **P6** IR semantics mislocated/unsettled | `norm_kind` moves from `Var` to `Rule`; `scope` splits into `scope_predicates` (executable) and `scope_metadata` (recorded); **`exception_reading` becomes a parameter** decided by J1b rather than hard-coded before it; a **versioned enrichment step** with provenance is specified for every field v2 does not extract; **IR-2's census runs before the subset is frozen**, and the subset must cover ≥ 55 of 58 anchor models |
 | **P7** chunk coverage ≠ rule coverage | Three metrics separated (`source_chunk_coverage`, `successful_batch_coverage`, measured `rule_recall`); **zero dropped bytes in full mode** with oversized chunks re-split at stable offsets; the PIPE-1/PIPE-2 contradiction resolved; `target_rules` renamed `--pilot-batch-limit` and rejected in full mode; a 20-document complete-rule gold set added (+3 pd) |
@@ -1329,12 +1411,28 @@ Beyond the proposal-side findings in **proposal §27.2**:
 
 ### 15.3 What is still unresolved
 
-1. **Whether A1b exists** (P4b) — unknown until the day-1 release audit.
+1. ~~Whether A1b exists (P4b)~~ — **resolved 2026-08-24, favorably.**
+   [PR #10](https://github.com/rrahimi-uci/compliance-to-code/pull/10) audited
+   the anchor's actual repository tree: the generated models and result files
+   are released. See §4.1's update and the P4b disposition row above. What
+   remains open from that audit is narrower: **the exact aggregation recipe**
+   that reproduces the paper's headline 42.6%/60.4%/33%/50% from
+   `results/metrics.csv` is not yet known — a naive per-row macro-average did
+   not reproduce them — and needs to be read from
+   `evaluation/run_evaluation.py` / `metrics/dmn_executor.py` before any
+   number is quoted.
 2. **Whether the string theory actually covers the 34 Requirements models.** The
    anchor describes `contains()`, binned-numeric, and null-check strings; whether
    three predicate forms suffice is confirmed by the IR-2 census, not assumed.
+   **The census tool exists** ([PR #10](https://github.com/rrahimi-uci/compliance-to-code/pull/10),
+   `utils/corpus_census.py`) but has not yet been run against the anchor's own
+   models to check this directly — running it against our own extracted
+   graphs answers a related but different question (what our corpora need,
+   not what the anchor's 34 Requirements models need).
 3. **Whether the expressiveness census leaves enough content to evaluate**
    (proposal §14.6). If not, the paper is narrower than any version so far.
+   The tool that computes this (`expressiveness_signal`) is built and tested;
+   it has not been run against real data for the same reason as item 2.
 4. **Staffing.** 126 pd of scheduled engineering in 157 working days, with no
    research allowance, is not a one-person plan. Either add an engineer or cut G4.
 5. **The anchor is one corpus.** Proposal §16 now states the bound and declares
