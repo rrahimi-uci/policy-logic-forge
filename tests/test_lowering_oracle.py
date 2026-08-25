@@ -7,7 +7,14 @@ Mutation of an operator, modality, or refusal must fail this suite.
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
+from utils.lowering_oracle import load_fixture, run_oracle
 from utils.lexec_ir import lower_graph
+
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def _source():
@@ -84,3 +91,18 @@ def test_oracle_refuses_unrepresentable_scope_instead_of_dropping_it():
             "source_sha256": "c" * 64,
         }],
     }]
+
+
+def test_frozen_fixture_cases_and_mutations_all_pass():
+    report = run_oracle(load_fixture(ROOT / "tests/fixtures/lowering_oracle"))
+    assert report["cases_passed"] == report["case_count"] == 5
+    assert report["mutations_killed"] == report["mutation_count"] == 6
+    assert report["mutation_score"] == 1.0
+    assert report["failed_cases"] == []
+    assert report["survived_mutations"] == []
+
+
+def test_checked_mutation_artifact_matches_recomputed_fixture():
+    fixture = load_fixture(ROOT / "tests/fixtures/lowering_oracle")
+    artifact = json.loads((ROOT / "results/aggregates/lowering_mutation_score.json").read_text(encoding="utf-8"))
+    assert artifact == run_oracle(fixture)
