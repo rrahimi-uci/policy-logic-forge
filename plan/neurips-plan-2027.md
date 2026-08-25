@@ -229,10 +229,14 @@ G0 must finish before any corpus-level compiler or instrument claim.
   exceptions, missing fields, and unsupported constructs. A bounded NDA pilot
   now exists at `docs/theory_coverage.md` and
   `docs/expressiveness_census.md`, with provenance in
-  `results/aggregates/ir2_nda_pilot/run_manifest.json`; it is explicitly
-  exploratory (two documents, one pre-optimization rules batch) and is not a
-  corpus estimate. The pilot exposed six rules requiring review, including
-  invalid predicate operators, so IR-1 remains blocked from freezing a subset.
+  `results/aggregates/ir2_nda_pilot/run_manifest.json`. The census runner now
+  also emits a content-addressed, metadata-only manifest for retained local
+  diagnostics; the current privacy-policy diagnostic is recorded at
+  `results/aggregates/ir2_full_smallest_privacy/run_manifest.json`. These are
+  explicitly exploratory pilots, not a corpus estimate. The NDA pilot exposed
+  six rules requiring review, including invalid predicate operators, and the
+  privacy diagnostic covers 3/4 rules under boolean/number/enum while refusing
+  one string rule; neither result authorizes freezing a subset.
 - `IR-1`: freeze semantics after the census, implement schema validation and
   total lowering, and refuse unsupported semantics.
 - `IR-3`: implement the reference solver core plus table hit-policy proof

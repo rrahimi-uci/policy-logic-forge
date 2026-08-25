@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Run the corpus feature + expressiveness census (IR-2, plan/neurips-plan-2027.md
 §3.6) against one or more knowledge-graph JSON files and write
-docs/theory_coverage.md and docs/expressiveness_census.md.
+docs/theory_coverage.md and docs/expressiveness_census.md. Use
+``--manifest-out`` with an explicit run label and scope note to retain a
+metadata-only, content-addressed run record alongside the reports.
 
     python3 scripts/corpus_census.py pipeline-output/*/agent_06-optimized/optimized_compliance_knowledge_graph.json
     python3 scripts/corpus_census.py --check-subset boolean,number,enum <graph.json>...
@@ -14,13 +16,117 @@ prevents a pilot from being mistaken for a corpus estimate.
 from __future__ import annotations
 
 import argparse
+from datetime import datetime, timezone
+import hashlib
+import json
+import platform
+import re
 import sys
+import subprocess
 from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_ROOT))
 
 from utils.corpus_census import census_report, coverage_at_subset, load_rules  # noqa: E402
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _repository_commit() -> str | None:
+    try:
+        completed = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=_ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except OSError:
+        return None
+    commit = completed.stdout.strip()
+    return commit if completed.returncode == 0 and commit else None
+
+
+def _repository_dirty() -> bool | None:
+    try:
+        completed = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=_ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except OSError:
+        return None
+    return bool(completed.stdout.strip()) if completed.returncode == 0 else None
+
+
+def _display_path(path: Path) -> str:
+    """Keep manifests portable without recording a developer's absolute path."""
+
+    try:
+        display = str(path.resolve().relative_to(_ROOT))
+    except ValueError:
+        display = path.name
+    # Pipeline output may come from an older local run whose directory names
+    # predate the repository-wide agent_01..agent_10 convention.  Manifests
+    # are part of the naming surface, so normalize only the label we retain;
+    # the source hash remains the authoritative artifact identity.
+    return re.sub(r"\bagent-(\d+)-", lambda match: f"agent_{int(match.group(1)):02d}_", display)
+
+
+def _run_manifest(
+    graph_paths: list[Path],
+    rules: list[dict],
+    report: dict,
+    output_paths: list[Path],
+    *,
+    run_label: str,
+    scope_note: str,
+    subset: dict | None,
+) -> dict:
+    return {
+        "schema_version": "ir2-census-run/1.0",
+        "task_id": "IR-2",
+        "run_id": run_label,
+        "status": "exploratory",
+        "scope_note": scope_note,
+        "created_at_utc": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
+        "repository": {
+            "commit": _repository_commit(),
+            "dirty": _repository_dirty(),
+            "python": platform.python_version(),
+        },
+        "inputs": {
+            "graph_count": len(graph_paths),
+            "graphs": [
+                {
+                    "path": _display_path(path),
+                    "bytes": path.stat().st_size,
+                    "sha256": _sha256_file(path),
+                }
+                for path in graph_paths
+            ],
+        },
+        "census": {
+            "rule_count": len(rules),
+            "report_sha256": hashlib.sha256(
+                json.dumps(report, sort_keys=True, separators=(",", ":")).encode("utf-8")
+            ).hexdigest(),
+        },
+        "subset": subset,
+        "outputs": [
+            {"path": _display_path(path), "bytes": path.stat().st_size, "sha256": _sha256_file(path)}
+            for path in output_paths
+        ],
+    }
 
 
 def _markdown_table(rows: list[tuple[str, int]], headers: tuple[str, str]) -> str:
@@ -139,10 +245,16 @@ def main() -> None:
     parser.add_argument("--run-label", default=None, help="Stable label included in generated report provenance")
     parser.add_argument("--scope-note", default=None,
                          help="Explicit scope/boundary note included in generated reports")
+    parser.add_argument("--manifest-out", default=None,
+                        help="Write a metadata-only IR-2 run manifest at this path")
     args = parser.parse_args()
 
+    if args.manifest_out and (not args.run_label or not args.scope_note):
+        parser.error("--manifest-out requires both --run-label and --scope-note")
+
+    graph_paths = [Path(path) for path in args.graphs]
     rules = []
-    for path in args.graphs:
+    for path in graph_paths:
         rules.extend(load_rules(path))
 
     if not rules:
@@ -152,27 +264,46 @@ def main() -> None:
     report = census_report(rules)
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    (out_dir / "theory_coverage.md").write_text(
+    theory_path = out_dir / "theory_coverage.md"
+    expressiveness_path = out_dir / "expressiveness_census.md"
+    theory_path.write_text(
         _theory_coverage_markdown(report, args.run_label, args.scope_note), encoding="utf-8"
     )
-    (out_dir / "expressiveness_census.md").write_text(
+    expressiveness_path.write_text(
         _expressiveness_markdown(report, args.run_label, args.scope_note), encoding="utf-8"
     )
-    print(f"✓ Wrote {out_dir / 'theory_coverage.md'}", flush=True)
-    print(f"✓ Wrote {out_dir / 'expressiveness_census.md'}", flush=True)
+    print(f"✓ Wrote {theory_path}", flush=True)
+    print(f"✓ Wrote {expressiveness_path}", flush=True)
 
+    subset_result = None
     if args.check_subset:
         subset = [t.strip() for t in args.check_subset.split(",") if t.strip()]
-        coverage = coverage_at_subset(rules, subset)
-        pct = coverage["coverage_fraction"] * 100
+        subset_result = coverage_at_subset(rules, subset)
+        pct = subset_result["coverage_fraction"] * 100
         print(
-            f"\nSubset {subset}: {coverage['covered_rules']}/{coverage['total_rules']} "
+            f"\nSubset {subset}: {subset_result['covered_rules']}/{subset_result['total_rules']} "
             f"rules covered ({pct:.1f}%)", flush=True,
         )
-        if coverage["refused_rules"]:
-            print(f"  {len(coverage['refused_rules'])} rule(s) would be refused, e.g.:", flush=True)
-            for entry in coverage["refused_rules"][:5]:
+        if subset_result["refused_rules"]:
+            print(f"  {len(subset_result['refused_rules'])} rule(s) would be refused, e.g.:", flush=True)
+            for entry in subset_result["refused_rules"][:5]:
                 print(f"    - {entry['rule_id']}: missing {entry['missing_theories']}", flush=True)
+
+    if args.manifest_out:
+        manifest_path = Path(args.manifest_out)
+        manifest_path.parent.mkdir(parents=True, exist_ok=True)
+        output_paths = [theory_path, expressiveness_path]
+        manifest = _run_manifest(
+            graph_paths,
+            rules,
+            report,
+            output_paths,
+            run_label=args.run_label,
+            scope_note=args.scope_note,
+            subset=subset_result,
+        )
+        manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+        print(f"✓ Wrote {manifest_path}", flush=True)
 
 
 if __name__ == "__main__":

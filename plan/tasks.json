@@ -110,7 +110,8 @@
         "artifacts": [
           "docs/theory_coverage.md",
           "docs/expressiveness_census.md",
-          "results/aggregates/ir2_nda_pilot/run_manifest.json"
+          "results/aggregates/ir2_nda_pilot/run_manifest.json",
+          "results/aggregates/ir2_full_smallest_privacy/run_manifest.json"
         ]
       },
       "evidence": [
@@ -119,9 +120,10 @@
         "tests/test_corpus_census.py",
         "docs/theory_coverage.md",
         "docs/expressiveness_census.md",
-        "results/aggregates/ir2_nda_pilot/run_manifest.json"
+        "results/aggregates/ir2_nda_pilot/run_manifest.json",
+        "results/aggregates/ir2_full_smallest_privacy/run_manifest.json"
       ],
-      "claim_boundary": "A bounded two-document, one-batch NDA pilot report is retained and explicitly labeled exploratory. It is not a full-corpus estimate; the pilot found contract issues (including invalid predicate operators) and does not authorize freezing the IR subset."
+      "claim_boundary": "Bounded local NDA and privacy-policy pilots are retained and explicitly labeled exploratory. They are not a full-corpus estimate; the NDA pilot found contract issues (including invalid predicate operators), the privacy pilot found a 75% boolean/number/enum subset coverage with one string refusal, and neither authorizes freezing the IR subset."
     },
     {
       "id": "IR-1",
