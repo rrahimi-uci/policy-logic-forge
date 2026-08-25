@@ -67,6 +67,8 @@ for line in sys.stdin:
     print(json.dumps({
         "protocol": request["protocol"],
         "case_id": request["case_id"],
+        "table_id": request["table_id"],
+        "dmn_sha256": request["dmn_sha256"],
         "status": "matched" if matched else "no_match",
         "outputs": outputs,
         "matched_rule_ids": ["r_active"] if matched else [],

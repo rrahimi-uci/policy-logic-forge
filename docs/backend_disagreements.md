@@ -15,15 +15,18 @@ newline-delimited JSON response per case on stdout. A request contains:
 - `case_id`, `table_id`, and JSON `inputs`;
 - the emitted DMN 1.3 document as `dmn_xml` and its `dmn_sha256`.
 
-Each response must repeat the same `protocol` version and `case_id`, a status in
+Each response must repeat the same `protocol` version, `case_id`, `table_id`,
+and `dmn_sha256` from its request, plus a status in
 `matched`/`no_match`/`unknown`/`refused`, `outputs`, `matched_rule_ids`, and
 `unknown_rule_ids`. Diagnostic text is retained separately and is not used to
-declare behavioral agreement.
+declare behavioral agreement. The digest and table echo prevent an adapter
+from returning a result computed for a different emitted artifact or table.
 
 ## Evidence and status
 
 The run must include `engine_id`, `engine_version`, `source`, `revision`, and
-`license`, plus either a SHA-256 of the engine artifact or a container digest.
+`license`, plus either a SHA-256 of the engine artifact or a pinned
+`sha256:<64-hex>` container digest.
 Without a command the result is `unrun`; a missing executable is also
 `unrun`. Adapter protocol failures are `invalid`, a timeout is `timeout`, and
 any behavioral mismatch is `disagreement`. Only `completed` with all cases
@@ -36,6 +39,8 @@ unrun cases. Adapter commands must receive engine metadata through a reviewed
 configuration; secrets must not be placed in command arguments or retained
 reports.
 
-The current repository has no pinned third-party engine installed, so BE-4 is
-implemented as an executable protocol harness and remains `partial` until an
-approved engine job supplies the required metadata and run artifact.
+The harness also rejects non-positive, non-finite, or boolean timeout values
+before launching an adapter. The current repository has no pinned third-party
+engine installed, so BE-4 is implemented as an executable protocol harness
+and remains `partial` until an approved engine job supplies the required
+metadata and run artifact.

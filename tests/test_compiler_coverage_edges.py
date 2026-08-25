@@ -8,6 +8,7 @@ contract rather than implementation-only bookkeeping.
 from __future__ import annotations
 
 from copy import deepcopy
+import json
 import subprocess
 import sys
 import xml.etree.ElementTree as ET
@@ -374,7 +375,7 @@ def test_smt_query_and_proof_edge_outcomes():
 
 def test_engine_harness_validation_and_process_failures():
     assert harness._validate_cases([{"case_id": "x", "inputs": {}}])[0]["case_id"] == "x"
-    for bad in ("x", [], [{"case_id": "", "inputs": {}}], [{"case_id": "x", "inputs": {}}, {"case_id": "x", "inputs": {}}], [{"case_id": "x", "inputs": []}], [{"case_id": "x", "inputs": {}, "table_id": ""}]):
+    for bad in ("x", [], ["not-an-object"], [{"case_id": "", "inputs": {}}], [{"case_id": "x", "inputs": {}}, {"case_id": "x", "inputs": {}}], [{"case_id": "x", "inputs": []}], [{"case_id": "x", "inputs": {}, "table_id": ""}]):
         with pytest.raises(harness.CrosscheckProtocolError):
             harness._validate_cases(bad)
     assert harness._validate_engine_command(None) is None
@@ -386,20 +387,32 @@ def test_engine_harness_validation_and_process_failures():
         harness._validate_engine_metadata(None)
     with pytest.raises(harness.CrosscheckProtocolError):
         harness._validate_engine_metadata({"engine_id": "x"})
-    metadata = {key: "x" for key in harness.REQUIRED_ENGINE_METADATA} | {"container_digest": "sha256:fixture"}
+    metadata = {key: "x" for key in harness.REQUIRED_ENGINE_METADATA} | {"container_digest": "sha256:" + "a" * 64}
     assert harness._validate_engine_metadata(metadata)["engine_id"] == "x"
     with pytest.raises(harness.CrosscheckProtocolError):
         harness._project_result({"status": "bad"})
     with pytest.raises(harness.CrosscheckProtocolError):
         harness._project_result({"status": "matched", "outputs": [], "matched_rule_ids": [], "unknown_rule_ids": []})
     with pytest.raises(harness.CrosscheckProtocolError):
+        harness._project_result({"status": "matched", "outputs": {}, "matched_rule_ids": [""], "unknown_rule_ids": []})
+    with pytest.raises(harness.CrosscheckProtocolError):
+        harness._project_result({"status": "matched", "outputs": {}, "matched_rule_ids": ["r1"], "unknown_rule_ids": ["r1"]})
+    with pytest.raises(harness.CrosscheckProtocolError):
         harness._parse_engine_output("not-json", [{"case_id": "x"}])
     with pytest.raises(harness.CrosscheckProtocolError):
         harness._parse_engine_output("{}\n", [{"case_id": "x"}])
+    with pytest.raises(harness.CrosscheckProtocolError):
+        harness._parse_engine_output("[]\n", [{"case_id": "x"}])
+    valid_output = {"protocol": harness.PROTOCOL_VERSION, "case_id": "x", "table_id": None}
+    with pytest.raises(harness.CrosscheckProtocolError):
+        harness._parse_engine_output(
+            json.dumps(valid_output) + "\n" + json.dumps(valid_output) + "\n",
+            [{"case_id": "x", "table_id": None}, {"case_id": "y", "table_id": None}],
+        )
     assert harness.compare_results({"status": "matched", "outputs": {}, "matched_rule_ids": [], "unknown_rule_ids": [], "diagnostics": ["r"]}, {"status": "no_match", "outputs": {}, "matched_rule_ids": [], "unknown_rule_ids": []})["agree"] is False
     ir = feel_ir(_active())
     cases = [{"case_id": "x", "inputs": {"active": True}, "table_id": "t1"}]
-    metadata = {key: "x" for key in harness.REQUIRED_ENGINE_METADATA} | {"container_digest": "sha256:fixture"}
+    metadata = {key: "x" for key in harness.REQUIRED_ENGINE_METADATA} | {"container_digest": "sha256:" + "a" * 64}
     missing = harness.run_crosscheck(ir, cases, engine_command=["definitely-not-installed"], engine_metadata=metadata)
     assert missing["status"] == "unrun"
     timeout = harness.run_crosscheck(ir, cases, engine_command=[sys.executable, "-c", "import time; time.sleep(1)"], engine_metadata=metadata, timeout_seconds=0.01)
