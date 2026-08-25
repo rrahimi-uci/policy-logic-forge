@@ -75,6 +75,10 @@ pip install -r requirements-dev.txt
 cp config.example.json config.json
 cp .env.example .env   # add your OPENAI_API_KEY
 
+# The committed template defaults to gpt-5.6-luna with xhigh reasoning.
+# If config.json already exists, update its model/effort fields or recreate it
+# from config.example.json; config.json is intentionally ignored.
+
 # No sample documents are committed (see "Data and licensing" below) — build
 # one corpus first, e.g. ContractNLI's NDAs:
 cd benchmarks

@@ -40,13 +40,17 @@ class TestEstimateCost:
         assert lc._estimate_cost("some-future-model", 1000, 1000) == 0.0
         assert lc._estimate_cost(None, 1000, 1000) == 0.0
 
+    @allure.title("GPT-5.6 Luna uses its configured input/output rates")
+    def test_gpt56_luna_cost(self):
+        assert lc._estimate_cost("gpt-5.6-luna", 1_000_000, 1_000_000) == pytest.approx(1.40)
+
 
 @allure.feature("Pipeline LLM client")
 @allure.story("Reasoning-model detection")
 class TestIsReasoningModel:
     @pytest.mark.parametrize("model,expected", [
         ("o1", True), ("o1-mini", True), ("o3-mini", True), ("o4-mini", True),
-        ("gpt-5.2", True), ("gpt-5", True),
+        ("gpt-5.6-luna", True), ("gpt-5", True),
         ("gpt-4o", False), ("gpt-4o-mini", False), ("gpt-4.1", False),
         ("", False), (None, False),
     ])
@@ -69,6 +73,11 @@ class TestChatCompletionParams:
         mock_openai.chat.completions.create.return_value = resp
         client._client = mock_openai
         return client, mock_openai
+
+    @allure.title("Client uses the configured GPT-5.6 Luna default")
+    def test_default_model(self):
+        client = create_llm_client(api_key="sk-test")
+        assert client.model == "gpt-5.6-luna"
 
     @allure.title("Non-reasoning models send temperature + max_tokens")
     def test_standard_model_params(self):
@@ -94,7 +103,7 @@ class TestChatCompletionParams:
 
     @allure.title("Reasoning completion budget can be bounded for compact runs")
     def test_reasoning_completion_budget_env_cap(self, monkeypatch):
-        client, mock = self._client_with_mock("gpt-5.2")
+        client, mock = self._client_with_mock("gpt-5.6-luna")
         monkeypatch.setenv("KG_REASONING_MAX_COMPLETION_TOKENS", "4096")
         client.chat_completion(
             [{"role": "user", "content": "hi"}],

@@ -162,18 +162,18 @@ class Config:
         return api_key
 
     def get_reasoning_model(self) -> str:
-        """Get reasoning model name."""
-        return self.get('openai.models.reasoning', 'gpt-5.2')
+        """Get the configured reasoning model name."""
+        return self.get('openai.models.reasoning', 'gpt-5.6-luna')
 
     def get_reasoning_effort(self) -> str:
-        """Get reasoning effort level (low, medium, high).
+        """Get reasoning effort level (none, low, medium, high, xhigh, max).
 
         ``KG_REASONING_EFFORT`` permits a one-off run to override without
         editing a local ``config.json``.
         """
         return os.getenv(
             'KG_REASONING_EFFORT',
-            self.get('openai.models.reasoning_effort', 'medium'),
+            self.get('openai.models.reasoning_effort', 'xhigh'),
         )
 
     def get_model_provider(self) -> str:
@@ -209,7 +209,7 @@ class Config:
 
     def get_optimizer_model(self) -> str:
         """Get optimizer model name (used for prompt-optimization meta-agent calls)."""
-        return self.get('openai.models.optimizer', 'gpt-5.2')
+        return self.get('openai.models.optimizer', 'gpt-5.6-luna')
 
     def get_source_dir(self) -> Path:
         """Get source directory path."""
@@ -302,7 +302,7 @@ class Config:
         return self.get('llm.default_max_tokens', 8192)
 
     def get_default_model(self) -> str:
-        return self.get('llm.default_model', 'gpt-5.2')
+        return self.get('llm.default_model', 'gpt-5.6-luna')
 
     # -- Domain --
 
@@ -441,7 +441,7 @@ class Config:
     # -- Optimizer (Agent 5) --
 
     def get_optimizer_model_name(self) -> str:
-        return self.get('optimizer.model', 'gpt-5.2')
+        return self.get('optimizer.model', 'gpt-5.6-luna')
 
     def get_optimizer_dedup_temperature(self) -> float:
         return self.get('optimizer.dedup_temperature', 0.2)

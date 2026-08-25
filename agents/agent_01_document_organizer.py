@@ -870,7 +870,7 @@ class DocumentChunkingAgent:
         Args:
             api_key: API key for LLM provider
             model: Optional override for reasoning model
-            reasoning_effort: Optional override for reasoning effort level (low/medium/high)
+            reasoning_effort: Optional override for reasoning effort level (none/low/medium/high/xhigh/max)
         """
         self.config = get_config()
         self.model = model or self.config.get_reasoning_model()

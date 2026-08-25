@@ -75,6 +75,7 @@ _PRICING_PER_1M = {
     "o3":           (2.00, 8.00),
     "o3-mini":      (1.10, 4.40),
     "o4-mini":      (1.10, 4.40),
+    "gpt-5.6-luna": (0.20, 1.20),
 }
 
 
@@ -122,11 +123,11 @@ class LLMClient:
 
         Args:
             api_key: OpenAI API key (defaults to config / OPENAI_API_KEY env var).
-            model: Model identifier (e.g. 'gpt-4o', 'o3-mini', 'gpt-5.2').
+            model: Model identifier (e.g. 'gpt-4o', 'o3-mini', 'gpt-5.6-luna').
             timeout: Request timeout in seconds.
             max_retries: Maximum number of retry attempts (handled by the SDK).
         """
-        self.model = model or _get_config_value('get_default_model', 'gpt-4o')
+        self.model = model or _get_config_value('get_default_model', 'gpt-5.6-luna')
         self.timeout = timeout if timeout is not None else _get_config_value('get_timeout', 300)
         self.max_retries = max_retries if max_retries is not None else _get_config_value('get_max_retries', 3)
 
