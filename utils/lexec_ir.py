@@ -502,14 +502,20 @@ def lower_graph(
             ir["refusals"].append(_refusal(rule, digest, exc))
             continue
         ir["rules"].append(lowered)
+        pending_symbols: dict[str, dict[str, Any]] = {}
+        conflict: str | None = None
         for symbol in symbols:
-            existing = symbol_by_id.get(symbol["id"])
+            existing = symbol_by_id.get(symbol["id"]) or pending_symbols.get(symbol["id"])
             if existing is None:
-                symbol_by_id[symbol["id"]] = symbol
+                pending_symbols[symbol["id"]] = symbol
             elif _canonical({k: existing[k] for k in ("theory", "role", "domain", "unit")}) != _canonical({k: symbol[k] for k in ("theory", "role", "domain", "unit")}):
-                ir["refusals"].append(_refusal(rule, digest, LoweringRefusal("SYMBOL_CONFLICT", "symbol", f"Symbol {symbol['id']!r} has incompatible declarations.")))
-                ir["rules"].pop()
+                conflict = symbol["id"]
                 break
+        if conflict is not None:
+            ir["refusals"].append(_refusal(rule, digest, LoweringRefusal("SYMBOL_CONFLICT", "symbol", f"Symbol {conflict!r} has incompatible declarations.")))
+            ir["rules"].pop()
+            continue
+        symbol_by_id.update(pending_symbols)
     ir["symbols"] = sorted(symbol_by_id.values(), key=lambda item: item["id"])
     groups: dict[tuple[tuple[str, ...], str], list[str]] = defaultdict(list)
     for rule in ir["rules"]:

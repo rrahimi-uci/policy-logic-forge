@@ -132,3 +132,23 @@ def test_unknown_input_field_is_refused_instead_of_silently_lost():
     assert ir["rules"] == []
     assert ir["refusals"][0]["code"] == "UNCLASSIFIED_FIELD"
     assert ir["ignored_fields"] == []
+
+
+def test_conflicted_rule_does_not_leak_symbols_before_refusal():
+    conflict = deepcopy(_rule())
+    conflict["rule_id"] = "r_conflict"
+    conflict["variables"] = [
+        {"name": "new_symbol", "type": "boolean", "role": "input"},
+        {"name": "active", "type": "string", "free_text": True, "role": "input"},
+        {"name": "category", "type": "enum", "allowed_values": ["pii", "anonymous"], "role": "input"},
+        {"name": "decision", "type": "enum", "allowed_values": ["allow", "deny"], "role": "output"},
+    ]
+    conflict["condition_predicates"] = [
+        {"predicate_id": "p_active", "variable": "active", "operator": "==", "value": "yes", "value_type": "string"},
+        {"predicate_id": "p_category", "variable": "category", "operator": "==", "value": "pii", "value_type": "enum"},
+    ]
+
+    ir = lower_graph([_rule(), conflict], source_sha256=SOURCE_HASH)
+
+    assert any(refusal["code"] == "SYMBOL_CONFLICT" for refusal in ir["refusals"])
+    assert "new_symbol" not in {symbol["id"] for symbol in ir["symbols"]}
