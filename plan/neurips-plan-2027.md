@@ -27,7 +27,7 @@ transfer study, and optional RL work remain future work.
 | G0 | 13 | 46 | 19 | done=8, partial=5 |
 | A | 4 | 8 | 4 | done=3, conditional=1 |
 | J | 2 | 6 | 0 | planned=2 |
-| G2 | 6 | 30 | 0 | partial=1, planned=5 |
+| G2 | 6 | 30 | 0 | partial=2, planned=4 |
 | G3 | 5 | 24 | 0 | planned=5 |
 | G4 | 3 | 26 | 0 | planned=3 |
 | G5 | 4 | 20 | 0 | conditional=4 |
