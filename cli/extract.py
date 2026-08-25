@@ -142,15 +142,25 @@ class ExtractionPipeline:
             env["PILOT_BATCH_LIMIT"] = str(self.pilot_batch_limit)
         return env
 
-    def _run(self, step: str, label: str, script: str, args: list[str]) -> bool:
+    def _run(
+        self,
+        step: str,
+        label: str,
+        script: str,
+        args: list[str],
+        extra_env: dict[str, str] | None = None,
+    ) -> bool:
         print("\n" + "=" * 80)
         print(f"STEP {step}: {label}")
         print("=" * 80)
         cmd = [sys.executable, str(_ROOT / "agents" / script)] + args
         print(f"$ {' '.join(cmd)}\n", flush=True)
+        env = self._env()
+        if extra_env:
+            env.update(extra_env)
         process = subprocess.Popen(
             cmd, cwd=_ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-            text=True, bufsize=1, env=self._env(),
+            text=True, bufsize=1, env=env,
         )
         for line in process.stdout:
             print(line, end="", flush=True)
@@ -190,8 +200,11 @@ class ExtractionPipeline:
             return True
         return self._run("5", "KG Optimizer", "agent_06_knowledge_graph_optimizer.py", [])
 
-    def step5_5(self) -> bool:
-        return self._run("5.5", "Executable Readiness", "agent_07_executable_readiness.py", [])
+    def step5_5(self, *, reuse_conflicts: bool = False) -> bool:
+        extra_env = {"KG_READINESS_SKIP_CONFLICTS": "true"} if reuse_conflicts else None
+        return self._run(
+            "5.5", "Executable Readiness", "agent_07_executable_readiness.py", [], extra_env=extra_env
+        )
 
     def step5_6(self) -> bool:
         return self._run("5.6", "Readiness Remediator", "agent_08_readiness_remediator.py", [])
@@ -234,7 +247,7 @@ class ExtractionPipeline:
                 print("\nAgent 5.5 requested focused remediation -> running Step 5.6")
                 if not self.step5_6():
                     return False
-                if not self.step5_5():
+                if not self.step5_5(reuse_conflicts=True):
                     print("\nSTOPPED: readiness still failing after remediation.")
                     return False
 

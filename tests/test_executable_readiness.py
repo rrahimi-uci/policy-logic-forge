@@ -196,6 +196,34 @@ def test_string_array_variable_type_no_longer_fails_v2_validation():
     assert not any(issue.code == "invalid_variable_type" for issue in issues)
 
 
+def test_free_text_outcome_value_type_normalises_to_string():
+    """The model's descriptive free_text label is a valid string outcome.
+
+    Agent 3 has emitted ``value_type=free_text`` for literal addresses and
+    addressee text.  The v2 schema spells that type ``string`` and requires
+    the corresponding variable to declare ``free_text: true``.
+    """
+    rule = valid_rule()
+    rule["outcomes"][0] = {
+        "variable": "request_addressee",
+        "operator": "=",
+        "value": "Attn: Marketing Department",
+        "value_type": "free_text",
+    }
+    rule["variables"][-1] = {
+        "name": "request_addressee",
+        "type": "string",
+        "free_text": True,
+        "role": "output",
+    }
+
+    normalise_rule_contract(rule)
+    issues = validate_rule_v2(rule, {"SELLER_SERVICER", "FANNIE_MAE"})
+
+    assert rule["outcomes"][0]["value_type"] == "string"
+    assert not any(issue.code == "invalid_outcome_value_type" for issue in issues)
+
+
 # ─────────────────────────────────────────────────────────────────────────
 # exception_basis / scope_basis: a free-text explanation instead of an enum
 # member must be coerced to the unresolved final state, not left as a raw v2
