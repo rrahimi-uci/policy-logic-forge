@@ -15,7 +15,7 @@ authoritative for research definitions, claim boundaries, and stop/go rules.
 prerequisites, an argv-form acceptance command, an artifact target, and a
 claim boundary, and that the graph can be validated and queried locally. It
 does **not** mean that the planned research has already been implemented or
-that a publishable result is guaranteed. At this revision, 10 person-days of
+that a publishable result is guaranteed. At this revision, 13 person-days of
 work are evidenced as complete; the compiler, benchmark, instrument study,
 transfer study, and optional RL work remain future work.
 
@@ -24,7 +24,7 @@ transfer study, and optional RL work remain future work.
 <!-- GENERATED_TASK_SUMMARY_START -->
 | Phase | Tasks | Total pd | Done pd | Status |
 | --- | ---: | ---: | ---: | --- |
-| G0 | 13 | 46 | 9 | done=4, partial=2, planned=7 |
+| G0 | 13 | 46 | 12 | done=5, partial=2, planned=6 |
 | A | 4 | 8 | 1 | done=1, planned=2, conditional=1 |
 | J | 2 | 6 | 0 | planned=2 |
 | G2 | 6 | 30 | 0 | planned=6 |
@@ -35,12 +35,12 @@ transfer study, and optional RL work remain future work.
 
 | Scope | Included pd | Done pd | Remaining pd |
 | --- | ---: | ---: | ---: |
-| `minimum_paper` | 125 | 10 | 115 |
-| `second_domain` | 151 | 10 | 141 |
-| `full_programme` | 171 | 10 | 161 |
-| `minimum_plus_optional_replication` | 129 | 10 | 119 |
+| `minimum_paper` | 125 | 13 | 112 |
+| `second_domain` | 151 | 13 | 138 |
+| `full_programme` | 171 | 13 | 158 |
+| `minimum_plus_optional_replication` | 129 | 13 | 116 |
 
-**Ready now:** `PIPE-2B`, `PIPE-4`, `IR-2`, `BENCH-1`, `A1B`, `A3`.
+**Ready now:** `PIPE-2B`, `PIPE-4`, `IR-2`, `BENCH-2`, `BENCH-3`, `A1B`, `A3`.
 
 Generated from [`plan/tasks.json`](tasks.json) by `scripts/validate_neurips_plan.py`; manual edits to this block fail CI.
 <!-- GENERATED_TASK_SUMMARY_END -->
@@ -224,9 +224,15 @@ G0 must finish before any corpus-level compiler or instrument claim.
   coverage is not a substitute.
 - `PIPE-4`: audit dependency precision/recall and missing-link categories on a
   frozen sample; do not infer success merely from optimizer input coverage.
-- `IR-2`: run the existing census tool on retained real pipeline output and
-  publish counts for types, operators, scopes, modalities, tables,
-  dependencies, exceptions, missing fields, and unsupported constructs.
+- `IR-2`: run the census tool on retained real pipeline output and publish
+  counts for types, operators, scopes, modalities, tables, dependencies,
+  exceptions, missing fields, and unsupported constructs. A bounded NDA pilot
+  now exists at `docs/theory_coverage.md` and
+  `docs/expressiveness_census.md`, with provenance in
+  `results/aggregates/ir2_nda_pilot/run_manifest.json`; it is explicitly
+  exploratory (two documents, one pre-optimization rules batch) and is not a
+  corpus estimate. The pilot exposed six rules requiring review, including
+  invalid predicate operators, so IR-1 remains blocked from freezing a subset.
 - `IR-1`: freeze semantics after the census, implement schema validation and
   total lowering, and refuse unsupported semantics.
 - `IR-3`: implement the reference solver core plus table hit-policy proof
@@ -235,6 +241,9 @@ G0 must finish before any corpus-level compiler or instrument claim.
 ### 3.3 Benchmark gates
 
 - `BENCH-1`: pin the Dutch adapter, source artifacts, and frozen 58/37 split.
+  This is now implemented as `bench/adapters/dutch_dmn.py` plus the
+  content-free, commit-pinned `bench/splits/dutch_58.json`; it freezes 24
+  Outcome and 34 Requirements models without redistributing upstream files.
 - `BENCH-2`: enforce gold isolation at the filesystem/container boundary.
   Artifact-free query generation receives a mount containing only source
   inputs and its output directory. Gold DMN, labels, cache, environment
@@ -412,7 +421,7 @@ grounding or human acceptability.
 The generated status table is the sole source of numeric totals. The scopes
 are cumulative:
 
-- minimum paper: 125 pd total, 10 done, 115 remaining;
+- minimum paper: 125 pd total, 13 done, 112 remaining;
 - minimum plus optional fresh-generation replication: 129 pd;
 - second-domain extension: 151 pd cumulative;
 - full programme including conditional RL: 171 pd cumulative.
@@ -423,9 +432,9 @@ recruitment, ethics review, and scientific iteration after a failed gate.
 Therefore the calendar cannot be obtained by dividing totals by headcount.
 
 With one contributor, the minimum scope is not credible by simply serializing
-115 remaining pd into the submission window. The recommended execution is:
+112 remaining pd into the submission window. The recommended execution is:
 
-- immediately parallelize provider-free G0 work (`IR-2`, `BENCH-1`, pipeline
+- immediately parallelize provider-free G0 work (`IR-2`, `BENCH-2`, `BENCH-3`, pipeline
   audits) with anchor replay/licensing (`A1B`, `A3`);
 - freeze IR semantics only after the census;
 - build reference and SMT backends in parallel after `IR-1`;
@@ -506,7 +515,8 @@ order within the two parallel tracks:
 
 1. `IR-2`: run the existing census on retained real output; it determines the
    IR boundary.
-2. `BENCH-1`: freeze the adapter, hashes, and split needed by benchmark tasks.
+2. `BENCH-2` and `BENCH-3`: build isolation and run-retention contracts on the
+   completed frozen split.
 3. `PIPE-2B` and `PIPE-4`: measure the two unresolved extraction claims.
 4. `A1B`: recover and replay the released aggregation independently of Track B.
 5. `A3`: draft the reuse posture; pause before external communication for owner

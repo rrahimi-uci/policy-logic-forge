@@ -107,10 +107,21 @@
           [".venv/bin/python", "-m", "pytest", "tests/test_corpus_census.py", "-q"],
           [".venv/bin/python", "scripts/validate_neurips_plan.py", "--check"]
         ],
-        "artifacts": ["docs/theory_coverage.md", "docs/expressiveness_census.md"]
+        "artifacts": [
+          "docs/theory_coverage.md",
+          "docs/expressiveness_census.md",
+          "results/aggregates/ir2_nda_pilot/run_manifest.json"
+        ]
       },
-      "evidence": ["utils/corpus_census.py", "scripts/corpus_census.py", "tests/test_corpus_census.py"],
-      "claim_boundary": "Tool is implemented; real-corpus reports are not yet produced."
+      "evidence": [
+        "utils/corpus_census.py",
+        "scripts/corpus_census.py",
+        "tests/test_corpus_census.py",
+        "docs/theory_coverage.md",
+        "docs/expressiveness_census.md",
+        "results/aggregates/ir2_nda_pilot/run_manifest.json"
+      ],
+      "claim_boundary": "A bounded two-document, one-batch NDA pilot report is retained and explicitly labeled exploratory. It is not a full-corpus estimate; the pilot found contract issues (including invalid predicate operators) and does not authorize freezing the IR subset."
     },
     {
       "id": "IR-1",
@@ -147,15 +158,15 @@
       "title": "Implement Dutch adapter and frozen 58/37 split",
       "phase": "G0",
       "track": "B",
-      "status": "planned",
+      "status": "done",
       "effort_pd": 3,
       "depends_on": ["A1A"],
       "acceptance": {
         "commands": [[".venv/bin/python", "-m", "pytest", "tests/test_dutch_adapter.py", "-q"]],
         "artifacts": ["bench/adapters/dutch_dmn.py", "bench/splits/dutch_58.json"]
       },
-      "evidence": [],
-      "claim_boundary": "Adapter and split only; not an evaluated benchmark result."
+      "evidence": ["bench/adapters/dutch_dmn.py", "bench/splits/dutch_58.json", "tests/test_dutch_adapter.py"],
+      "claim_boundary": "Pins the upstream population and evaluator-compatible split only; it is not an evaluated benchmark result and does not redistribute upstream artifacts."
     },
     {
       "id": "BENCH-2",

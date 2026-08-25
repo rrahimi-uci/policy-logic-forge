@@ -14,7 +14,9 @@ This module is deliberately provider-free and dependency-free (no LLM calls,
 no third-party libraries): it is pure aggregation over already-extracted v2
 rule dicts, so it can run against any batch's
 `optimized_compliance_knowledge_graph.json` (or an Agent-4 pre-optimization
-graph) the moment one exists, with no API key and no network.
+graph) with no API key and no network.  It also reports malformed or incomplete
+contract fields instead of silently dropping them from the supported-subset
+census.
 
 Two censuses, both returned by `census_report()`:
 
@@ -30,12 +32,10 @@ Two censuses, both returned by `census_report()`:
   signal for bounding ambition, not a legal classifier, and every function
   here says so in its own docstring rather than only here.
 
-As of this commit, no real extraction has been run in this repository (see
-README.md "Data and licensing" -- corpora are downloaded, not vendored, and
-no committed pipeline output exists), so this module ships as a tool with
-unit tests against synthetic v2 rule fixtures, not as a report against real
-data. Running it against a real optimized graph is the literal next step
-once one exists (see docs/theory_coverage.md once populated).
+The repository may retain aggregate reports from bounded local pilots, but it
+does not vendor source corpora or pipeline output (see README.md "Data and
+licensing"). A pilot report is evidence that the tool ran against real output;
+it is not a corpus-wide estimate and must carry an explicit scope note.
 """
 
 from __future__ import annotations
@@ -76,6 +76,28 @@ EXPRESSIVENESS_BUCKETS = {
     "vague_standard": VAGUE_STANDARD_KEYWORDS,
     "discretionary_authority": DISCRETIONARY_AUTHORITY_KEYWORDS,
 }
+
+# Fields whose presence is material to the IR-2 review.  Empty arrays are
+# counted as present: ``exceptions: []`` and an omitted ``exceptions`` field
+# have different provenance and readiness meanings in contract v2.
+CENSUS_FIELDS = (
+    "applicability_scope",
+    "scope_basis",
+    "recommended_hit_policy",
+    "exceptions",
+    "exception_basis",
+    "test_vectors",
+    "field_evidence",
+    "source_reference",
+    "condition_logic",
+)
+
+# A generated graph may carry dependencies on each rule (after Agent 5) or a
+# top-level dependency_details object.  The latter is intentionally measured by
+# the CLI when loading a graph; these aliases cover rule-level handoffs and
+# decision-table projections without assuming one producer's exact spelling.
+DEPENDENCY_FIELDS = ("dependencies", "dependency_ids", "related_rules")
+TABLE_FIELDS = ("decision_table", "table", "table_rows", "decision_table_rows")
 
 
 def _rules_from_graph(graph: Mapping[str, Any]) -> list[dict[str, Any]]:
@@ -159,6 +181,137 @@ def operator_census(rules: Iterable[Mapping[str, Any]]) -> dict[str, int]:
     return dict(counts)
 
 
+def _categorical_census(rules: Iterable[Mapping[str, Any]], field: str) -> dict[str, int]:
+    """Count values for a scalar rule field, retaining an explicit missing bucket."""
+    counts: Counter[str] = Counter()
+    for rule in rules:
+        value = rule.get(field)
+        key = "<missing>" if value is None or value == "" else str(value)
+        counts[key] += 1
+    return dict(sorted(counts.items()))
+
+
+def scope_basis_census(rules: Iterable[Mapping[str, Any]]) -> dict[str, int]:
+    """Count final/candidate scope evidence states, including missing values."""
+    return _categorical_census(rules, "scope_basis")
+
+
+def exception_basis_census(rules: Iterable[Mapping[str, Any]]) -> dict[str, int]:
+    """Count exception evidence states, including explicit empty/missing states."""
+    return _categorical_census(rules, "exception_basis")
+
+
+def hit_policy_census(rules: Iterable[Mapping[str, Any]]) -> dict[str, int]:
+    """Count recommended decision-table hit policies, including missing values."""
+    return _categorical_census(rules, "recommended_hit_policy")
+
+
+def rule_type_census(rules: Iterable[Mapping[str, Any]]) -> dict[str, int]:
+    """Count domain rule types, retaining rules with no type as ``<missing>``."""
+    return _categorical_census(rules, "rule_type")
+
+
+def field_presence_census(rules: Iterable[Mapping[str, Any]]) -> dict[str, dict[str, int]]:
+    """Report present/missing counts for fields that affect executability.
+
+    Presence is key-based rather than truthiness-based, so an explicit empty
+    list/object remains visible as an asserted value.  This is important for
+    distinguishing ``exceptions: []`` from a model that omitted the field.
+    """
+    rules = list(rules)
+    total = len(rules)
+    report: dict[str, dict[str, int]] = {}
+    for field in CENSUS_FIELDS:
+        present = sum(1 for rule in rules if field in rule and rule.get(field) is not None)
+        report[field] = {"present": present, "missing": total - present}
+    return report
+
+
+def _nonempty_field(rule: Mapping[str, Any], field: str) -> bool:
+    """Whether a rule carries a non-empty dependency/table representation."""
+    value = rule.get(field)
+    if isinstance(value, (list, dict, str)):
+        return bool(value)
+    return value is not None
+
+
+def dependency_census(rules: Iterable[Mapping[str, Any]]) -> dict[str, int]:
+    """Count rule-level dependency representations and directed edges.
+
+    Top-level graph dependency metadata is handled by ``scripts/corpus_census``
+    because this provider-free utility intentionally accepts only rule dicts.
+    """
+    rules = list(rules)
+    represented = [rule for rule in rules if any(_nonempty_field(rule, field) for field in DEPENDENCY_FIELDS)]
+    edge_count = 0
+    for rule in rules:
+        for field in DEPENDENCY_FIELDS:
+            value = rule.get(field)
+            if isinstance(value, list):
+                edge_count += len(value)
+            elif isinstance(value, dict):
+                edge_count += len(value)
+    return {
+        "rules_with_dependencies": len(represented),
+        "rules_without_dependencies": len(rules) - len(represented),
+        "dependency_edges": edge_count,
+    }
+
+
+def table_census(rules: Iterable[Mapping[str, Any]]) -> dict[str, int]:
+    """Count rules carrying a non-empty decision-table projection."""
+    rules = list(rules)
+    represented = [rule for rule in rules if any(_nonempty_field(rule, field) for field in TABLE_FIELDS)]
+    return {
+        "rules_with_tables": len(represented),
+        "rules_without_tables": len(rules) - len(represented),
+    }
+
+
+def contract_issue_census(rules: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
+    """Expose contract/review failures instead of excluding malformed rules.
+
+    Invalid operators/value types are counted directly because older or
+    provider-specific producers may not attach ``contract_issues``.  Attached
+    issue codes and ``requires_review`` are also retained for triage.
+    """
+    rules = list(rules)
+    issue_codes: Counter[str] = Counter()
+    issue_severities: Counter[str] = Counter()
+    invalid_predicate_operators = 0
+    invalid_predicate_value_types = 0
+    invalid_outcome_value_types = 0
+    for rule in rules:
+        for predicate in rule.get("condition_predicates") or []:
+            if isinstance(predicate, Mapping):
+                if predicate.get("operator") not in OPERATORS:
+                    invalid_predicate_operators += 1
+                if predicate.get("value_type") not in VALUE_TYPES:
+                    invalid_predicate_value_types += 1
+        for outcome in rule.get("outcomes") or []:
+            if isinstance(outcome, Mapping) and outcome.get("value_type") not in VALUE_TYPES:
+                invalid_outcome_value_types += 1
+        issues = rule.get("contract_issues") or []
+        if isinstance(issues, list):
+            for issue in issues:
+                if not isinstance(issue, Mapping):
+                    continue
+                issue_codes[str(issue.get("code") or "<missing>")] += 1
+                issue_severities[str(issue.get("severity") or "<missing>")] += 1
+    rules_with_issues = sum(bool(rule.get("contract_issues")) for rule in rules)
+    rules_requiring_review = sum(rule.get("requires_review") is True for rule in rules)
+    return {
+        "rules_with_contract_issues": rules_with_issues,
+        "rules_without_contract_issues": len(rules) - rules_with_issues,
+        "rules_requiring_review": rules_requiring_review,
+        "invalid_predicate_operators": invalid_predicate_operators,
+        "invalid_predicate_value_types": invalid_predicate_value_types,
+        "invalid_outcome_value_types": invalid_outcome_value_types,
+        "issue_codes": dict(sorted(issue_codes.items())),
+        "issue_severities": dict(sorted(issue_severities.items())),
+    }
+
+
 def theories_required_by(rule: Mapping[str, Any]) -> set[str]:
     """The set of v2 variable types this single rule needs supported.
 
@@ -233,8 +386,16 @@ def census_report(rules: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
     rules = list(rules)
     return {
         "total_rules": len(rules),
+        "rule_type_census": rule_type_census(rules),
         "variable_type_census": variable_type_census(rules),
         "value_type_census": value_type_census(rules),
         "operator_census": operator_census(rules),
+        "scope_basis_census": scope_basis_census(rules),
+        "exception_basis_census": exception_basis_census(rules),
+        "hit_policy_census": hit_policy_census(rules),
+        "field_presence_census": field_presence_census(rules),
+        "dependency_census": dependency_census(rules),
+        "table_census": table_census(rules),
+        "contract_issue_census": contract_issue_census(rules),
         "expressiveness_signal": expressiveness_signal(rules),
     }
