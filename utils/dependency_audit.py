@@ -9,6 +9,7 @@ making a dependency-quality claim about the compliance corpus.
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -86,6 +87,60 @@ def _edge_set(edges: list[Mapping[str, Any]]) -> set[tuple[str, str, str]]:
     return {_edge_key(edge) for edge in edges}
 
 
+def _require_complete_labels(
+    positive_edges: list[Mapping[str, Any]],
+    negative_edges: list[Mapping[str, Any]],
+    *,
+    label: str,
+    candidate_edges: set[tuple[str, str, str]],
+) -> None:
+    """Require exactly one binary label for every candidate edge."""
+
+    positive = _edge_set(positive_edges)
+    negative = _edge_set(negative_edges)
+    overlap = positive & negative
+    if overlap:
+        raise DependencyAuditError(f"{label} labels an edge both positive and negative: {sorted(overlap)[0]}")
+    missing = candidate_edges - (positive | negative)
+    if missing:
+        raise DependencyAuditError(
+            f"{label} must label every candidate edge exactly once; missing {sorted(missing)[0]}"
+        )
+
+
+def _wilson_interval(successes: int, trials: int, *, z: float = 1.959963984540054) -> dict[str, Any]:
+    """Return a descriptive 95% Wilson interval for one frozen frame."""
+
+    if trials < 0 or successes < 0 or successes > trials:
+        raise DependencyAuditError("interval successes/trials must satisfy 0 <= successes <= trials")
+    if trials == 0:
+        return {
+            "method": "wilson_95_binomial",
+            "confidence": 0.95,
+            "successes": successes,
+            "trials": trials,
+            "lower": None,
+            "upper": None,
+            "interpretation": "descriptive frame-level interval; not a population estimate",
+        }
+    proportion = successes / trials
+    z_squared = z * z
+    denominator = 1 + z_squared / trials
+    center = (proportion + z_squared / (2 * trials)) / denominator
+    margin = z / denominator * math.sqrt(
+        proportion * (1 - proportion) / trials + z_squared / (4 * trials * trials)
+    )
+    return {
+        "method": "wilson_95_binomial",
+        "confidence": 0.95,
+        "successes": successes,
+        "trials": trials,
+        "lower": max(0.0, center - margin),
+        "upper": min(1.0, center + margin),
+        "interpretation": "descriptive frame-level interval; not a population estimate",
+    }
+
+
 def load_frame(fixture_dir: str | Path) -> dict[str, Any]:
     """Load and validate a complete dependency audit frame."""
 
@@ -142,6 +197,12 @@ def load_frame(fixture_dir: str | Path) -> dict[str, Any]:
                 record.get("negative_edges"), label=f"annotators[{index}].negative_edges", rule_ids=rule_ids, candidate_edges=candidate_edges
             ),
         })
+        _require_complete_labels(
+            checked_annotators[-1]["edges"],
+            checked_annotators[-1]["negative_edges"],
+            label=f"annotators[{index}]",
+            candidate_edges=candidate_edges,
+        )
 
     adjudication = frame.get("adjudication")
     if not isinstance(adjudication, Mapping) or not str(adjudication.get("method", "")).strip():
@@ -155,6 +216,12 @@ def load_frame(fixture_dir: str | Path) -> dict[str, Any]:
             adjudication.get("negative_edges"), label="adjudication.negative_edges", rule_ids=rule_ids, candidate_edges=candidate_edges
         ),
     }
+    _require_complete_labels(
+        checked_adjudication["edges"],
+        checked_adjudication["negative_edges"],
+        label="adjudication",
+        candidate_edges=candidate_edges,
+    )
     adjudicated_positive = _edge_set(checked_adjudication["edges"])
     adjudicated_negative = _edge_set(checked_adjudication["negative_edges"])
     if adjudicated_positive & adjudicated_negative:
@@ -188,6 +255,11 @@ def evaluate_frame(frame: Mapping[str, Any]) -> dict[str, Any]:
     negative_intersection = set.intersection(*annotator_negative_sets)
     positive_iaa = len(positive_intersection) / len(positive_union) if positive_union else 1.0
     negative_iaa = len(negative_intersection) / len(negative_union) if negative_union else 1.0
+    exact_label_set_agreement = all(
+        _edge_set(record["edges"]) == annotator_positive_sets[0]
+        and _edge_set(record["negative_edges"]) == annotator_negative_sets[0]
+        for record in frame["annotators"][1:]
+    )
     return {
         "status": "fixture_only",
         "evidence_status": frame["evidence_status"],
@@ -202,11 +274,21 @@ def evaluate_frame(frame: Mapping[str, Any]) -> dict[str, Any]:
         "false_positive_edges": len(false_positives),
         "recall": len(matched) / len(gold) if gold else None,
         "precision": len(matched) / len(predictions) if predictions else None,
+        "recall_uncertainty": _wilson_interval(len(matched), len(gold)),
+        "precision_uncertainty": _wilson_interval(len(matched), len(predictions)),
         "missing_edge_keys": [list(edge) for edge in sorted(missing)],
         "false_positive_edge_keys": [list(edge) for edge in sorted(false_positives)],
         "annotator_count": len(frame["annotators"]),
         "positive_edge_iaa_jaccard": positive_iaa,
         "negative_edge_iaa_jaccard": negative_iaa,
+        "annotator_agreement": {
+            "metric": "typed_edge_label_jaccard",
+            "annotator_count": len(frame["annotators"]),
+            "positive_jaccard": positive_iaa,
+            "negative_jaccard": negative_iaa,
+            "exact_label_set_agreement": exact_label_set_agreement,
+            "interpretation": "descriptive edge-label agreement; chance-corrected IAA remains a real-frame requirement",
+        },
         "adjudication_method": frame["adjudication"]["method"],
     }
 

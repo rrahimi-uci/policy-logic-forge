@@ -92,7 +92,7 @@
         "artifacts": ["tests/fixtures/dependency_gold/", "docs/dependency_fixture_construction.md", "results/aggregates/dependency_audit.json"]
       },
       "evidence": ["utils/dependency_audit.py", "scripts/dependency_audit.py", "tests/test_dependency_audit.py", "docs/dependency_fixture_construction.md", "results/aggregates/dependency_audit.json"],
-      "claim_boundary": "The deterministic evaluator and a synthetic fixture are complete, but the fixture is contract-only. A real dependency precision/recall claim remains blocked pending a licensed rule sample, explicit negatives, two independent human annotations, adjudication, and agreement statistics."
+      "claim_boundary": "The deterministic evaluator now fail-closed validates complete positive/negative edge labels and reports descriptive frame-level Wilson intervals plus typed-edge agreement, but the synthetic fixture remains contract-only. A real dependency precision/recall claim remains blocked pending a licensed rule sample, explicit negatives, two independent human annotations, adjudication, sampling weights, and agreement statistics."
     },
     {
       "id": "IR-2",

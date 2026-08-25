@@ -17,15 +17,21 @@ A real audit must include:
 
 The evaluator validates that no edge escapes the universe, self-loops are not
 silently accepted, and a prediction cannot be counted outside the candidate
-edge set. Precision and recall match typed `(source_rule_id, target_rule_id,
-dependency_type)` edges.
+edge set. Each candidate edge must receive exactly one positive or negative
+label from each annotator and from adjudication; otherwise the frame is
+rejected rather than silently treating an unknown edge as a false positive.
+Precision and recall match typed `(source_rule_id, target_rule_id,
+dependency_type)` edges. The report also includes descriptive frame-level 95%
+Wilson intervals and typed-edge Jaccard agreement. These are diagnostics, not
+population uncertainty or chance-corrected human IAA.
 
 ## Checked-in fixture boundary
 
 `tests/fixtures/dependency_gold/` is synthetic and marked
 `evidence_status: fixture_only`. It exists to test the audit contract without
-an API call. Its 0.5 precision, 0.5 recall, and 1.0 Jaccard agreement values
-must not be presented as corpus dependency quality or human IAA.
+an API call. Its 0.5 precision, 0.5 recall, 1.0 Jaccard agreement values, and
+frame-level intervals must not be presented as corpus dependency quality or
+human IAA.
 
 Run it with:
 
