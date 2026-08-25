@@ -25,18 +25,19 @@ def _cases():
     ]
 
 
-def _adapter(*, disagreement: bool = False, malformed: bool = False):
+def _adapter(*, disagreement: bool = False, malformed: bool = False, protocol_mismatch: bool = False):
     behavior = "'deny'" if disagreement else "'allow'"
     if malformed:
         code = "print('not-json')"
     else:
+        protocol = "'wrong-protocol'" if protocol_mismatch else "request['protocol']"
         code = f"""
 import json, sys
 for line in sys.stdin:
     request = json.loads(line)
     matched = request['inputs'].get('active') is True
     output = {{'decision': {behavior}}} if matched else {{}}
-    print(json.dumps({{'case_id': request['case_id'], 'status': 'matched' if matched else 'no_match', 'outputs': output, 'matched_rule_ids': ['r1'] if matched else [], 'unknown_rule_ids': []}}))
+    print(json.dumps({{'protocol': {protocol}, 'case_id': request['case_id'], 'status': 'matched' if matched else 'no_match', 'outputs': output, 'matched_rule_ids': ['r1'] if matched else [], 'unknown_rule_ids': []}}))
 """
     return [sys.executable, "-c", code]
 
@@ -85,8 +86,15 @@ def test_protocol_failure_and_missing_pinning_metadata_are_invalid():
         engine_command=_adapter(malformed=True),
         engine_metadata=ENGINE_METADATA,
     )
+    protocol_mismatch = run_crosscheck(
+        _ir(),
+        _cases(),
+        engine_command=_adapter(protocol_mismatch=True),
+        engine_metadata=ENGINE_METADATA,
+    )
     missing_metadata = run_crosscheck(_ir(), _cases(), engine_command=_adapter(), engine_metadata={})
 
     assert malformed["status"] == "invalid"
+    assert protocol_mismatch["status"] == "invalid"
     assert missing_metadata["status"] == "invalid"
     assert malformed["claimable"] is False and missing_metadata["claimable"] is False

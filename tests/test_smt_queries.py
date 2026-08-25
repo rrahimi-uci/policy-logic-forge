@@ -74,6 +74,16 @@ def test_unknown_and_timeout_are_first_class_query_outcomes():
     assert timeout["status"] == "timeout"
 
 
+def test_malformed_query_inputs_are_unknown_instead_of_becoming_false_proofs():
+    malformed_formula = query_satisfiable({"op": ["not-an-operator"]}, [_bool_symbol()])
+    malformed_coverage = query_coverage([{"id": "broken", "condition": None}], [_bool_symbol()])
+    malformed_conflicts = query_conflicts([{"id": "broken", "condition": _eq("x", True)}], [_bool_symbol()])
+
+    assert malformed_formula["status"] == "unknown"
+    assert malformed_coverage["status"] == "unknown"
+    assert malformed_conflicts["status"] == "unknown"
+
+
 def test_overlap_query_returns_a_counterexample_or_proves_disjointness():
     symbols = [_bool_symbol()]
     true_rule = _rule("r_true", _eq("x", True), "allow")
