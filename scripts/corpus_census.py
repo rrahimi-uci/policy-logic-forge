@@ -91,6 +91,8 @@ def _run_manifest(
     run_label: str,
     scope_note: str,
     subset: dict | None,
+    repository_commit: str | None,
+    repository_dirty: bool | None,
 ) -> dict:
     return {
         "schema_version": "ir2-census-run/1.0",
@@ -100,8 +102,10 @@ def _run_manifest(
         "scope_note": scope_note,
         "created_at_utc": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
         "repository": {
-            "commit": _repository_commit(),
-            "dirty": _repository_dirty(),
+            # Capture state before writing reports so generated output does
+            # not make an otherwise clean source checkout appear dirty.
+            "commit": repository_commit,
+            "dirty": repository_dirty,
             "python": platform.python_version(),
         },
         "inputs": {
@@ -210,6 +214,8 @@ def _theory_coverage_markdown(report: dict, run_label: str | None = None, scope_
         f"- Invalid predicate operators: {report['contract_issue_census']['invalid_predicate_operators']}",
         f"- Invalid predicate value types: {report['contract_issue_census']['invalid_predicate_value_types']}",
         f"- Invalid outcome value types: {report['contract_issue_census']['invalid_outcome_value_types']}",
+        f"- Invalid variable types: {report['contract_issue_census']['invalid_variable_types']}",
+        f"- Malformed variable entries: {report['contract_issue_census']['malformed_variable_entries']}",
         "",
     ]
     return "\n".join(lines).rstrip() + "\n"
@@ -262,6 +268,8 @@ def main() -> None:
         sys.exit(1)
 
     report = census_report(rules)
+    repository_commit = _repository_commit()
+    repository_dirty = _repository_dirty()
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     theory_path = out_dir / "theory_coverage.md"
@@ -301,6 +309,8 @@ def main() -> None:
             run_label=args.run_label,
             scope_note=args.scope_note,
             subset=subset_result,
+            repository_commit=repository_commit,
+            repository_dirty=repository_dirty,
         )
         manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
         print(f"✓ Wrote {manifest_path}", flush=True)

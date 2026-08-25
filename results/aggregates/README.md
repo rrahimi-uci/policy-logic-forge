@@ -14,3 +14,8 @@ manifest even when they have no publishable output.
 This directory contains aggregate metadata only. It does not authorize
 redistribution of any benchmark corpus or gold artifact, and no benchmark run
 bundle is claimed or retained by this contract implementation.
+
+IR-2 census manifests record the repository commit and dirty state observed
+before the census writes its generated reports. This keeps report generation
+from turning a clean source checkout into a misleadingly dirty provenance
+record.

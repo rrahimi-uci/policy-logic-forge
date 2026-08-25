@@ -176,6 +176,16 @@ def test_contract_issue_census_exposes_invalid_predicate_operator_and_review():
     assert report["issue_codes"] == {"invalid_predicate_operator": 1}
 
 
+def test_contract_issue_census_exposes_invalid_variable_types():
+    rule = _rule("R1", variables=[_var("amount", "currency"), {"name": "missing_type"}, "malformed"])
+
+    report = contract_issue_census([rule])
+
+    assert report["invalid_variable_types"] == 2
+    assert report["invalid_variable_type_values"] == {"<missing>": 1, "currency": 1}
+    assert report["malformed_variable_entries"] == 1
+
+
 # ─────────────────────────────────────────────────────────────────────────
 # theories_required_by / coverage_at_subset — the §9.4 blocker, generalized
 # ─────────────────────────────────────────────────────────────────────────
@@ -206,6 +216,16 @@ def test_coverage_at_subset_reproduces_the_proposal_9_4_finding():
     assert with_string["covered_rules"] == 3
     assert with_string["coverage_fraction"] == 1.0
     assert with_string["refused_rules"] == []
+
+
+def test_coverage_at_subset_refuses_unknown_variable_theory():
+    rules = [_rule("unknown", variables=[_var("amount", "currency")])]
+
+    coverage = coverage_at_subset(rules, {"boolean", "number", "enum", "currency"})
+
+    assert coverage["supported_theories"] == ["boolean", "enum", "number"]
+    assert coverage["covered_rules"] == 0
+    assert coverage["refused_rules"] == [{"rule_id": "unknown", "missing_theories": ["currency"]}]
 
 
 def test_coverage_at_subset_on_empty_corpus_is_vacuously_complete():

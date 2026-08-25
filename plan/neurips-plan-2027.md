@@ -236,7 +236,12 @@ G0 must finish before any corpus-level compiler or instrument claim.
   explicitly exploratory pilots, not a corpus estimate. The NDA pilot exposed
   six rules requiring review, including invalid predicate operators, and the
   privacy diagnostic covers 3/4 rules under boolean/number/enum while refusing
-  one string rule; neither result authorizes freezing a subset.
+  one string rule; neither result authorizes freezing a subset. A subsequent
+  retained smallest privacy-policy run using the current `agent_01`–`agent_10`
+  naming is recorded with its reports and content-addressed manifest under
+  `results/aggregates/ir2_agent_naming_smallest/`; it independently covers
+  3/4 rules under boolean/number/enum and refuses the same string rule, so it
+  remains exploratory rather than a corpus estimate.
 - `IR-1`: freeze semantics after the census, implement schema validation and
   total lowering, and refuse unsupported semantics.
 - `IR-3`: implement the reference solver core plus table hit-policy proof
