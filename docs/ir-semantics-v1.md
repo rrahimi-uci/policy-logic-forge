@@ -99,8 +99,16 @@ Rules are grouped into tables by output-target signature and hit policy.  A
 table's policy proof starts as `unknown`/`unproved`; the lowering does not
 claim disjointness, equal outputs on overlap, source precedence, or solver
 validation.  Unknown at a table boundary is configured as `refuse`.
-`IR-3` is responsible for producing proof records and witnesses before any
-backend treats a table as executable.
+
+The provider-free `utils/smt.py` core can prove pairwise disjointness for
+complete finite domains (booleans, enums, and small closed integer intervals)
+and can find counterexamples for overlaps.  It reports `unknown` for open
+strings, unbounded/real intervals, and any search that exceeds its bound;
+`PRIORITY` without an explicit precedence is refused, and `COLLECT` remains
+unknown until a later backend freezes its overlap semantics.  Every proof
+record contains a query hash and witnesses where applicable.  A real SMT
+backend may replace this bounded core, but no backend may convert `unknown`,
+`timeout`, or `refused` into a pass.
 
 ## What this implementation does not establish
 
