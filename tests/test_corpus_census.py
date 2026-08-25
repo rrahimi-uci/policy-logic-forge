@@ -1,4 +1,4 @@
-"""IR-2 (neurips-plan-2027.md §3.6): the corpus feature census must run
+"""IR-2 (plan/neurips-plan-2027.md §3.6): the corpus feature census must run
 *before* the compiler's supported type/operator subset is frozen.
 
 Proposal §9.4 shows what freezing-before-measuring costs: refusing the

@@ -1,6 +1,6 @@
 # Anchor release-contents audit (A1a)
 
-**Task:** `neurips-plan-2027.md` §4.1 A1a. **Status: done — resolves the open
+**Task:** `plan/neurips-plan-2027.md` §4.1 A1a. **Status: done — resolves the open
 question in proposal Appendix B / plan §15.3 item 1.** Repository audited via
 the GitHub API tree endpoint and raw file fetches on 2026-08-24, commit
 `6a4844fb235d4f958d0810bba7089a2e9078099e` of

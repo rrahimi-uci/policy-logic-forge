@@ -23,7 +23,7 @@ decision logic, and use the compiler as the measuring instrument.
 | Substrate | This repository: 10-stage extraction pipeline, v2 *candidate* rule contract, four-invariant readiness gate, claim-level grounding verifier, deterministic DAG **node**-coverage partition, and **four corpus input adapters + prompt packs — not four benchmark results** (no label loaders, query builders, splits, scoring code, or run manifests exist; `pytest` 770 passed makes no model calls and tests fixed graphs/prompts). See §24 R1. |
 | Status | Proposal for discussion. `(measured)` = a real run. `(target)` = pre-registered success criterion. `(published)` = a number from cited prior work, verified against the source. `(verified-in-code)` = checked against this repo at commit time. |
 | Development plan | [`neurips-plan-2027.md`](neurips-plan-2027.md) — the buildable form of §26: task IDs, module layout, acceptance tests, effort in person-days, and the G0→G5 sequence |
-| Filename | `neurIips-proposal-2027.md` preserves a typo from the original request and is **deliberately retained as a compatibility path** so existing links do not break; the companion plan uses the correct `neurips-plan-2027.md`. Rename before this becomes a cited artifact. |
+| Filename | `plan/neurIips-proposal-2027.md` preserves the original filename typo; both proposal and companion plan now live under `plan/`. Rename only with a repository-wide link migration. |
 
 ---
 

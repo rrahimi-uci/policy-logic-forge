@@ -1,4 +1,4 @@
-"""Corpus feature census (IR-2, neurips-plan-2027.md §3.6).
+"""Corpus feature census (IR-2, plan/neurips-plan-2027.md §3.6).
 
 The compiler IR's supported type/operator subset must be frozen from a
 *measurement* of what real v2 rule graphs actually contain, not from a guess

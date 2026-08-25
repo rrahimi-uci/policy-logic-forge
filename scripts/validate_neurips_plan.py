@@ -10,7 +10,7 @@ Examples:
 
 The validator is deliberately standard-library only. It validates structure,
 dependency closure, cycles, status/evidence contracts, acceptance commands,
-scope totals, and the generated summary embedded in neurips-plan-2027.md.
+scope totals, and the generated summary embedded in plan/neurips-plan-2027.md.
 It never runs planned paid/network tasks automatically.
 """
 
@@ -27,7 +27,7 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parent.parent
 REGISTRY = ROOT / "plan" / "tasks.json"
-PLAN = ROOT / "neurips-plan-2027.md"
+PLAN = ROOT / "plan" / "neurips-plan-2027.md"
 IR_SCHEMA = ROOT / "plan" / "lexec-ir-v1.schema.json"
 SUMMARY_START = "<!-- GENERATED_TASK_SUMMARY_START -->"
 SUMMARY_END = "<!-- GENERATED_TASK_SUMMARY_END -->"
@@ -254,7 +254,7 @@ def render_summary(registry: dict[str, Any]) -> str:
         "",
         f"**Ready now:** {', '.join(f'`{task_id}`' for task_id in ready) if ready else 'none'}.",
         "",
-        f"Generated from [`plan/tasks.json`](plan/tasks.json) by "
+        f"Generated from [`plan/tasks.json`](tasks.json) by "
         "`scripts/validate_neurips_plan.py`; manual edits to this block fail CI.",
         SUMMARY_END,
     ])
