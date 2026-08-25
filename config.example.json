@@ -2,9 +2,9 @@
   "openai": {
     "api_key": "${OPENAI_API_KEY}",
     "models": {
-      "reasoning": "gpt-5.2",
-      "reasoning_effort": "medium",
-      "optimizer": "gpt-5.2"
+      "reasoning": "gpt-5.6-luna",
+      "reasoning_effort": "xhigh",
+      "optimizer": "gpt-5.6-luna"
     },
     "rate_limiting": {
       "max_retries": 1,
@@ -14,7 +14,7 @@
   "llm": {
     "default_temperature": 0.7,
     "default_max_tokens": 8192,
-    "default_model": "gpt-5.2"
+    "default_model": "gpt-5.6-luna"
   },
   "pipeline": {
     "max_workers": 40,
@@ -86,7 +86,7 @@
     }
   },
   "optimizer": {
-    "model": "gpt-5.2",
+    "model": "gpt-5.6-luna",
     "dedup_temperature": 0.2,
     "dedup_max_tokens": 8192,
     "dependency_temperature": 0.7,

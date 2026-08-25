@@ -187,7 +187,7 @@ class BusinessRulesExtractor:
         api_key: str, 
         entity_relationship_file: str,
         target_rules_count: int = 100,
-        reasoning_effort: str = "medium",
+        reasoning_effort: Optional[str] = None,
         config: Optional[RulesExtractionConfig] = None
     ):
         self.config = config or RulesExtractionConfig(target_rules_count=target_rules_count)
