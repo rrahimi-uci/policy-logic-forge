@@ -24,6 +24,9 @@ from typing import Any, Iterable, Mapping, Sequence
 UNKNOWN = None
 MAX_ASSIGNMENTS = 10_000
 _RANGE = re.compile(r"^([\[\(])\s*(-?(?:\d+(?:\.\d*)?|\.\d+))\s*,\s*(-?(?:\d+(?:\.\d*)?|\.\d+))\s*([\]\)])$")
+_THEORIES = {"bool", "int", "real", "enum", "string"}
+_NUMERIC_THEORIES = {"int", "real"}
+_LITERAL_TYPES = {"bool", "int", "real", "enum", "string", "null"}
 
 
 @dataclass(frozen=True)
@@ -56,6 +59,153 @@ def _symbols_by_id(symbols: Mapping[str, Mapping[str, Any]] | Sequence[Mapping[s
     if isinstance(symbols, Mapping):
         return {str(key): value for key, value in symbols.items() if isinstance(value, Mapping)}
     return {str(item.get("id")): item for item in symbols if isinstance(item, Mapping) and item.get("id")}
+
+
+def _budget_error(max_assignments: Any) -> str | None:
+    """Validate the public bounded-search resource contract."""
+
+    if isinstance(max_assignments, bool) or not isinstance(max_assignments, int):
+        return "max_assignments must be a non-negative integer"
+    if max_assignments < 0:
+        return "max_assignments must be a non-negative integer"
+    return None
+
+
+def _symbol_domain_error(symbol: Mapping[str, Any]) -> str | None:
+    """Reject malformed or theory/domain-incompatible declarations."""
+
+    theory = symbol.get("theory")
+    if theory not in _THEORIES:
+        return f"unsupported theory {theory!r}"
+    domain = symbol.get("domain")
+    if not isinstance(domain, Mapping):
+        return f"symbol {symbol.get('id')!r} has no domain declaration"
+    expected_kind = {
+        "bool": "boolean",
+        "int": "interval",
+        "real": "interval",
+        "enum": "enum",
+        "string": "string",
+    }[theory]
+    if domain.get("kind") != expected_kind:
+        return f"symbol {symbol.get('id')!r} has {theory!r} theory with incompatible domain"
+    if theory == "enum":
+        values = domain.get("values")
+        if not isinstance(values, list) or not values:
+            return f"symbol {symbol.get('id')!r} enum domain has no values"
+        if any(
+            not isinstance(value, (str, int, float, bool))
+            or (isinstance(value, float) and not math.isfinite(value))
+            for value in values
+        ):
+            return f"symbol {symbol.get('id')!r} enum domain contains a non-scalar value"
+    elif theory == "string":
+        predicates = domain.get("predicates")
+        if not isinstance(predicates, list) or not predicates:
+            return f"symbol {symbol.get('id')!r} string domain has no predicates"
+    elif theory in _NUMERIC_THEORIES:
+        minimum, maximum = domain.get("minimum"), domain.get("maximum")
+        for bound_name, bound in (("minimum", minimum), ("maximum", maximum)):
+            if bound is not None and (isinstance(bound, bool) or not isinstance(bound, (int, float)) or not math.isfinite(bound)):
+                return f"symbol {symbol.get('id')!r} has an invalid {bound_name} bound"
+        if minimum is not None and maximum is not None and minimum > maximum:
+            return f"symbol {symbol.get('id')!r} has a reversed numeric interval"
+        for flag in ("minimum_inclusive", "maximum_inclusive"):
+            if flag in domain and not isinstance(domain[flag], bool):
+                return f"symbol {symbol.get('id')!r} has a non-boolean {flag} flag"
+    return None
+
+
+def _literal_type_error(operand: Mapping[str, Any]) -> str | None:
+    """Check a literal's declared type before evaluating it."""
+
+    literal_type = operand.get("type")
+    value = operand.get("literal")
+    if literal_type not in _LITERAL_TYPES:
+        return f"unsupported literal type {literal_type!r}"
+    if literal_type == "null" and value is not None:
+        return "null literal must have a null value"
+    if literal_type == "bool" and not isinstance(value, bool):
+        return "bool literal must have a boolean value"
+    if literal_type == "int" and (isinstance(value, bool) or not isinstance(value, int)):
+        return "int literal must have an integer value"
+    if literal_type == "real" and (isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value)):
+        return "real literal must have a finite numeric value"
+    if literal_type == "enum" and (
+        not isinstance(value, (str, int, float, bool))
+        or (isinstance(value, float) and not math.isfinite(value))
+    ):
+        return "enum literal must have a scalar value"
+    if literal_type == "string" and not isinstance(value, str):
+        return "string literal must have a string value"
+    return None
+
+
+def _operand_type(operand: Any, symbol_map: Mapping[str, Mapping[str, Any]]) -> str | None:
+    if isinstance(operand, Mapping) and set(operand) == {"symbol"}:
+        symbol = symbol_map.get(str(operand.get("symbol")))
+        return symbol.get("theory") if isinstance(symbol, Mapping) else None
+    if isinstance(operand, Mapping) and set(operand) == {"literal", "type"}:
+        return operand.get("type")
+    return None
+
+
+def _formula_type_error(formula: Any, symbol_map: Mapping[str, Mapping[str, Any]]) -> str | None:
+    """Reject type-incompatible formulas before bounded evaluation."""
+
+    if not isinstance(formula, Mapping):
+        return "formula must be an object"
+    op = formula.get("op")
+    if op in {"and", "or"}:
+        for child in formula.get("args", []):
+            error = _formula_type_error(child, symbol_map)
+            if error:
+                return error
+        return None
+    if op == "not":
+        return _formula_type_error(formula.get("arg"), symbol_map)
+    if op == "is_null":
+        operand = formula.get("arg")
+        if isinstance(operand, Mapping) and set(operand) == {"literal", "type"}:
+            return _literal_type_error(operand)
+        return None
+    if op not in {"eq", "ne", "lt", "le", "gt", "ge", "contains", "in_binned_range"}:
+        return None
+    left, right = formula.get("left"), formula.get("right")
+    for operand in (left, right):
+        if isinstance(operand, Mapping) and set(operand) == {"literal", "type"}:
+            error = _literal_type_error(operand)
+            if error:
+                return error
+    left_type = _operand_type(left, symbol_map)
+    right_type = _operand_type(right, symbol_map)
+    if left_type is None or right_type is None:
+        return "formula references an invalid operand"
+    if op in {"eq", "ne"}:
+        if left_type == "null" or right_type == "null":
+            return None
+        if left_type != right_type and not (left_type in _NUMERIC_THEORIES and right_type in _NUMERIC_THEORIES):
+            return f"{op} compares incompatible theories {left_type!r} and {right_type!r}"
+        # An enum value outside its declaration is malformed input, not a
+        # valid unsatisfiable query that may be used as a proof.
+        for operand, other_type in ((left, right_type), (right, left_type)):
+            if isinstance(operand, Mapping) and set(operand) == {"literal", "type"} and other_type == "enum":
+                symbol_operand = right if operand is left else left
+                if isinstance(symbol_operand, Mapping) and set(symbol_operand) == {"symbol"}:
+                    symbol = symbol_map.get(str(symbol_operand.get("symbol")), {})
+                    values = symbol.get("domain", {}).get("values", []) if isinstance(symbol, Mapping) else []
+                    if operand.get("literal") not in values:
+                        return f"enum literal {operand.get('literal')!r} is outside symbol domain"
+    elif op in {"lt", "le", "gt", "ge"}:
+        if left_type not in _NUMERIC_THEORIES or right_type not in _NUMERIC_THEORIES:
+            return f"{op} requires numeric operands"
+    elif op == "contains":
+        if left_type != "string" or right_type != "string":
+            return "contains requires string operands"
+    elif op == "in_binned_range":
+        if left_type not in _NUMERIC_THEORIES or right_type != "string":
+            return "in_binned_range requires a numeric left operand and string range"
+    return None
 
 
 def _formula_symbols(formula: Any) -> set[str]:
@@ -124,20 +274,31 @@ def _formula_error(formula: Any) -> str | None:
 def _candidate_values(symbol: Mapping[str, Any], literals: Sequence[Any]) -> tuple[list[Any], bool, str | None]:
     theory = symbol.get("theory")
     domain = symbol.get("domain") if isinstance(symbol.get("domain"), Mapping) else {}
-    kind = domain.get("kind")
-    if theory == "bool" or kind == "boolean":
+    if theory == "bool":
         return [None, False, True], True, None
-    if theory == "enum" or kind == "enum":
+    if theory == "enum":
         values = domain.get("values")
         if not isinstance(values, list) or not values:
             return [], False, "enum domain has no values"
         return [None, *dict.fromkeys(values)], True, None
-    if theory in {"int", "real"} or kind == "interval":
+    if theory == "int":
         minimum, maximum = domain.get("minimum"), domain.get("maximum")
-        if isinstance(minimum, int) and isinstance(maximum, int) and not isinstance(minimum, bool) and not isinstance(maximum, bool) and 0 <= maximum - minimum <= 16:
+        if (
+            isinstance(minimum, int)
+            and isinstance(maximum, int)
+            and not isinstance(minimum, bool)
+            and not isinstance(maximum, bool)
+            and domain.get("minimum_inclusive", True)
+            and domain.get("maximum_inclusive", True)
+            and 0 <= maximum - minimum <= 16
+        ):
             return [None, *range(minimum, maximum + 1)], True, None
-        return [], False, "numeric interval is not a small closed integer interval"
-    if theory == "string" or kind == "string":
+        return [], False, "integer interval is not a small closed interval"
+    if theory == "real":
+        # A real interval is continuous even when its endpoints happen to be
+        # integers. Enumerating those endpoints would be an unsound proof.
+        return [], False, "real interval is continuous and not exhaustively enumerable"
+    if theory == "string":
         strings = [value for value in literals if isinstance(value, str)]
         # The domain is infinite; these candidates are useful for finding a
         # witness but cannot establish unsatisfiability.
@@ -240,11 +401,21 @@ def solve_formula(
     formula_error = _formula_error(formula)
     if formula_error:
         return SolveResult("unknown", None, 0, formula_error)
+    budget_error = _budget_error(max_assignments)
+    if budget_error:
+        return SolveResult("unknown", None, 0, budget_error)
     symbol_map = _symbols_by_id(symbols)
     referenced = sorted(_formula_symbols(formula))
     missing = [name for name in referenced if name not in symbol_map]
     if missing:
         return SolveResult("unknown", None, 0, f"unknown symbols: {missing}")
+    for name in referenced:
+        declaration_error = _symbol_domain_error(symbol_map[name])
+        if declaration_error:
+            return SolveResult("unknown", None, 0, declaration_error)
+    type_error = _formula_type_error(formula, symbol_map)
+    if type_error:
+        return SolveResult("unknown", None, 0, type_error)
     literals = _formula_literals(formula)
     choices: list[list[Any]] = []
     complete = True
@@ -386,6 +557,18 @@ def query_coverage(
         "symbols": symbols,
         "max_assignments": max_assignments,
     }
+    budget_error = _budget_error(max_assignments)
+    if budget_error:
+        return {
+            "query_type": "coverage",
+            "status": "unknown",
+            "witness": None,
+            "explored": 0,
+            "reason": budget_error,
+            "query_sha256": _sha256({"query_type": "coverage", "query": query}),
+            "rule_ids": rule_ids,
+            "covered": None,
+        }
     if rule_list and (len(conditions) != len(rule_list) or any(not isinstance(rule, Mapping) for rule in rule_list)):
         return {
             "query_type": "coverage",
@@ -425,6 +608,44 @@ def query_coverage(
             "covered": None,
         }
         return result
+
+    for name in referenced:
+        declaration_error = _symbol_domain_error(symbol_map[name])
+        if declaration_error:
+            return {
+                "query_type": "coverage",
+                "status": "unknown",
+                "witness": None,
+                "explored": 0,
+                "reason": declaration_error,
+                "query_sha256": _sha256({"query_type": "coverage", "query": query}),
+                "rule_ids": rule_ids,
+                "covered": None,
+            }
+    formula_error = _formula_error(formula)
+    if formula_error:
+        return {
+            "query_type": "coverage",
+            "status": "unknown",
+            "witness": None,
+            "explored": 0,
+            "reason": formula_error,
+            "query_sha256": _sha256({"query_type": "coverage", "query": query}),
+            "rule_ids": rule_ids,
+            "covered": None,
+        }
+    type_error = _formula_type_error(formula, symbol_map)
+    if type_error:
+        return {
+            "query_type": "coverage",
+            "status": "unknown",
+            "witness": None,
+            "explored": 0,
+            "reason": type_error,
+            "query_sha256": _sha256({"query_type": "coverage", "query": query}),
+            "rule_ids": rule_ids,
+            "covered": None,
+        }
 
     literals = _formula_literals(formula)
     choices: list[list[Any]] = []
@@ -526,6 +747,19 @@ def query_conflicts(
         "symbols": symbols,
         "max_assignments": max_assignments,
     }
+    budget_error = _budget_error(max_assignments)
+    if budget_error:
+        return {
+            "query_type": "conflicts",
+            "status": "unknown",
+            "witness": None,
+            "explored": 0,
+            "reason": budget_error,
+            "query_sha256": _sha256({"query_type": "conflicts", "query": query}),
+            "rule_ids": rule_ids,
+            "conflict_count": 0,
+            "witnesses": [],
+        }
     if any(
         not isinstance(rule, Mapping)
         or not isinstance(rule.get("condition"), Mapping)
@@ -657,6 +891,11 @@ def prove_table(
     }
     policy = table.get("hit_policy")
     method = "pairwise_disjointness" if policy == "UNIQUE" else "equal_outputs_on_overlap"
+    budget_error = _budget_error(max_assignments)
+    if budget_error:
+        proof = _proof_base(table, method, query)
+        proof.update({"status": "unknown", "witnesses": [{"reason": budget_error}]})
+        return proof
     if policy == "PRIORITY":
         proof = _proof_base(table, "source_precedence", query)
         proof.update({"status": "refused", "witnesses": [{"reason": "priority order is not represented in LExec IR v1"}]})

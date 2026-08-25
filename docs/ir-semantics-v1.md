@@ -102,13 +102,15 @@ validation.  Unknown at a table boundary is configured as `refuse`.
 
 The provider-free `utils/smt.py` core can prove pairwise disjointness for
 complete finite domains (booleans, enums, and small closed integer intervals)
-and can find counterexamples for overlaps.  It reports `unknown` for open
-strings, unbounded/real intervals, and any search that exceeds its bound;
-`PRIORITY` without an explicit precedence is refused, and `COLLECT` remains
-unknown until a later backend freezes its overlap semantics.  Every proof
-record contains a query hash and witnesses where applicable.  The explicit
-satisfiability, overlap, coverage, conflict, counterexample, and witness
-query contract is documented in
+and can find counterexamples for overlaps.  It never discretizes a continuous
+real interval or ignores open integer endpoints.  It reports `unknown` for
+open strings, real/unbounded intervals, malformed or type-incompatible
+queries, and any invalid resource bound; a search that exceeds a valid bound
+is `timeout`.  `PRIORITY` without an explicit precedence is refused, and
+`COLLECT` remains unknown until a later backend freezes its overlap semantics.
+Every proof record contains a query hash and witnesses where applicable.  The
+explicit satisfiability, overlap, coverage, conflict, counterexample, and
+witness query contract is documented in
 [`docs/smt-query-protocol.md`](smt-query-protocol.md).  A real SMT backend
 may replace this bounded core, but no backend may convert `unknown`, `timeout`,
 or `refused` into a pass.

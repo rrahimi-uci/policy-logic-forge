@@ -47,8 +47,13 @@ valid gap even if the domain also contains unexplored values.
 ## Completeness boundary
 
 The bounded core can exhaust booleans, enums, and small closed integer
-intervals. Strings and open or unbounded numeric intervals are incomplete;
-they may produce a useful satisfying witness, but failure to find one is
-`unknown`. Searches above `max_assignments` are `timeout`. A future native SMT
-backend may replace the enumerator, but it must preserve the result schema and
-must not convert `unknown`, `timeout`, or an IR refusal into a pass.
+intervals. Real intervals are continuous and are never discretized into an
+integer approximation. Strings, open integer intervals, and unbounded numeric
+intervals are incomplete; they may produce a useful satisfying witness, but
+failure to find one is `unknown`. Searches above `max_assignments` are
+`timeout`; a negative, non-integral, or boolean resource bound is malformed and
+returns `unknown`. Malformed declarations, incompatible operand types, and
+out-of-domain enum literals also return `unknown` rather than becoming
+unsatisfiable proofs. A future native SMT backend may replace the enumerator,
+but it must preserve the result schema and must not convert `unknown`,
+`timeout`, or an IR refusal into a pass.

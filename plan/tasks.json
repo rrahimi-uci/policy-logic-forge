@@ -169,7 +169,7 @@
         "tests/test_hit_policy_proofs.py",
         "docs/ir-semantics-v1.md"
       ],
-      "claim_boundary": "A provider-free bounded enumerator and conservative UNIQUE/ANY/PRIORITY/COLLECT proof records are implemented; query/proof hashes bind formulas, rules, symbol declarations, and search bounds. Complete finite-domain UNIQUE checks can be proved; open strings, unbounded/real intervals, COLLECT overlap semantics, missing precedence, timeout, and unknown remain non-passes. This is not a complete SMT backend."
+      "claim_boundary": "A provider-free bounded enumerator and conservative UNIQUE/ANY/PRIORITY/COLLECT proof records are implemented; query/proof hashes bind formulas, rules, symbol declarations, and search bounds. Complete finite-domain UNIQUE checks can be proved; continuous real intervals are never discretized, and open strings, open/unbounded intervals, malformed/type-incompatible queries, invalid resource bounds, COLLECT overlap semantics, missing precedence, timeout, and unknown remain non-passes. This is not a complete SMT backend."
     },
     {
       "id": "BENCH-1",
