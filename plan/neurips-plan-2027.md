@@ -224,9 +224,15 @@ G0 must finish before any corpus-level compiler or instrument claim.
   coverage is not a substitute.
 - `PIPE-4`: audit dependency precision/recall and missing-link categories on a
   frozen sample; do not infer success merely from optimizer input coverage.
-- `IR-2`: run the existing census tool on retained real pipeline output and
-  publish counts for types, operators, scopes, modalities, tables,
-  dependencies, exceptions, missing fields, and unsupported constructs.
+- `IR-2`: run the census tool on retained real pipeline output and publish
+  counts for types, operators, scopes, modalities, tables, dependencies,
+  exceptions, missing fields, and unsupported constructs. A bounded NDA pilot
+  now exists at `docs/theory_coverage.md` and
+  `docs/expressiveness_census.md`, with provenance in
+  `results/aggregates/ir2_nda_pilot/run_manifest.json`; it is explicitly
+  exploratory (two documents, one pre-optimization rules batch) and is not a
+  corpus estimate. The pilot exposed six rules requiring review, including
+  invalid predicate operators, so IR-1 remains blocked from freezing a subset.
 - `IR-1`: freeze semantics after the census, implement schema validation and
   total lowering, and refuse unsupported semantics.
 - `IR-3`: implement the reference solver core plus table hit-policy proof

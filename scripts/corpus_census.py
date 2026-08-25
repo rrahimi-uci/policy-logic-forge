@@ -7,10 +7,9 @@ docs/theory_coverage.md and docs/expressiveness_census.md.
     python3 scripts/corpus_census.py --check-subset boolean,number,enum <graph.json>...
 
 No API key, no network: this is pure aggregation over already-extracted v2
-rule dicts via utils/corpus_census.py. As of this commit no real pipeline
-output is committed to this repo (see README.md "Data and licensing"), so
-running this script against a real graph is the literal next step once one
-exists -- it is not run as part of this commit.
+rule dicts via utils/corpus_census.py. A report may be labeled as a bounded
+pilot with ``--scope-note``; that label is part of the generated artifact and
+prevents a pilot from being mistaken for a corpus estimate.
 """
 from __future__ import annotations
 
@@ -30,11 +29,37 @@ def _markdown_table(rows: list[tuple[str, int]], headers: tuple[str, str]) -> st
     return "\n".join(lines)
 
 
-def _theory_coverage_markdown(report: dict) -> str:
+def _context_lines(run_label: str | None, scope_note: str | None) -> list[str]:
+    lines: list[str] = []
+    if run_label:
+        lines.append(f"- Run: {run_label}")
+    if scope_note:
+        lines.append(f"- Scope: {scope_note}")
+    if lines:
+        lines.append("")
+    return lines
+
+
+def _count_table(rows: dict[str, int], headers: tuple[str, str] = ("category", "rules")) -> str:
+    return _markdown_table(sorted(rows.items()), headers)
+
+
+def _presence_table(presence: dict[str, dict[str, int]]) -> str:
+    lines = ["| field | present | missing |", "| --- | ---: | ---: |"]
+    for field, counts in sorted(presence.items()):
+        lines.append(f"| `{field}` | {counts['present']} | {counts['missing']} |")
+    return "\n".join(lines)
+
+
+def _theory_coverage_markdown(report: dict, run_label: str | None = None, scope_note: str | None = None) -> str:
     lines = [
         "# Corpus feature census (theory coverage)",
         "",
         f"- Total rules: {report['total_rules']}",
+        *_context_lines(run_label, scope_note),
+        "## Rule type census",
+        "",
+        _count_table(report["rule_type_census"]),
         "",
         "## Variable type census (rules using >=1 variable of this type)",
         "",
@@ -48,11 +73,43 @@ def _theory_coverage_markdown(report: dict) -> str:
         "",
         _markdown_table(sorted(report["operator_census"].items()), ("operator", "rules")),
         "",
+        "## Scope, exception, and hit-policy census",
+        "",
+        "### Scope basis",
+        "",
+        _count_table(report["scope_basis_census"]),
+        "",
+        "### Exception basis",
+        "",
+        _count_table(report["exception_basis_census"]),
+        "",
+        "### Recommended hit policy",
+        "",
+        _count_table(report["hit_policy_census"]),
+        "",
+        "## Field presence",
+        "",
+        _presence_table(report["field_presence_census"]),
+        "",
+        "## Dependencies and decision-table projections",
+        "",
+        _count_table(report["dependency_census"]),
+        "",
+        _count_table(report["table_census"]),
+        "",
+        "## Contract and review signals",
+        "",
+        f"- Rules with contract issues: {report['contract_issue_census']['rules_with_contract_issues']}",
+        f"- Rules requiring review: {report['contract_issue_census']['rules_requiring_review']}",
+        f"- Invalid predicate operators: {report['contract_issue_census']['invalid_predicate_operators']}",
+        f"- Invalid predicate value types: {report['contract_issue_census']['invalid_predicate_value_types']}",
+        f"- Invalid outcome value types: {report['contract_issue_census']['invalid_outcome_value_types']}",
+        "",
     ]
-    return "\n".join(lines) + "\n"
+    return "\n".join(lines).rstrip() + "\n"
 
 
-def _expressiveness_markdown(report: dict) -> str:
+def _expressiveness_markdown(report: dict, run_label: str | None = None, scope_note: str | None = None) -> str:
     signal = report["expressiveness_signal"]
     lines = [
         "# Expressiveness census",
@@ -63,13 +120,14 @@ def _expressiveness_markdown(report: dict) -> str:
         "express (proposal §14.6). A lower bound, not a legal classification.",
         "",
         f"- Total rules: {signal['total_rules']}",
+        *_context_lines(run_label, scope_note),
         f"- Rules matching at least one bucket: {signal['rules_matching_any_bucket']} "
         f"({signal['fraction_matching_any_bucket']:.1%})",
         "",
         _markdown_table(sorted(signal["bucket_counts"].items()), ("bucket", "rules")),
         "",
     ]
-    return "\n".join(lines) + "\n"
+    return "\n".join(lines).rstrip() + "\n"
 
 
 def main() -> None:
@@ -78,6 +136,9 @@ def main() -> None:
     parser.add_argument("--check-subset", default=None,
                          help="Comma-separated variable types; report coverage_at_subset against them")
     parser.add_argument("--out-dir", default=str(_ROOT / "docs"), help="Where to write the two report files")
+    parser.add_argument("--run-label", default=None, help="Stable label included in generated report provenance")
+    parser.add_argument("--scope-note", default=None,
+                         help="Explicit scope/boundary note included in generated reports")
     args = parser.parse_args()
 
     rules = []
@@ -91,8 +152,12 @@ def main() -> None:
     report = census_report(rules)
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    (out_dir / "theory_coverage.md").write_text(_theory_coverage_markdown(report), encoding="utf-8")
-    (out_dir / "expressiveness_census.md").write_text(_expressiveness_markdown(report), encoding="utf-8")
+    (out_dir / "theory_coverage.md").write_text(
+        _theory_coverage_markdown(report, args.run_label, args.scope_note), encoding="utf-8"
+    )
+    (out_dir / "expressiveness_census.md").write_text(
+        _expressiveness_markdown(report, args.run_label, args.scope_note), encoding="utf-8"
+    )
     print(f"✓ Wrote {out_dir / 'theory_coverage.md'}", flush=True)
     print(f"✓ Wrote {out_dir / 'expressiveness_census.md'}", flush=True)
 
