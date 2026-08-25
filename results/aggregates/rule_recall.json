@@ -1,0 +1,29 @@
+{
+  "adjudication_method": "fixture_adjudication_for_contract_testing_only",
+  "annotator_count": 2,
+  "claim_boundary": "Synthetic provider-free contract fixture only. It does not estimate semantic recall on the compliance corpus; a real PIPE-2B result requires a licensed stratified sample, two independent human annotators, adjudication, and agreement statistics.",
+  "evidence_status": "fixture_only",
+  "false_positive_rule_keys": [
+    "model-r003"
+  ],
+  "false_positive_rules": 1,
+  "gold_rules": 3,
+  "matched_rules": 2,
+  "missing_rule_keys": [
+    "privacy.other_data_request"
+  ],
+  "missing_rules": 1,
+  "per_source": {
+    "sample_privacy_001": {
+      "gold": 3,
+      "matched": 2,
+      "precision": 0.6666666666666666,
+      "predicted": 3,
+      "recall": 0.6666666666666666
+    }
+  },
+  "precision": 0.6666666666666666,
+  "predicted_rules": 3,
+  "recall": 0.6666666666666666,
+  "status": "fixture_only"
+}
