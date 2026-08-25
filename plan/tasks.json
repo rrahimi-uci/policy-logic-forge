@@ -173,15 +173,19 @@
       "title": "Isolate artifact-free query generation from gold",
       "phase": "G0",
       "track": "B",
-      "status": "planned",
+      "status": "done",
       "effort_pd": 2,
       "depends_on": ["BENCH-1"],
       "acceptance": {
         "commands": [[".venv/bin/python", "-m", "pytest", "tests/test_query_isolation.py", "-q"]],
         "artifacts": ["bench/queries.py", "docs/query_isolation_protocol.md"]
       },
-      "evidence": [],
-      "claim_boundary": "Gold must be absent from the generator mount; working-directory isolation is insufficient."
+      "evidence": [
+        "bench/queries.py",
+        "tests/test_query_isolation.py",
+        "docs/query_isolation_protocol.md"
+      ],
+      "claim_boundary": "The provider-free Python harness stages copied source files and output only, blocks absolute-path file access outside the staging root, and disables network and child processes. A release claim still requires an external container or VM mount/network boundary recorded in the run manifest; this local guard is not a kernel boundary."
     },
     {
       "id": "BENCH-3",

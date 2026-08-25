@@ -15,7 +15,7 @@ authoritative for research definitions, claim boundaries, and stop/go rules.
 prerequisites, an argv-form acceptance command, an artifact target, and a
 claim boundary, and that the graph can be validated and queried locally. It
 does **not** mean that the planned research has already been implemented or
-that a publishable result is guaranteed. At this revision, 13 person-days of
+that a publishable result is guaranteed. At this revision, 20 person-days of
 work are evidenced as complete; the compiler, benchmark, instrument study,
 transfer study, and optional RL work remain future work.
 
@@ -24,7 +24,7 @@ transfer study, and optional RL work remain future work.
 <!-- GENERATED_TASK_SUMMARY_START -->
 | Phase | Tasks | Total pd | Done pd | Status |
 | --- | ---: | ---: | ---: | --- |
-| G0 | 13 | 46 | 17 | done=7, partial=2, planned=4 |
+| G0 | 13 | 46 | 19 | done=8, partial=2, planned=3 |
 | A | 4 | 8 | 1 | done=1, planned=2, conditional=1 |
 | J | 2 | 6 | 0 | planned=2 |
 | G2 | 6 | 30 | 0 | planned=6 |
@@ -35,12 +35,12 @@ transfer study, and optional RL work remain future work.
 
 | Scope | Included pd | Done pd | Remaining pd |
 | --- | ---: | ---: | ---: |
-| `minimum_paper` | 125 | 18 | 107 |
-| `second_domain` | 151 | 18 | 133 |
-| `full_programme` | 171 | 18 | 153 |
-| `minimum_plus_optional_replication` | 129 | 18 | 111 |
+| `minimum_paper` | 125 | 20 | 105 |
+| `second_domain` | 151 | 20 | 131 |
+| `full_programme` | 171 | 20 | 151 |
+| `minimum_plus_optional_replication` | 129 | 20 | 109 |
 
-**Ready now:** `PIPE-2B`, `PIPE-4`, `IR-2`, `BENCH-2`, `A1B`, `A3`.
+**Ready now:** `PIPE-2B`, `PIPE-4`, `IR-2`, `A1B`, `A3`.
 
 Generated from [`plan/tasks.json`](tasks.json) by `scripts/validate_neurips_plan.py`; manual edits to this block fail CI.
 <!-- GENERATED_TASK_SUMMARY_END -->
@@ -245,10 +245,12 @@ G0 must finish before any corpus-level compiler or instrument claim.
   content-free, commit-pinned `bench/splits/dutch_58.json`; it freezes 24
   Outcome and 34 Requirements models without redistributing upstream files.
 - `BENCH-2`: enforce gold isolation at the filesystem/container boundary.
-  Artifact-free query generation receives a mount containing only source
-  inputs and its output directory. Gold DMN, labels, cache, environment
-  secrets, alternate worktrees, and network access are unavailable. A test
-  must demonstrate that attempted gold-path access fails.
+  `bench/queries.py` stages copied source inputs and an output directory,
+  rejects traversal and symlink escapes, scrubs provider credentials, and
+  runs the query program with Python-level file, network, and child-process
+  guards. Adversarial tests demonstrate that a known absolute gold path is
+  denied. This local guard is not a kernel boundary: release jobs must also
+  record a container/VM mount with gold absent and network disabled.
 - `BENCH-3`: retain individual runs and label the estimator used for each
   reported aggregation. This is now implemented by `bench/manifest.py`: every
   expected model/condition/run key must have exactly one retained record,
@@ -429,7 +431,7 @@ grounding or human acceptability.
 The generated status table is the sole source of numeric totals. The scopes
 are cumulative:
 
-- minimum paper: 125 pd total, 13 done, 112 remaining;
+- minimum paper: 125 pd total, 20 done, 105 remaining;
 - minimum plus optional fresh-generation replication: 129 pd;
 - second-domain extension: 151 pd cumulative;
 - full programme including conditional RL: 171 pd cumulative.
@@ -442,7 +444,7 @@ Therefore the calendar cannot be obtained by dividing totals by headcount.
 With one contributor, the minimum scope is not credible by simply serializing
 112 remaining pd into the submission window. The recommended execution is:
 
-- immediately parallelize provider-free G0 work (`IR-2`, `BENCH-2`, `BENCH-3`, pipeline
+- immediately parallelize provider-free G0 work (`IR-2`, `BENCH-3`, pipeline
   audits) with anchor replay/licensing (`A1B`, `A3`);
 - freeze IR semantics only after the census;
 - build reference and SMT backends in parallel after `IR-1`;
@@ -518,16 +520,14 @@ from one domain or fixed benchmark to policy compilation generally.
 
 ## 13. Immediate executable queue
 
-The validator currently identifies six dependency-ready tasks. Recommended
+The validator currently identifies five dependency-ready tasks. Recommended
 order within the two parallel tracks:
 
 1. `IR-2`: run the existing census on retained real output; it determines the
    IR boundary.
-2. `BENCH-2` and `BENCH-3`: build isolation and run-retention contracts on the
-   completed frozen split.
-3. `PIPE-2B` and `PIPE-4`: measure the two unresolved extraction claims.
-4. `A1B`: recover and replay the released aggregation independently of Track B.
-5. `A3`: draft the reuse posture; pause before external communication for owner
+2. `PIPE-2B` and `PIPE-4`: measure the two unresolved extraction claims.
+3. `A1B`: recover and replay the released aggregation independently of Track B.
+4. `A3`: draft the reuse posture; pause before external communication for owner
    approval.
 
 Use `--show TASK` for the exact artifact and command contract. If a task's
