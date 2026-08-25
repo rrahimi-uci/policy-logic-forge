@@ -19,7 +19,11 @@ Before a corpus claim, the frame must contain:
 The evaluator matches semantic keys, not model-generated rule IDs. A match is
 the normalized tuple `(source_id, rule_type, subject, action, object)`. It
 reports matched, missing, and false-positive rules, plus per-source precision
-and recall.
+and recall. It also reports descriptive 95% Wilson intervals for the frozen
+frame and semantic-key agreement between the two annotators. These intervals
+and agreement values are frame diagnostics only; they are not population
+uncertainty or chance-corrected human IAA without the real stratified sampling
+weights, licensed source frame, and approved annotation protocol.
 
 ## Checked-in fixture boundary
 

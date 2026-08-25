@@ -1,5 +1,18 @@
 {
   "adjudication_method": "fixture_adjudication_for_contract_testing_only",
+  "annotator_agreement": {
+    "annotator_count": 2,
+    "annotator_rule_counts": [
+      3,
+      3
+    ],
+    "exact_set_agreement": true,
+    "interpretation": "descriptive semantic-key agreement; chance-corrected IAA remains a real-frame requirement",
+    "intersection": 3,
+    "jaccard": 1.0,
+    "metric": "semantic_key_jaccard",
+    "union": 3
+  },
   "annotator_count": 2,
   "claim_boundary": "Synthetic provider-free contract fixture only. It does not estimate semantic recall on the compliance corpus; a real PIPE-2B result requires a licensed stratified sample, two independent human annotators, adjudication, and agreement statistics.",
   "evidence_status": "fixture_only",
@@ -18,12 +31,48 @@
       "gold": 3,
       "matched": 2,
       "precision": 0.6666666666666666,
+      "precision_uncertainty": {
+        "confidence": 0.95,
+        "interpretation": "descriptive frame-level interval; not a population estimate",
+        "lower": 0.20765960080204765,
+        "method": "wilson_95_binomial",
+        "successes": 2,
+        "trials": 3,
+        "upper": 0.9385080552796037
+      },
       "predicted": 3,
-      "recall": 0.6666666666666666
+      "recall": 0.6666666666666666,
+      "recall_uncertainty": {
+        "confidence": 0.95,
+        "interpretation": "descriptive frame-level interval; not a population estimate",
+        "lower": 0.20765960080204765,
+        "method": "wilson_95_binomial",
+        "successes": 2,
+        "trials": 3,
+        "upper": 0.9385080552796037
+      }
     }
   },
   "precision": 0.6666666666666666,
+  "precision_uncertainty": {
+    "confidence": 0.95,
+    "interpretation": "descriptive frame-level interval; not a population estimate",
+    "lower": 0.20765960080204765,
+    "method": "wilson_95_binomial",
+    "successes": 2,
+    "trials": 3,
+    "upper": 0.9385080552796037
+  },
   "predicted_rules": 3,
   "recall": 0.6666666666666666,
+  "recall_uncertainty": {
+    "confidence": 0.95,
+    "interpretation": "descriptive frame-level interval; not a population estimate",
+    "lower": 0.20765960080204765,
+    "method": "wilson_95_binomial",
+    "successes": 2,
+    "trials": 3,
+    "upper": 0.9385080552796037
+  },
   "status": "fixture_only"
 }
