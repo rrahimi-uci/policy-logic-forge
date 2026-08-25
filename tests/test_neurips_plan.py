@@ -36,11 +36,11 @@ def test_repository_registry_and_embedded_summary_are_valid() -> None:
 def test_generated_summary_has_frozen_scope_totals_and_ready_queue() -> None:
     summary = render_summary(load_registry())
 
-    assert "| `minimum_paper` | 125 | 22 | 103 |" in summary
-    assert "| `second_domain` | 151 | 22 | 129 |" in summary
-    assert "| `full_programme` | 171 | 22 | 149 |" in summary
-    assert "| `minimum_plus_optional_replication` | 129 | 22 | 107 |" in summary
-    assert "`PIPE-2B`, `PIPE-4`, `IR-2`, `A3`" in summary
+    assert "| `minimum_paper` | 125 | 23 | 102 |" in summary
+    assert "| `second_domain` | 151 | 23 | 128 |" in summary
+    assert "| `full_programme` | 171 | 23 | 148 |" in summary
+    assert "| `minimum_plus_optional_replication` | 129 | 23 | 106 |" in summary
+    assert "`PIPE-2B`, `PIPE-4`, `IR-2`" in summary
 
 
 def test_cycle_is_rejected() -> None:

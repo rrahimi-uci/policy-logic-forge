@@ -277,15 +277,15 @@
       "title": "Resolve anchor data reuse posture",
       "phase": "A",
       "track": "A",
-      "status": "planned",
+      "status": "done",
       "effort_pd": 1,
       "depends_on": ["A1A"],
       "acceptance": {
-        "commands": [["test", "-f", "docs/data_licensing.md"]],
+        "commands": [[".venv/bin/python", "-m", "pytest", "tests/test_data_licensing.py", "-q"]],
         "artifacts": ["docs/data_licensing.md"]
       },
-      "evidence": [],
-      "claim_boundary": "Characterization is not resolution; no source-model re-hosting without documented authority."
+      "evidence": ["docs/data_licensing.md", "docs/anchor_release_audit.md", "bench/splits/dutch_58.json", "tests/test_data_licensing.py"],
+      "claim_boundary": "The pinned release's code is identified as CC BY 4.0, while the README's Dutch source-data reuse statement is explicitly only an assumption; therefore the repository records a fail-closed release boundary and does not re-host source, gold, generated, raw, or restricted artifacts. This characterizes posture but is not legal clearance or permission to redistribute."
     },
     {
       "id": "LOWER-1",
