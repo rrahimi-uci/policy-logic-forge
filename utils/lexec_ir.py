@@ -352,6 +352,8 @@ def _lower_rule(rule: Mapping[str, Any], source_sha256: str) -> tuple[dict[str, 
     rule_id = str(rule.get("rule_id") or rule.get("id") or "").strip()
     if not rule_id:
         raise LoweringRefusal("MISSING_RULE_ID", "rule", "Every lowered rule requires rule_id.")
+    if not _all_references(rule):
+        raise LoweringRefusal("MISSING_PROVENANCE", "source_reference", "Every lowered rule requires at least one source reference.")
     if "schema_version" in rule and rule.get("schema_version") != "2.0":
         raise LoweringRefusal("UNSUPPORTED_SOURCE_SCHEMA", "schema_version", "Only v2 source rules can be lowered to LExec IR v1.")
     if rule.get("superseded_by"):

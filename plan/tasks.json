@@ -302,15 +302,25 @@
       "title": "Validate v2-to-IR lowering against an independent oracle",
       "phase": "G2",
       "track": "G2",
-      "status": "planned",
+      "status": "partial",
       "effort_pd": 8,
       "depends_on": ["IR-1"],
       "acceptance": {
-        "commands": [[".venv/bin/python", "-m", "pytest", "tests/test_lowering_oracle.py", "-q"]],
+        "commands": [
+          [".venv/bin/python", "-m", "pytest", "tests/test_lowering_oracle.py", "-q"],
+          [".venv/bin/python", "scripts/lowering_mutation.py", "--check"]
+        ],
         "artifacts": ["tests/fixtures/lowering_oracle/", "results/aggregates/lowering_mutation_score.json"]
       },
-      "evidence": [],
-      "claim_boundary": "Independent denotations and loss accounting; backend agreement alone is insufficient."
+      "evidence": [
+        "utils/lowering_oracle.py",
+        "scripts/lowering_mutation.py",
+        "tests/test_lowering_oracle.py",
+        "tests/fixtures/lowering_oracle/cases.json",
+        "results/aggregates/lowering_mutation_score.json",
+        "docs/lowering_oracle_protocol.md"
+      ],
+      "claim_boundary": "A frozen provider-free fixture contains independent semantic projections and six mutation cases; all five cases pass and all six mutations are killed. This is a fixture-only lowering gate, not a corpus-level accuracy estimate or a substitute for backend equivalence."
     },
     {
       "id": "BE-1",
