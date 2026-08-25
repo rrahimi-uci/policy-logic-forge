@@ -7,8 +7,9 @@ This directory contains the machine-readable contracts behind
   person-day estimates, scope membership, acceptance commands, artifacts, and
   evidence paths.
 - `lexec-ir-v1.schema.json` is the structural contract for the proposed
-  compiler intermediate representation. Its evaluation semantics are a
-  required future artifact of task `IR-1`.
+  compiler intermediate representation. `docs/ir-semantics-v1.md` and
+  `utils/lexec_ir.py` provide the current fail-closed G0 subset; corpus-wide
+  freezing, solver proofs, and backend equivalence remain later gates.
 
 From the repository root:
 
