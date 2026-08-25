@@ -111,7 +111,10 @@
           "docs/theory_coverage.md",
           "docs/expressiveness_census.md",
           "results/aggregates/ir2_nda_pilot/run_manifest.json",
-          "results/aggregates/ir2_full_smallest_privacy/run_manifest.json"
+          "results/aggregates/ir2_full_smallest_privacy/run_manifest.json",
+          "results/aggregates/ir2_agent_naming_smallest/theory_coverage.md",
+          "results/aggregates/ir2_agent_naming_smallest/expressiveness_census.md",
+          "results/aggregates/ir2_agent_naming_smallest/run_manifest.json"
         ]
       },
       "evidence": [
@@ -121,9 +124,12 @@
         "docs/theory_coverage.md",
         "docs/expressiveness_census.md",
         "results/aggregates/ir2_nda_pilot/run_manifest.json",
-        "results/aggregates/ir2_full_smallest_privacy/run_manifest.json"
+        "results/aggregates/ir2_full_smallest_privacy/run_manifest.json",
+        "results/aggregates/ir2_agent_naming_smallest/theory_coverage.md",
+        "results/aggregates/ir2_agent_naming_smallest/expressiveness_census.md",
+        "results/aggregates/ir2_agent_naming_smallest/run_manifest.json"
       ],
-      "claim_boundary": "Bounded local NDA and privacy-policy pilots are retained and explicitly labeled exploratory. They are not a full-corpus estimate; the NDA pilot found contract issues (including invalid predicate operators), the privacy pilot found a 75% boolean/number/enum subset coverage with one string refusal, and neither authorizes freezing the IR subset."
+      "claim_boundary": "Bounded local NDA and privacy-policy pilots are retained and explicitly labeled exploratory. The current-agent-naming smallest privacy run also covers 3/4 rules under boolean/number/enum and explicitly refuses one string rule. These runs are not a full-corpus estimate; the NDA pilot found contract issues (including invalid predicate operators), and none authorizes freezing the IR subset."
     },
     {
       "id": "IR-1",
