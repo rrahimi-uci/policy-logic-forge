@@ -327,15 +327,20 @@
       "title": "Implement bounded reference evaluator",
       "phase": "G2",
       "track": "G2",
-      "status": "planned",
+      "status": "partial",
       "effort_pd": 6,
       "depends_on": ["IR-1"],
       "acceptance": {
         "commands": [[".venv/bin/python", "-m", "pytest", "tests/test_feel.py", "tests/test_feel_properties.py", "-q"]],
         "artifacts": ["utils/feel.py"]
       },
-      "evidence": [],
-      "claim_boundary": "Reference evaluator for the declared IR subset, not source correctness."
+      "evidence": [
+        "utils/feel.py",
+        "tests/test_feel.py",
+        "tests/test_feel_properties.py",
+        "docs/feel-reference-evaluator.md"
+      ],
+      "claim_boundary": "A provider-free reference evaluator for Kleene formulas, exceptions, assignments, UNIQUE/ANY dispatch, and fail-closed proof gating is implemented. COLLECT, priority, contextual scope metadata, and unproved/unknown tables remain non-executable; this is reference IR semantics, not source correctness or a complete FEEL engine."
     },
     {
       "id": "BE-2",
