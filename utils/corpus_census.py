@@ -134,6 +134,30 @@ def _variable_types_in_rule(rule: Mapping[str, Any]) -> set[str]:
     }
 
 
+def _theories_required_for_coverage(rule: Mapping[str, Any]) -> set[str]:
+    """Return every declared theory, retaining malformed declarations.
+
+    Unknown or malformed variable types must become explicit refusals in a
+    candidate subset check.  Silently dropping them would make an unsupported
+    rule appear covered.
+    """
+
+    variables = rule.get("variables")
+    if variables is None or variables == []:
+        return set()
+    if not isinstance(variables, list):
+        return {"<malformed_variables>"}
+    required: set[str] = set()
+    for variable in variables:
+        if not isinstance(variable, Mapping):
+            required.add("<malformed_variable>")
+            continue
+        raw_type = variable.get("type")
+        type_name = str(raw_type).strip() if raw_type is not None else ""
+        required.add(type_name or "<missing_variable_type>")
+    return required
+
+
 def variable_type_census(rules: Iterable[Mapping[str, Any]]) -> dict[str, int]:
     """Count rules declaring at least one variable of each v2 type.
 
@@ -281,7 +305,22 @@ def contract_issue_census(rules: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
     invalid_predicate_operators = 0
     invalid_predicate_value_types = 0
     invalid_outcome_value_types = 0
+    invalid_variable_types = 0
+    malformed_variable_entries = 0
+    invalid_variable_type_values: Counter[str] = Counter()
     for rule in rules:
+        variables = rule.get("variables") or []
+        if not isinstance(variables, list):
+            malformed_variable_entries += 1
+        else:
+            for variable in variables:
+                if not isinstance(variable, Mapping):
+                    malformed_variable_entries += 1
+                    continue
+                if variable.get("type") not in VARIABLE_TYPES:
+                    invalid_variable_types += 1
+                    value = str(variable.get("type") or "<missing>")
+                    invalid_variable_type_values[value] += 1
         for predicate in rule.get("condition_predicates") or []:
             if isinstance(predicate, Mapping):
                 if predicate.get("operator") not in OPERATORS:
@@ -307,20 +346,25 @@ def contract_issue_census(rules: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
         "invalid_predicate_operators": invalid_predicate_operators,
         "invalid_predicate_value_types": invalid_predicate_value_types,
         "invalid_outcome_value_types": invalid_outcome_value_types,
+        "invalid_variable_types": invalid_variable_types,
+        "invalid_variable_type_values": dict(sorted(invalid_variable_type_values.items())),
+        "malformed_variable_entries": malformed_variable_entries,
         "issue_codes": dict(sorted(issue_codes.items())),
         "issue_severities": dict(sorted(issue_severities.items())),
     }
 
 
 def theories_required_by(rule: Mapping[str, Any]) -> set[str]:
-    """The set of v2 variable types this single rule needs supported.
+    """The theories this rule needs, retaining malformed declarations.
 
     Used by `coverage_at_subset` to answer "if the compiler supports only
     subset S, how many rules lower without a refusal?" -- the question
     proposal §9.4 shows the whole primary endpoint depends on getting right
-    *before* the subset is frozen, not after.
+    *before* the subset is frozen, not after. Unknown types and malformed
+    variable entries are returned as explicit markers so they cannot be
+    mistaken for covered rules.
     """
-    return _variable_types_in_rule(rule)
+    return _theories_required_for_coverage(rule)
 
 
 def coverage_at_subset(rules: Iterable[Mapping[str, Any]], supported_theories: Iterable[str]) -> dict[str, Any]:
@@ -332,7 +376,7 @@ def coverage_at_subset(rules: Iterable[Mapping[str, Any]], supported_theories: I
     the 58 anchor models" was the plan's acceptance criterion for the Dutch
     corpus; this function is the general form of that check for any corpus.
     """
-    supported = set(supported_theories)
+    supported = set(supported_theories) & VARIABLE_TYPES
     rules = list(rules)
     total = len(rules)
     refused: list[dict[str, Any]] = []

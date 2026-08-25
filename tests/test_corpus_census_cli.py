@@ -64,6 +64,9 @@ def test_cli_writes_reports_and_content_addressed_manifest(tmp_path):
     assert manifest["schema_version"] == "ir2-census-run/1.0"
     assert manifest["task_id"] == "IR-2"
     assert manifest["status"] == "exploratory"
+    assert isinstance(manifest["repository"]["commit"], str)
+    assert len(manifest["repository"]["commit"]) == 40
+    assert isinstance(manifest["repository"]["dirty"], bool)
     assert manifest["census"]["rule_count"] == 1
     assert manifest["subset"]["covered_rules"] == 1
     source = manifest["inputs"]["graphs"][0]
