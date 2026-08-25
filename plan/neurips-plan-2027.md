@@ -27,7 +27,7 @@ transfer study, and optional RL work remain future work.
 | G0 | 13 | 46 | 19 | done=8, partial=5 |
 | A | 4 | 8 | 4 | done=3, conditional=1 |
 | J | 2 | 6 | 0 | planned=2 |
-| G2 | 6 | 30 | 0 | partial=3, planned=3 |
+| G2 | 6 | 30 | 0 | partial=4, planned=2 |
 | G3 | 5 | 24 | 0 | planned=5 |
 | G4 | 3 | 26 | 0 | planned=3 |
 | G5 | 4 | 20 | 0 | conditional=4 |
@@ -332,17 +332,20 @@ Tasks:
   cases.
 - `BE-1`: implement a bounded, simple reference evaluator.
 - `BE-2`: emit DMN 1.3 and validate schema, hit policy, and behavior.
-- `BE-3`: implement complete SMT encoding plus satisfiability, overlap,
-  coverage, conflict, counterexample, and witness queries.
+- `BE-3`: implement the bounded SMT-shaped query core for satisfiability,
+  overlap, coverage, conflict, counterexample, and witness queries; a native
+  complete SMT backend remains a separately gated follow-up.
 - `BE-4`: cross-check selected artifacts in a pinned independent DMN engine.
 - `P3P`: preserve a restricted P3-prime comparator without allowing its
   narrower language to define the main IR.
 
 G2 succeeds only if the lowering oracle passes its frozen cases, all supported
-IR programs agree across the reference and SMT backends, DMN-compatible cases
-also agree with both DMN engines, and every unsupported case is an explicit
-refusal. Agreement among backends derived from the same faulty lowering is not
-evidence of lowering correctness.
+bounded IR programs agree across the reference and query backends, DMN-compatible
+cases also agree with both DMN engines, and every unsupported case is an
+explicit refusal. A native complete SMT comparison is conditional on its
+solver dependency being installed and its cross-check job running. Agreement
+among backends derived from the same faulty lowering is not evidence of
+lowering correctness.
 
 ---
 
@@ -461,7 +464,9 @@ With one contributor, the minimum scope is not credible by simply serializing
 - immediately parallelize provider-free G0 work (`IR-2`, `BENCH-3`, pipeline
   audits) with the remaining extraction audits;
 - freeze IR semantics only after the census;
-- build reference and SMT backends in parallel after `IR-1`;
+- build the reference evaluator and bounded SMT-shaped query core in parallel
+  after `IR-1`; add a native SMT backend only with an explicit solver
+  dependency and cross-check protocol;
 - freeze statistics before instrument outcomes are inspected;
 - begin `PAPER-1` artifact plumbing early, while scientific conclusions remain
   gated on `INST-1`.
