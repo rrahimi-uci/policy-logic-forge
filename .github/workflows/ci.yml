@@ -27,5 +27,7 @@ jobs:
           pip install -r requirements-dev.txt
       - name: Validate NeurIPS execution plan
         run: python scripts/validate_neurips_plan.py --check
+      - name: Validate pipeline configuration
+        run: python scripts/validate_config.py
       - name: Run tests
         run: python -m pytest

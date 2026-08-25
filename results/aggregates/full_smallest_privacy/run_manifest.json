@@ -1,0 +1,73 @@
+{
+  "run_id": "full-smallest-privacy-20260825",
+  "status": "requires_review",
+  "scope_note": "One smallest privacy-policy source file; all agents were exercised, but grounding certification correctly refused four unsupported claims/relationships. This is a debugging run, not a corpus estimate or research result.",
+  "domain": "privacy_policy",
+  "source": {
+    "file_count": 1,
+    "bytes": 532,
+    "word_count_after_organization": 67,
+    "files": [
+      {
+        "name": "701_tangeroutlet.com.txt",
+        "sha256": "b18c3117f69fb1a43531f550ad3c4883f252761924ba9e588b6f127bb5b6bf47"
+      }
+    ]
+  },
+  "configuration": {
+    "reasoning_model": "gpt-5.6-luna",
+    "reasoning_effort": "high",
+    "reasoning_max_completion_tokens": 32768,
+    "workers": 1,
+    "target_rules": 1,
+    "pilot_batch_limit": null,
+    "optimizer_skipped": false
+  },
+  "stages": {
+    "document_organizer": {"status": "pass", "chunks": 1},
+    "entity_extractor": {"status": "pass", "entity_types": 14, "relationships": 22},
+    "rules_extractor": {"status": "pass", "rules": 4, "source_verified": "4/4"},
+    "rule_validator": {"status": "pass", "checks": 5, "failures": 0, "warnings": 12},
+    "rules_entities_merger": {"status": "pass", "rules": 4},
+    "kg_optimizer": {"status": "pass", "rules": 4, "dependencies": 4, "cycles": 0},
+    "executable_readiness_initial": {"status": "requires_remediation", "ready": 0, "review": 4},
+    "readiness_remediator": {"status": "pass", "ready": 4, "review": 0},
+    "executable_readiness_verification": {"status": "pass", "ready": 4, "review": 0, "conflicts_reused": 7},
+    "grounding_verifier": {
+      "status": "requires_review",
+      "rules_certified": "0/4",
+      "claims_supported": "78/88",
+      "claims_insufficient": 10,
+      "relationship_failures": 4,
+      "contradicted_claims": 0
+    },
+    "dependency_dag": {"status": "pass", "dags": 1, "coverage": "4/4", "cycles": 0, "run_after_grounding_refusal": true}
+  },
+  "interpretation": {
+    "pipeline_result": "grounding_certification_blocked",
+    "blocking_evidence": [
+      "Four optimizer-generated dependency edges were not source-supported.",
+      "One extracted outcome asserted removal completion where the source only states a removal request/mechanism."
+    ],
+    "not_a_bug": "The grounding refusal is fail-closed behavior; failures remain visible and are not converted into a certification.",
+    "code_fixes_exercised": [
+      "Normalize model-emitted free_text outcome types to canonical string.",
+      "Reuse remediated conflict analyses during the post-remediation readiness verification."
+    ]
+  },
+  "retained_artifacts": {
+    "metadata_only": true,
+    "source_and_pipeline_output": "local-only and not redistributed",
+    "output_hashes": {
+      "agent_1_processing": "441cb51c0a9d5017a1ed1ec2d1051dbf0b3cc9e077ad5300eeb30fc6804c5ea6",
+      "agent_2_entities": "a51a2cb21d20d596dcf925f8142d481894fb896a380251193c79943afe8b8963",
+      "agent_3_rules": "2a7e5cb81658ae660b84af99928d3bb4d4f1647c08a044db46b424982e21a5b6",
+      "agent_3_5_validation": "980c7f5c9e0e6adaad59a1af9e873f67cdcebbf121145dc3b7148d76479116d7",
+      "agent_4_graph": "d0003fab188419560418770f884068a0d4f60cacb8ff59ff74e2361d9b4352ef",
+      "agent_5_optimized_graph": "bbfb2c493780dab778f12f37eac40ce6d8f0e2799045571dfb9bd6357339cfb7",
+      "agent_5_5_readiness": "8d6bc4c6db4aaea02c44d12dd988e64a7372bdcfe0adb16e688db915e4ac6da8",
+      "agent_5_7_grounding": "92c03deafb3aa43fa0a6ae9e50fa95acc33ab44aaf1d42ae5ccae1be0b6854a5",
+      "agent_6_dags": "f366ade16c9f78551bae4fae98cb91def141f895fb85eeb10231a073b2170d4c"
+    }
+  }
+}

@@ -47,27 +47,36 @@ class TestConfigFallback:
         cfg = Config()
         assert cfg.get("llm.default_model") == "envmodel"
 
-    def test_gpt56_luna_xhigh_is_the_committed_default(self, monkeypatch):
+    def test_gpt56_luna_high_is_the_committed_default(self, monkeypatch):
         monkeypatch.setenv("C2C_CONFIG_PATH", str(PROJECT_ROOT / "config.example.json"))
         cfg = self._fresh(PROJECT_ROOT / "config.example.json")
 
         assert cfg.get_reasoning_model() == "gpt-5.6-luna"
-        assert cfg.get_reasoning_effort() == "xhigh"
+        assert cfg.get_reasoning_effort() == "high"
         assert cfg.get_optimizer_model() == "gpt-5.6-luna"
         assert cfg.get_default_model() == "gpt-5.6-luna"
         assert cfg.get_optimizer_model_name() == "gpt-5.6-luna"
 
-    def test_gpt56_luna_xhigh_are_safe_code_fallbacks(self, tmp_path, monkeypatch):
+    def test_gpt56_luna_high_are_safe_code_fallbacks(self, tmp_path, monkeypatch):
         monkeypatch.delenv("KG_REASONING_EFFORT", raising=False)
         config_path = tmp_path / "config.json"
         config_path.write_text("{}")
         cfg = self._fresh(config_path)
 
         assert cfg.get_reasoning_model() == "gpt-5.6-luna"
-        assert cfg.get_reasoning_effort() == "xhigh"
+        assert cfg.get_reasoning_effort() == "high"
         assert cfg.get_optimizer_model() == "gpt-5.6-luna"
         assert cfg.get_default_model() == "gpt-5.6-luna"
         assert cfg.get_optimizer_model_name() == "gpt-5.6-luna"
+
+    def test_invalid_reasoning_effort_is_rejected(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("KG_REASONING_EFFORT", "turbo")
+        config_path = tmp_path / "config.json"
+        config_path.write_text(json.dumps({}))
+        cfg = self._fresh(config_path)
+
+        with pytest.raises(ValueError, match="Unsupported reasoning effort"):
+            cfg.get_reasoning_effort()
 
 
 # ── config: OpenAI-only provider ──

@@ -25,6 +25,8 @@ _root_env_path = _repo_root / '.env'
 if _root_env_path.exists():
     load_dotenv(dotenv_path=_root_env_path)
 
+REASONING_EFFORTS = frozenset({"none", "low", "medium", "high", "xhigh", "max"})
+
 
 class Config:
     """Configuration manager that loads settings from config.json and environment variables."""
@@ -171,10 +173,14 @@ class Config:
         ``KG_REASONING_EFFORT`` permits a one-off run to override without
         editing a local ``config.json``.
         """
-        return os.getenv(
+        effort = os.getenv(
             'KG_REASONING_EFFORT',
-            self.get('openai.models.reasoning_effort', 'xhigh'),
+            self.get('openai.models.reasoning_effort', 'high'),
         )
+        if effort not in REASONING_EFFORTS:
+            allowed = ", ".join(sorted(REASONING_EFFORTS))
+            raise ValueError(f"Unsupported reasoning effort {effort!r}; expected one of: {allowed}")
+        return effort
 
     def get_model_provider(self) -> str:
         """Return the model provider. This build is OpenAI-only."""

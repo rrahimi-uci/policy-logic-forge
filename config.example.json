@@ -3,7 +3,7 @@
     "api_key": "${OPENAI_API_KEY}",
     "models": {
       "reasoning": "gpt-5.6-luna",
-      "reasoning_effort": "xhigh",
+      "reasoning_effort": "high",
       "optimizer": "gpt-5.6-luna"
     },
     "rate_limiting": {

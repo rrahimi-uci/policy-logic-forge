@@ -173,6 +173,9 @@ LEGACY_VALUE_TYPES = {
     "number_list": "list",
     "string_array": "list",
     "string_list": "list",
+    # Models occasionally use the prompt's descriptive ``free_text`` label
+    # where the v2 contract requires the canonical ``string`` value_type.
+    "free_text": "string",
 }
 
 LEGACY_OPERATORS = {
