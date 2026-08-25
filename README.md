@@ -75,7 +75,7 @@ pip install -r requirements-dev.txt
 cp config.example.json config.json
 cp .env.example .env   # add your OPENAI_API_KEY
 
-# The committed template defaults to gpt-5.6-luna with xhigh reasoning.
+# The committed template defaults to gpt-5.6-luna with high reasoning.
 # If config.json already exists, update its model/effort fields or recreate it
 # from config.example.json; config.json is intentionally ignored.
 
@@ -152,9 +152,15 @@ tests/                      pytest suite
 ## Testing
 
 ```bash
+.venv/bin/python scripts/validate_config.py
+.venv/bin/python scripts/validate_neurips_plan.py --check
 pytest
 ```
 
 No API key needed — the suite tests contract validation, readiness/grounding
 logic, dependency-DAG partitioning, and prompt-pack consistency against fixed
 graphs and prompt files, not live extraction runs.
+
+For a provider-backed one-document configuration smoke run, follow
+[`docs/pipeline_smoke.md`](docs/pipeline_smoke.md). It is explicitly a pilot,
+not corpus coverage or a benchmark result.
