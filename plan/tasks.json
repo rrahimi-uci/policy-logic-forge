@@ -380,18 +380,18 @@
     },
     {
       "id": "BE-4",
-      "title": "Cross-check a pinned third-party DMN engine",
+      "title": "Cross-check through a pinned third-party DMN engine",
       "phase": "G2",
       "track": "G2",
-      "status": "planned",
+      "status": "partial",
       "effort_pd": 3,
       "depends_on": ["BE-1", "BE-2", "BE-3"],
       "acceptance": {
         "commands": [[".venv/bin/python", "-m", "pytest", "tests/test_dmn_engine_crosscheck.py", "-q"]],
         "artifacts": ["bench/dmn_engine_harness.py", "docs/backend_disagreements.md"]
       },
-      "evidence": [],
-      "claim_boundary": "Four-way agreement may be claimed only when the required engine job ran."
+      "evidence": ["bench/dmn_engine_harness.py", "tests/test_dmn_engine_crosscheck.py", "docs/backend_disagreements.md"],
+      "claim_boundary": "A deterministic JSONL adapter protocol, provenance requirements, and fail-closed comparison harness are implemented. Missing engines, protocol failures, timeouts, and disagreements remain explicit non-claims; no third-party engine agreement is reported until an approved pinned engine job supplies its metadata and output."
     },
     {
       "id": "P3P",
