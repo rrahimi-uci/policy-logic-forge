@@ -19,12 +19,12 @@ that a publishable result is guaranteed. At this revision, 23 person-days of
 work are evidenced as complete; the compiler, benchmark, instrument study,
 transfer study, and optional RL work remain future work.
 
-## Status — 2026-08-24
+## Status — 2026-08-25
 
 <!-- GENERATED_TASK_SUMMARY_START -->
 | Phase | Tasks | Total pd | Done pd | Status |
 | --- | ---: | ---: | ---: | --- |
-| G0 | 13 | 46 | 19 | done=8, partial=4, planned=1 |
+| G0 | 13 | 46 | 19 | done=8, partial=5 |
 | A | 4 | 8 | 4 | done=3, conditional=1 |
 | J | 2 | 6 | 0 | planned=2 |
 | G2 | 6 | 30 | 0 | planned=6 |
