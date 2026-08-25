@@ -24,7 +24,7 @@ transfer study, and optional RL work remain future work.
 <!-- GENERATED_TASK_SUMMARY_START -->
 | Phase | Tasks | Total pd | Done pd | Status |
 | --- | ---: | ---: | ---: | --- |
-| G0 | 13 | 46 | 19 | done=8, partial=2, planned=3 |
+| G0 | 13 | 46 | 19 | done=8, partial=3, planned=2 |
 | A | 4 | 8 | 4 | done=3, conditional=1 |
 | J | 2 | 6 | 0 | planned=2 |
 | G2 | 6 | 30 | 0 | planned=6 |
