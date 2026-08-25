@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
 import subprocess
 from typing import Any, Mapping, Sequence
@@ -25,6 +26,7 @@ REFERENCE_STATUSES = {"matched", "no_match", "unknown", "refused"}
 REPORT_STATUSES = {"completed", "disagreement", "invalid", "timeout", "unrun"}
 REQUIRED_ENGINE_METADATA = ("engine_id", "engine_version", "source", "revision", "license")
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
+_CONTAINER_DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
 _COMPARE_FIELDS = ("status", "outputs", "matched_rule_ids", "unknown_rule_ids")
 
 
@@ -96,7 +98,7 @@ def _validate_engine_metadata(metadata: Mapping[str, Any] | None) -> dict[str, A
     if missing:
         raise CrosscheckProtocolError(f"engine_metadata missing non-empty fields: {missing}")
     has_artifact_hash = isinstance(metadata.get("artifact_sha256"), str) and bool(_SHA256.fullmatch(metadata["artifact_sha256"]))
-    has_container_digest = isinstance(metadata.get("container_digest"), str) and bool(metadata["container_digest"].strip())
+    has_container_digest = isinstance(metadata.get("container_digest"), str) and bool(_CONTAINER_DIGEST.fullmatch(metadata["container_digest"]))
     if not (has_artifact_hash or has_container_digest):
         raise CrosscheckProtocolError("engine_metadata requires artifact_sha256 or container_digest")
     return dict(metadata)
@@ -111,6 +113,10 @@ def _project_result(result: Mapping[str, Any]) -> dict[str, Any]:
     unknown = result.get("unknown_rule_ids", [])
     if not isinstance(outputs, Mapping) or not isinstance(matched, list) or not isinstance(unknown, list):
         raise CrosscheckProtocolError("result outputs and rule-id fields have invalid types")
+    if any(not isinstance(rule_id, str) or not rule_id.strip() for rule_id in [*matched, *unknown]):
+        raise CrosscheckProtocolError("result rule-id fields must contain non-empty strings")
+    if set(matched) & set(unknown):
+        raise CrosscheckProtocolError("result cannot mark a rule both matched and unknown")
     return {
         "status": status,
         "outputs": dict(outputs),
@@ -149,11 +155,16 @@ def _request(case: Mapping[str, Any], dmn_xml: str, dmn_sha256: str) -> dict[str
     }
 
 
-def _parse_engine_output(stdout: str, cases: Sequence[Mapping[str, Any]]) -> dict[str, Mapping[str, Any]]:
+def _parse_engine_output(
+    stdout: str,
+    cases: Sequence[Mapping[str, Any]],
+    dmn_sha256: str | None = None,
+) -> dict[str, Mapping[str, Any]]:
     lines = [line for line in stdout.splitlines() if line.strip()]
     if len(lines) != len(cases):
         raise CrosscheckProtocolError(f"engine returned {len(lines)} results for {len(cases)} cases")
     expected_ids = {str(case["case_id"]) for case in cases}
+    expected_cases = {str(case["case_id"]): case for case in cases}
     results: dict[str, Mapping[str, Any]] = {}
     for index, line in enumerate(lines):
         try:
@@ -165,10 +176,29 @@ def _parse_engine_output(stdout: str, cases: Sequence[Mapping[str, Any]]) -> dic
         if result.get("protocol") != PROTOCOL_VERSION:
             raise CrosscheckProtocolError(f"engine output line {index + 1} has an incompatible protocol")
         case_id = result.get("case_id")
+        if not isinstance(case_id, str) or not case_id.strip():
+            raise CrosscheckProtocolError(f"engine output line {index + 1} has an invalid case_id")
         if case_id not in expected_ids or case_id in results:
             raise CrosscheckProtocolError(f"engine returned unexpected or duplicate case_id: {case_id!r}")
+        expected_table_id = expected_cases[case_id].get("table_id")
+        if result.get("table_id") != expected_table_id:
+            raise CrosscheckProtocolError(f"engine output line {index + 1} has an unexpected table_id")
+        if dmn_sha256 is not None and result.get("dmn_sha256") != dmn_sha256:
+            raise CrosscheckProtocolError(f"engine output line {index + 1} has an unexpected dmn_sha256")
         results[str(case_id)] = result
     return results
+
+
+def _validate_timeout(timeout_seconds: Any) -> float:
+    if isinstance(timeout_seconds, bool) or not isinstance(timeout_seconds, (int, float)):
+        raise CrosscheckProtocolError("timeout_seconds must be a positive finite number")
+    try:
+        timeout = float(timeout_seconds)
+    except (OverflowError, ValueError):
+        raise CrosscheckProtocolError("timeout_seconds must be a positive finite number") from None
+    if timeout <= 0 or not math.isfinite(timeout):
+        raise CrosscheckProtocolError("timeout_seconds must be a positive finite number")
+    return timeout
 
 
 def run_crosscheck(
@@ -190,6 +220,7 @@ def run_crosscheck(
     try:
         normalized_cases = _validate_cases(cases)
         command = _validate_engine_command(engine_command)
+        timeout = _validate_timeout(timeout_seconds)
     except CrosscheckProtocolError as exc:
         return _invalid_report(str(exc))
     engine: dict[str, Any] = {"command": command or []}
@@ -210,7 +241,8 @@ def run_crosscheck(
         engine["metadata"] = metadata
         dmn_bytes = emit_dmn(ir)
         dmn_xml = dmn_bytes.decode("utf-8")
-        requests = [_request(case, dmn_xml, _sha256(dmn_bytes)) for case in normalized_cases]
+        dmn_sha256 = _sha256(dmn_bytes)
+        requests = [_request(case, dmn_xml, dmn_sha256) for case in normalized_cases]
         reference = {
             case["case_id"]: evaluate_ir(ir, case["inputs"], table_id=case.get("table_id"))
             for case in normalized_cases
@@ -220,7 +252,7 @@ def run_crosscheck(
             input="".join(_canonical(request) + "\n" for request in requests),
             text=True,
             capture_output=True,
-            timeout=timeout_seconds,
+            timeout=timeout,
             check=False,
         )
     except CrosscheckProtocolError as exc:
@@ -255,7 +287,7 @@ def run_crosscheck(
             engine=engine,
         )
     try:
-        engine_results = _parse_engine_output(completed.stdout, normalized_cases)
+        engine_results = _parse_engine_output(completed.stdout, normalized_cases, dmn_sha256)
         comparisons: list[dict[str, Any]] = []
         for case in normalized_cases:
             case_id = case["case_id"]
