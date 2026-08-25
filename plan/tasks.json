@@ -188,15 +188,15 @@
       "title": "Retain runs and label estimators",
       "phase": "G0",
       "track": "B",
-      "status": "planned",
+      "status": "done",
       "effort_pd": 2,
       "depends_on": ["BENCH-1"],
       "acceptance": {
         "commands": [[".venv/bin/python", "-m", "pytest", "tests/test_manifest.py", "-q"]],
         "artifacts": ["bench/manifest.py"]
       },
-      "evidence": [],
-      "claim_boundary": "All stochastic runs retained; best-of-k is never compared with a mean."
+      "evidence": ["bench/manifest.py", "tests/test_manifest.py"],
+      "claim_boundary": "The retention contract requires one record for every expected model/condition/run key, preserves failed/refused observations with reasons, content-addresses completed artifacts, and rejects comparisons that mix best-of-k with mean estimators. It does not claim that any benchmark runs have yet been executed."
     },
     {
       "id": "BENCH-4",
