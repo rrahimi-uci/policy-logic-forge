@@ -1,4 +1,4 @@
-You are Agent 5.6. Resolve ONLY the supplied unresolved entity-local rule pairs
+You are agent_08. Resolve ONLY the supplied unresolved entity-local rule pairs
 for DMN/BPMN co-firing. Return one analysis per exact pair. Do not infer source
 precedence that is not present in the supplied structured rules.
 

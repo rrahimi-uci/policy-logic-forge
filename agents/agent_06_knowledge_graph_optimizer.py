@@ -63,7 +63,7 @@ def dependency_has_structural_support(source_rule: Any, target_rule: Any) -> boo
     before pricing") without a shared variable, and this check exists only to
     flag the clearest false positives — dependencies between rules whose
     condition/outcome vocabularies are completely disjoint — not to replace
-    Agent 5.7's independent, far stricter re-verification downstream.
+    agent_09's independent, far stricter re-verification downstream.
 
     Returns False (no support) whenever either side isn't a real rule dict,
     so a bad or missing rule_id degrades to "unsupported" rather than raising.
@@ -141,7 +141,7 @@ class KnowledgeGraphOptimizer:
         """Summarize a rule for the dedup/dependency LLM prompts, preferring
         the v2 structured contract over the legacy v1 prose fields.
 
-        Agent 3's compact prompts explicitly forbid the legacy `conditions`/
+        agent_03's compact prompts explicitly forbid the legacy `conditions`/
         `consequences` string fields for every domain this repo carries (see
         domain-prompts/*/business_rules_extraction_compact.txt), so a v2-only
         rule simply has neither field. All four summary sites in this class
@@ -284,7 +284,7 @@ class KnowledgeGraphOptimizer:
         with open(input_file, 'r', encoding='utf-8') as f:
             data = json.load(f)
         
-        # Use top-level business_rules array (Agent 4 output format)
+        # Use top-level business_rules array (agent_05 output format)
         # entity_types.business_rules contains rule IDs, not full rule objects
         rules = data.get('business_rules', [])
         
@@ -1140,7 +1140,7 @@ class KnowledgeGraphOptimizer:
             Summary statistics
         """
         print("\n" + "=" * 80, flush=True)
-        print("🧠 AGENT 5: COMPLIANCE KNOWLEDGE GRAPH OPTIMIZER", flush=True)
+        print("🧠 agent_06: COMPLIANCE KNOWLEDGE GRAPH OPTIMIZER", flush=True)
         print("=" * 80, flush=True)
         print(f"\n📋 Purpose: Optimize the knowledge graph for quality and usability", flush=True)
         print(f"\n   This agent performs two key optimizations:", flush=True)
@@ -1229,12 +1229,12 @@ def main():
     REASONING_EFFORT = config.get_reasoning_effort()
     OUTPUT_DIR = config.get_optimized_dir()
     
-    # Input file from Agent 4 output
+    # Input file from agent_05 output
     input_file = config.get_rules_with_entities_dir() / "compliance_knowledge_graph.json"
     
     if not input_file.exists():
         print(f"❌ Error: Input file not found: {input_file}", flush=True)
-        print(f"   Please run the pipeline up to step 4 (consolidation) first.", flush=True)
+        print(f"   Please run the pipeline through agent_05 (consolidation) first.", flush=True)
         sys.exit(1)
     
     # Initialize optimizer

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Agent 4: Business Rules with Entities Merger
+agent_05: Business Rules with Entities Merger
 
-Merges the outputs from Agent 2 (entity definitions) and Agent 3 (business rules)
+Merges the outputs from agent_02 (entity definitions) and agent_03 (business rules)
 to create a complete knowledge graph with rules enriched with entity information.
 
 Author: Reza Rahimi
@@ -33,8 +33,8 @@ class KnowledgeEnricher:
         Initialize the Knowledge Enricher.
         
         Args:
-            entity_file: Path to entity_types_and_relationships.json (Agent 2 output)
-            rules_file: Path to compliance_rules_with_entities.json (Agent 3 output)
+            entity_file: Path to entity_types_and_relationships.json (agent_02 output)
+            rules_file: Path to compliance_rules_with_entities.json (agent_03 output)
             output_dir: Directory to save merged output
         """
         self.entity_file = entity_file
@@ -49,14 +49,14 @@ class KnowledgeEnricher:
     def load_data(self):
         """Load entity definitions and business rules."""
         print("\n" + "=" * 80, flush=True)
-        print("🔗 AGENT 4: BUSINESS RULES WITH ENTITIES MERGER", flush=True)
+        print("🔗 agent_05: BUSINESS RULES WITH ENTITIES MERGER", flush=True)
         print("=" * 80, flush=True)
         print(f"\n📋 Purpose: Enrich business rules with entity/relationship definitions", flush=True)
         print(f"   This creates a complete knowledge graph structure.", flush=True)
-        print(f"   Input: Entity definitions (Agent 2) + Business rules (Agent 3)", flush=True)
+        print(f"   Input: Entity definitions (agent_02) + Business rules (agent_03)", flush=True)
         print(f"   Output: Unified knowledge graph with enriched rules\n", flush=True)
         
-        # Load entity definitions (Agent 2 output)
+        # Load entity definitions (agent_02 output)
         print(f"{'='*60}", flush=True)
         print(f"📖 STEP 1: LOADING DATA", flush=True)
         print(f"{'='*60}", flush=True)
@@ -64,7 +64,7 @@ class KnowledgeEnricher:
         with open(self.entity_file, 'r', encoding='utf-8') as f:
             entity_data = json.load(f)
         
-        # Agent 2 outputs simple entity/relationship definitions.
+        # agent_02 outputs simple entity/relationship definitions.
         # Key may be 'entity_types' (mortgage/base) or 'entities' (AML domain).
         # For list-format entities (AML), convert to a dict keyed by entity name.
         raw_entities = entity_data.get('entity_types') or entity_data.get('entities', {})
@@ -87,12 +87,12 @@ class KnowledgeEnricher:
             print(f"     Sample relationships: {', '.join(rel_names)}{'...' if len(self.relationships) > 5 else ''}", flush=True)
         print(flush=True)
         
-        # Load business rules (Agent 3 output - nested structure)
+        # Load business rules (agent_03 output - nested structure)
         print(f"📖 Loading business rules from: {self.rules_file}", flush=True)
         with open(self.rules_file, 'r', encoding='utf-8') as f:
             rules_data = json.load(f)
         
-        # Agent 3 outputs nested structure: business_rules are inside entity_types and relationships
+        # agent_03 outputs nested structure: business_rules are inside entity_types and relationships
         # We need to extract and flatten them
         all_rules = []
         
@@ -116,8 +116,8 @@ class KnowledgeEnricher:
                 rule['entity_type'] = 'relationship'
                 all_rules.append(rule)
 
-        # Normalize entity_or_relationship to Agent 2 canonical names where possible.
-        # Agent 3 and Agent 2 often differ in naming convention
+        # Normalize entity_or_relationship to agent_02 canonical names where possible.
+        # agent_03 and agent_02 often differ in naming convention
         # (e.g. "Financial Institution" vs "FINANCIAL_INSTITUTION"). Build a
         # case/whitespace/hyphen-insensitive lookup over both entity_types and
         # relationships keys, then remap any rule whose name resolves to a
@@ -145,7 +145,7 @@ class KnowledgeEnricher:
         print(f"   ✓ Extracted {len(all_rules)} business rules from nested structure", flush=True)
         print(f"      ({len([r for r in all_rules if r.get('entity_type') == 'entity'])} entity rules, {len([r for r in all_rules if r.get('entity_type') == 'relationship'])} relationship rules)", flush=True)
         if remapped:
-            print(f"   ✓ Normalized {remapped} rule entity references to canonical Agent 2 names", flush=True)
+            print(f"   ✓ Normalized {remapped} rule entity references to canonical agent_02 names", flush=True)
         print(flush=True)
     
     def enrich_rules(self):
@@ -220,7 +220,7 @@ class KnowledgeEnricher:
                 'created_at': datetime.now().isoformat(),
                 'source_entity_file': str(self.entity_file),
                 'source_rules_file': str(self.rules_file),
-                'agent': 'Agent 4 - Rules with Entities Merger',
+                'agent': 'agent_05 - Rules with Entities Merger',
                 'description': 'Business rules enriched with entity and relationship definitions',
                 'version': '2.0'
             },
@@ -322,12 +322,12 @@ def main():
     # Check if input files exist
     if not entity_file.exists():
         print(f"❌ Error: Entity definitions file not found: {entity_file}", flush=True)
-        print("   Please run Agent 2 (entity extraction) first.", flush=True)
+        print("   Please run agent_02 (entity extraction) first.", flush=True)
         sys.exit(1)
     
     if not rules_file.exists():
         print(f"❌ Error: Business rules file not found: {rules_file}", flush=True)
-        print("   Please run Agent 3 (rules extraction) first.", flush=True)
+        print("   Please run agent_03 (rules extraction) first.", flush=True)
         sys.exit(1)
     
     # Create enricher and run

@@ -123,7 +123,7 @@ class EntityRelationshipExtractor:
             "overall_score": 85,
             "entity_quality_score": 85,
             "relationship_quality_score": 85,
-            # Business rules are Agent 3's output, not Agent 2's — genuinely
+            # Business rules are agent_03's output, not agent_02's — genuinely
             # nothing to score here yet, so 0 is the accurate value.
             "business_rules_score": 0,
             "coverage_score": 85,

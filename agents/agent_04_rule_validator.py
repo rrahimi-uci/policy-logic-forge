@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Agent 3.5: Rule Validation Agent
+agent_04: Rule Validation Agent
 
 Validates extracted business rules for:
 1. Source verification - Rules match source documents
@@ -299,7 +299,7 @@ class RuleValidationAgent:
             'jurisdiction', 'risk_level', 'enforcement_action',
             'applicability_scope', 'data_points_required', 'audit_frequency'
         ]
-        # Agent 3's v2 contract replaces the legacy taxonomy fields with
+        # agent_03's v2 contract replaces the legacy taxonomy fields with
         # typed predicates, variables, provenance, scope, parties, exceptions,
         # and executable test vectors.  Do not report valid v2 rules as
         # incomplete merely because legacy-only fields such as jurisdiction or
@@ -584,12 +584,12 @@ def main():
         "--rules-file",
         type=str,
         required=True,
-        help="Path to rules JSON file (agent-3 output)"
+        help="Path to rules JSON file (agent_03 output)"
     )
     parser.add_argument(
         "--source-dir",
         type=str,
-        help="Path to organized source documents (agent-1 output)"
+        help="Path to organized source documents (agent_01 output)"
     )
     parser.add_argument(
         "--output-dir",

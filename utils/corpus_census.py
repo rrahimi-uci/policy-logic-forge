@@ -13,8 +13,8 @@ fails even at the true target effect.
 This module is deliberately provider-free and dependency-free (no LLM calls,
 no third-party libraries): it is pure aggregation over already-extracted v2
 rule dicts, so it can run against any batch's
-`optimized_compliance_knowledge_graph.json` (or an Agent-4 pre-optimization
-graph) with no API key and no network.  It also reports malformed or incomplete
+`optimized_compliance_knowledge_graph.json` (or an ``agent_05``
+pre-optimization graph) with no API key and no network.  It also reports malformed or incomplete
 contract fields instead of silently dropping them from the supported-subset
 census.
 
@@ -92,7 +92,7 @@ CENSUS_FIELDS = (
     "condition_logic",
 )
 
-# A generated graph may carry dependencies on each rule (after Agent 5) or a
+# A generated graph may carry dependencies on each rule (after agent_06) or a
 # top-level dependency_details object.  The latter is intentionally measured by
 # the CLI when loading a graph; these aliases cover rule-level handoffs and
 # decision-table projections without assuming one producer's exact spelling.
@@ -101,7 +101,7 @@ TABLE_FIELDS = ("decision_table", "table", "table_rows", "decision_table_rows")
 
 
 def _rules_from_graph(graph: Mapping[str, Any]) -> list[dict[str, Any]]:
-    """Read business_rules from an optimized (Agent 5+) or raw (Agent 3)
+    """Read business_rules from an optimized (agent_06+) or raw (agent_03)
     graph shape -- matching cli/extract.py's own `_count_business_rules`
     fallback so this tool works against either stage's output."""
     if isinstance(graph.get("business_rules"), list):

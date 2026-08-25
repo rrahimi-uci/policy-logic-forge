@@ -27,14 +27,14 @@
     "entity_iterations": 2,
     "skip_optimize": true,
     "model": "gpt-5.2",
-    "completed_stages": ["1", "2", "3", "3.5", "4", "6"],
+    "completed_agents": ["agent_01", "agent_02", "agent_03", "agent_04", "agent_05", "agent_10"],
     "source_chunk_count": 6,
     "rules_batches_total": 1,
     "rules_batches_processed": 1,
     "bytes_dropped": 0
   },
   "artifacts": {
-    "graph_stage": "agent-4-rules-with-entities",
+    "graph_stage": "agent_05-rules-with-entities",
     "graph_sha256": "7a6c6bbdad150c9a95f3e86210d70a8f97ccf05787906383546ceb1a68a2bb95",
     "rule_count": 6,
     "dag_count": 6,

@@ -199,7 +199,7 @@ def test_string_array_variable_type_no_longer_fails_v2_validation():
 def test_free_text_outcome_value_type_normalises_to_string():
     """The model's descriptive free_text label is a valid string outcome.
 
-    Agent 3 has emitted ``value_type=free_text`` for literal addresses and
+    agent_03 has emitted ``value_type=free_text`` for literal addresses and
     addressee text.  The v2 schema spells that type ``string`` and requires
     the corresponding variable to declare ``free_text: true``.
     """
@@ -286,8 +286,8 @@ def test_valid_exception_basis_values_are_left_untouched():
 
 # ─────────────────────────────────────────────────────────────────────────
 # source_reference: documented (rule_contract_v2.txt, every domain prompt) as
-# a single object, but Agent 3 sometimes emits a list of citations for a rule
-# whose justification spans more than one excerpt. Agent 5.7's own
+# a single object, but agent_03 sometimes emits a list of citations for a rule
+# whose justification spans more than one excerpt. agent_09's own
 # _iter_references already treats that as legitimate — _evidence_pointer must
 # too, rather than silently discarding real evidence. Real case: a
 # ContractNLI pilot rule with an empty `exceptions` list and a list-shaped
@@ -361,9 +361,9 @@ def test_review_required_rules_without_v2_violations_do_not_fail_schema_consiste
     invariant_pass before rules_requiring_review, that made SystemExit(2)
     fire on every real run with any review-required rule at all (49-56 on one
     mortgage run, 7 on a ContractNLI pilot run), permanently pre-empting the
-    SystemExit(3) branch that launches Agent 5.6 — silently defeating the
+    SystemExit(3) branch that launches agent_08 — silently defeating the
     auto-remediation README.md documents ("The full pipeline launches 5.6
-    automatically when Agent 5.5 requests remediation"). schema_consistency
+    automatically when agent_07 requests remediation"). schema_consistency
     must stay gated on genuine v2 structural violations only, so a
     well-formed-but-incomplete rule can still reach the remediation path."""
     organized = tmp_path / "organized" / "B2-1-01"

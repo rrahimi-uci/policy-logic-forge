@@ -8,13 +8,13 @@ process running it. Before this fix, three of its checks used the idiom
 `verification` is falsy. A non-empty string is truthy, so a corrupted
 `exception_verification` (a string instead of the expected dict) passed
 straight through to `.get()` and raised `AttributeError: 'str' object has no
-attribute 'get'` — which is exactly what happened here: Agent 5.5's
+attribute 'get'` — which is exactly what happened here: agent_07's
 `finish_rule`/`_complete_evidence` copied a resolver completion field into the
 rule without checking its type, and `final_rule_issues` was the first
 downstream reader unguarded against the resulting corruption.
 
 Both layers are tested: kg_readiness.final_rule_issues (must never crash on
-malformed input) and agent_5_5's field-copy loops (must not let the
+malformed input) and agent_07's field-copy loops (must not let the
 corruption in in the first place).
 """
 
@@ -174,7 +174,7 @@ def test_well_formed_verification_and_derivation_still_pass():
 
 
 # ─────────────────────────────────────────────────────────────────────────
-# Root cause: Agent 5.5 must not copy a malformed completion field into the
+# Root cause: agent_07 must not copy a malformed completion field into the
 # rule in the first place.
 # ─────────────────────────────────────────────────────────────────────────
 
@@ -352,7 +352,7 @@ def test_exception_verification_source_evidence_alias_satisfies_the_evidence_che
 # Root cause: a resolver completion replaces applicability_scope wholesale
 # with whatever it returns, which can add richer domain-specific keys
 # (jurisdiction, trigger_event, ...) without repeating every one of the three
-# standard keys. Agent 5.5's own `.setdefault(key, [])` backfill only ran
+# standard keys. agent_07's own `.setdefault(key, [])` backfill only ran
 # before that replacement, so 12 of 352 rules in one real run had a real,
 # populated applicability_scope that still failed this check for lacking one
 # standard key outright.

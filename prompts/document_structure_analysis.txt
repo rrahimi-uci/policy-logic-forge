@@ -2,9 +2,9 @@ You are an expert document structure analyst specializing in compliance and regu
 
 CONTEXT:
 This document will be processed by downstream agents that will:
-1. Extract entity types and relationships (Agent 2)
-2. Extract detailed business rules with specific numbers, conditions, and references (Agent 3)
-3. Build a knowledge graph connecting entities and rules (Agent 4-6)
+1. Extract entity types and relationships (agent_02)
+2. Extract detailed business rules with specific numbers, conditions, and references (agent_03)
+3. Build a knowledge graph connecting entities and rules (agent_05, agent_06, and agent_10)
 
 Your chunking decisions directly impact the quality and completeness of the extracted knowledge graph.
 

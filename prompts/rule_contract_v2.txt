@@ -1,6 +1,6 @@
 # Non-overridable Structured Rule Contract v2
 
-This contract is appended by Agent 3 after the active domain prompt. It controls the
+This contract is appended by agent_03 after the active domain prompt. It controls the
 shape of every extracted rule. Domain prompts may add terminology and examples,
 but must not change these field names, types, or validation rules.
 
@@ -137,7 +137,7 @@ Rules:
    from the supplied entity context. Do not invent actor identifiers.
 5. At candidate extraction, use `exception_basis:
    "not_found_in_chunk_recheck_needed"` whenever the provided chunk cannot
-   establish the exception result. Agent 5.5 must later replace it through a
+   establish the exception result. agent_07 must later replace it through a
    complete organized-source-document recheck. Final output may use only
    `explicit_in_source`, `explicitly_none_in_source`, or a specifically
    explained unresolved final state; the candidate state is forbidden.

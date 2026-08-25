@@ -1,4 +1,4 @@
-"""Tests for Agent 3's source_reference verification and exact-span bridging.
+"""Tests for agent_03's source_reference verification and exact-span bridging.
 
 Context: `_verify_source_references` accepts an LLM-quoted `source_text` as
 "verified" whenever it scores >= 0.5 on a fuzzy SequenceMatcher ratio against
@@ -6,9 +6,9 @@ the text at its claimed word position — a threshold deliberately loose because
 LLMs often quote verbatim but get word offsets slightly wrong (see that
 method's own docstring). The gap this leaves: a quote that silently elides
 real intervening content (a worked example, a footnote) can still score well
-above 0.5 even though it is not a genuine substring of the document. Agent
-5.7's independent grounding verifier requires an exact substring, so such
-rules pass Agent 3's check and then fail certification later.
+above 0.5 even though it is not a genuine substring of the document. The
+agent_09 independent grounding verifier requires an exact substring, so such
+rules pass agent_03's check and then fail certification later.
 
 `bridge_exact_span` closes that gap: when the fuzzy ratio isn't already near
 1.0, it looks for where the genuinely-matching words actually sit in the

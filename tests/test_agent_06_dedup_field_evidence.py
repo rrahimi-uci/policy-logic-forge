@@ -1,4 +1,4 @@
-"""Regression test: Agent 5's rule-merge dedup must not drop a duplicate's
+"""Regression test: agent_06's rule-merge dedup must not drop a duplicate's
 field_evidence.
 
 Context: `_deduplicate_rules_single` already collects `source_reference`

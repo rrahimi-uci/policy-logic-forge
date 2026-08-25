@@ -6,16 +6,16 @@ validator, or a later agent) reads that same field expecting something else,
 and nothing tied the two together — so the mismatch was invisible until a
 real extraction run hit it:
 
-  - Agent 3's extraction reasonably produced scope_basis "explicit_in_source"
+  - agent_03's extraction reasonably produced scope_basis "explicit_in_source"
     (by direct analogy to exception_basis's own documented convention), but
     utils.rule_contract.SCOPE_BASES only accepted bare "explicit" — 261 of 275
     schema violations on one real run, from a single missing enum entry.
-  - Agent 5.5's readiness-completion prompt documents scope_derivation /
+  - agent_07's readiness-completion prompt documents scope_derivation /
     exception_verification with an "evidence" list; when the resolver judged
     an already-final-looking rule as not needing further derivation and
-    omitted the field, Agent 3's own (differently-shaped) candidate value was
+    omitted the field, agent_03's own (differently-shaped) candidate value was
     left in place, and kg_readiness.final_rule_issues had no fallback for it.
-  - Agent 2 produced PascalCase entity names; the naming_consistency invariant
+  - agent_02 produced PascalCase entity names; the naming_consistency invariant
     required SCREAMING_SNAKE_CASE, and the only normalization was a fixed list
     of six previously-discovered legacy names.
   - A resolver completion replaced applicability_scope wholesale, dropping a
@@ -73,7 +73,7 @@ def _pipe_enum(prompt_text: str, field: str) -> set[str]:
 # ─────────────────────────────────────────────────────────────────────────
 # 1. FINAL_* enums must be a subset of the broader schema enums.
 #
-# A value valid at Agent 5.5's final-readiness gate but absent from
+# A value valid at agent_07's final-readiness gate but absent from
 # utils.rule_contract's schema enum means a rule can pass readiness and still
 # fail schema_consistency (or vice versa) — exactly the scope_basis bug. This
 # is the single highest-value structural check: it would have failed the
@@ -85,7 +85,7 @@ def test_final_scope_bases_is_a_subset_of_schema_scope_bases():
     missing = FINAL_SCOPE_BASES - SCOPE_BASES
     assert not missing, (
         f"FINAL_SCOPE_BASES has value(s) {missing} that utils.rule_contract.SCOPE_BASES "
-        f"does not accept — a rule could pass Agent 5.5's readiness gate and still fail "
+        f"does not accept — a rule could pass agent_07's readiness gate and still fail "
         f"schema_consistency for its own scope_basis value."
     )
 
@@ -151,21 +151,21 @@ def test_prompt_documented_scope_basis_values_are_final_states():
 
 # ─────────────────────────────────────────────────────────────────────────
 # 3. Every field the readiness-completion prompt promises to return is
-# actually consumed somewhere (Agent 5.5's field-copy loop or
+# actually consumed somewhere (agent_07's field-copy loop or
 # final_rule_issues) — the inverse mismatch: a field nobody reads is a
 # silent no-op at best and a sign the two were never reconciled at worst.
 # ─────────────────────────────────────────────────────────────────────────
 
-def test_every_promised_completion_field_is_consumed_by_agent_5_5():
+def test_every_promised_completion_field_is_consumed_by_agent_07():
     prompt = _readiness_completion_prompt()
     promised_top_level = {"exceptions", "exception_basis", "exception_verification",
                            "applicability_scope", "scope_basis", "scope_derivation"}
     for field in promised_top_level:
         assert f'"{field}"' in prompt, f"expected {field!r} in the prompt's own documented shape"
 
-    agent_5_5_source = (PROJECT_ROOT / "agents" / "agent_07_executable_readiness.py").read_text()
+    agent_07_source = (PROJECT_ROOT / "agents" / "agent_07_executable_readiness.py").read_text()
     for field in promised_top_level:
-        assert f'"{field}"' in agent_5_5_source, (
+        assert f'"{field}"' in agent_07_source, (
             f"executable_readiness_completion.txt promises {field!r} but "
             f"agent_07_executable_readiness.py never reads it back out of a completion"
         )
@@ -193,7 +193,7 @@ def test_readiness_completion_evidence_shape_matches_what_final_rule_issues_read
 
 def test_field_evidence_fallback_actually_satisfies_final_rule_issues():
     """End-to-end: a rule whose dedicated verification/derivation is missing
-    entirely, but whose field_evidence (Agent 3's own, schema-required output)
+    entirely, but whose field_evidence (agent_03's own, schema-required output)
     has real citations, must be accepted — this is the fallback that makes
     the shape mismatch harmless instead of a silent rule loss."""
     rule = valid_rule()

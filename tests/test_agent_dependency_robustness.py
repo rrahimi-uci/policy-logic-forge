@@ -1,12 +1,12 @@
 """Regression tests for verified agent-pipeline correctness fixes.
 
-  Agent 5 (KnowledgeGraphOptimizer):
+  agent_06 (KnowledgeGraphOptimizer):
     The Step-3 dependency-merge loop read dep["source_rule_id"],
     dep["dependency_type"], dep["rationale"] via raw subscript OUTSIDE the
     per-batch try/except. A single LLM-returned dependency object missing one
     of those keys raised KeyError and aborted the whole optimization run.
 
-  Agent 8 (SemanticRuleMatcher):
+  The upstream comparison matcher (not shipped in this repository):
     Batch verdicts were attached to rule pairs by array position and any
     short/truncated array (len(results) < len(batch)) discarded ALL verdicts,
     falling back to UNRELATED for the entire batch. Verdicts must align by
@@ -22,16 +22,16 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 
-# ── Agent 5: malformed dependency must not crash the merge ─────────────────
+# ── agent_06: malformed dependency must not crash the merge ────────────────
 @allure.feature("Pipeline agent robustness")
-@allure.story("Agent 5 dependency merge tolerates missing keys")
-class TestAgent5DependencyMissingKeys:
+@allure.story("agent_06 dependency merge tolerates missing keys")
+class TestAgent06DependencyMissingKeys:
     @allure.title("A dependency missing keys is skipped, not fatal")
     def test_missing_keys_does_not_crash(self, monkeypatch):
-        from agents import agent_06_knowledge_graph_optimizer as a5
+        from agents import agent_06_knowledge_graph_optimizer as agent_06_optimizer
 
         # Build the optimizer without touching real config/LLM construction.
-        opt = a5.KnowledgeGraphOptimizer.__new__(a5.KnowledgeGraphOptimizer)
+        opt = agent_06_optimizer.KnowledgeGraphOptimizer.__new__(agent_06_optimizer.KnowledgeGraphOptimizer)
         opt.max_workers = 1
         opt.model = "test-model"
 
@@ -111,7 +111,6 @@ class _DummyConfig:
         return 1000
 
 
-# NOTE: the source pipeline has TestAgent8BatchAlignment here, covering
-# agent_8_semantic_rule_matcher.py's batch-verdict alignment by pair_id. Agent
-# 8 is part of the cross-graph comparison pipeline (agents 7-10), which this
-# repo doesn't ship — see README.md "Scope".
+# NOTE: the upstream comparison pipeline has a batch-verdict alignment test
+# covering pair-id attachment. That comparison pipeline is not shipped here;
+# see README.md "Scope".

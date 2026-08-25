@@ -4,18 +4,18 @@ Extraction orchestrator: compliance documents -> a grounding-certified,
 DMN/BPMN-ready knowledge graph.
 
 This is a lean, single-batch orchestrator by design (see README.md "Scope").
-It runs ten stages in order, streaming each agent subprocess's output:
+It runs the ten canonical agents in order, streaming each subprocess's output:
 
-  1    Document Organizer         chunk raw documents
-  2    Entity Extractor           entities & relationships
-  3    Rules Extractor            business rules (v2 contract)
-  3.5  Rule Validator             advisory quality pass (non-blocking)
-  4    Rules+Entities Merger      first complete knowledge graph
-  5    KG Optimizer               dedup + dependency analysis
-  5.5  Executable Readiness       four-invariant gate; DMN/BPMN projection
-  5.6  Readiness Remediator       focused fix-up (only if 5.5 requests it)
-  5.7  Grounding Verifier         independent claim-level certification
-  6    Dependency DAG Generator   100%-coverage DAG partition of the graph
+  agent_01  Document Organizer       chunk raw documents
+  agent_02  Entity Extractor         entities & relationships
+  agent_03  Rules Extractor           business rules (v2 contract)
+  agent_04  Rule Validator             advisory quality pass (non-blocking)
+  agent_05  Rules+Entities Merger      first complete knowledge graph
+  agent_06  KG Optimizer               dedup + dependency analysis
+  agent_07  Executable Readiness       four-invariant gate; DMN/BPMN projection
+  agent_08  Readiness Remediator       focused fix-up (only if agent_07 requests it)
+  agent_09  Grounding Verifier         independent claim-level certification
+  agent_10  Dependency DAG Generator   100%-coverage DAG partition of the graph
 
 Each agent subprocess shares an adaptive API-concurrency limiter (see
 utils/adaptive_limiter.py) via KG_GLOBAL_LLM_STATE_FILE, so running multiple
@@ -33,6 +33,7 @@ from pathlib import Path
 _ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_ROOT))
 
+from utils.agent_names import AGENT_IDS, agent_spec, output_dir_name  # noqa: E402
 from utils.config import get_config  # noqa: E402
 
 DOMAINS = ["nda_confidentiality", "privacy_policy", "mobile_app_privacy", "commercial_contracts"]
@@ -68,8 +69,7 @@ _PERFORMANCE_ENV = {
 
 
 def _count_business_rules(data: dict) -> int:
-    """Count rules whether the graph keeps them flat (Agent 4+) or nested
-    under entity_types/relationships (Agent 3's raw output)."""
+    """Count rules in the agent_03 raw or agent_05+ graph shape."""
     if isinstance(data.get("business_rules"), list):
         return len(data["business_rules"])
     total = 0
@@ -137,23 +137,22 @@ class ExtractionPipeline:
         # Unset unless explicitly requested: absence means full coverage
         # (see agents/agent_03_rules_extractor.py::read_text_files_batch).
         # `--target-rules` never controls chunk/batch coverage -- only how
-        # many rules Agent 3 tries to extract per batch.
+        # many rules agent_03 tries to extract per batch.
         if self.pilot_batch_limit is not None:
             env["PILOT_BATCH_LIMIT"] = str(self.pilot_batch_limit)
         return env
 
     def _run(
         self,
-        step: str,
-        label: str,
-        script: str,
+        agent_id: str,
         args: list[str],
         extra_env: dict[str, str] | None = None,
     ) -> bool:
+        spec = agent_spec(agent_id)
         print("\n" + "=" * 80)
-        print(f"STEP {step}: {label}")
+        print(f"{agent_id}: {spec.role}")
         print("=" * 80)
-        cmd = [sys.executable, str(_ROOT / "agents" / script)] + args
+        cmd = [sys.executable, str(_ROOT / "agents" / spec.module)] + args
         print(f"$ {' '.join(cmd)}\n", flush=True)
         env = self._env()
         if extra_env:
@@ -166,73 +165,78 @@ class ExtractionPipeline:
             print(line, end="", flush=True)
         code = process.wait()
         ok = code == 0
-        print(f"\n{'PASS' if ok else 'FAIL'} STEP {step}: {label} (exit {code})")
+        print(f"\n{'PASS' if ok else 'FAIL'} {agent_id}: {spec.role} (exit {code})")
         return ok
 
-    def step1(self) -> bool:
+    def run_agent_01(self) -> bool:
         files = [str(p) for p in sorted(self.source_dir.iterdir()) if p.is_file()]
         if not files:
             print(f"No files found in {self.source_dir}")
             return False
-        return self._run("1", "Document Organizer", "agent_01_document_organizer.py",
-                          [str(self.source_dir), str(self.organized_dir), "--files"] + [Path(f).name for f in files])
-
-    def step2(self) -> bool:
-        return self._run("2", "Entity Extractor", "agent_02_entity_extractor.py", [])
-
-    def step3(self) -> bool:
-        # No CLI args: agent_3 reads TARGET_RULES purely via config.get_target_rules().
-        return self._run("3", "Rules Extractor", "agent_03_rules_extractor.py", [])
-
-    def step3_5(self) -> bool:
-        rules_file = self.rules_dir / "compliance_rules_with_entities.json"
-        validation_dir = self.config.get_pipeline_base_path() / "agent-3-5-validation"
-        return self._run("3.5", "Rule Validator", "agent_04_rule_validator.py",
-                          ["--rules-file", str(rules_file), "--source-dir", str(self.organized_dir),
-                           "--output-dir", str(validation_dir)])
-
-    def step4(self) -> bool:
-        return self._run("4", "Rules+Entities Merger", "agent_05_rules_with_entities_merger.py", [])
-
-    def step5(self) -> bool:
-        if self.skip_optimize:
-            print("\nSTEP 5: Knowledge Graph Optimizer -- SKIPPED (--skip-optimize)")
-            return True
-        return self._run("5", "KG Optimizer", "agent_06_knowledge_graph_optimizer.py", [])
-
-    def step5_5(self, *, reuse_conflicts: bool = False) -> bool:
-        extra_env = {"KG_READINESS_SKIP_CONFLICTS": "true"} if reuse_conflicts else None
         return self._run(
-            "5.5", "Executable Readiness", "agent_07_executable_readiness.py", [], extra_env=extra_env
+            "agent_01",
+            [str(self.source_dir), str(self.organized_dir), "--files"]
+            + [Path(f).name for f in files],
         )
 
-    def step5_6(self) -> bool:
-        return self._run("5.6", "Readiness Remediator", "agent_08_readiness_remediator.py", [])
+    def run_agent_02(self) -> bool:
+        return self._run("agent_02", [])
 
-    def step5_7(self) -> bool:
-        return self._run("5.7", "Grounding Verifier", "agent_09_grounding_verifier.py", [])
+    def run_agent_03(self) -> bool:
+        # No CLI args: agent_03 reads TARGET_RULES via config.get_target_rules().
+        return self._run("agent_03", [])
 
-    def step6(self) -> bool:
-        return self._run("6", "Dependency DAG Generator", "agent_10_dag_generator.py", [])
+    def run_agent_04(self) -> bool:
+        rules_file = self.rules_dir / "compliance_rules_with_entities.json"
+        validation_dir = self.config.get_pipeline_base_path() / output_dir_name("agent_04")
+        return self._run(
+            "agent_04",
+            ["--rules-file", str(rules_file), "--source-dir", str(self.organized_dir),
+             "--output-dir", str(validation_dir)],
+        )
+
+    def run_agent_05(self) -> bool:
+        return self._run("agent_05", [])
+
+    def run_agent_06(self) -> bool:
+        if self.skip_optimize:
+            print("\nagent_06: Knowledge Graph Optimizer -- SKIPPED (--skip-optimize)")
+            return True
+        return self._run("agent_06", [])
+
+    def run_agent_07(self, *, reuse_conflicts: bool = False) -> bool:
+        extra_env = {"KG_READINESS_SKIP_CONFLICTS": "true"} if reuse_conflicts else None
+        return self._run(
+            "agent_07", [], extra_env=extra_env
+        )
+
+    def run_agent_08(self) -> bool:
+        return self._run("agent_08", [])
+
+    def run_agent_09(self) -> bool:
+        return self._run("agent_09", [])
+
+    def run_agent_10(self) -> bool:
+        return self._run("agent_10", [])
 
     def run_all(self) -> bool:
         start = datetime.now()
-        if not self.step1():
+        if not self.run_agent_01():
             return False
-        if not self.step2():
+        if not self.run_agent_02():
             return False
-        if not self.step3():
+        if not self.run_agent_03():
             return False
-        self.step3_5()  # advisory; never blocks the pipeline
-        if not self.step4():
+        self.run_agent_04()  # advisory; never blocks the pipeline
+        if not self.run_agent_05():
             return False
-        if not self.step5():
+        if not self.run_agent_06():
             return False
 
         if not self.skip_optimize:
-            if not self.step5_5():
-                # 5.5 exits nonzero either on a hard invariant failure
-                # (unrecoverable here) or because rules need 5.6 remediation.
+            if not self.run_agent_07():
+                # agent_07 exits nonzero either on a hard invariant failure
+                # (unrecoverable here) or because rules need agent_08 remediation.
                 report_path = self.optimized_dir / "kg_readiness_report.json"
                 needs_remediation = False
                 if report_path.exists():
@@ -242,20 +246,20 @@ class ExtractionPipeline:
                     except (OSError, json.JSONDecodeError):
                         pass
                 if not needs_remediation:
-                    print("\nSTOPPED: Agent 5.5 invariant failure (not remediable by 5.6).")
+                    print("\nSTOPPED: agent_07 invariant failure (not remediable by agent_08).")
                     return False
-                print("\nAgent 5.5 requested focused remediation -> running Step 5.6")
-                if not self.step5_6():
+                print("\nagent_07 requested focused remediation -> running agent_08")
+                if not self.run_agent_08():
                     return False
-                if not self.step5_5(reuse_conflicts=True):
+                if not self.run_agent_07(reuse_conflicts=True):
                     print("\nSTOPPED: readiness still failing after remediation.")
                     return False
 
-            if not self.step5_7():
-                print("\nSTOPPED: Agent 5.7 grounding certification failed.")
+            if not self.run_agent_09():
+                print("\nSTOPPED: agent_09 grounding certification failed.")
                 return False
 
-        if not self.step6():
+        if not self.run_agent_10():
             return False
 
         elapsed = datetime.now() - start
@@ -266,16 +270,31 @@ class ExtractionPipeline:
         print("=" * 80)
         return True
 
-    def run_step(self, step: str) -> bool:
+    def run_agent(self, agent_id: str) -> bool:
         dispatch = {
-            "1": self.step1, "2": self.step2, "3": self.step3, "3.5": self.step3_5,
-            "4": self.step4, "5": self.step5, "5.5": self.step5_5, "5.6": self.step5_6,
-            "5.7": self.step5_7, "6": self.step6,
+            "agent_01": self.run_agent_01, "agent_02": self.run_agent_02,
+            "agent_03": self.run_agent_03, "agent_04": self.run_agent_04,
+            "agent_05": self.run_agent_05, "agent_06": self.run_agent_06,
+            "agent_07": self.run_agent_07, "agent_08": self.run_agent_08,
+            "agent_09": self.run_agent_09, "agent_10": self.run_agent_10,
         }
-        if step not in dispatch:
-            print(f"Invalid step: {step}. Valid: {', '.join(dispatch)}")
+        if agent_id not in dispatch:
+            print(f"Invalid agent: {agent_id}. Valid: {', '.join(AGENT_IDS)}")
             return False
-        return dispatch[step]()
+        return dispatch[agent_id]()
+
+    def run_step(self, step: str) -> bool:
+        """Run a legacy numeric stage selector for backwards compatibility."""
+
+        legacy_steps = {
+            "1": "agent_01", "2": "agent_02", "3": "agent_03", "3.5": "agent_04",
+            "4": "agent_05", "5": "agent_06", "5.5": "agent_07", "5.6": "agent_08",
+            "5.7": "agent_09", "6": "agent_10",
+        }
+        if step not in legacy_steps:
+            print(f"Invalid step: {step}. Valid agents: {', '.join(AGENT_IDS)}")
+            return False
+        return self.run_agent(legacy_steps[step])
 
 
 def main():
@@ -283,11 +302,12 @@ def main():
     parser.add_argument("--dir", required=True, help="Directory of source documents under compliance-files/")
     parser.add_argument("--domain", required=True, choices=DOMAINS)
     parser.add_argument("--batch-name", default=None, help="Output folder name under pipeline-output/ (default: --dir's basename)")
-    parser.add_argument("--target-rules", type=int, default=30, help="Target business rules Agent 3 tries to extract per batch (default: 30). Does NOT bound chunk/batch coverage -- see --pilot-batch-limit for that.")
-    parser.add_argument("--pilot-batch-limit", type=int, default=None, help="Cap the number of word-balanced batches Agent 3 processes, for a cheap smoke run. Omit for full coverage (default): every organized chunk is read whole and every batch is processed. A capped run is never corpus coverage.")
+    parser.add_argument("--target-rules", type=int, default=30, help="Target business rules agent_03 tries to extract per batch (default: 30). Does NOT bound chunk/batch coverage -- see --pilot-batch-limit for that.")
+    parser.add_argument("--pilot-batch-limit", type=int, default=None, help="Cap the number of word-balanced batches agent_03 processes, for a cheap smoke run. Omit for full coverage (default): every organized chunk is read whole and every batch is processed. A capped run is never corpus coverage.")
     parser.add_argument("--workers", type=int, default=None, help="Local scheduling workers (default: config.json pipeline.max_workers)")
-    parser.add_argument("--skip-optimize", action="store_true", help="Skip steps 5/5.5/5.6/5.7 (dedup, readiness, remediation, grounding)")
-    parser.add_argument("--step", choices=["1", "2", "3", "3.5", "4", "5", "5.5", "5.6", "5.7", "6"], help="Run a single step only")
+    parser.add_argument("--skip-optimize", action="store_true", help="Skip agents agent_06 through agent_09 (optimization, readiness, remediation, grounding)")
+    parser.add_argument("--agent", choices=list(AGENT_IDS), help="Run one canonical agent only")
+    parser.add_argument("--step", choices=["1", "2", "3", "3.5", "4", "5", "5.5", "5.6", "5.7", "6"], help="Deprecated numeric stage selector; use --agent")
     args = parser.parse_args()
 
     source_dir = Path(args.dir)
@@ -302,7 +322,9 @@ def main():
         max_workers=args.workers, skip_optimize=args.skip_optimize, batch_name=args.batch_name,
         pilot_batch_limit=args.pilot_batch_limit,
     )
-    ok = pipeline.run_step(args.step) if args.step else pipeline.run_all()
+    if args.agent and args.step:
+        parser.error("--agent and --step cannot be used together")
+    ok = pipeline.run_agent(args.agent) if args.agent else pipeline.run_step(args.step) if args.step else pipeline.run_all()
     sys.exit(0 if ok else 1)
 
 

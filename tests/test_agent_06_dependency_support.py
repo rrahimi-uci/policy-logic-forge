@@ -1,10 +1,10 @@
-"""Tests for Agent 5's structural-support check on inferred rule dependencies.
+"""Tests for agent_06's structural-support check on inferred rule dependencies.
 
 Note: the non-batched path in analyze_dependencies calls self.client directly
 (self._json_request is used only by the batched/cross-batch paths), so the
 integration tests below stub self.client.chat_completion, not _json_request.
 
-Context: Agent 5.7's independent grounding verifier re-derives whether each
+Context: agent_09's independent grounding verifier re-derives whether each
 claimed rule-to-rule dependency actually follows from the two rules' own
 condition/outcome logic, and on the fannie_mae readiness graph found 44% of
 dependency/conflict claims did not hold up — the model's own reasoning showed

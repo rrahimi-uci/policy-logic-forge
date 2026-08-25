@@ -3,7 +3,7 @@
 `test_data_contracts.py` already parametrises its field contracts over every
 entry in its DOMAINS list, so these tests cover only what it cannot:
 
-- the two `_compact` overrides exist. Agents 2 and 3 request
+- the two `_compact` overrides exist. `agent_02` and `agent_03` request
   `entity_extraction_compact` / `business_rules_extraction_compact`, not the
   non-compact names the contract tests check. Without a domain override the
   shared copies apply, and those tell the model to "prefer concrete mortgage
@@ -59,8 +59,8 @@ RUNTIME_DOMAIN_PROMPTS = [
 def test_runtime_prompt_is_overridden(domain, name):
     """Every prompt an agent actually loads must exist in the domain pack.
 
-    The two _compact names are the point of this test: they are what Agents 2
-    and 3 request, and no pre-existing domain pack overrides them.
+    The two _compact names are the point of this test: they are what `agent_02`
+    and `agent_03` request, and no pre-existing domain pack overrides them.
     """
     path = DOMAIN_PROMPTS / domain / f"{name}.txt"
     assert path.exists(), (

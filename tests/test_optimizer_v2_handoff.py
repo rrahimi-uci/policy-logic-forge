@@ -5,7 +5,7 @@ description.
 Before this fix, `_deduplicate_rules_single`, `analyze_dependencies`, and
 both batched dependency paths in `agent_06_knowledge_graph_optimizer.py`
 built their LLM-facing rule summaries from the legacy `conditions` /
-`consequences` string fields alone. Agent 3's compact prompts explicitly
+`consequences` string fields alone. agent_03's compact prompts explicitly
 forbid those fields for every domain this repo carries (see
 domain-prompts/*/business_rules_extraction_compact.txt), so a v2-only rule's
 summary carried nothing but `rule_id`, `rule_type`, `title`, and a truncated
@@ -18,7 +18,7 @@ actually carries. These tests exercise the helper directly (unit) and then
 confirm all four call sites actually use it by inspecting the JSON each one
 hands to `prompt_manager.format_prompt` (integration, no live LLM call —
 same `object.__new__(KnowledgeGraphOptimizer)` construction pattern as
-tests/test_agent_5_dependency_support.py).
+tests/test_agent_06_dependency_support.py).
 """
 
 import json
@@ -70,7 +70,7 @@ def _v2_rule(rule_id="R2"):
 def _optimizer():
     """Bare optimizer with just enough mocked config to call the summary
     helper and drive the four prompt-building call sites without a real
-    LLM client, matching tests/test_agent_5_dependency_support.py."""
+    LLM client, matching tests/test_agent_06_dependency_support.py."""
     optimizer = object.__new__(KnowledgeGraphOptimizer)
     optimizer.config = MagicMock()
     optimizer.config.get_optimizer_description_truncation_length.return_value = 500

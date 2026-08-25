@@ -133,7 +133,7 @@ def assess_rule_readiness(
 ) -> dict[str, Any]:
     """Return the v2 readiness payload for one rule.
 
-    Dependency analysis happens in Agent 5, so requirement 2 is explicitly
+    Dependency analysis happens in agent_06, so requirement 2 is explicitly
     pending until that stage has populated the decision. All other sections are
     deterministic at validation time.
     """
@@ -160,7 +160,7 @@ def assess_rule_readiness(
                 {
                     "code": "dependency_analysis_pending",
                     "path": "recommended_hit_policy",
-                    "message": "Agent 5 has not completed dependency/conflict analysis.",
+                    "message": "agent_06 has not completed dependency/conflict analysis.",
                     "severity": "info",
                 }
             ],

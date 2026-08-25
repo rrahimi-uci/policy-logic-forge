@@ -1,6 +1,6 @@
 """Deterministic construction of dependency DAGs from an optimized knowledge graph.
 
-Agent 5 (and 5.5/5.6/5.7) attach a canonical dependency-edge list to
+agent_06 through agent_09 attach a canonical dependency-edge list to
 ``dependency_details.dependencies`` on the optimized graph (see
 ``dependency_edges()`` in ``utils/kg_readiness.py``). This module partitions
 *every* rule in the graph into one or more directed acyclic graphs built from
@@ -9,7 +9,7 @@ those edges.
 The 100%-coverage guarantee is structural, not best-effort: every rule
 (including one with zero dependency edges) is assigned to exactly one
 weakly-connected component, and every component becomes exactly one DAG in
-the output. A rule cycle — which a graph that has passed Agent 5.5 readiness
+the output. A rule cycle — which a graph that has passed agent_07 readiness
 should not contain, but which this module does not assume away — is condensed
 into a single "cycle group" node via Kosaraju's algorithm so the emitted
 per-component graph is provably acyclic (SCC-condensation of any directed

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Agent 5.6: focused, checkpointed remediation of readiness failures only."""
+"""agent_08: focused, checkpointed remediation of readiness failures only."""
 
 from __future__ import annotations
 
@@ -38,6 +38,28 @@ def _stable_hash(value: Any) -> str:
 def _chunks(values: list[Any], size: int) -> Iterable[list[Any]]:
     for start in range(0, len(values), max(1, size)):
         yield values[start:start + max(1, size)]
+
+
+def _source_reference_section_id(rule: Mapping[str, Any]) -> str:
+    """Return a deterministic section key for either source-reference shape.
+
+    ``agent_03`` accepts one source-reference object or a list of objects when
+    a rule's evidence spans multiple excerpts. Remediation batching only needs
+    a stable sort key, so list-shaped evidence uses its first non-empty section
+    identifier instead of assuming the object form.
+    """
+
+    reference = rule.get("source_reference")
+    if isinstance(reference, Mapping):
+        return str(reference.get("section_id", ""))
+    if isinstance(reference, list):
+        section_ids = sorted(
+            str(item.get("section_id", ""))
+            for item in reference
+            if isinstance(item, Mapping) and str(item.get("section_id", ""))
+        )
+        return section_ids[0] if section_ids else ""
+    return ""
 
 
 class JsonlCheckpoint:
@@ -84,7 +106,7 @@ class OpenAIRemediationResolver:
             content = content.split("\n", 1)[1].rsplit("```", 1)[0]
         value = json.loads(content)
         if not isinstance(value, dict):
-            raise ValueError("Agent 5.6 response must be a JSON object")
+            raise ValueError("agent_08 response must be a JSON object")
         return value
 
     def complete(self, prompt_name: str, field: str, payload: Any, max_tokens: int) -> list[dict[str, Any]]:
@@ -102,12 +124,12 @@ class OpenAIRemediationResolver:
                 result = self._parse(response.choices[0].message.content or "")
                 items = result.get(field)
                 if not isinstance(items, list):
-                    raise ValueError(f"Agent 5.6 response lacks list field {field!r}")
+                    raise ValueError(f"agent_08 response lacks list field {field!r}")
                 return [dict(item) for item in items if isinstance(item, Mapping)]
             except (json.JSONDecodeError, TypeError, ValueError) as exc:
                 error = exc
                 prompt += "\n\nReturn a complete valid JSON object only. Include every requested item exactly once."
-                print(f"⚠️ Agent 5.6 JSON retry {attempt}/{attempts}: {exc}", flush=True)
+                print(f"⚠️ agent_08 JSON retry {attempt}/{attempts}: {exc}", flush=True)
         assert error is not None
         raise error
 
@@ -184,7 +206,7 @@ class ReadinessRemediator:
                 "evidence_packet": completer._evidence_packet(rule, corpus),
             })
         packets.sort(key=lambda item: (
-            str((item["rule"].get("source_reference") or {}).get("section_id", "")),
+            _source_reference_section_id(item["rule"]),
             str(item["rule"].get("rule_id", "")),
         ))
         return list(_chunks(packets, batch_size))
@@ -316,12 +338,12 @@ class ReadinessRemediator:
         rule_batch_size = max(1, int(os.getenv("KG_REMEDIATION_RULES_PER_REQUEST", "4")))
         pair_batch_size = max(1, int(os.getenv("KG_REMEDIATION_PAIRS_PER_REQUEST", "12")))
         passes = max(1, int(os.getenv("KG_REMEDIATION_MAX_PASSES", "2")))
-        checkpoint = JsonlCheckpoint(output_dir / "agent_5_6_checkpoint.jsonl")
+        checkpoint = JsonlCheckpoint(output_dir / "agent_08_checkpoint.jsonl")
         history = []
 
         for pass_number in range(1, passes + 1):
             review_ids = {str(rule.get("rule_id")) for rule in rules if rule.get("requires_review")}
-            print(f"▶ Agent 5.6 pass {pass_number}/{passes}: {len(review_ids)} review rules", flush=True)
+            print(f"▶ agent_08 pass {pass_number}/{passes}: {len(review_ids)} review rules", flush=True)
             if not review_ids:
                 break
 
@@ -338,7 +360,7 @@ class ReadinessRemediator:
                 })
                 cached = checkpoint.get(key)
                 if isinstance(cached, list):
-                    print(f"↪ Agent 5.6 rule checkpoint hit ({len(batch)} rules)", flush=True)
+                    print(f"↪ agent_08 rule checkpoint hit ({len(batch)} rules)", flush=True)
                     return cached
                 if self.resolver is None:
                     return []
@@ -376,7 +398,7 @@ class ReadinessRemediator:
                 })
                 cached = checkpoint.get(key)
                 if isinstance(cached, list):
-                    print(f"↪ Agent 5.6 conflict checkpoint hit ({len(batch)} pairs)", flush=True)
+                    print(f"↪ agent_08 conflict checkpoint hit ({len(batch)} pairs)", flush=True)
                     return cached
                 if self.resolver is None:
                     return []
@@ -462,7 +484,7 @@ class ReadinessRemediator:
                                 "entity": str(entry.get("entity", "")),
                                 "rule_ids": list(pair),
                                 "status": "unresolved",
-                                "reasoning": "Agent 5.6 did not return this expanded group pair.",
+                                "reasoning": "agent_08 did not return this expanded group pair.",
                                 "resolution": "",
                             })
                 else:
@@ -512,7 +534,7 @@ class ReadinessRemediator:
                 "conflict_batches": len(conflict_batches),
                 "rules_remaining": remaining,
             })
-            print(f"✓ Agent 5.6 pass {pass_number}: {len(review_ids) - remaining} newly ready; {remaining} remain", flush=True)
+            print(f"✓ agent_08 pass {pass_number}: {len(review_ids) - remaining} newly ready; {remaining} remain", flush=True)
             if remaining == 0 or remaining >= len(review_ids):
                 break
 
@@ -536,8 +558,8 @@ class ReadinessRemediator:
         (output_dir / "corpus_manifest.json").write_text(json.dumps(final_graph["corpus_manifest"], indent=2) + "\n", encoding="utf-8")
         (output_dir / "kg_readiness_report.json").write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         (output_dir / "kg_readiness_report.md").write_text(_report_markdown(report), encoding="utf-8")
-        (output_dir / "agent_5_6_remediation_report.json").write_text(json.dumps(report["remediation"], indent=2) + "\n", encoding="utf-8")
-        print(f"✅ Agent 5.6 completed: {report['rules_ready']} ready, {report['rules_requiring_review']} require review", flush=True)
+        (output_dir / "agent_08_remediation_report.json").write_text(json.dumps(report["remediation"], indent=2) + "\n", encoding="utf-8")
+        print(f"✅ agent_08 completed: {report['rules_ready']} ready, {report['rules_requiring_review']} require review", flush=True)
         return report
 
 

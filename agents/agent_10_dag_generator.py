@@ -2,15 +2,15 @@
 """
 Dependency DAG Generator
 
-Stage 6 of the extraction pipeline. Reads the optimized knowledge graph
-(Agent 5's output — or, absent that, Agent 4's pre-optimization graph, e.g.
+agent_10 in the extraction pipeline. Reads the optimized knowledge graph
+(agent_06's output — or, absent that, agent_05's pre-optimization graph, e.g.
 under --skip-optimize) and partitions every business rule into one or more
-directed acyclic graphs built from the rule dependency edges Agent 5 already
+directed acyclic graphs built from the rule dependency edges agent_06 already
 computed.
 
 Every rule is guaranteed to appear in exactly one output DAG: a rule with no
 dependencies becomes its own single-node DAG, and a dependency cycle (which
-Agent 5.5 readiness should already prevent, but which this stage does not
+agent_07 readiness should already prevent, but which this stage does not
 assume away) is condensed into a single "cycle group" node so the emitted
 DAG stays acyclic without dropping any rule. See utils/dag_builder.py for the
 partitioning algorithm and its own test coverage.
@@ -110,9 +110,9 @@ def main() -> None:
 
     config = get_config()
 
-    # Same source-resolution order as the visualizer (Agent 5 optimized graph
-    # first, Agent 4's pre-optimization graph otherwise): dependency edges are
-    # computed during Agent 5's optimization pass, so falling back to Agent 4
+    # Same source-resolution order as the visualizer (agent_06 optimized graph
+    # first, agent_05's pre-optimization graph otherwise): dependency edges are
+    # computed during agent_06's optimization pass, so falling back to agent_05
     # output (e.g. a --skip-optimize run) still works, just with no edges —
     # every rule becomes its own single-node DAG.
     optimized_file = config.get_optimized_dir() / "optimized_compliance_knowledge_graph.json"
@@ -120,18 +120,18 @@ def main() -> None:
 
     if optimized_file.exists():
         json_file = optimized_file
-        print("📊 Using optimized business rules (Agent 5 output)", flush=True)
+        print("📊 Using optimized business rules (agent_06 output)", flush=True)
     elif rules_with_entities_file.exists():
         json_file = rules_with_entities_file
-        print("⚠️  Optimized graph not found — using Agent 4 output (pre-optimization).", flush=True)
-        print("    Dependency edges are computed by Agent 5, so this run will likely", flush=True)
+        print("⚠️  Optimized graph not found — using agent_05 output (pre-optimization).", flush=True)
+        print("    Dependency edges are computed by agent_06, so this run will likely", flush=True)
         print("    yield only single-rule DAGs with no dependency edges.", flush=True)
     else:
         print("❌ Error: No input file found.", flush=True)
         print("   Looked for:", flush=True)
         print(f"     - {optimized_file}", flush=True)
         print(f"     - {rules_with_entities_file}", flush=True)
-        print("   Please run the pipeline up to step 4 or 5 first.", flush=True)
+        print("   Please run the pipeline through agent_05 or agent_06 first.", flush=True)
         sys.exit(1)
 
     output_dir = config.get_dag_dir()

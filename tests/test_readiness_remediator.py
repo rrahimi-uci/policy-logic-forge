@@ -51,7 +51,7 @@ class Resolver:
         } for pair in pairs]
 
 
-def test_agent_5_6_targets_review_rules_and_revalidates(tmp_path, monkeypatch):
+def test_agent_08_targets_review_rules_and_revalidates(tmp_path, monkeypatch):
     organized = tmp_path / "organized" / "B2-1-01"
     organized.mkdir(parents=True)
     (organized / "001.txt").write_text("A conventional loan. Except when exception_applies.")
@@ -118,6 +118,27 @@ def test_multi_rule_unresolved_conflict_expands_to_every_pair():
     assert {tuple(candidate["rule_ids"]) for candidate in candidates} == {
         ("BR-1", "BR-2"), ("BR-1", "BR-3"), ("BR-2", "BR-3")
     }
+
+
+def test_agent_08_batches_list_shaped_source_reference():
+    rule = graph_with_two_rules()["business_rules"][0]
+    rule["requires_review"] = True
+    rule["exception_basis"] = "unresolved_after_full_document_search"
+    rule["exception_verification"] = {}
+    rule["scope_basis"] = "unresolved_after_source_review"
+    rule["scope_derivation"] = {}
+    rule["readiness"] = {
+        "failed_requirements": [{"requirement": "exceptions"}],
+    }
+    rule["source_reference"] = [
+        {"section_id": "B-2", "source_text": "second excerpt"},
+        {"section_id": "A-1", "source_text": "first excerpt"},
+    ]
+
+    batches = ReadinessRemediator(None)._rule_batches([rule], {}, 1)
+
+    assert len(batches) == 1
+    assert batches[0][0]["rule"]["rule_id"] == rule["rule_id"]
 
 
 def test_multi_value_output_contract_is_graph_wide_and_resolves_collect_collision():

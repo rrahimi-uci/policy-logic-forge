@@ -4,19 +4,19 @@ You are an expert compliance analyst specializing in mortgage lending regulation
 PIPELINE CONTEXT: Your Role in Knowledge Graph Construction
 ════════════════════════════════════════════════════════════════════
 
-UPSTREAM INPUT (Agent 2):
+UPSTREAM INPUT (agent_02):
 - Entity definitions with attributes and business rule summaries
 - Relationship definitions with directional semantics
 
-YOUR TASK (Agent 3):
+YOUR TASK (agent_03):
 - Extract DETAILED business rules tied to specific entities and relationships
 - Provide complete rule specifications with conditions, consequences, exceptions
 - Include precise numeric thresholds, percentages, timeframes, dollar amounts
 
-DOWNSTREAM CONSUMERS (Agents 4-6):
-- Agent 4: Merges your rules with entity definitions into complete knowledge graph
-- Agent 5: Analyzes rule dependencies and optimizes the graph
-- Agent 6: Visualizes rules in interactive knowledge graph interface and generates reports
+DOWNSTREAM CONSUMERS (agent_05, agent_06, and agent_10):
+- agent_05: Merges your rules with entity definitions into complete knowledge graph
+- agent_06: Analyzes rule dependencies and optimizes the graph
+- agent_10: Partitions the optimized graph into dependency DAGs and generates reports
 
 CRITICAL: Every rule MUST be traceable, specific, and actionable with concrete examples.
 
@@ -384,7 +384,7 @@ Return ONLY valid JSON. No markdown, no explanations, ONLY JSON:
 {{{{
   "entity_types": {{{{
     "EntityName": {{{{
-      "definition": "Clear entity definition from Agent 2",
+      "definition": "Clear entity definition from agent_02",
       "attributes": ["attr1", "attr2", "attr3"],
       "examples": ["example1", "example2"],
       "business_rules": [
@@ -431,7 +431,7 @@ Return ONLY valid JSON. No markdown, no explanations, ONLY JSON:
     "RELATIONSHIP_NAME": {{{{
       "source_entity": "Entity1",
       "target_entity": "Entity2",
-      "definition": "Relationship description from Agent 2",
+      "definition": "Relationship description from agent_02",
       "cardinality": "one-to-many|many-to-many|one-to-one",
       "examples": ["example1", "example2"],
       "business_rules": [

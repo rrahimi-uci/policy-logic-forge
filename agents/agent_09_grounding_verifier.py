@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Agent 5.7: independent, claim-level source-grounding certification."""
+"""agent_09: independent, claim-level source-grounding certification."""
 
 from __future__ import annotations
 
@@ -200,7 +200,7 @@ class OpenAIGroundingResolver:
             content = content.split("\n", 1)[1].rsplit("```", 1)[0]
         value = json.loads(content)
         if not isinstance(value, dict) or not isinstance(value.get("verifications"), list):
-            raise ValueError("Agent 5.7 response must contain a verifications list")
+            raise ValueError("agent_09 response must contain a verifications list")
         return value
 
     def verify(self, packets: list[Mapping[str, Any]]) -> list[dict[str, Any]]:
@@ -235,7 +235,7 @@ class OpenAIGroundingResolver:
             except Exception as exc:
                 last_error = exc
                 prompt += "\n\nReturn complete valid JSON only, with every requested rule_id and claim_id exactly once."
-                print(f"⚠️ Agent 5.7 request retry {attempt}/{attempts}: {exc}", flush=True)
+                print(f"⚠️ agent_09 request retry {attempt}/{attempts}: {exc}", flush=True)
         assert last_error is not None
         raise last_error
 
@@ -669,7 +669,7 @@ class GroundingVerifier:
         packets = rule_packets + relationship_packets
         batches = self.make_batches(rule_packets, max_rules, max_claims)
         batches.extend(self.make_batches(relationship_packets, max_relationships, max_claims))
-        checkpoint = JsonlCheckpoint(output_dir / "agent_5_7_grounding_checkpoint.jsonl")
+        checkpoint = JsonlCheckpoint(output_dir / "agent_09_grounding_checkpoint.jsonl")
         raw_by_rule: dict[str, list[dict[str, Any]]] = {}
         unexpected_responses: list[dict[str, Any]] = []
 
@@ -683,14 +683,14 @@ class GroundingVerifier:
             })
             cached = checkpoint.get(key)
             if isinstance(cached, list):
-                print(f"↪ Agent 5.7 checkpoint hit ({len(batch)} rules)", flush=True)
+                print(f"↪ agent_09 checkpoint hit ({len(batch)} rules)", flush=True)
                 return batch, cached
             result = self.resolver.verify(batch) if self.resolver is not None else []
             checkpoint.put(key, result)
             return batch, result
 
         print(
-            f"▶ Agent 5.7 grounding: {len(rules)} rules, {sum(len(p['claims']) for p in packets)} model claims, "
+            f"▶ agent_09 grounding: {len(rules)} rules, {sum(len(p['claims']) for p in packets)} model claims, "
             f"{len(deterministic_relationships)} deterministic relationship checks, "
             f"{len(batches)} batches, {workers} workers",
             flush=True,
@@ -935,7 +935,7 @@ class GroundingVerifier:
         )
         _write_text_atomic(output_dir / "kg_grounding_report.md", self.report_markdown(report))
         print(
-            f"{'✅' if report['pass'] else '❌'} Agent 5.7 completed: "
+            f"{'✅' if report['pass'] else '❌'} agent_09 completed: "
             f"{report['rules_certified']}/{report['total_rules']} rules and "
             f"{report['supported_claims']}/{report['total_claims']} claims certified",
             flush=True,
@@ -948,7 +948,7 @@ def certification_issues(
     report: Mapping[str, Any],
     corpus_sha256: str,
 ) -> list[str]:
-    """Return deterministic reasons an Agent 5.7 certificate is not reusable."""
+    """Return deterministic reasons an agent_09 certificate is not reusable."""
     issues: list[str] = []
     metadata = graph.get("metadata")
     certificate = metadata.get("grounding_certification") if isinstance(metadata, Mapping) else None

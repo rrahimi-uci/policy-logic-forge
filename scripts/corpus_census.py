@@ -3,7 +3,7 @@
 §3.6) against one or more knowledge-graph JSON files and write
 docs/theory_coverage.md and docs/expressiveness_census.md.
 
-    python3 scripts/corpus_census.py pipeline-output/*/agent-5-optimized/optimized_compliance_knowledge_graph.json
+    python3 scripts/corpus_census.py pipeline-output/*/agent_06-optimized/optimized_compliance_knowledge_graph.json
     python3 scripts/corpus_census.py --check-subset boolean,number,enum <graph.json>...
 
 No API key, no network: this is pure aggregation over already-extracted v2

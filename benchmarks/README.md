@@ -89,7 +89,7 @@ python3 cli/extract.py --dir mapp_full         --domain mobile_app_privacy
 `cli/extract.py` runs a single batch/domain per invocation — there is no
 `--batch`/`--source` sweep mode in this repo (see `../README.md` "Scope": the
 orchestrator is deliberately lean). Each command above is one full corpus as
-one batch; `--target-rules` bounds how many rules Agent 3 tries to extract,
+one batch; `--target-rules` bounds how many rules agent_03 tries to extract,
 not how many documents get read.
 
 > **Cost.** These corpora total 1,387 documents through a 7-8-stage LLM

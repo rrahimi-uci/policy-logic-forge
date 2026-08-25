@@ -1,4 +1,4 @@
-"""Tests for Agent 1's concurrent per-document processing.
+"""Tests for agent_01's concurrent per-document processing.
 
 Context: process_knowledge_folder chunked and organized every file in a
 single-threaded `for` loop, with an added `time.sleep(1)` between files. The
@@ -6,7 +6,7 @@ per-document LLM call (chunk_document_with_reasoning) already goes through a
 client whose in-flight concurrency is gated by KG_LLM_CONCURRENCY (default 8,
 set by the CLI orchestrator's performance profile) — so the client already
 supports up to 8 concurrent reasoning calls, but the loop only ever issued
-one at a time. On a real 115-document benchmark corpus this made Step 1
+one at a time. On a real 115-document benchmark corpus this made agent_01
 alone take on the order of hours (~2.4 minutes/document, wholly serial),
 independent of how many workers the rest of the pipeline used.
 
@@ -146,7 +146,7 @@ def test_documents_are_actually_processed_concurrently_not_one_at_a_time(tmp_pat
 
 
 def test_reorganizing_a_document_clears_stale_chunks_from_a_prior_run(tmp_path):
-    """Chunking is LLM-driven and non-deterministic — a re-run of Step 1 can
+    """Chunking is LLM-driven and non-deterministic — a re-run of agent_01 can
     produce a different set of chunk filenames than the previous run.
     Without clearing the document's folder first, a chunk file the new run
     didn't happen to overwrite is orphaned but still present, and every
