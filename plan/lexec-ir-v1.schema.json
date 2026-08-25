@@ -1,0 +1,276 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrahimi-uci/compliance-to-code/plan/lexec-ir-v1.schema.json",
+  "title": "LEXEC compiler intermediate representation v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "document_unit", "semantics", "symbols", "rules", "tables", "refusals"],
+  "properties": {
+    "schema_version": {"const": "lexec-ir/1.0"},
+    "document_unit": {"$ref": "#/$defs/documentUnit"},
+    "semantics": {"$ref": "#/$defs/semantics"},
+    "symbols": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/symbol"}
+    },
+    "rules": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/rule"}
+    },
+    "tables": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/table"}
+    },
+    "refusals": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/refusal"}
+    }
+  },
+  "$defs": {
+    "documentUnit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["document_id", "source_sha256", "source_paths"],
+      "properties": {
+        "document_id": {"type": "string", "minLength": 1},
+        "source_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "source_paths": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+        "corpus_id": {"type": ["string", "null"]},
+        "split": {"type": ["string", "null"]}
+      }
+    },
+    "semantics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["null_model", "unknown_at_table_boundary", "exception_reading"],
+      "properties": {
+        "null_model": {"const": "kleene_three_valued"},
+        "unknown_at_table_boundary": {"enum": ["refuse", "no_match", "explicit_unknown"]},
+        "exception_reading": {"enum": ["unset", "defeater_or", "conjunctive", "ignored"]}
+      }
+    },
+    "domain": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind"],
+          "properties": {"kind": {"const": "boolean"}}
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "values"],
+          "properties": {
+            "kind": {"const": "enum"},
+            "values": {"type": "array", "minItems": 1, "items": {"type": ["string", "number", "boolean"]}}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind"],
+          "properties": {
+            "kind": {"const": "interval"},
+            "minimum": {"type": ["number", "null"]},
+            "maximum": {"type": ["number", "null"]},
+            "minimum_inclusive": {"type": "boolean", "default": true},
+            "maximum_inclusive": {"type": "boolean", "default": true}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "predicates"],
+          "properties": {
+            "kind": {"const": "string"},
+            "predicates": {
+              "type": "array",
+              "minItems": 1,
+              "items": {"enum": ["eq", "contains", "is_null", "in_binned_range"]}
+            }
+          }
+        }
+      ]
+    },
+    "symbol": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "theory", "role", "domain", "unit", "derived_expression", "provenance"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+        "theory": {"enum": ["bool", "int", "real", "enum", "string"]},
+        "role": {"enum": ["input", "derived", "output"]},
+        "domain": {"$ref": "#/$defs/domain"},
+        "unit": {"type": ["string", "null"]},
+        "derived_expression": {"oneOf": [{"$ref": "#/$defs/formula"}, {"type": "null"}]},
+        "provenance": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/span"}}
+      }
+    },
+    "literal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["literal", "type"],
+      "properties": {
+        "literal": {"type": ["string", "number", "boolean", "null"]},
+        "type": {"enum": ["bool", "int", "real", "enum", "string", "null"]}
+      }
+    },
+    "operand": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["symbol"],
+          "properties": {"symbol": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"}}
+        },
+        {"$ref": "#/$defs/literal"}
+      ]
+    },
+    "formula": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["op", "args"],
+          "properties": {
+            "op": {"enum": ["and", "or"]},
+            "args": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/formula"}}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["op", "arg"],
+          "properties": {
+            "op": {"const": "not"},
+            "arg": {"$ref": "#/$defs/formula"}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["op", "left", "right"],
+          "properties": {
+            "op": {"enum": ["eq", "ne", "lt", "le", "gt", "ge", "contains", "in_binned_range"]},
+            "left": {"$ref": "#/$defs/operand"},
+            "right": {"$ref": "#/$defs/operand"}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["op", "arg"],
+          "properties": {
+            "op": {"const": "is_null"},
+            "arg": {"$ref": "#/$defs/operand"}
+          }
+        }
+      ]
+    },
+    "span": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["chunk_path", "section_id", "start_offset", "end_offset", "source_sha256"],
+      "properties": {
+        "chunk_path": {"type": "string", "minLength": 1},
+        "section_id": {"type": "string", "minLength": 1},
+        "start_offset": {"type": "integer", "minimum": 0},
+        "end_offset": {"type": "integer", "minimum": 1},
+        "source_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+      }
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["predicate", "metadata"],
+      "properties": {
+        "predicate": {"oneOf": [{"$ref": "#/$defs/formula"}, {"type": "null"}]},
+        "metadata": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "jurisdictions": {"type": "array", "items": {"type": "string"}},
+            "parties": {"type": "array", "items": {"type": "string"}},
+            "authority": {"type": ["string", "null"]},
+            "effective_from": {"type": ["string", "null"], "format": "date"},
+            "effective_to": {"type": ["string", "null"], "format": "date"},
+            "document_version": {"type": ["string", "null"]}
+          }
+        }
+      }
+    },
+    "effect": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "modality", "target", "value", "provenance"],
+      "properties": {
+        "kind": {"const": "assignment"},
+        "modality": {"enum": ["obligation", "permission", "prohibition", "definition", "none"]},
+        "target": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+        "value": {"$ref": "#/$defs/operand"},
+        "provenance": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/span"}}
+      }
+    },
+    "exception": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "condition", "provenance"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "condition": {"$ref": "#/$defs/formula"},
+        "provenance": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/span"}}
+      }
+    },
+    "rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "scope", "condition", "exceptions", "effects", "provenance"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "scope": {"$ref": "#/$defs/scope"},
+        "condition": {"$ref": "#/$defs/formula"},
+        "exceptions": {"type": "array", "items": {"$ref": "#/$defs/exception"}},
+        "effects": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/effect"}},
+        "provenance": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/span"}}
+      }
+    },
+    "policyProof": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "method", "solver", "query_sha256", "witnesses"],
+      "properties": {
+        "status": {"enum": ["proved", "refused", "timeout", "unknown"]},
+        "method": {"enum": ["pairwise_disjointness", "equal_outputs_on_overlap", "source_precedence", "unproved"]},
+        "solver": {"type": ["string", "null"]},
+        "query_sha256": {"type": ["string", "null"], "pattern": "^[a-f0-9]{64}$"},
+        "witnesses": {"type": "array", "items": {"type": "object"}}
+      }
+    },
+    "table": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "rule_ids", "output_signature", "hit_policy", "policy_proof"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "rule_ids": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+        "output_signature": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+        "hit_policy": {"enum": ["UNIQUE", "ANY", "PRIORITY", "COLLECT"]},
+        "policy_proof": {"$ref": "#/$defs/policyProof"}
+      }
+    },
+    "refusal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rule_id", "code", "construct", "detail", "requires_review", "provenance"],
+      "properties": {
+        "rule_id": {"type": ["string", "null"]},
+        "code": {"type": "string", "pattern": "^[A-Z][A-Z0-9_]+$"},
+        "construct": {"type": "string", "minLength": 1},
+        "detail": {"type": "string", "minLength": 1},
+        "requires_review": {"const": true},
+        "provenance": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/span"}}
+      }
+    }
+  }
+}
