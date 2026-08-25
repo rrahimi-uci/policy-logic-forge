@@ -8,10 +8,9 @@ size at which its own declared success criterion fails even at the true
 target effect. `utils/corpus_census.py` is the tool that makes that kind of
 blocker visible by measurement instead of by omission.
 
-No real pipeline output exists in this repo yet (see README.md "Data and
-licensing"), so these tests exercise the census against synthetic v2 rule
-fixtures rather than a real corpus -- the same posture the module's own
-docstring states.
+These tests exercise the census against synthetic v2 rule fixtures.  A bounded
+local pilot may be retained as aggregate evidence, but it is not a substitute
+for a full-corpus report or a coverage claim.
 """
 
 import json
@@ -20,10 +19,17 @@ import pytest
 
 from utils.corpus_census import (
     census_report,
+    contract_issue_census,
     coverage_at_subset,
+    dependency_census,
+    field_presence_census,
     expressiveness_signal,
+    exception_basis_census,
+    hit_policy_census,
     load_rules,
     operator_census,
+    scope_basis_census,
+    table_census,
     theories_required_by,
     value_type_census,
     variable_type_census,
@@ -120,6 +126,56 @@ def test_operator_census_counts_each_operator_once_per_rule():
     assert counts[">"] == 0
 
 
+def test_metadata_censuses_retain_missing_values():
+    rules = [_rule("R1", variables=[_var("a", "boolean")])]
+    rules[0].update({
+        "scope_basis": "explicit",
+        "exception_basis": "explicitly_none_in_source",
+        "recommended_hit_policy": "UNIQUE",
+    })
+    assert scope_basis_census(rules) == {"explicit": 1}
+    assert exception_basis_census(rules) == {"explicitly_none_in_source": 1}
+    assert hit_policy_census(rules) == {"UNIQUE": 1}
+    assert scope_basis_census([_rule("missing")]) == {"<missing>": 1}
+
+
+def test_field_presence_distinguishes_empty_arrays_from_omitted_fields():
+    explicit_empty = _rule("R1")
+    explicit_empty["exceptions"] = []
+    omitted = _rule("R2")
+    counts = field_presence_census([explicit_empty, omitted])
+    assert counts["exceptions"] == {"present": 1, "missing": 1}
+
+
+def test_dependency_and_table_censuses_count_nonempty_projections():
+    rules = [_rule("R1"), _rule("R2")]
+    rules[0]["dependencies"] = [{"depends_on_rule": "R2"}]
+    rules[0]["table_rows"] = [{"when": "x", "then": "y"}]
+    assert dependency_census(rules) == {
+        "rules_with_dependencies": 1,
+        "rules_without_dependencies": 1,
+        "dependency_edges": 1,
+    }
+    assert table_census(rules) == {"rules_with_tables": 1, "rules_without_tables": 1}
+
+
+def test_contract_issue_census_exposes_invalid_predicate_operator_and_review():
+    rule = _rule(
+        "R1",
+        variables=[_var("x", "string")],
+        predicates=[_predicate("x", "=", "string")],
+    )
+    rule.update({
+        "requires_review": True,
+        "contract_issues": [{"code": "invalid_predicate_operator", "severity": "error"}],
+    })
+    report = contract_issue_census([rule])
+    assert report["invalid_predicate_operators"] == 1
+    assert report["rules_with_contract_issues"] == 1
+    assert report["rules_requiring_review"] == 1
+    assert report["issue_codes"] == {"invalid_predicate_operator": 1}
+
+
 # ─────────────────────────────────────────────────────────────────────────
 # theories_required_by / coverage_at_subset — the §9.4 blocker, generalized
 # ─────────────────────────────────────────────────────────────────────────
@@ -207,7 +263,7 @@ def test_expressiveness_signal_on_empty_corpus_reports_zero_not_undefined():
 # census_report — the combined output the CLI script writes
 # ─────────────────────────────────────────────────────────────────────────
 
-def test_census_report_combines_all_four_censuses():
+def test_census_report_combines_coverage_and_failure_censuses():
     rules = [_rule(
         "R1",
         variables=[_var("a", "boolean")],
@@ -219,6 +275,10 @@ def test_census_report_combines_all_four_censuses():
     assert report["variable_type_census"]["boolean"] == 1
     assert report["value_type_census"]["boolean"] == 1
     assert report["operator_census"]["=="] == 1
+    assert report["scope_basis_census"] == {"<missing>": 1}
+    assert report["dependency_census"]["rules_without_dependencies"] == 1
+    assert report["table_census"]["rules_without_tables"] == 1
+    assert report["contract_issue_census"]["rules_without_contract_issues"] == 1
     assert report["expressiveness_signal"]["bucket_counts"]["deontic_modality"] == 1
 
 
