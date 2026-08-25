@@ -4,7 +4,7 @@
   "title": "LEXEC compiler intermediate representation v1",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "document_unit", "semantics", "symbols", "rules", "tables", "refusals"],
+  "required": ["schema_version", "document_unit", "semantics", "symbols", "rules", "tables", "refusals", "ignored_fields"],
   "properties": {
     "schema_version": {"const": "lexec-ir/1.0"},
     "document_unit": {"$ref": "#/$defs/documentUnit"},
@@ -24,6 +24,10 @@
     "refusals": {
       "type": "array",
       "items": {"$ref": "#/$defs/refusal"}
+    },
+    "ignored_fields": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/ignoredField"}
     }
   },
   "$defs": {
@@ -270,6 +274,16 @@
         "detail": {"type": "string", "minLength": 1},
         "requires_review": {"const": true},
         "provenance": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/span"}}
+      }
+    },
+    "ignoredField": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rule_id", "field", "reason"],
+      "properties": {
+        "rule_id": {"type": ["string", "null"]},
+        "field": {"type": "string", "minLength": 1},
+        "reason": {"enum": ["NON_EXECUTABLE_METADATA", "AUDIT_STATUS_NOT_EXECUTABLE"]}
       }
     }
   }

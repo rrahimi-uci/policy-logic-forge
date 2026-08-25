@@ -135,8 +135,14 @@
         "commands": [[".venv/bin/python", "-m", "pytest", "tests/test_lexec_ir.py", "tests/test_lowering_oracle.py", "-q"]],
         "artifacts": ["plan/lexec-ir-v1.schema.json", "docs/ir-semantics-v1.md", "utils/lexec_ir.py"]
       },
-      "evidence": ["plan/lexec-ir-v1.schema.json"],
-      "claim_boundary": "Schema exists; semantics document, lowering implementation, independent oracle, and string theory remain unimplemented."
+      "evidence": [
+        "plan/lexec-ir-v1.schema.json",
+        "docs/ir-semantics-v1.md",
+        "utils/lexec_ir.py",
+        "tests/test_lexec_ir.py",
+        "tests/test_lowering_oracle.py"
+      ],
+      "claim_boundary": "The dependency-free v1 subset, semantics document, total fail-closed lowering, string predicates, ignored-field ledger, and independent expected-value tests are implemented. Status remains partial because the bounded IR-2 pilot is not a corpus-wide freeze, table policies are unproved, and date/duration/list/other unsupported constructs are explicit refusals."
     },
     {
       "id": "IR-3",
