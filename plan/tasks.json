@@ -347,15 +347,21 @@
       "title": "Emit and validate DMN 1.3",
       "phase": "G2",
       "track": "G2",
-      "status": "planned",
+      "status": "partial",
       "effort_pd": 5,
       "depends_on": ["IR-1", "IR-3"],
       "acceptance": {
         "commands": [[".venv/bin/python", "-m", "pytest", "tests/test_dmn_builder.py", "tests/test_dmn_emit.py", "-q"]],
         "artifacts": ["utils/dmn_builder.py", "utils/dmn_emit.py"]
       },
-      "evidence": [],
-      "claim_boundary": "XSD validity is syntax; semantic validity requires BE-4."
+      "evidence": [
+        "utils/dmn_builder.py",
+        "utils/dmn_emit.py",
+        "tests/test_dmn_builder.py",
+        "tests/test_dmn_emit.py",
+        "docs/dmn-emission.md"
+      ],
+      "claim_boundary": "A dependency-free DMN 1.3 XML emitter and structural validator support proven bounded UNIQUE/ANY tables with conjunctional atomic conditions. Unproved policies, contextual scope, exceptions, derived inputs, and unsupported conditions refuse emission. XML shape is not XSD or semantic equivalence; BE-4 remains required."
     },
     {
       "id": "BE-3",
