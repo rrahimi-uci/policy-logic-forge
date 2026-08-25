@@ -1,0 +1,33 @@
+{
+  "adjudication_method": "fixture_adjudication_for_contract_testing_only",
+  "annotator_count": 2,
+  "candidate_edge_count": 4,
+  "claim_boundary": "Synthetic provider-free contract fixture only. It does not estimate dependency precision or recall on the compliance corpus; a real PIPE-4 result requires a licensed rule sample, two independent human annotators, explicit negatives, adjudication, and agreement statistics.",
+  "declared_negative_edges": 2,
+  "evidence_status": "fixture_only",
+  "false_positive_edge_keys": [
+    [
+      "r4",
+      "r1",
+      "prerequisite"
+    ]
+  ],
+  "false_positive_edges": 1,
+  "gold_edges": 2,
+  "matched_edges": 1,
+  "missing_edge_keys": [
+    [
+      "r3",
+      "r2",
+      "complementary"
+    ]
+  ],
+  "missing_edges": 1,
+  "negative_edge_iaa_jaccard": 1.0,
+  "positive_edge_iaa_jaccard": 1.0,
+  "precision": 0.5,
+  "predicted_edges": 2,
+  "recall": 0.5,
+  "rule_universe_size": 4,
+  "status": "fixture_only"
+}

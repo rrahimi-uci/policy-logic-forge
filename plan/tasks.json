@@ -84,15 +84,15 @@
       "title": "Audit dependency discovery precision and recall",
       "phase": "G0",
       "track": "B",
-      "status": "planned",
+      "status": "partial",
       "effort_pd": 6,
       "depends_on": ["PIPE-3"],
       "acceptance": {
         "commands": [[".venv/bin/python", "-m", "pytest", "tests/test_dependency_audit.py", "-q"]],
         "artifacts": ["tests/fixtures/dependency_gold/", "docs/dependency_fixture_construction.md", "results/aggregates/dependency_audit.json"]
       },
-      "evidence": [],
-      "claim_boundary": "Fixture must have a declared universe, negatives, two annotators, adjudication, and IAA."
+      "evidence": ["utils/dependency_audit.py", "scripts/dependency_audit.py", "tests/test_dependency_audit.py", "docs/dependency_fixture_construction.md", "results/aggregates/dependency_audit.json"],
+      "claim_boundary": "The deterministic evaluator and a synthetic fixture are complete, but the fixture is contract-only. A real dependency precision/recall claim remains blocked pending a licensed rule sample, explicit negatives, two independent human annotations, adjudication, and agreement statistics."
     },
     {
       "id": "IR-2",
