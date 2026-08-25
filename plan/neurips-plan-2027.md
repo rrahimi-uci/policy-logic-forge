@@ -15,7 +15,7 @@ authoritative for research definitions, claim boundaries, and stop/go rules.
 prerequisites, an argv-form acceptance command, an artifact target, and a
 claim boundary, and that the graph can be validated and queried locally. It
 does **not** mean that the planned research has already been implemented or
-that a publishable result is guaranteed. At this revision, 22 person-days of
+that a publishable result is guaranteed. At this revision, 23 person-days of
 work are evidenced as complete; the compiler, benchmark, instrument study,
 transfer study, and optional RL work remain future work.
 
@@ -25,7 +25,7 @@ transfer study, and optional RL work remain future work.
 | Phase | Tasks | Total pd | Done pd | Status |
 | --- | ---: | ---: | ---: | --- |
 | G0 | 13 | 46 | 19 | done=8, partial=2, planned=3 |
-| A | 4 | 8 | 3 | done=2, planned=1, conditional=1 |
+| A | 4 | 8 | 4 | done=3, conditional=1 |
 | J | 2 | 6 | 0 | planned=2 |
 | G2 | 6 | 30 | 0 | planned=6 |
 | G3 | 5 | 24 | 0 | planned=5 |
@@ -35,12 +35,12 @@ transfer study, and optional RL work remain future work.
 
 | Scope | Included pd | Done pd | Remaining pd |
 | --- | ---: | ---: | ---: |
-| `minimum_paper` | 125 | 22 | 103 |
-| `second_domain` | 151 | 22 | 129 |
-| `full_programme` | 171 | 22 | 149 |
-| `minimum_plus_optional_replication` | 129 | 22 | 107 |
+| `minimum_paper` | 125 | 23 | 102 |
+| `second_domain` | 151 | 23 | 128 |
+| `full_programme` | 171 | 23 | 148 |
+| `minimum_plus_optional_replication` | 129 | 23 | 106 |
 
-**Ready now:** `PIPE-2B`, `PIPE-4`, `IR-2`, `A3`.
+**Ready now:** `PIPE-2B`, `PIPE-4`, `IR-2`.
 
 Generated from [`plan/tasks.json`](tasks.json) by `scripts/validate_neurips_plan.py`; manual edits to this block fail CI.
 <!-- GENERATED_TASK_SUMMARY_END -->
@@ -293,8 +293,15 @@ diagnostic only.
 - `A2` is optional and separately preregistered. It uses fresh model
   generations only after `A1B`, with a distinct budget and no substitution of
   current-model output for the historical release.
-- `A3` records license and reuse posture. Contacting authors is external
-  communication and requires owner approval.
+- `A3` is complete as a fail-closed posture characterization: the pinned
+  upstream code is CC BY 4.0, but the README's Dutch source-data reuse claim
+  is explicitly an assumption rather than documented permission. The
+  repository therefore retains only scripts, manifests, hashes, and labeled
+  derived diagnostics; it does not re-host source, gold, generated, raw, or
+  restricted artifacts. [`docs/data_licensing.md`](../docs/data_licensing.md)
+  records the evidence and the owner-approved actions still required before
+  any broader release. Contacting authors remains external communication and
+  requires owner approval.
 
 ### 4.2 Join points
 
@@ -438,7 +445,7 @@ grounding or human acceptability.
 The generated status table is the sole source of numeric totals. The scopes
 are cumulative:
 
-- minimum paper: 125 pd total, 22 done, 103 remaining;
+- minimum paper: 125 pd total, 23 done, 102 remaining;
 - minimum plus optional fresh-generation replication: 129 pd;
 - second-domain extension: 151 pd cumulative;
 - full programme including conditional RL: 171 pd cumulative.
@@ -449,10 +456,10 @@ recruitment, ethics review, and scientific iteration after a failed gate.
 Therefore the calendar cannot be obtained by dividing totals by headcount.
 
 With one contributor, the minimum scope is not credible by simply serializing
-103 remaining pd into the submission window. The recommended execution is:
+102 remaining pd into the submission window. The recommended execution is:
 
 - immediately parallelize provider-free G0 work (`IR-2`, `BENCH-3`, pipeline
-  audits) with the remaining anchor licensing task (`A3`);
+  audits) with the remaining extraction audits;
 - freeze IR semantics only after the census;
 - build reference and SMT backends in parallel after `IR-1`;
 - freeze statistics before instrument outcomes are inspected;
@@ -527,14 +534,12 @@ from one domain or fixed benchmark to policy compilation generally.
 
 ## 13. Immediate executable queue
 
-The validator currently identifies four dependency-ready tasks. Recommended
+The validator currently identifies three dependency-ready tasks. Recommended
 order within the two parallel tracks:
 
 1. `IR-2`: run the existing census on retained real output; it determines the
    IR boundary.
 2. `PIPE-2B` and `PIPE-4`: measure the two unresolved extraction claims.
-3. `A3`: draft the reuse posture; pause before external communication for owner
-   approval.
 
 Use `--show TASK` for the exact artifact and command contract. If a task's
 acceptance command cannot pass without unstated setup, update that task's
