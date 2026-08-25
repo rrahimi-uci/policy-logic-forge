@@ -365,18 +365,18 @@
     },
     {
       "id": "BE-3",
-      "title": "Implement complete SMT backend and witness queries",
+      "title": "Implement bounded SMT-shaped backend and witness queries",
       "phase": "G2",
       "track": "G2",
-      "status": "planned",
+      "status": "partial",
       "effort_pd": 6,
       "depends_on": ["IR-1", "IR-3"],
       "acceptance": {
         "commands": [[".venv/bin/python", "-m", "pytest", "tests/test_smt_queries.py", "-q"]],
-        "artifacts": ["utils/smt.py"]
+        "artifacts": ["utils/smt.py", "docs/smt-query-protocol.md"]
       },
-      "evidence": [],
-      "claim_boundary": "Timeout and unknown are recorded; witnesses accompany satisfiable findings."
+      "evidence": ["utils/smt.py", "tests/test_smt_queries.py", "docs/smt-query-protocol.md"],
+      "claim_boundary": "Provider-free bounded satisfiability, overlap, coverage, conflict, counterexample, and witness query APIs are implemented. Complete finite-domain results can be proved and concrete witnesses are retained; open or unbounded domains, Kleene-unknown coverage, and search limits remain unknown or timeout. This is not a complete SMT backend without a solver dependency."
     },
     {
       "id": "BE-4",

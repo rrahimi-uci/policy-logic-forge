@@ -178,6 +178,8 @@ def _range_membership(value: Any, range_text: Any) -> bool | None:
 def evaluate_formula(formula: Mapping[str, Any], assignment: Mapping[str, Any]) -> bool | None:
     """Evaluate an IR formula with Kleene true/false/unknown semantics."""
 
+    if not isinstance(formula, Mapping):
+        return UNKNOWN
     op = formula.get("op")
     if op in {"and", "or"}:
         values = [evaluate_formula(child, assignment) for child in formula.get("args", [])]
@@ -202,6 +204,8 @@ def solve_formula(
 ) -> SolveResult:
     """Find a satisfying assignment, or conservatively report unknown."""
 
+    if not isinstance(formula, Mapping):
+        return SolveResult("unknown", None, 0, "formula must be an object")
     symbol_map = _symbols_by_id(symbols)
     referenced = sorted(_formula_symbols(formula))
     missing = [name for name in referenced if name not in symbol_map]
@@ -233,6 +237,299 @@ def solve_formula(
     if complete:
         return SolveResult("unsat", None, explored)
     return SolveResult("unknown", None, explored, "; ".join(incomplete_reasons))
+
+
+def _query_record(query_type: str, query: Mapping[str, Any], result: SolveResult) -> dict[str, Any]:
+    """Attach stable query metadata to a bounded solver result."""
+
+    record = {
+        "query_type": query_type,
+        **result.as_dict(),
+        "query_sha256": _sha256({"query_type": query_type, "query": query}),
+    }
+    return record
+
+
+def query_satisfiable(
+    formula: Mapping[str, Any],
+    symbols: Mapping[str, Mapping[str, Any]] | Sequence[Mapping[str, Any]],
+    *,
+    max_assignments: int = MAX_ASSIGNMENTS,
+) -> dict[str, Any]:
+    """Run the bounded satisfiability query and retain its witness contract."""
+
+    query = {"formula": formula, "symbols": symbols}
+    return _query_record("satisfiable", query, solve_formula(formula, symbols, max_assignments=max_assignments))
+
+
+def query_overlap(
+    left_rule: Mapping[str, Any],
+    right_rule: Mapping[str, Any],
+    symbols: Mapping[str, Mapping[str, Any]] | Sequence[Mapping[str, Any]],
+    *,
+    max_assignments: int = MAX_ASSIGNMENTS,
+) -> dict[str, Any]:
+    """Ask whether two rule conditions can be true at the same assignment."""
+
+    left_condition = left_rule.get("condition") if isinstance(left_rule, Mapping) else None
+    right_condition = right_rule.get("condition") if isinstance(right_rule, Mapping) else None
+    formula = {"op": "and", "args": [left_condition, right_condition]}
+    query = {
+        "left_rule": {"id": left_rule.get("id"), "condition": left_condition},
+        "right_rule": {"id": right_rule.get("id"), "condition": right_condition},
+        "symbols": symbols,
+    }
+    result = solve_formula(formula, symbols, max_assignments=max_assignments)
+    record = _query_record("overlap", query, result)
+    record.update({
+        "rule_ids": [left_rule.get("id"), right_rule.get("id")],
+        "overlap": True if result.status == "sat" else False if result.status == "unsat" else None,
+    })
+    return record
+
+
+def query_counterexample(
+    formula: Mapping[str, Any],
+    symbols: Mapping[str, Mapping[str, Any]] | Sequence[Mapping[str, Any]],
+    *,
+    max_assignments: int = MAX_ASSIGNMENTS,
+) -> dict[str, Any]:
+    """Search for a satisfying assignment to a violation formula.
+
+    ``status == "sat"`` means that a counterexample was found.  The original
+    solver status is intentionally preserved so unknown and timeout can never
+    be mistaken for a negative result.
+    """
+
+    record = _query_record(
+        "counterexample",
+        {"formula": formula, "symbols": symbols},
+        solve_formula(formula, symbols, max_assignments=max_assignments),
+    )
+    record["found"] = record["status"] == "sat"
+    return record
+
+
+def query_witness(
+    formula: Mapping[str, Any],
+    symbols: Mapping[str, Mapping[str, Any]] | Sequence[Mapping[str, Any]],
+    *,
+    max_assignments: int = MAX_ASSIGNMENTS,
+) -> dict[str, Any]:
+    """Return a satisfying witness while preserving incomplete outcomes."""
+
+    record = _query_record(
+        "witness",
+        {"formula": formula, "symbols": symbols},
+        solve_formula(formula, symbols, max_assignments=max_assignments),
+    )
+    record["found"] = record["status"] == "sat"
+    return record
+
+
+def query_coverage(
+    rules: Mapping[str, Mapping[str, Any]] | Sequence[Mapping[str, Any]],
+    symbols: Mapping[str, Mapping[str, Any]] | Sequence[Mapping[str, Any]],
+    *,
+    max_assignments: int = MAX_ASSIGNMENTS,
+) -> dict[str, Any]:
+    """Check that every bounded assignment satisfies at least one rule.
+
+    This query is deliberately stricter than satisfiability: an assignment
+    whose disjunction evaluates to ``unknown`` prevents a proof.  A concrete
+    false assignment is a valid coverage-gap counterexample, even when the
+    domain is otherwise open-ended.
+    """
+
+    rule_list = list(_rule_map(rules).values())
+    rule_ids = [str(rule.get("id")) for rule in rule_list]
+    conditions = [rule.get("condition") for rule in rule_list if isinstance(rule.get("condition"), Mapping)]
+    query = {
+        "rules": [{"id": rule.get("id"), "condition": rule.get("condition")} for rule in rule_list],
+        "symbols": symbols,
+    }
+    if not conditions:
+        return {
+            "query_type": "coverage",
+            "status": "counterexample",
+            "witness": {},
+            "explored": 0,
+            "reason": "no executable rule conditions",
+            "query_sha256": _sha256({"query_type": "coverage", "query": query}),
+            "rule_ids": rule_ids,
+            "covered": False,
+        }
+
+    formula = {"op": "or", "args": conditions}
+    symbol_map = _symbols_by_id(symbols)
+    referenced = sorted(_formula_symbols(formula))
+    missing = [name for name in referenced if name not in symbol_map]
+    if missing:
+        result = {
+            "query_type": "coverage",
+            "status": "unknown",
+            "witness": None,
+            "explored": 0,
+            "reason": f"unknown symbols: {missing}",
+            "query_sha256": _sha256({"query_type": "coverage", "query": query}),
+            "rule_ids": rule_ids,
+            "covered": None,
+        }
+        return result
+
+    literals = _formula_literals(formula)
+    choices: list[list[Any]] = []
+    complete = True
+    incomplete_reasons: list[str] = []
+    for name in referenced:
+        values, is_complete, reason = _candidate_values(symbol_map[name], literals)
+        if not values:
+            return {
+                "query_type": "coverage",
+                "status": "unknown",
+                "witness": None,
+                "explored": 0,
+                "reason": reason,
+                "query_sha256": _sha256({"query_type": "coverage", "query": query}),
+                "rule_ids": rule_ids,
+                "covered": None,
+            }
+        choices.append(values)
+        complete = complete and is_complete
+        if reason:
+            incomplete_reasons.append(f"{name}: {reason}")
+
+    total = math.prod(len(values) for values in choices) if choices else 1
+    if total > max_assignments:
+        return {
+            "query_type": "coverage",
+            "status": "timeout",
+            "witness": None,
+            "explored": 0,
+            "reason": f"candidate space {total} exceeds max_assignments={max_assignments}",
+            "query_sha256": _sha256({"query_type": "coverage", "query": query}),
+            "rule_ids": rule_ids,
+            "covered": None,
+        }
+
+    explored = 0
+    unknown_assignment: dict[str, Any] | None = None
+    for values in itertools.product(*choices):
+        assignment = dict(zip(referenced, values))
+        explored += 1
+        outcome = evaluate_formula(formula, assignment)
+        if outcome is False:
+            return {
+                "query_type": "coverage",
+                "status": "counterexample",
+                "witness": assignment,
+                "explored": explored,
+                "reason": "no rule condition is true for this assignment",
+                "query_sha256": _sha256({"query_type": "coverage", "query": query}),
+                "rule_ids": rule_ids,
+                "covered": False,
+            }
+        if outcome is UNKNOWN and unknown_assignment is None:
+            unknown_assignment = assignment
+
+    if unknown_assignment is not None:
+        reason = "; ".join(incomplete_reasons) or "a rule disjunction evaluates to unknown"
+        status = "unknown"
+        covered = None
+        witness = None
+    elif complete:
+        reason = None
+        status = "proved"
+        covered = True
+        witness = None
+    else:
+        reason = "; ".join(incomplete_reasons) or "domain is incomplete"
+        status = "unknown"
+        covered = None
+        witness = None
+    return {
+        "query_type": "coverage",
+        "status": status,
+        "witness": witness,
+        "explored": explored,
+        "reason": reason,
+        "query_sha256": _sha256({"query_type": "coverage", "query": query}),
+        "rule_ids": rule_ids,
+        "covered": covered,
+    }
+
+
+def query_conflicts(
+    rules: Mapping[str, Mapping[str, Any]] | Sequence[Mapping[str, Any]],
+    symbols: Mapping[str, Mapping[str, Any]] | Sequence[Mapping[str, Any]],
+    *,
+    max_assignments: int = MAX_ASSIGNMENTS,
+) -> dict[str, Any]:
+    """Find overlapping rules with different executable outputs."""
+
+    rule_list = list(_rule_map(rules).values())
+    rule_ids = [str(rule.get("id")) for rule in rule_list]
+    query = {
+        "rules": [
+            {"id": rule.get("id"), "condition": rule.get("condition"), "effects": rule.get("effects")}
+            for rule in rule_list
+        ],
+        "symbols": symbols,
+    }
+    witnesses: list[dict[str, Any]] = []
+    unknown_reason: str | None = None
+    timeout_reason: str | None = None
+    explored = 0
+    for left, right in itertools.combinations(rule_list, 2):
+        overlap = query_overlap(left, right, symbols, max_assignments=max_assignments)
+        explored += int(overlap["explored"])
+        if overlap["status"] == "sat":
+            assignment = overlap["witness"] or {}
+            left_output = _effect_values(left, assignment)
+            right_output = _effect_values(right, assignment)
+            if left_output is None or right_output is None:
+                unknown_reason = "overlap witness has unknown output value"
+                continue
+            if left_output != right_output:
+                witnesses.append({
+                    "rule_ids": [left.get("id"), right.get("id")],
+                    "assignment": assignment,
+                    "left_output": left_output,
+                    "right_output": right_output,
+                })
+                return {
+                    "query_type": "conflicts",
+                    "status": "conflict",
+                    "witness": assignment,
+                    "explored": explored,
+                    "reason": "overlapping rules produce different outputs",
+                    "query_sha256": _sha256({"query_type": "conflicts", "query": query}),
+                    "rule_ids": rule_ids,
+                    "conflict_count": len(witnesses),
+                    "witnesses": witnesses,
+                }
+        elif overlap["status"] == "timeout":
+            timeout_reason = overlap.get("reason") or "overlap query timed out"
+        elif overlap["status"] == "unknown":
+            unknown_reason = overlap.get("reason") or "overlap query is unknown"
+
+    if timeout_reason:
+        status, reason = "timeout", timeout_reason
+    elif unknown_reason:
+        status, reason = "unknown", unknown_reason
+    else:
+        status, reason = "proved", None
+    return {
+        "query_type": "conflicts",
+        "status": status,
+        "witness": None,
+        "explored": explored,
+        "reason": reason,
+        "query_sha256": _sha256({"query_type": "conflicts", "query": query}),
+        "rule_ids": rule_ids,
+        "conflict_count": len(witnesses),
+        "witnesses": witnesses,
+    }
 
 
 def _rule_map(rules: Mapping[str, Mapping[str, Any]] | Sequence[Mapping[str, Any]]) -> dict[str, Mapping[str, Any]]:

@@ -106,9 +106,12 @@ and can find counterexamples for overlaps.  It reports `unknown` for open
 strings, unbounded/real intervals, and any search that exceeds its bound;
 `PRIORITY` without an explicit precedence is refused, and `COLLECT` remains
 unknown until a later backend freezes its overlap semantics.  Every proof
-record contains a query hash and witnesses where applicable.  A real SMT
-backend may replace this bounded core, but no backend may convert `unknown`,
-`timeout`, or `refused` into a pass.
+record contains a query hash and witnesses where applicable.  The explicit
+satisfiability, overlap, coverage, conflict, counterexample, and witness
+query contract is documented in
+[`docs/smt-query-protocol.md`](smt-query-protocol.md).  A real SMT backend
+may replace this bounded core, but no backend may convert `unknown`, `timeout`,
+or `refused` into a pass.
 
 ## What this implementation does not establish
 
