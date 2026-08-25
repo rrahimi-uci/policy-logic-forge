@@ -406,15 +406,15 @@
       "title": "Regression-test restricted P3-prime comparison",
       "phase": "G2",
       "track": "G2",
-      "status": "planned",
+      "status": "partial",
       "effort_pd": 2,
       "depends_on": ["BE-1", "BE-3"],
       "acceptance": {
         "commands": [[".venv/bin/python", "-m", "pytest", "tests/test_p3_prime.py", "-q"]],
-        "artifacts": ["tests/test_p3_prime.py"]
+        "artifacts": ["utils/p3_prime.py", "docs/p3-prime-protocol.md", "tests/test_p3_prime.py"]
       },
-      "evidence": [],
-      "claim_boundary": "Comparison theorem for two known tables; never a certificate against an unknown reference."
+      "evidence": ["utils/p3_prime.py", "docs/p3-prime-protocol.md", "tests/test_p3_prime.py"],
+      "claim_boundary": "A provider-free restricted P3-prime comparator generates representative cells from an explicit finite threshold set, checks ties/open-closed neighbors, multiple dimensions, missing/default outcomes, and reports differences with witnesses. It is a comparison theorem for two known tables only; it is not exhaustive instrument validation or a certificate against an unknown reference."
     },
     {
       "id": "J1",
