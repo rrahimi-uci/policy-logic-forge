@@ -70,6 +70,23 @@ def test_unique_disjoint_table_is_proved_and_annotation_is_non_mutating():
     assert ir["tables"][0]["policy_proof"]["status"] == "unknown"
 
 
+def test_policy_proof_hash_binds_symbols_and_search_budget():
+    symbols = [_bool_symbol()]
+    rules = [
+        _rule("r_true", {"op": "eq", "left": {"symbol": "x"}, "right": {"literal": True, "type": "bool"}}, "allow"),
+        _rule("r_any", {"op": "eq", "left": {"symbol": "x"}, "right": {"literal": True, "type": "bool"}}, "deny"),
+    ]
+    table = {"id": "t1", "rule_ids": ["r_true", "r_any"], "hit_policy": "UNIQUE"}
+
+    proof = prove_table(table, rules, symbols)
+    bounded = prove_table(table, rules, symbols, max_assignments=1)
+    altered_symbols = [{**symbols[0], "unit": "flag"}]
+    altered = prove_table(table, rules, altered_symbols)
+
+    assert proof["query_sha256"] != bounded["query_sha256"]
+    assert proof["query_sha256"] != altered["query_sha256"]
+
+
 def test_unknown_and_priority_never_pass():
     symbols = [{"id": "n", "theory": "real", "role": "input", "domain": {"kind": "interval", "minimum": None, "maximum": None}}]
     rule = _rule("r", {"op": "gt", "left": {"symbol": "n"}, "right": {"literal": 0, "type": "real"}}, "allow")
