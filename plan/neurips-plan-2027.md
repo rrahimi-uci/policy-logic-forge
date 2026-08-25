@@ -24,7 +24,7 @@ transfer study, and optional RL work remain future work.
 <!-- GENERATED_TASK_SUMMARY_START -->
 | Phase | Tasks | Total pd | Done pd | Status |
 | --- | ---: | ---: | ---: | --- |
-| G0 | 13 | 46 | 12 | done=5, partial=2, planned=6 |
+| G0 | 13 | 46 | 14 | done=6, partial=2, planned=5 |
 | A | 4 | 8 | 1 | done=1, planned=2, conditional=1 |
 | J | 2 | 6 | 0 | planned=2 |
 | G2 | 6 | 30 | 0 | planned=6 |
@@ -35,12 +35,12 @@ transfer study, and optional RL work remain future work.
 
 | Scope | Included pd | Done pd | Remaining pd |
 | --- | ---: | ---: | ---: |
-| `minimum_paper` | 125 | 13 | 112 |
-| `second_domain` | 151 | 13 | 138 |
-| `full_programme` | 171 | 13 | 158 |
-| `minimum_plus_optional_replication` | 129 | 13 | 116 |
+| `minimum_paper` | 125 | 15 | 110 |
+| `second_domain` | 151 | 15 | 136 |
+| `full_programme` | 171 | 15 | 156 |
+| `minimum_plus_optional_replication` | 129 | 15 | 114 |
 
-**Ready now:** `PIPE-2B`, `PIPE-4`, `IR-2`, `BENCH-2`, `BENCH-3`, `A1B`, `A3`.
+**Ready now:** `PIPE-2B`, `PIPE-4`, `IR-2`, `BENCH-2`, `BENCH-4`, `A1B`, `A3`.
 
 Generated from [`plan/tasks.json`](tasks.json) by `scripts/validate_neurips_plan.py`; manual edits to this block fail CI.
 <!-- GENERATED_TASK_SUMMARY_END -->
@@ -250,7 +250,11 @@ G0 must finish before any corpus-level compiler or instrument claim.
   secrets, alternate worktrees, and network access are unavailable. A test
   must demonstrate that attempted gold-path access fails.
 - `BENCH-3`: retain individual runs and label the estimator used for each
-  reported aggregation.
+  reported aggregation. This is now implemented by `bench/manifest.py`: every
+  expected model/condition/run key must have exactly one retained record,
+  completed outputs are content-addressed, failures/refusals retain reasons,
+  and comparisons reject mixing best-of-k with mean estimators. The contract
+  does not claim that benchmark runs have been executed.
 - `BENCH-4`: validate content-addressed bundles and separate redistributable
   files, scripts/manifests, and non-redistributable derived artifacts.
 
