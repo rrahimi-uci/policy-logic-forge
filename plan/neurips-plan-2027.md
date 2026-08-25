@@ -442,7 +442,7 @@ recruitment, ethics review, and scientific iteration after a failed gate.
 Therefore the calendar cannot be obtained by dividing totals by headcount.
 
 With one contributor, the minimum scope is not credible by simply serializing
-112 remaining pd into the submission window. The recommended execution is:
+105 remaining pd into the submission window. The recommended execution is:
 
 - immediately parallelize provider-free G0 work (`IR-2`, `BENCH-3`, pipeline
   audits) with anchor replay/licensing (`A1B`, `A3`);
