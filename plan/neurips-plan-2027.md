@@ -27,7 +27,7 @@ transfer study, and optional RL work remain future work.
 | G0 | 13 | 46 | 19 | done=8, partial=5 |
 | A | 4 | 8 | 4 | done=3, conditional=1 |
 | J | 2 | 6 | 0 | planned=2 |
-| G2 | 6 | 30 | 0 | partial=4, planned=2 |
+| G2 | 6 | 30 | 0 | partial=5, planned=1 |
 | G3 | 5 | 24 | 0 | planned=5 |
 | G4 | 3 | 26 | 0 | planned=3 |
 | G5 | 4 | 20 | 0 | conditional=4 |
@@ -335,17 +335,19 @@ Tasks:
 - `BE-3`: implement the bounded SMT-shaped query core for satisfiability,
   overlap, coverage, conflict, counterexample, and witness queries; a native
   complete SMT backend remains a separately gated follow-up.
-- `BE-4`: cross-check selected artifacts in a pinned independent DMN engine.
+- `BE-4`: run the fail-closed adapter protocol against a pinned independent
+  DMN engine; an engine job is required before cross-backend agreement is a
+  claim.
 - `P3P`: preserve a restricted P3-prime comparator without allowing its
   narrower language to define the main IR.
 
 G2 succeeds only if the lowering oracle passes its frozen cases, all supported
 bounded IR programs agree across the reference and query backends, DMN-compatible
-cases also agree with both DMN engines, and every unsupported case is an
-explicit refusal. A native complete SMT comparison is conditional on its
-solver dependency being installed and its cross-check job running. Agreement
-among backends derived from the same faulty lowering is not evidence of
-lowering correctness.
+cases also agree with the pinned third-party engine through the BE-4 protocol,
+and every unsupported case is an explicit refusal. A native complete SMT
+comparison is conditional on its solver dependency being installed and its
+cross-check job running. Agreement among backends derived from the same faulty
+lowering is not evidence of lowering correctness.
 
 ---
 
