@@ -242,15 +242,20 @@
       "title": "Replay the released anchor evaluator",
       "phase": "A",
       "track": "A",
-      "status": "planned",
+      "status": "done",
       "effort_pd": 2,
       "depends_on": ["A1A"],
       "acceptance": {
         "commands": [[".venv/bin/python", "-m", "pytest", "tests/test_anchor_replay.py", "-q"]],
         "artifacts": ["docs/anchor_aggregation_recipe.md", "results/aggregates/a1_replay.json"]
       },
-      "evidence": [],
-      "claim_boundary": "Deterministic replay of released artifacts; not fresh stochastic replication."
+      "evidence": [
+        "bench/anchor_replay.py",
+        "tests/test_anchor_replay.py",
+        "docs/anchor_aggregation_recipe.md",
+        "results/aggregates/a1_replay.json"
+      ],
+      "claim_boundary": "The pinned evaluator replay validates the 1,900-row observation grid and reports a semantic mismatch in 792 rows; release and replay aggregates are descriptive and do not reproduce or authorize reuse of the historical headline numbers. This is not fresh stochastic replication."
     },
     {
       "id": "A2",

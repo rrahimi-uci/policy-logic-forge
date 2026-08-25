@@ -15,7 +15,7 @@ authoritative for research definitions, claim boundaries, and stop/go rules.
 prerequisites, an argv-form acceptance command, an artifact target, and a
 claim boundary, and that the graph can be validated and queried locally. It
 does **not** mean that the planned research has already been implemented or
-that a publishable result is guaranteed. At this revision, 20 person-days of
+that a publishable result is guaranteed. At this revision, 22 person-days of
 work are evidenced as complete; the compiler, benchmark, instrument study,
 transfer study, and optional RL work remain future work.
 
@@ -25,7 +25,7 @@ transfer study, and optional RL work remain future work.
 | Phase | Tasks | Total pd | Done pd | Status |
 | --- | ---: | ---: | ---: | --- |
 | G0 | 13 | 46 | 19 | done=8, partial=2, planned=3 |
-| A | 4 | 8 | 1 | done=1, planned=2, conditional=1 |
+| A | 4 | 8 | 3 | done=2, planned=1, conditional=1 |
 | J | 2 | 6 | 0 | planned=2 |
 | G2 | 6 | 30 | 0 | planned=6 |
 | G3 | 5 | 24 | 0 | planned=5 |
@@ -35,12 +35,12 @@ transfer study, and optional RL work remain future work.
 
 | Scope | Included pd | Done pd | Remaining pd |
 | --- | ---: | ---: | ---: |
-| `minimum_paper` | 125 | 20 | 105 |
-| `second_domain` | 151 | 20 | 131 |
-| `full_programme` | 171 | 20 | 151 |
-| `minimum_plus_optional_replication` | 129 | 20 | 109 |
+| `minimum_paper` | 125 | 22 | 103 |
+| `second_domain` | 151 | 22 | 129 |
+| `full_programme` | 171 | 22 | 149 |
+| `minimum_plus_optional_replication` | 129 | 22 | 107 |
 
-**Ready now:** `PIPE-2B`, `PIPE-4`, `IR-2`, `A1B`, `A3`.
+**Ready now:** `PIPE-2B`, `PIPE-4`, `IR-2`, `A3`.
 
 Generated from [`plan/tasks.json`](tasks.json) by `scripts/validate_neurips_plan.py`; manual edits to this block fail CI.
 <!-- GENERATED_TASK_SUMMARY_END -->
@@ -279,10 +279,17 @@ diagnostic only.
 ### 4.1 Anchor reproduction
 
 - `A1A` is complete: it establishes what was released, not reproduced scores.
-- `A1B` replays the released evaluator using released artifacts. Before any
-  comparison, it must recover the exact observation unit, inclusion rules,
-  aggregation, and confidence interval procedure. A mismatch is reported, not
-  tuned away.
+- `A1B` is complete for the pinned release: the evaluator processed all 1,900
+  expected observations, and the repository validator confirmed the complete
+  activity × condition × run × type grid. The retained comparison reports
+  1,108 exact rows and 792 semantic mismatch rows, concentrated in outcome
+  testability/count/agreement fields. The release and replay aggregates are
+  descriptive diagnostics only; they do not reproduce or authorize reuse of
+  the historical headline numbers. The exact command, normalization rules,
+  and observation-unit contract are recorded in
+  [`docs/anchor_aggregation_recipe.md`](../docs/anchor_aggregation_recipe.md),
+  with the hashes and mismatch examples in
+  [`results/aggregates/a1_replay.json`](../results/aggregates/a1_replay.json).
 - `A2` is optional and separately preregistered. It uses fresh model
   generations only after `A1B`, with a distinct budget and no substitution of
   current-model output for the historical release.
@@ -431,7 +438,7 @@ grounding or human acceptability.
 The generated status table is the sole source of numeric totals. The scopes
 are cumulative:
 
-- minimum paper: 125 pd total, 20 done, 105 remaining;
+- minimum paper: 125 pd total, 22 done, 103 remaining;
 - minimum plus optional fresh-generation replication: 129 pd;
 - second-domain extension: 151 pd cumulative;
 - full programme including conditional RL: 171 pd cumulative.
@@ -442,10 +449,10 @@ recruitment, ethics review, and scientific iteration after a failed gate.
 Therefore the calendar cannot be obtained by dividing totals by headcount.
 
 With one contributor, the minimum scope is not credible by simply serializing
-105 remaining pd into the submission window. The recommended execution is:
+103 remaining pd into the submission window. The recommended execution is:
 
 - immediately parallelize provider-free G0 work (`IR-2`, `BENCH-3`, pipeline
-  audits) with anchor replay/licensing (`A1B`, `A3`);
+  audits) with the remaining anchor licensing task (`A3`);
 - freeze IR semantics only after the census;
 - build reference and SMT backends in parallel after `IR-1`;
 - freeze statistics before instrument outcomes are inspected;
@@ -520,14 +527,13 @@ from one domain or fixed benchmark to policy compilation generally.
 
 ## 13. Immediate executable queue
 
-The validator currently identifies five dependency-ready tasks. Recommended
+The validator currently identifies four dependency-ready tasks. Recommended
 order within the two parallel tracks:
 
 1. `IR-2`: run the existing census on retained real output; it determines the
    IR boundary.
 2. `PIPE-2B` and `PIPE-4`: measure the two unresolved extraction claims.
-3. `A1B`: recover and replay the released aggregation independently of Track B.
-4. `A3`: draft the reuse posture; pause before external communication for owner
+3. `A3`: draft the reuse posture; pause before external communication for owner
    approval.
 
 Use `--show TASK` for the exact artifact and command contract. If a task's

@@ -1,0 +1,420 @@
+{
+  "benchmark_id": "dutch-anchor",
+  "comparison": {
+    "exact_rows": 1108,
+    "examples": [
+      {
+        "field": "outcome_agree_count",
+        "key": {
+          "activity_id": "AcculaderInWerkingHebben",
+          "condition": "conditions",
+          "dmn_type": "Outcome",
+          "run_id": 2
+        },
+        "released": "0.0",
+        "replayed": "1"
+      },
+      {
+        "field": "outcome_disagree_count",
+        "key": {
+          "activity_id": "AcculaderInWerkingHebben",
+          "condition": "conditions",
+          "dmn_type": "Outcome",
+          "run_id": 2
+        },
+        "released": "2.0",
+        "replayed": "1"
+      },
+      {
+        "field": "outcome_agreement",
+        "key": {
+          "activity_id": "AcculaderInWerkingHebben",
+          "condition": "conditions",
+          "dmn_type": "Outcome",
+          "run_id": 2
+        },
+        "released": "0.0",
+        "replayed": "0.5"
+      },
+      {
+        "field": "outcome_agree_count",
+        "key": {
+          "activity_id": "AcculaderInWerkingHebben",
+          "condition": "conditions",
+          "dmn_type": "Outcome",
+          "run_id": 3
+        },
+        "released": "1.0",
+        "replayed": "2"
+      },
+      {
+        "field": "outcome_disagree_count",
+        "key": {
+          "activity_id": "AcculaderInWerkingHebben",
+          "condition": "conditions",
+          "dmn_type": "Outcome",
+          "run_id": 3
+        },
+        "released": "1.0",
+        "replayed": "0"
+      },
+      {
+        "field": "outcome_agreement",
+        "key": {
+          "activity_id": "AcculaderInWerkingHebben",
+          "condition": "conditions",
+          "dmn_type": "Outcome",
+          "run_id": 3
+        },
+        "released": "0.5",
+        "replayed": "1.0"
+      },
+      {
+        "field": "outcome_agree_count",
+        "key": {
+          "activity_id": "AcculaderInWerkingHebben",
+          "condition": "srl_conditions",
+          "dmn_type": "Outcome",
+          "run_id": 2
+        },
+        "released": "0.0",
+        "replayed": "1"
+      },
+      {
+        "field": "outcome_disagree_count",
+        "key": {
+          "activity_id": "AcculaderInWerkingHebben",
+          "condition": "srl_conditions",
+          "dmn_type": "Outcome",
+          "run_id": 2
+        },
+        "released": "2.0",
+        "replayed": "1"
+      },
+      {
+        "field": "outcome_agreement",
+        "key": {
+          "activity_id": "AcculaderInWerkingHebben",
+          "condition": "srl_conditions",
+          "dmn_type": "Outcome",
+          "run_id": 2
+        },
+        "released": "0.0",
+        "replayed": "0.5"
+      },
+      {
+        "field": "outcome_agree_count",
+        "key": {
+          "activity_id": "AcculaderInWerkingHebben",
+          "condition": "srl_conditions",
+          "dmn_type": "Outcome",
+          "run_id": 3
+        },
+        "released": "1.0",
+        "replayed": "2"
+      },
+      {
+        "field": "outcome_disagree_count",
+        "key": {
+          "activity_id": "AcculaderInWerkingHebben",
+          "condition": "srl_conditions",
+          "dmn_type": "Outcome",
+          "run_id": 3
+        },
+        "released": "1.0",
+        "replayed": "0"
+      },
+      {
+        "field": "outcome_agreement",
+        "key": {
+          "activity_id": "AcculaderInWerkingHebben",
+          "condition": "srl_conditions",
+          "dmn_type": "Outcome",
+          "run_id": 3
+        },
+        "released": "0.5",
+        "replayed": "1.0"
+      },
+      {
+        "field": "outcome_agree_count",
+        "key": {
+          "activity_id": "AfscheidingDakterras",
+          "condition": "baseline",
+          "dmn_type": "Outcome",
+          "run_id": 2
+        },
+        "released": "0.0",
+        "replayed": "939"
+      },
+      {
+        "field": "outcome_disagree_count",
+        "key": {
+          "activity_id": "AfscheidingDakterras",
+          "condition": "baseline",
+          "dmn_type": "Outcome",
+          "run_id": 2
+        },
+        "released": "1024.0",
+        "replayed": "85"
+      },
+      {
+        "field": "outcome_agreement",
+        "key": {
+          "activity_id": "AfscheidingDakterras",
+          "condition": "baseline",
+          "dmn_type": "Outcome",
+          "run_id": 2
+        },
+        "released": "0.0",
+        "replayed": "0.9169921875"
+      },
+      {
+        "field": "outcome_agree_count",
+        "key": {
+          "activity_id": "AfscheidingDakterras",
+          "condition": "baseline",
+          "dmn_type": "Outcome",
+          "run_id": 5
+        },
+        "released": "0.0",
+        "replayed": "939"
+      },
+      {
+        "field": "outcome_disagree_count",
+        "key": {
+          "activity_id": "AfscheidingDakterras",
+          "condition": "baseline",
+          "dmn_type": "Outcome",
+          "run_id": 5
+        },
+        "released": "1024.0",
+        "replayed": "85"
+      },
+      {
+        "field": "outcome_agreement",
+        "key": {
+          "activity_id": "AfscheidingDakterras",
+          "condition": "baseline",
+          "dmn_type": "Outcome",
+          "run_id": 5
+        },
+        "released": "0.0",
+        "replayed": "0.9169921875"
+      },
+      {
+        "field": "outcome_agree_count",
+        "key": {
+          "activity_id": "AfscheidingDakterras",
+          "condition": "conditions",
+          "dmn_type": "Outcome",
+          "run_id": 1
+        },
+        "released": "0.0",
+        "replayed": "427"
+      },
+      {
+        "field": "outcome_disagree_count",
+        "key": {
+          "activity_id": "AfscheidingDakterras",
+          "condition": "conditions",
+          "dmn_type": "Outcome",
+          "run_id": 1
+        },
+        "released": "1024.0",
+        "replayed": "597"
+      }
+    ],
+    "field_mismatch_counts": {
+      "outcome_agree_count": 792,
+      "outcome_agreement": 792,
+      "outcome_disagree_count": 792,
+      "outcome_num_tests": 660,
+      "outcome_testable": 660
+    },
+    "mismatch_rows": 792,
+    "rows_compared": 1900,
+    "status": "mismatch_reported"
+  },
+  "release_commit": "6a4844fb235d4f958d0810bba7089a2e9078099e",
+  "released_metrics": {
+    "rows": 1900,
+    "sha256": "6551900298213a495aa548aac38e2277a231220f85fed9bb92d475c948144867"
+  },
+  "released_outcomes": {
+    "groups": {
+      "Outcome/baseline": {
+        "activities": 24,
+        "agree": 52,
+        "disagree": 13508,
+        "observation_unit": "generation_row",
+        "row_macro_agreement": 0.21666666666666667,
+        "rows": 120,
+        "test_input_weighted_agreement": 0.0038348082595870206,
+        "test_inputs": 13560
+      },
+      "Outcome/conditions": {
+        "activities": 24,
+        "agree": 1241,
+        "disagree": 12319,
+        "observation_unit": "generation_row",
+        "row_macro_agreement": 0.1765625,
+        "rows": 120,
+        "test_input_weighted_agreement": 0.09151917404129793,
+        "test_inputs": 13560
+      },
+      "Outcome/srl": {
+        "activities": 24,
+        "agree": 51,
+        "disagree": 13509,
+        "observation_unit": "generation_row",
+        "row_macro_agreement": 0.2125,
+        "rows": 120,
+        "test_input_weighted_agreement": 0.003761061946902655,
+        "test_inputs": 13560
+      },
+      "Outcome/srl_conditions": {
+        "activities": 24,
+        "agree": 937,
+        "disagree": 12623,
+        "observation_unit": "generation_row",
+        "row_macro_agreement": 0.1609375,
+        "rows": 120,
+        "test_input_weighted_agreement": 0.06910029498525073,
+        "test_inputs": 13560
+      },
+      "Requirements/baseline": {
+        "activities": 1,
+        "agree": 0,
+        "disagree": 40,
+        "observation_unit": "generation_row",
+        "row_macro_agreement": 0.0,
+        "rows": 5,
+        "test_input_weighted_agreement": 0.0,
+        "test_inputs": 40
+      },
+      "Requirements/conditions": {
+        "activities": 1,
+        "agree": 20,
+        "disagree": 20,
+        "observation_unit": "generation_row",
+        "row_macro_agreement": 0.5,
+        "rows": 5,
+        "test_input_weighted_agreement": 0.5,
+        "test_inputs": 40
+      },
+      "Requirements/srl": {
+        "activities": 1,
+        "agree": 0,
+        "disagree": 40,
+        "observation_unit": "generation_row",
+        "row_macro_agreement": 0.0,
+        "rows": 5,
+        "test_input_weighted_agreement": 0.0,
+        "test_inputs": 40
+      },
+      "Requirements/srl_conditions": {
+        "activities": 1,
+        "agree": 12,
+        "disagree": 28,
+        "observation_unit": "generation_row",
+        "row_macro_agreement": 0.3,
+        "rows": 5,
+        "test_input_weighted_agreement": 0.3,
+        "test_inputs": 40
+      }
+    },
+    "inclusion_rule": "generation_success == true and outcome_testable == true"
+  },
+  "replayed_metrics": {
+    "rows": 1900,
+    "sha256": "b42df446aa8a6b7a59a6ae09cc294252ab2f02d2ef27b57176ef2b5db635c498"
+  },
+  "replayed_outcomes": {
+    "groups": {
+      "Outcome/baseline": {
+        "activities": 24,
+        "agree": 2132,
+        "disagree": 11428,
+        "observation_unit": "generation_row",
+        "row_macro_agreement": 0.2521484375,
+        "rows": 120,
+        "test_input_weighted_agreement": 0.15722713864306784,
+        "test_inputs": 13560
+      },
+      "Outcome/conditions": {
+        "activities": 24,
+        "agree": 7174,
+        "disagree": 6386,
+        "observation_unit": "generation_row",
+        "row_macro_agreement": 0.40166015625,
+        "rows": 120,
+        "test_input_weighted_agreement": 0.5290560471976401,
+        "test_inputs": 13560
+      },
+      "Outcome/srl": {
+        "activities": 24,
+        "agree": 223,
+        "disagree": 13337,
+        "observation_unit": "generation_row",
+        "row_macro_agreement": 0.24270833333333333,
+        "rows": 120,
+        "test_input_weighted_agreement": 0.01644542772861357,
+        "test_inputs": 13560
+      },
+      "Outcome/srl_conditions": {
+        "activities": 24,
+        "agree": 6833,
+        "disagree": 6727,
+        "observation_unit": "generation_row",
+        "row_macro_agreement": 0.4068115234375,
+        "rows": 120,
+        "test_input_weighted_agreement": 0.5039085545722713,
+        "test_inputs": 13560
+      },
+      "Requirements/baseline": {
+        "activities": 34,
+        "agree": 27964,
+        "disagree": 23876,
+        "observation_unit": "generation_row",
+        "row_macro_agreement": 0.4472732843137255,
+        "rows": 170,
+        "test_input_weighted_agreement": 0.539429012345679,
+        "test_inputs": 51840
+      },
+      "Requirements/conditions": {
+        "activities": 34,
+        "agree": 31119,
+        "disagree": 20721,
+        "observation_unit": "generation_row",
+        "row_macro_agreement": 0.5587545955882353,
+        "rows": 170,
+        "test_input_weighted_agreement": 0.6002893518518518,
+        "test_inputs": 51840
+      },
+      "Requirements/srl": {
+        "activities": 34,
+        "agree": 26165,
+        "disagree": 25675,
+        "observation_unit": "generation_row",
+        "row_macro_agreement": 0.43663449754901956,
+        "rows": 170,
+        "test_input_weighted_agreement": 0.5047260802469136,
+        "test_inputs": 51840
+      },
+      "Requirements/srl_conditions": {
+        "activities": 34,
+        "agree": 27858,
+        "disagree": 23982,
+        "observation_unit": "generation_row",
+        "row_macro_agreement": 0.5145565257352941,
+        "rows": 170,
+        "test_input_weighted_agreement": 0.5373842592592593,
+        "test_inputs": 51840
+      }
+    },
+    "inclusion_rule": "generation_success == true and outcome_testable == true"
+  },
+  "schema_version": "anchor-replay/1.0",
+  "source_repository": "https://github.com/opengov-lab/legal-text-to-decision-model",
+  "status": "mismatch_reported"
+}
