@@ -8,7 +8,8 @@ semantic recall.
 
 Before a corpus claim, the frame must contain:
 
-- a licensed, stratified source sample with immutable SHA-256 hashes;
+- a licensed, stratified source sample with immutable lowercase hexadecimal
+  SHA-256 hashes;
 - two independent annotator files using the same semantic rule schema;
 - an adjudication file retaining disagreements and decisions;
 - source quotes that occur verbatim in the hashed source files;
@@ -16,7 +17,10 @@ Before a corpus claim, the frame must contain:
 - an agreement statistic (for example, exact semantic-key agreement and an
   appropriate chance-corrected measure where the sample supports it).
 
-The evaluator matches semantic keys, not model-generated rule IDs. A match is
+The evaluator requires every semantic field and source quote to be a
+non-empty string, validates source hashes as lowercase hexadecimal SHA-256,
+and rejects frames without an explicit claim boundary. It matches semantic
+keys, not model-generated rule IDs. A match is
 the normalized tuple `(source_id, rule_type, subject, action, object)`. It
 reports matched, missing, and false-positive rules, plus per-source precision
 and recall. It also reports descriptive 95% Wilson intervals for the frozen

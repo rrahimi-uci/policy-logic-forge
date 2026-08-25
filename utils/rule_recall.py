@@ -13,12 +13,14 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import re
 from pathlib import Path
 from typing import Any, Mapping
 
 
 REQUIRED_RULE_FIELDS = ("rule_key", "source_id", "rule_type", "subject", "action", "object")
 SEMANTIC_FIELDS = ("source_id", "rule_type", "subject", "action", "object")
+_SHA256 = re.compile(r"^[0-9a-f]{64}$")
 
 
 class RuleRecallError(ValueError):
@@ -40,7 +42,10 @@ def _normalise_text(value: Any) -> str:
 
 
 def _rule_signature(rule: Mapping[str, Any]) -> tuple[str, ...]:
-    missing = [field for field in REQUIRED_RULE_FIELDS if not str(rule.get(field, "")).strip()]
+    missing = [
+        field for field in REQUIRED_RULE_FIELDS
+        if not isinstance(rule.get(field), str) or not rule[field].strip()
+    ]
     if missing:
         raise RuleRecallError(f"rule is missing required fields: {', '.join(missing)}")
     # Rule IDs are annotator/model-local identifiers and must not affect a
@@ -74,11 +79,21 @@ def _validate_source_manifest(frame: Mapping[str, Any], fixture_dir: Path) -> di
     for index, raw in enumerate(sources):
         if not isinstance(raw, Mapping):
             raise RuleRecallError(f"source_manifest[{index}] must be an object")
-        source_id = str(raw.get("source_id", "")).strip()
-        relative_path = str(raw.get("path", "")).strip()
-        expected_hash = str(raw.get("sha256", "")).strip()
-        if not source_id or not relative_path or len(expected_hash) != 64:
+        source_id = raw.get("source_id")
+        relative_path = raw.get("path")
+        expected_hash = raw.get("sha256")
+        if (
+            not isinstance(source_id, str)
+            or not source_id.strip()
+            or not isinstance(relative_path, str)
+            or not relative_path.strip()
+            or not isinstance(expected_hash, str)
+            or not _SHA256.fullmatch(expected_hash)
+        ):
             raise RuleRecallError(f"source_manifest[{index}] needs source_id, path, and sha256")
+        source_id = source_id.strip()
+        relative_path = relative_path.strip()
+        expected_hash = expected_hash.strip()
         if source_id in indexed:
             raise RuleRecallError(f"duplicate source_id {source_id!r}")
         path = (fixture_dir / relative_path).resolve()
@@ -104,9 +119,10 @@ def _validate_rule_sources(rules: list[dict[str, Any]], sources: Mapping[str, Ma
         source = sources.get(source_id)
         if source is None:
             raise RuleRecallError(f"{label}.rules[{index}] references unknown source_id {source_id!r}")
-        quote = str(rule.get("source_quote", "")).strip()
-        if not quote:
+        quote = rule.get("source_quote")
+        if not isinstance(quote, str) or not quote.strip():
             raise RuleRecallError(f"{label}.rules[{index}] must include source_quote")
+        quote = quote.strip()
         if quote not in str(source["content"]):
             raise RuleRecallError(f"{label}.rules[{index}] source_quote is not present in {source_id}")
 
@@ -179,6 +195,8 @@ def load_frame(fixture_dir: str | Path) -> dict[str, Any]:
         raise RuleRecallError("frame.schema_version must be '1.0'")
     if frame.get("evidence_status") != "fixture_only":
         raise RuleRecallError("PIPE-2B fixtures must declare evidence_status='fixture_only'")
+    if not isinstance(frame.get("claim_boundary"), str) or not frame["claim_boundary"].strip():
+        raise RuleRecallError("frame.claim_boundary must be a non-empty string")
 
     sources = _validate_source_manifest(frame, root)
     annotators = frame.get("annotators")
@@ -188,9 +206,14 @@ def load_frame(fixture_dir: str | Path) -> dict[str, Any]:
     for index, record in enumerate(annotators):
         if not isinstance(record, Mapping):
             raise RuleRecallError(f"annotators[{index}] must be an object")
-        annotator_id = str(record.get("annotator_id", "")).strip()
-        if not annotator_id or annotator_id in annotator_ids:
+        annotator_id = record.get("annotator_id")
+        if (
+            not isinstance(annotator_id, str)
+            or not annotator_id.strip()
+            or annotator_id.strip() in annotator_ids
+        ):
             raise RuleRecallError("annotator IDs must be present and unique")
+        annotator_id = annotator_id.strip()
         if record.get("independent") is not True:
             raise RuleRecallError(f"annotators[{index}] must declare independent=true")
         annotator_ids.add(annotator_id)
@@ -200,7 +223,7 @@ def load_frame(fixture_dir: str | Path) -> dict[str, Any]:
     adjudication = frame.get("adjudication")
     if not isinstance(adjudication, Mapping):
         raise RuleRecallError("adjudication record is required")
-    if str(adjudication.get("method", "")).strip() == "":
+    if not isinstance(adjudication.get("method"), str) or not adjudication["method"].strip():
         raise RuleRecallError("adjudication.method is required")
     adjudicated_rules = _validate_rules(adjudication.get("rules"), label="adjudication")
     _validate_rule_sources(adjudicated_rules, sources, "adjudication")
