@@ -147,15 +147,15 @@
       "title": "Implement Dutch adapter and frozen 58/37 split",
       "phase": "G0",
       "track": "B",
-      "status": "planned",
+      "status": "done",
       "effort_pd": 3,
       "depends_on": ["A1A"],
       "acceptance": {
         "commands": [[".venv/bin/python", "-m", "pytest", "tests/test_dutch_adapter.py", "-q"]],
         "artifacts": ["bench/adapters/dutch_dmn.py", "bench/splits/dutch_58.json"]
       },
-      "evidence": [],
-      "claim_boundary": "Adapter and split only; not an evaluated benchmark result."
+      "evidence": ["bench/adapters/dutch_dmn.py", "bench/splits/dutch_58.json", "tests/test_dutch_adapter.py"],
+      "claim_boundary": "Pins the upstream population and evaluator-compatible split only; it is not an evaluated benchmark result and does not redistribute upstream artifacts."
     },
     {
       "id": "BENCH-2",
