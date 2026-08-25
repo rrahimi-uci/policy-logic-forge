@@ -29,5 +29,8 @@ jobs:
         run: python scripts/validate_neurips_plan.py --check
       - name: Validate pipeline configuration
         run: python scripts/validate_config.py
-      - name: Run tests
-        run: python -m pytest
+      - name: Run tests with compiler coverage gate
+        run: |
+          python -m coverage erase
+          python -m coverage run -m pytest -q
+          python -m coverage report

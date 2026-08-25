@@ -1,0 +1,16 @@
+[run]
+branch = false
+source =
+    utils
+    bench
+
+[report]
+include =
+    utils/lexec_ir.py
+    utils/feel.py
+    utils/smt.py
+    utils/dmn_builder.py
+    utils/dmn_emit.py
+    bench/dmn_engine_harness.py
+show_missing = true
+fail_under = 85
