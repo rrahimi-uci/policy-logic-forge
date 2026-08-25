@@ -203,15 +203,20 @@
       "title": "Validate content-addressed run bundles and release boundary",
       "phase": "G0",
       "track": "B",
-      "status": "planned",
+      "status": "done",
       "effort_pd": 3,
       "depends_on": ["BENCH-1", "BENCH-3"],
       "acceptance": {
         "commands": [[".venv/bin/python", "-m", "pytest", "tests/test_run_bundle.py", "-q"]],
         "artifacts": ["bench/run_bundle.py", "results/aggregates/README.md", "requirements-lock.txt"]
       },
-      "evidence": [],
-      "claim_boundary": "Raw or restricted inputs remain local; publishable aggregates must resolve every hash."
+      "evidence": [
+        "bench/run_bundle.py",
+        "results/aggregates/README.md",
+        "requirements-lock.txt",
+        "tests/test_run_bundle.py"
+      ],
+      "claim_boundary": "The bundle contract verifies file size and SHA-256 digests, rejects traversal/symlink escapes, requires retained run and dependency-lock artifacts, and permits release only through an explicit allowlist that excludes raw/gold/local-only/restricted roles. It does not claim that any benchmark bundle has been executed."
     },
     {
       "id": "A1A",

@@ -24,7 +24,7 @@ transfer study, and optional RL work remain future work.
 <!-- GENERATED_TASK_SUMMARY_START -->
 | Phase | Tasks | Total pd | Done pd | Status |
 | --- | ---: | ---: | ---: | --- |
-| G0 | 13 | 46 | 14 | done=6, partial=2, planned=5 |
+| G0 | 13 | 46 | 17 | done=7, partial=2, planned=4 |
 | A | 4 | 8 | 1 | done=1, planned=2, conditional=1 |
 | J | 2 | 6 | 0 | planned=2 |
 | G2 | 6 | 30 | 0 | planned=6 |
@@ -35,12 +35,12 @@ transfer study, and optional RL work remain future work.
 
 | Scope | Included pd | Done pd | Remaining pd |
 | --- | ---: | ---: | ---: |
-| `minimum_paper` | 125 | 15 | 110 |
-| `second_domain` | 151 | 15 | 136 |
-| `full_programme` | 171 | 15 | 156 |
-| `minimum_plus_optional_replication` | 129 | 15 | 114 |
+| `minimum_paper` | 125 | 18 | 107 |
+| `second_domain` | 151 | 18 | 133 |
+| `full_programme` | 171 | 18 | 153 |
+| `minimum_plus_optional_replication` | 129 | 18 | 111 |
 
-**Ready now:** `PIPE-2B`, `PIPE-4`, `IR-2`, `BENCH-2`, `BENCH-4`, `A1B`, `A3`.
+**Ready now:** `PIPE-2B`, `PIPE-4`, `IR-2`, `BENCH-2`, `A1B`, `A3`.
 
 Generated from [`plan/tasks.json`](tasks.json) by `scripts/validate_neurips_plan.py`; manual edits to this block fail CI.
 <!-- GENERATED_TASK_SUMMARY_END -->
@@ -256,7 +256,11 @@ G0 must finish before any corpus-level compiler or instrument claim.
   and comparisons reject mixing best-of-k with mean estimators. The contract
   does not claim that benchmark runs have been executed.
 - `BENCH-4`: validate content-addressed bundles and separate redistributable
-  files, scripts/manifests, and non-redistributable derived artifacts.
+  files, scripts/manifests, and non-redistributable derived artifacts. This is
+  now implemented by `bench/run_bundle.py` with path-safety, size/hash,
+  required-lock/manifest, and explicit-release-allowlist checks. It rejects
+  source, gold, raw, restricted, and local-only artifacts from release and
+  does not claim that a benchmark bundle has been executed.
 
 ### 3.4 G0 exit gate
 
