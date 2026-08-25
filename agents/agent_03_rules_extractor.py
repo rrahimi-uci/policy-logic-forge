@@ -101,7 +101,7 @@ def split_oversized_content(
 ) -> List[Tuple[int, int, str]]:
     """Split `content` into overlapping, word-boundary-aligned windows so a
     chunk longer than `max_chars` reaches the extractor with zero dropped
-    bytes (PIPE-2, neurips-plan-2027.md §3.2).
+    bytes (PIPE-2, plan/neurips-plan-2027.md §3.2).
 
     Returns `(start_char, end_char, text)` tuples with `text` always an exact
     substring `content[start_char:end_char]`. Consecutive windows overlap by
@@ -170,7 +170,7 @@ class RulesExtractionConfig:
     max_content_length: int = 8000
     reasoning_model: Optional[str] = None
     optimization_model: Optional[str] = None
-    # PIPE-1/PIPE-2 (neurips-plan-2027.md §3.1-3.2): None means full coverage
+    # PIPE-1/PIPE-2 (plan/neurips-plan-2027.md §3.1-3.2): None means full coverage
     # -- every organized chunk is read whole (re-split, never truncated) and
     # every resulting batch is processed. An int caps batch selection for a
     # deliberately cheap pilot run and permits the old truncate-with-loss
@@ -252,7 +252,7 @@ class BusinessRulesExtractor:
         content for the LLM to process. This prevents one oversized chunk
         from dominating a batch while small chunks get crowded out.
 
-        PIPE-1/PIPE-2 (neurips-plan-2027.md §3.1-3.2). Full coverage is the
+        PIPE-1/PIPE-2 (plan/neurips-plan-2027.md §3.1-3.2). Full coverage is the
         default (`self.config.pilot_batch_limit is None`): every organized
         chunk is read whole -- a chunk longer than `max_content_length`
         characters is re-split into overlapping windows via

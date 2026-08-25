@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the corpus feature + expressiveness census (IR-2, neurips-plan-2027.md
+"""Run the corpus feature + expressiveness census (IR-2, plan/neurips-plan-2027.md
 §3.6) against one or more knowledge-graph JSON files and write
 docs/theory_coverage.md and docs/expressiveness_census.md.
 

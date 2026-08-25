@@ -2,9 +2,9 @@
 
 **Companion to:** [`neurIips-proposal-2027.md`](neurIips-proposal-2027.md)
 
-**Plan contract:** [`plan/tasks.json`](plan/tasks.json)
+**Plan contract:** [`tasks.json`](tasks.json)
 
-**Compiler IR contract:** [`plan/lexec-ir-v1.schema.json`](plan/lexec-ir-v1.schema.json)
+**Compiler IR contract:** [`lexec-ir-v1.schema.json`](lexec-ir-v1.schema.json)
 
 This document is the human-readable operating plan for the NeurIPS 2027 work.
 The task registry is authoritative for task IDs, dependencies, status, effort,
@@ -42,7 +42,7 @@ transfer study, and optional RL work remain future work.
 
 **Ready now:** `PIPE-2B`, `PIPE-4`, `IR-2`, `BENCH-1`, `A1B`, `A3`.
 
-Generated from [`plan/tasks.json`](plan/tasks.json) by `scripts/validate_neurips_plan.py`; manual edits to this block fail CI.
+Generated from [`plan/tasks.json`](tasks.json) by `scripts/validate_neurips_plan.py`; manual edits to this block fail CI.
 <!-- GENERATED_TASK_SUMMARY_END -->
 
 Status words have literal meanings:
@@ -168,7 +168,7 @@ them.
 ## 2. Compiler IR contract
 
 The canonical interchange format is **LExec IR v1**, defined structurally by
-[`plan/lexec-ir-v1.schema.json`](plan/lexec-ir-v1.schema.json). It replaces the
+[`plan/lexec-ir-v1.schema.json`](lexec-ir-v1.schema.json). It replaces the
 ambiguous idea of treating an existing `rule["execution"]` object as the
 compiler IR. Existing extracted-rule JSON is an input that must be lowered;
 it is not itself the executable semantics.

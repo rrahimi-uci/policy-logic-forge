@@ -1,4 +1,4 @@
-"""PIPE-3 (neurips-plan-2027.md §3.3): the optimizer's dedup/dependency
+"""PIPE-3 (plan/neurips-plan-2027.md §3.3): the optimizer's dedup/dependency
 prompts must see a v2 rule's structured contract, not just its truncated
 description.
 

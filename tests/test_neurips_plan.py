@@ -27,7 +27,10 @@ def test_repository_registry_and_embedded_summary_are_valid() -> None:
     assert validate_ir_schema() == []
     assert validate_embedded_summary(registry) == []
     assert REGISTRY == ROOT / "plan" / "tasks.json"
-    assert PLAN == ROOT / "neurips-plan-2027.md"
+    assert PLAN == ROOT / "plan" / "neurips-plan-2027.md"
+    assert (ROOT / "plan" / "neurIips-proposal-2027.md").is_file()
+    assert not (ROOT / "neurips-plan-2027.md").exists()
+    assert not (ROOT / "neurIips-proposal-2027.md").exists()
 
 
 def test_generated_summary_has_frozen_scope_totals_and_ready_queue() -> None:

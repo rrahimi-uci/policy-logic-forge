@@ -1,7 +1,7 @@
 # NeurIPS plan contracts
 
 This directory contains the machine-readable contracts behind
-[`neurips-plan-2027.md`](../neurips-plan-2027.md):
+[`neurips-plan-2027.md`](neurips-plan-2027.md):
 
 - `tasks.json` is authoritative for task IDs, dependency edges, statuses,
   person-day estimates, scope membership, acceptance commands, artifacts, and
