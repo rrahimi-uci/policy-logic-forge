@@ -96,6 +96,27 @@ def test_unknown_and_priority_never_pass():
     assert priority["status"] == "refused"
 
 
+def test_unique_proof_does_not_discretize_a_continuous_real_interval():
+    symbols = [{"id": "amount", "theory": "real", "role": "input", "domain": {"kind": "interval", "minimum": 0, "maximum": 2}}]
+    condition = {"op": "gt", "left": {"symbol": "amount"}, "right": {"literal": 0, "type": "real"}}
+    rules = [_rule("r1", condition, "allow"), _rule("r2", condition, "allow")]
+
+    proof = prove_table({"id": "t", "rule_ids": ["r1", "r2"], "hit_policy": "UNIQUE"}, rules, symbols)
+
+    assert proof["status"] == "unknown"
+    assert "continuous" in proof["witnesses"][0]["reason"]
+
+
+def test_policy_proof_rejects_an_invalid_resource_bound():
+    symbols = [_bool_symbol()]
+    rule = _rule("r", {"op": "eq", "left": {"symbol": "x"}, "right": {"literal": True, "type": "bool"}}, "allow")
+
+    proof = prove_table({"id": "t", "rule_ids": ["r"], "hit_policy": "UNIQUE"}, [rule], symbols, max_assignments=-1)
+
+    assert proof["status"] == "unknown"
+    assert "non-negative integer" in proof["witnesses"][0]["reason"]
+
+
 def test_collect_is_explicitly_unproved_even_when_overlap_is_allowed():
     symbols = [_bool_symbol()]
     rule = _rule("r", {"op": "eq", "left": {"symbol": "x"}, "right": {"literal": True, "type": "bool"}}, "allow")

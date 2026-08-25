@@ -9,6 +9,7 @@ from utils.smt import (
     query_overlap,
     query_satisfiable,
     query_witness,
+    solve_formula,
 )
 
 
@@ -55,6 +56,38 @@ def test_query_hash_binds_the_bounded_search_budget():
     bounded = query_satisfiable(formula, symbols, max_assignments=1)
 
     assert default["query_sha256"] != bounded["query_sha256"]
+
+
+def test_real_intervals_are_not_discretized_into_unsound_integer_proofs():
+    symbols = [{"id": "amount", "theory": "real", "role": "input", "domain": {"kind": "interval", "minimum": 0, "maximum": 2}}]
+    formula = {"op": "eq", "left": {"symbol": "amount"}, "right": {"literal": 1, "type": "real"}}
+
+    result = solve_formula(formula, symbols)
+
+    assert result.status == "unknown"
+    assert "continuous" in (result.reason or "")
+
+
+def test_open_integer_interval_is_not_treated_as_a_complete_domain():
+    symbols = [{"id": "count", "theory": "int", "role": "input", "domain": {"kind": "interval", "minimum": 0, "maximum": 2, "minimum_inclusive": False, "maximum_inclusive": True}}]
+    formula = {"op": "eq", "left": {"symbol": "count"}, "right": {"literal": 1, "type": "int"}}
+
+    result = solve_formula(formula, symbols)
+
+    assert result.status == "unknown"
+    assert "closed" in (result.reason or "")
+
+
+def test_incompatible_or_malformed_query_inputs_remain_unknown():
+    bool_symbols = [_bool_symbol()]
+    incompatible = {"op": "gt", "left": {"symbol": "x"}, "right": {"literal": 1, "type": "int"}}
+    outside_enum = {"op": "eq", "left": {"symbol": "category"}, "right": {"literal": "deny", "type": "enum"}}
+    enum_symbols = [{"id": "category", "theory": "enum", "role": "input", "domain": {"kind": "enum", "values": ["allow"]}}]
+
+    assert query_satisfiable(incompatible, bool_symbols)["status"] == "unknown"
+    assert query_satisfiable(outside_enum, enum_symbols)["status"] == "unknown"
+    assert query_satisfiable(_eq("x", True), bool_symbols, max_assignments=-1)["status"] == "unknown"
+    assert query_conflicts([], bool_symbols, max_assignments=-1)["status"] == "unknown"
 
 
 def test_unsatisfiable_and_counterexample_queries_do_not_invent_witnesses():
