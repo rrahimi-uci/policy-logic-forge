@@ -393,6 +393,7 @@ def _lower_rule(rule: Mapping[str, Any], source_sha256: str) -> tuple[dict[str, 
     outcomes = rule.get("outcomes")
     if not isinstance(outcomes, list) or not outcomes:
         raise LoweringRefusal("MISSING_OUTCOMES", "outcomes", "Every lowered rule requires one outcome.")
+    outcome_targets: set[str] = set()
     for outcome in outcomes:
         if not isinstance(outcome, Mapping):
             raise LoweringRefusal("INVALID_OUTCOME", "outcomes", "Outcome must be an object.")
@@ -400,6 +401,9 @@ def _lower_rule(rule: Mapping[str, Any], source_sha256: str) -> tuple[dict[str, 
         target = variables.get(target_name)
         if target is None or target.get("role") != "output":
             raise LoweringRefusal("INVALID_OUTCOME_TARGET", "outcomes", f"Outcome target {target_name!r} is not a declared output.")
+        if target_name in outcome_targets:
+            raise LoweringRefusal("DUPLICATE_OUTCOME_TARGET", "outcomes", f"Outcome target {target_name!r} is assigned more than once.")
+        outcome_targets.add(target_name)
         if outcome.get("operator") != "=":
             raise LoweringRefusal("UNSUPPORTED_OUTCOME_OPERATOR", "outcomes", "Only assignment outcomes are supported.")
         if outcome.get("value_type") == "enum" and outcome.get("value") not in (target.get("allowed_values") or []):
@@ -545,10 +549,12 @@ def _validate_operand(value: Any, symbols: Mapping[str, Mapping[str, Any]], path
         if not isinstance(symbol, str) or symbol not in symbols:
             errors.append(f"{path}: unknown symbol {symbol!r}")
         return errors
-    if set(value) != {"literal", "type"} or value.get("type") not in SUPPORTED_THEORIES | {"null"}:
-        return [f"{path}: malformed literal operand"]
     literal_type = value.get("type")
+    if set(value) != {"literal", "type"} or not isinstance(literal_type, str) or literal_type not in SUPPORTED_THEORIES | {"null"}:
+        return [f"{path}: malformed literal operand"]
     literal = value.get("literal")
+    if literal_type == "null" and literal is not None:
+        errors.append(f"{path}: null literal must be null")
     if literal_type == "bool" and not isinstance(literal, bool):
         errors.append(f"{path}: bool literal is not boolean")
     if literal_type in {"int", "real"} and (isinstance(literal, bool) or not isinstance(literal, (int, float)) or not math.isfinite(literal)):
@@ -563,6 +569,8 @@ def _validate_formula(value: Any, symbols: Mapping[str, Mapping[str, Any]], path
         return [f"{path}: formula must be an object"]
     op = value.get("op")
     errors: list[str] = []
+    if not isinstance(op, str):
+        return [f"{path}: unsupported formula operator {op!r}"]
     if op in {"and", "or"}:
         args = value.get("args")
         if not isinstance(args, list) or not args:
@@ -601,11 +609,14 @@ def validate_ir(ir: Any) -> list[str]:
     else:
         if semantics.get("null_model") != NULL_MODEL:
             errors.append("semantics.null_model must be kleene_three_valued")
-        if semantics.get("unknown_at_table_boundary") not in {"refuse", "no_match", "explicit_unknown"}:
+        if not isinstance(semantics.get("unknown_at_table_boundary"), str) or semantics.get("unknown_at_table_boundary") not in {"refuse", "no_match", "explicit_unknown"}:
             errors.append("semantics.unknown_at_table_boundary is invalid")
-        if semantics.get("exception_reading") not in {"unset", "defeater_or", "conjunctive", "ignored"}:
+        if not isinstance(semantics.get("exception_reading"), str) or semantics.get("exception_reading") not in {"unset", "defeater_or", "conjunctive", "ignored"}:
             errors.append("semantics.exception_reading is invalid")
-    symbols = ir.get("symbols") if isinstance(ir.get("symbols"), list) else []
+    raw_symbols = ir.get("symbols")
+    if not isinstance(raw_symbols, list):
+        errors.append("symbols must be an array")
+    symbols = raw_symbols if isinstance(raw_symbols, list) else []
     symbol_map: dict[str, Mapping[str, Any]] = {}
     for index, symbol in enumerate(symbols):
         path = f"symbols[{index}]"
@@ -615,14 +626,19 @@ def validate_ir(ir: Any) -> list[str]:
         if symbol["id"] in symbol_map:
             errors.append(f"{path}: duplicate symbol id")
         symbol_map[symbol["id"]] = symbol
-        if symbol.get("theory") not in SUPPORTED_THEORIES or symbol.get("role") not in {"input", "derived", "output"}:
+        if not isinstance(symbol.get("theory"), str) or symbol.get("theory") not in SUPPORTED_THEORIES or not isinstance(symbol.get("role"), str) or symbol.get("role") not in {"input", "derived", "output"}:
             errors.append(f"{path}: invalid theory or role")
-        if not isinstance(symbol.get("provenance"), list) or not symbol["provenance"]:
+        raw_symbol_provenance = symbol.get("provenance")
+        if not isinstance(raw_symbol_provenance, list) or not raw_symbol_provenance:
             errors.append(f"{path}: provenance is required")
-        for span_index, span in enumerate(symbol.get("provenance") or []):
+            raw_symbol_provenance = []
+        for span_index, span in enumerate(raw_symbol_provenance):
             errors.extend(_validate_span(span, f"{path}.provenance[{span_index}]"))
+    raw_rules = ir.get("rules")
+    if not isinstance(raw_rules, list):
+        errors.append("rules must be an array")
     rule_ids: set[str] = set()
-    for index, rule in enumerate(ir.get("rules") if isinstance(ir.get("rules"), list) else []):
+    for index, rule in enumerate(raw_rules if isinstance(raw_rules, list) else []):
         path = f"rules[{index}]"
         if not isinstance(rule, Mapping) or not isinstance(rule.get("id"), str) or not rule["id"]:
             errors.append(f"{path}: malformed rule")
@@ -631,34 +647,80 @@ def validate_ir(ir: Any) -> list[str]:
             errors.append(f"{path}: duplicate rule id")
         rule_ids.add(rule["id"])
         errors.extend(_validate_formula(rule.get("condition"), symbol_map, f"{path}.condition"))
-        if not isinstance(rule.get("effects"), list) or not rule["effects"]:
+        raw_effects = rule.get("effects")
+        if not isinstance(raw_effects, list) or not raw_effects:
             errors.append(f"{path}: effects are required")
-        for effect_index, effect in enumerate(rule.get("effects") or []):
+            effects = []
+        else:
+            effects = raw_effects
+        effect_targets: set[str] = set()
+        for effect_index, effect in enumerate(effects):
             ep = f"{path}.effects[{effect_index}]"
-            if not isinstance(effect, Mapping) or effect.get("kind") != "assignment" or effect.get("modality") not in SUPPORTED_MODALITIES:
+            if not isinstance(effect, Mapping):
                 errors.append(f"{ep}: malformed effect")
-            elif effect.get("target") not in symbol_map or symbol_map[effect["target"]].get("role") != "output":
+                continue
+            if effect.get("kind") != "assignment" or not isinstance(effect.get("modality"), str) or effect.get("modality") not in SUPPORTED_MODALITIES:
+                errors.append(f"{ep}: malformed effect")
+            target = effect.get("target")
+            if isinstance(target, str):
+                if target in effect_targets:
+                    errors.append(f"{ep}: duplicate effect target {target!r}")
+                effect_targets.add(target)
+            if not isinstance(target, str) or target not in symbol_map or symbol_map[target].get("role") != "output":
                 errors.append(f"{ep}: target is not an output symbol")
             errors.extend(_validate_operand(effect.get("value"), symbol_map, f"{ep}.value"))
-        for span_index, span in enumerate(rule.get("provenance") or []):
+        raw_rule_provenance = rule.get("provenance", [])
+        if not isinstance(raw_rule_provenance, list):
+            errors.append(f"{path}.provenance: provenance must be an array")
+            raw_rule_provenance = []
+        for span_index, span in enumerate(raw_rule_provenance):
             errors.extend(_validate_span(span, f"{path}.provenance[{span_index}]"))
-        for exception_index, exception in enumerate(rule.get("exceptions") or []):
+        raw_exceptions = rule.get("exceptions", [])
+        if not isinstance(raw_exceptions, list):
+            errors.append(f"{path}.exceptions: exceptions must be an array")
+            raw_exceptions = []
+        for exception_index, exception in enumerate(raw_exceptions):
+            if not isinstance(exception, Mapping):
+                errors.append(f"{path}.exceptions[{exception_index}]: exception must be an object")
+                continue
             errors.extend(_validate_formula(exception.get("condition"), symbol_map, f"{path}.exceptions[{exception_index}].condition"))
-    for index, table in enumerate(ir.get("tables") if isinstance(ir.get("tables"), list) else []):
+    raw_tables = ir.get("tables")
+    if not isinstance(raw_tables, list):
+        errors.append("tables must be an array")
+    for index, table in enumerate(raw_tables if isinstance(raw_tables, list) else []):
         path = f"tables[{index}]"
-        if not isinstance(table, Mapping) or not table.get("rule_ids") or table.get("hit_policy") not in SUPPORTED_HIT_POLICIES:
+        if not isinstance(table, Mapping):
             errors.append(f"{path}: malformed table")
+            continue
+        table_rule_ids = table.get("rule_ids")
+        if not isinstance(table_rule_ids, list) or not table_rule_ids:
+            errors.append(f"{path}: rule_ids must be a non-empty array")
+        elif any(not isinstance(rid, str) or not rid for rid in table_rule_ids):
+            errors.append(f"{path}: rule_ids must contain non-empty strings")
         else:
-            errors.extend(f"{path}: unknown rule id {rid!r}" for rid in table["rule_ids"] if rid not in rule_ids)
-    for index, refusal in enumerate(ir.get("refusals") if isinstance(ir.get("refusals"), list) else []):
+            errors.extend(f"{path}: unknown rule id {rid!r}" for rid in table_rule_ids if rid not in rule_ids)
+        if not isinstance(table.get("hit_policy"), str) or table.get("hit_policy") not in SUPPORTED_HIT_POLICIES:
+            errors.append(f"{path}: invalid hit policy")
+    raw_refusals = ir.get("refusals")
+    if not isinstance(raw_refusals, list):
+        errors.append("refusals must be an array")
+    for index, refusal in enumerate(raw_refusals if isinstance(raw_refusals, list) else []):
         path = f"refusals[{index}]"
         if not isinstance(refusal, Mapping) or refusal.get("requires_review") is not True or not re.fullmatch(r"[A-Z][A-Z0-9_]+", str(refusal.get("code", ""))):
             errors.append(f"{path}: malformed refusal")
-        for span_index, span in enumerate(refusal.get("provenance") or []):
+            continue
+        raw_refusal_provenance = refusal.get("provenance", [])
+        if not isinstance(raw_refusal_provenance, list):
+            errors.append(f"{path}.provenance: provenance must be an array")
+            raw_refusal_provenance = []
+        for span_index, span in enumerate(raw_refusal_provenance):
             errors.extend(_validate_span(span, f"{path}.provenance[{span_index}]"))
-    for index, ignored in enumerate(ir.get("ignored_fields") if isinstance(ir.get("ignored_fields"), list) else []):
+    raw_ignored = ir.get("ignored_fields")
+    if not isinstance(raw_ignored, list):
+        errors.append("ignored_fields must be an array")
+    for index, ignored in enumerate(raw_ignored if isinstance(raw_ignored, list) else []):
         path = f"ignored_fields[{index}]"
-        if not isinstance(ignored, Mapping) or not isinstance(ignored.get("field"), str) or ignored.get("reason") not in {"NON_EXECUTABLE_METADATA", "AUDIT_STATUS_NOT_EXECUTABLE"}:
+        if not isinstance(ignored, Mapping) or not isinstance(ignored.get("field"), str) or not isinstance(ignored.get("reason"), str) or ignored.get("reason") not in {"NON_EXECUTABLE_METADATA", "AUDIT_STATUS_NOT_EXECUTABLE"}:
             errors.append(f"{path}: malformed ignored-field classification")
     return errors
 

@@ -84,6 +84,8 @@ def _in_range(value: Any, range_text: Any) -> bool | None:
 def evaluate_formula(formula: Mapping[str, Any], environment: Mapping[str, Any]) -> bool | None:
     """Evaluate one IR formula as true, false, or unknown."""
 
+    if not isinstance(formula, Mapping):
+        return UNKNOWN
     op = formula.get("op")
     if op in {"and", "or"}:
         values = [evaluate_formula(child, environment) for child in formula.get("args", [])]
@@ -187,6 +189,8 @@ def evaluate_ir(ir: Mapping[str, Any], inputs: Mapping[str, Any], *, table_id: s
             return _result("refused", table_id, diagnostics=[{"code": "UNKNOWN_TABLE", "detail": f"No table {table_id!r}"}])
     elif len(tables) > 1:
         return _result("refused", None, diagnostics=[{"code": "TABLE_SELECTION_REQUIRED", "detail": "Multiple tables require an explicit table_id"}])
+    elif not tables:
+        return _result("refused", table_id, diagnostics=[{"code": "NO_EXECUTABLE_TABLE", "detail": "A valid IR document must contain an executable decision table"}])
 
     rules = {rule.get("id"): rule for rule in ir.get("rules", [])}
     if tables:

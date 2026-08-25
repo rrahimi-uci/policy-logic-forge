@@ -162,6 +162,8 @@ def _parse_engine_output(stdout: str, cases: Sequence[Mapping[str, Any]]) -> dic
             raise CrosscheckProtocolError(f"engine output line {index + 1} is not JSON: {exc}") from exc
         if not isinstance(result, Mapping):
             raise CrosscheckProtocolError(f"engine output line {index + 1} must be an object")
+        if result.get("protocol") != PROTOCOL_VERSION:
+            raise CrosscheckProtocolError(f"engine output line {index + 1} has an incompatible protocol")
         case_id = result.get("case_id")
         if case_id not in expected_ids or case_id in results:
             raise CrosscheckProtocolError(f"engine returned unexpected or duplicate case_id: {case_id!r}")

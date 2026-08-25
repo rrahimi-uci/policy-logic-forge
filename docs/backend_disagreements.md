@@ -15,7 +15,7 @@ newline-delimited JSON response per case on stdout. A request contains:
 - `case_id`, `table_id`, and JSON `inputs`;
 - the emitted DMN 1.3 document as `dmn_xml` and its `dmn_sha256`.
 
-Each response must contain the same `case_id`, a status in
+Each response must repeat the same `protocol` version and `case_id`, a status in
 `matched`/`no_match`/`unknown`/`refused`, `outputs`, `matched_rule_ids`, and
 `unknown_rule_ids`. Diagnostic text is retained separately and is not used to
 declare behavioral agreement.

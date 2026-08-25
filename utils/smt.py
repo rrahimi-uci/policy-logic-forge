@@ -88,6 +88,39 @@ def _formula_literals(formula: Any) -> list[Any]:
     return values
 
 
+def _formula_error(formula: Any) -> str | None:
+    """Return a deterministic shape error before bounded evaluation."""
+
+    if not isinstance(formula, Mapping):
+        return "formula must be an object"
+    op = formula.get("op")
+    if not isinstance(op, str):
+        return f"unsupported formula operator {op!r}"
+    if op in {"and", "or"}:
+        args = formula.get("args")
+        if not isinstance(args, list) or not args:
+            return f"{op} requires non-empty args"
+        for child in args:
+            error = _formula_error(child)
+            if error:
+                return error
+        return None
+    if op == "not":
+        return _formula_error(formula.get("arg"))
+    if op == "is_null":
+        operand = formula.get("arg")
+        if isinstance(operand, Mapping) and (set(operand) == {"symbol"} or set(operand) == {"literal", "type"}):
+            return None
+        return "is_null requires an operand"
+    if op in {"eq", "ne", "lt", "le", "gt", "ge", "contains", "in_binned_range"}:
+        for key in ("left", "right"):
+            operand = formula.get(key)
+            if not isinstance(operand, Mapping) or set(operand) not in ({"symbol"}, {"literal", "type"}):
+                return f"{op} requires valid {key} operand"
+        return None
+    return f"unsupported formula operator {op!r}"
+
+
 def _candidate_values(symbol: Mapping[str, Any], literals: Sequence[Any]) -> tuple[list[Any], bool, str | None]:
     theory = symbol.get("theory")
     domain = symbol.get("domain") if isinstance(symbol.get("domain"), Mapping) else {}
@@ -204,8 +237,9 @@ def solve_formula(
 ) -> SolveResult:
     """Find a satisfying assignment, or conservatively report unknown."""
 
-    if not isinstance(formula, Mapping):
-        return SolveResult("unknown", None, 0, "formula must be an object")
+    formula_error = _formula_error(formula)
+    if formula_error:
+        return SolveResult("unknown", None, 0, formula_error)
     symbol_map = _symbols_by_id(symbols)
     referenced = sorted(_formula_symbols(formula))
     missing = [name for name in referenced if name not in symbol_map]
@@ -273,16 +307,18 @@ def query_overlap(
 
     left_condition = left_rule.get("condition") if isinstance(left_rule, Mapping) else None
     right_condition = right_rule.get("condition") if isinstance(right_rule, Mapping) else None
+    left_id = left_rule.get("id") if isinstance(left_rule, Mapping) else None
+    right_id = right_rule.get("id") if isinstance(right_rule, Mapping) else None
     formula = {"op": "and", "args": [left_condition, right_condition]}
     query = {
-        "left_rule": {"id": left_rule.get("id"), "condition": left_condition},
-        "right_rule": {"id": right_rule.get("id"), "condition": right_condition},
+        "left_rule": {"id": left_id, "condition": left_condition},
+        "right_rule": {"id": right_id, "condition": right_condition},
         "symbols": symbols,
     }
     result = solve_formula(formula, symbols, max_assignments=max_assignments)
     record = _query_record("overlap", query, result)
     record.update({
-        "rule_ids": [left_rule.get("id"), right_rule.get("id")],
+        "rule_ids": [left_id, right_id],
         "overlap": True if result.status == "sat" else False if result.status == "unsat" else None,
     })
     return record
@@ -348,6 +384,17 @@ def query_coverage(
         "rules": [{"id": rule.get("id"), "condition": rule.get("condition")} for rule in rule_list],
         "symbols": symbols,
     }
+    if rule_list and (len(conditions) != len(rule_list) or any(not isinstance(rule, Mapping) for rule in rule_list)):
+        return {
+            "query_type": "coverage",
+            "status": "unknown",
+            "witness": None,
+            "explored": 0,
+            "reason": "one or more rules has no executable condition",
+            "query_sha256": _sha256({"query_type": "coverage", "query": query}),
+            "rule_ids": rule_ids,
+            "covered": None,
+        }
     if not conditions:
         return {
             "query_type": "coverage",
@@ -476,6 +523,23 @@ def query_conflicts(
         ],
         "symbols": symbols,
     }
+    if any(
+        not isinstance(rule, Mapping)
+        or not isinstance(rule.get("condition"), Mapping)
+        or not isinstance(rule.get("effects"), list)
+        for rule in rule_list
+    ):
+        return {
+            "query_type": "conflicts",
+            "status": "unknown",
+            "witness": None,
+            "explored": 0,
+            "reason": "one or more rules is malformed for conflict analysis",
+            "query_sha256": _sha256({"query_type": "conflicts", "query": query}),
+            "rule_ids": rule_ids,
+            "conflict_count": 0,
+            "witnesses": [],
+        }
     witnesses: list[dict[str, Any]] = []
     unknown_reason: str | None = None
     timeout_reason: str | None = None
@@ -596,9 +660,9 @@ def prove_table(
         proof = _proof_base(table, "unproved", query)
         proof.update({"status": "refused", "witnesses": [{"reason": f"unsupported hit policy {policy!r}"}]})
         return proof
-    if any(rule is None for rule in selected):
+    if any(rule is None or not isinstance(rule.get("condition"), Mapping) for rule in selected):
         proof = _proof_base(table, method, query)
-        proof.update({"status": "unknown", "witnesses": [{"reason": "table references a missing rule"}]})
+        proof.update({"status": "unknown", "witnesses": [{"reason": "table references a missing or malformed rule"}]})
         return proof
     proof = _proof_base(table, method, query)
     unknown_reason: str | None = None
