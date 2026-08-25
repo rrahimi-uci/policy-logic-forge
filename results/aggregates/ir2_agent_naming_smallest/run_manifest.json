@@ -4,9 +4,9 @@
   "run_id": "ir2-agent-naming-smallest-20260825",
   "status": "exploratory",
   "scope_note": "One retained smallest privacy-policy pipeline run with current agent naming; exploratory diagnostic only, not a corpus estimate or compiler-freeze decision.",
-  "created_at_utc": "2026-08-25T21:29:04+00:00",
+  "created_at_utc": "2026-08-25T22:40:45+00:00",
   "repository": {
-    "commit": "e38c447e14cf96cad9be42f4d87a1e57e4e9e948",
+    "commit": "500cde3a458a3131b5afa4d86270f16d0e8b8577",
     "dirty": false,
     "python": "3.14.4"
   },
