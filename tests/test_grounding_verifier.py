@@ -274,10 +274,10 @@ def test_certificate_detects_graph_or_corpus_drift(tmp_path):
 
 
 # NOTE: the source pipeline has a test here asserting its HTML visualizer
-# (step 7 there) refuses to render an optimized graph without a matching
-# Agent 5.7 certificate. This repo has no visualizer (see README.md
-# "Scope") and Step 6 here is the dependency-DAG generator instead, which
-# has no such precondition (it runs on Agent 5's output whether or not 5.7
+# refuses to render an optimized graph without a matching
+# agent_09 certificate. This repo has no visualizer (see README.md
+# "Scope") and agent_10 here is the dependency-DAG generator instead, which
+# has no such precondition (it runs on agent_06's output whether or not agent_09
 # has certified it) — so there is no equivalent gate to test.
 
 

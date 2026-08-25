@@ -11,7 +11,7 @@ script is the source of truth when they need to change.
     python3 scripts/generate_benchmark_domain_prompts.py           # write packs
     python3 scripts/generate_benchmark_domain_prompts.py --check   # verify only
 
-Each pack ships 13 templates, not the conventional 11. Agents 2 and 3 request
+Each pack ships 13 templates, not the conventional 11. `agent_02` and `agent_03` request
 `entity_extraction_compact` and `business_rules_extraction_compact`; without a
 domain override for those two, the shared copies apply and they instruct the
 model to "prefer concrete mortgage concepts" regardless of the active domain.

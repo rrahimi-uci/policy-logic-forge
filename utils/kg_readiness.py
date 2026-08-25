@@ -228,11 +228,11 @@ def _best_evidence(dedicated: Any, field_evidence_entries: Any) -> list | None:
     field_evidence entries for that same field when the resolver completion
     omitted it.
 
-    The dominant real cause: a candidate rule Agent 3 already marked with a
+    The dominant real cause: a candidate rule agent_03 already marked with a
     final-looking basis (e.g. scope_basis "explicit_in_source") is reasonably
     treated by the completion resolver as not needing further derivation, so
     its response omits scope_derivation/exception_verification entirely —
-    leaving whatever shape Agent 3's own extraction happened to put there
+    leaving whatever shape agent_03's own extraction happened to put there
     (observed in practice: an ad hoc object with fields like
     "primary_source_reference" that this reader never asked for). Rather than
     depend on every upstream shape matching exactly, fall back to
@@ -261,7 +261,7 @@ def final_rule_issues(rule: Mapping[str, Any], entity_keys: Iterable[str]) -> li
     # "jurisdiction", "trigger_event") alongside the three standard ones is not
     # thereby less scoped — but a resolver completion that replaces
     # applicability_scope wholesale can drop a standard key it didn't happen to
-    # populate. Agent 5.5's own defaulting (`.setdefault(key, [])`) only runs
+    # populate. agent_07's own defaulting (`.setdefault(key, [])`) only runs
     # before that replacement, so a missing key here means "not stated", the
     # same as an explicit empty list — `.get(key, [])` treats them alike
     # rather than failing an absent key as if it were a wrong type.

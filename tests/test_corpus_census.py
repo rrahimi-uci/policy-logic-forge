@@ -283,7 +283,7 @@ def test_census_report_combines_coverage_and_failure_censuses():
 
 
 # ─────────────────────────────────────────────────────────────────────────
-# load_rules — reading both graph shapes (Agent 5 optimized vs Agent 3 raw)
+# load_rules — reading both graph shapes (agent_06 optimized vs agent_03 raw)
 # ─────────────────────────────────────────────────────────────────────────
 
 def test_load_rules_reads_flat_business_rules_shape(tmp_path):
@@ -296,7 +296,7 @@ def test_load_rules_reads_flat_business_rules_shape(tmp_path):
 
 
 def test_load_rules_reads_nested_entity_relationship_shape(tmp_path):
-    """Agent 3's raw output nests rules under entity_types/relationships
+    """agent_03's raw output nests rules under entity_types/relationships
     instead of a flat business_rules list -- cli/extract.py's own
     _count_business_rules has the same fallback for this reason."""
     graph = {

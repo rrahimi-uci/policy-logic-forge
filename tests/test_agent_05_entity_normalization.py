@@ -1,8 +1,8 @@
 """
-Tests for Agent 4 entity name normalization.
+Tests for agent_05 entity name normalization.
 
-Verifies that entity_or_relationship values from Agent 3 (mixed naming
-conventions) are correctly mapped to Agent 2 canonical UPPER_SNAKE_CASE
+Verifies that entity_or_relationship values from agent_03 (mixed naming
+conventions) are correctly mapped to agent_02 canonical UPPER_SNAKE_CASE
 names when a normalized match exists, and left unchanged otherwise.
 
 Coverage
@@ -17,7 +17,7 @@ Coverage
   Edge:  already-canonical names are not double-remapped
   Edge:  empty rule sets produce no errors
   Edge:  AML-realistic naming data (spaces / UPPER_SNAKE_CASE mix)
-  Code:  normalization block exists in agent_4 source
+  Code:  normalization block exists in agent_05 source
 """
 
 import json
@@ -65,7 +65,7 @@ SCHEMA_RELATIONSHIPS = {
 }
 
 
-def _write_agent2(tmp_path: Path, entity_types=None, relationships=None) -> Path:
+def _write_agent_02(tmp_path: Path, entity_types=None, relationships=None) -> Path:
     p = tmp_path / "entity_types_and_relationships.json"
     p.write_text(json.dumps({
         "entity_types": entity_types if entity_types is not None else SCHEMA_ENTITY_TYPES,
@@ -74,7 +74,7 @@ def _write_agent2(tmp_path: Path, entity_types=None, relationships=None) -> Path
     return p
 
 
-def _write_agent3(tmp_path: Path, entity_types: dict, relationships: dict = None) -> Path:
+def _write_agent_03(tmp_path: Path, entity_types: dict, relationships: dict = None) -> Path:
     p = tmp_path / "compliance_rules_with_entities.json"
     p.write_text(json.dumps({
         "entity_types": entity_types,
@@ -96,12 +96,12 @@ def _make_rule(rule_id: str, rule_name: str = "Test Rule") -> dict:
     }
 
 
-def _load_enricher(tmp_path: Path, agent3_entity_types: dict,
-                   agent3_relationships: dict = None,
+def _load_enricher(tmp_path: Path, agent_03_entity_types: dict,
+                   agent_03_relationships: dict = None,
                    schema_entity_types=None) -> KnowledgeEnricher:
     """Build and load a KnowledgeEnricher from in-memory test data."""
-    entity_file = _write_agent2(tmp_path, entity_types=schema_entity_types)
-    rules_file = _write_agent3(tmp_path, agent3_entity_types, agent3_relationships)
+    entity_file = _write_agent_02(tmp_path, entity_types=schema_entity_types)
+    rules_file = _write_agent_03(tmp_path, agent_03_entity_types, agent_03_relationships)
     enricher = KnowledgeEnricher(entity_file, rules_file, tmp_path / "output")
     enricher.load_data()
     return enricher
@@ -112,7 +112,7 @@ def _load_enricher(tmp_path: Path, agent3_entity_types: dict,
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestEntityNameNormalization:
-    """entity_or_relationship is mapped to the canonical Agent-2 name."""
+    """entity_or_relationship is mapped to the canonical agent_02 name."""
 
     def test_spaces_normalized_to_canonical(self, tmp_path):
         """'Financial Institution' (spaces) → 'FINANCIAL_INSTITUTION'."""
@@ -151,7 +151,7 @@ class TestEntityNameNormalization:
         assert enricher.business_rules[0]["entity_or_relationship"] == "FINANCIAL_INSTITUTION"
 
     def test_no_match_preserved(self, tmp_path):
-        """An entity with no schema match keeps its original Agent-3 name."""
+        """An entity with no schema match keeps its original agent_03 name."""
         enricher = _load_enricher(tmp_path, {
             "AML_CFT_COMPLIANCE_OFFICER": {"business_rules": [_make_rule("R001")]}
         })
@@ -199,8 +199,8 @@ class TestRelationshipNormalization:
         """'filed by' → 'FILED_BY' when schema has FILED_BY."""
         enricher = _load_enricher(
             tmp_path,
-            agent3_entity_types={},
-            agent3_relationships={"filed by": {"business_rules": [_make_rule("R001")]}},
+            agent_03_entity_types={},
+            agent_03_relationships={"filed by": {"business_rules": [_make_rule("R001")]}},
         )
         rule = enricher.business_rules[0]
         assert rule["entity_or_relationship"] == "FILED_BY"
@@ -210,8 +210,8 @@ class TestRelationshipNormalization:
         """An unrecognized relationship name is kept as-is."""
         enricher = _load_enricher(
             tmp_path,
-            agent3_entity_types={},
-            agent3_relationships={"APPROVES": {"business_rules": [_make_rule("R001")]}},
+            agent_03_entity_types={},
+            agent_03_relationships={"APPROVES": {"business_rules": [_make_rule("R001")]}},
         )
         assert enricher.business_rules[0]["entity_or_relationship"] == "APPROVES"
 
@@ -294,7 +294,7 @@ class TestDownstreamEffects:
         assert merged["statistics"]["total_rules"] == 3
 
     def test_merged_output_entity_types_preserved(self, tmp_path):
-        """entity_types in merged output still contains all Agent-2 schema entities."""
+        """entity_types in merged output still contains all agent_02 schema entities."""
         enricher = _load_enricher(tmp_path, {
             "Financial Institution": {"business_rules": [_make_rule("R001")]}
         })
@@ -311,7 +311,7 @@ class TestEdgeCases:
     """Normalization is safe in degenerate inputs."""
 
     def test_empty_rules_no_error(self, tmp_path):
-        """Agent 3 with no rules produces an empty business_rules list."""
+        """agent_03 with no rules produces an empty business_rules list."""
         enricher = _load_enricher(tmp_path, {})
         assert enricher.business_rules == []
 
@@ -331,7 +331,7 @@ class TestEdgeCases:
         assert enricher.business_rules[0]["entity_or_relationship"] == "FINANCIAL_INSTITUTION"
 
     def test_no_duplicate_remapping(self, tmp_path):
-        """Two different Agent-3 names that normalize to the same canonical name
+        """Two different agent_03 names that normalize to the same canonical name
         are both remapped — no collision, no loss of rules."""
         enricher = _load_enricher(tmp_path, {
             "Financial Institution": {"business_rules": [_make_rule("R001")]},
@@ -368,8 +368,8 @@ class TestAmlRealisticData:
         },
     }
 
-    # Agent-3 entity names as seen in practice (from the real AML pipeline run)
-    AML_AGENT3_ENTITIES = {
+    # agent_03 entity names as seen in practice (from the real AML pipeline run)
+    AML_AGENT_03_ENTITIES = {
         # These two normalize to schema keys:
         "Financial Institution": {"business_rules": [_make_rule("R001"), _make_rule("R002")]},
         "Correspondent Banking Relationship": {"business_rules": [_make_rule("R003")]},
@@ -383,7 +383,7 @@ class TestAmlRealisticData:
     def test_normalized_count(self, tmp_path):
         """Exactly 3 rules should be remapped to canonical names."""
         enricher = _load_enricher(
-            tmp_path, self.AML_AGENT3_ENTITIES,
+            tmp_path, self.AML_AGENT_03_ENTITIES,
             schema_entity_types=self.AML_SCHEMA
         )
         remapped = [
@@ -398,9 +398,9 @@ class TestAmlRealisticData:
         assert by_id["R003"] == "CORRESPONDENT_BANKING_RELATIONSHIP"
 
     def test_unmatched_preserved(self, tmp_path):
-        """Agent-3 entities with no schema match keep their original names."""
+        """agent_03 entities with no schema match keep their original names."""
         enricher = _load_enricher(
-            tmp_path, self.AML_AGENT3_ENTITIES,
+            tmp_path, self.AML_AGENT_03_ENTITIES,
             schema_entity_types=self.AML_SCHEMA
         )
         by_id = {r["rule_id"]: r["entity_or_relationship"] for r in enricher.business_rules}
@@ -411,7 +411,7 @@ class TestAmlRealisticData:
     def test_exact_canonical_already_in_schema_unchanged(self, tmp_path):
         """CUSTOMER_LEGAL_PERSON is already canonical — unchanged."""
         enricher = _load_enricher(
-            tmp_path, self.AML_AGENT3_ENTITIES,
+            tmp_path, self.AML_AGENT_03_ENTITIES,
             schema_entity_types=self.AML_SCHEMA
         )
         by_id = {r["rule_id"]: r["entity_or_relationship"] for r in enricher.business_rules}
@@ -420,7 +420,7 @@ class TestAmlRealisticData:
     def test_total_rule_count_preserved(self, tmp_path):
         """Normalization never loses or duplicates rules."""
         enricher = _load_enricher(
-            tmp_path, self.AML_AGENT3_ENTITIES,
+            tmp_path, self.AML_AGENT_03_ENTITIES,
             schema_entity_types=self.AML_SCHEMA
         )
         assert len(enricher.business_rules) == 7
@@ -430,34 +430,34 @@ class TestAmlRealisticData:
 # 7. Source-code inspection
 # ─────────────────────────────────────────────────────────────────────────────
 
-class TestAgent4SourceContainsNormalization:
-    """The normalization block must be present in agent_4 source."""
+class TestAgent05SourceContainsNormalization:
+    """The normalization block must be present in agent_05 source."""
 
-    AGENT4 = (PROJECT_ROOT / "agents" / "agent_05_rules_with_entities_merger.py").read_text()
+    AGENT_05 = (PROJECT_ROOT / "agents" / "agent_05_rules_with_entities_merger.py").read_text()
 
     def test_canonical_map_built(self):
-        assert "canonical_map" in self.AGENT4, (
-            "Agent 4 must build a canonical_map from entity_types keys"
+        assert "canonical_map" in self.AGENT_05, (
+            "agent_05 must build a canonical_map from entity_types keys"
         )
 
     def test_normalization_regex_present(self):
-        assert r"[\s\-]+" in self.AGENT4 or r"[\s\\-]+" in self.AGENT4, (
-            "Agent 4 must normalize spaces/hyphens via regex sub"
+        assert r"[\s\-]+" in self.AGENT_05 or r"[\s\\-]+" in self.AGENT_05, (
+            "agent_05 must normalize spaces/hyphens via regex sub"
         )
 
     def test_remapped_counter_logged(self):
-        assert "remapped" in self.AGENT4, (
-            "Agent 4 must track and log the remapped count"
+        assert "remapped" in self.AGENT_05, (
+            "agent_05 must track and log the remapped count"
         )
 
     def test_canonical_lookup_applied(self):
-        assert "canonical_map.get" in self.AGENT4, (
-            "Agent 4 must look up canonical names via canonical_map.get()"
+        assert "canonical_map.get" in self.AGENT_05, (
+            "agent_05 must look up canonical names via canonical_map.get()"
         )
 
     def test_only_remap_when_name_changes(self):
         """Guard: 'canonical != orig' prevents no-op remaps and double-remapping."""
-        assert "canonical != orig" in self.AGENT4, (
-            "Agent 4 must guard remapping with 'canonical != orig' so already-canonical "
+        assert "canonical != orig" in self.AGENT_05, (
+            "agent_05 must guard remapping with 'canonical != orig' so already-canonical "
             "names are never counted as remapped"
         )

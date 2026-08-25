@@ -10,15 +10,15 @@ Contracts validated
 ──────────────────
  Prompt file                    → Consumer agent(s)
  ──────────────────────────────────────────────────────
- entity_extraction.txt          → Agent 2 / Agent 4
- entity_refinement.txt          → Agent 2 (meta-agent loop)
- business_rules_extraction.txt  → Agent 3 / Agent 4
- rule_deduplication.txt         → Agent 5
- dependency_analysis.txt        → Agent 5 / Agent 6
- rule_matcher_batch.txt         → Agent 8 / Agent 9
- document_structure_analysis.txt→ Agent 1
- entity_resolution.txt          → Agent 2 (multi-doc)
- rule_resolution.txt            → Agent 3 (multi-doc)
+ entity_extraction.txt          → agent_02 / agent_05
+ entity_refinement.txt          → agent_02 (meta-agent loop)
+ business_rules_extraction.txt  → agent_03 / agent_05
+ rule_deduplication.txt         → agent_06
+ dependency_analysis.txt        → agent_06 / agent_10
+ rule_matcher_batch.txt         → upstream comparison matcher/verifier (not shipped here)
+ document_structure_analysis.txt→ agent_01
+ entity_resolution.txt          → agent_02 (multi-doc)
+ rule_resolution.txt            → agent_03 (multi-doc)
 """
 
 import json
@@ -123,9 +123,9 @@ class TestPromptFileExistence:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 1. rule_deduplication  →  Agent 5 (deduplicate_rules)
+# 1. rule_deduplication  →  agent_06 (deduplicate_rules)
 #
-#    Agent 5 reads:
+#    agent_06 reads:
 #      dedup_result.get("duplicate_groups", [])
 #      group["primary_rule_id"]
 #      group["duplicate_rule_ids"]
@@ -139,7 +139,7 @@ class TestPromptFileExistence:
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestRuleDeduplicationContract:
-    """rule_deduplication.txt must produce fields that Agent 5 reads."""
+    """rule_deduplication.txt must produce fields that agent_06 reads."""
 
     REQUIRED_TOP_LEVEL = ["duplicate_groups"]
     REQUIRED_GROUP_FIELDS = [
@@ -161,7 +161,7 @@ class TestRuleDeduplicationContract:
         prompt = _load_prompt(domain, "rule_deduplication")
         assert _prompt_contains_field(prompt, "duplicate_groups"), (
             f"{domain}/rule_deduplication.txt must instruct LLM to output "
-            f'"duplicate_groups" (Agent 5 line ~213)'
+            f'"duplicate_groups" (agent_06 line ~213)'
         )
 
     @pytest.mark.parametrize("domain", DOMAINS)
@@ -170,7 +170,7 @@ class TestRuleDeduplicationContract:
         prompt = _load_prompt(domain, "rule_deduplication")
         assert _prompt_contains_field(prompt, field), (
             f'{domain}/rule_deduplication.txt must include "{field}" in '
-            f"duplicate_groups (Agent 5 reads it)"
+            f"duplicate_groups (agent_06 reads it)"
         )
 
     @pytest.mark.parametrize("domain", DOMAINS)
@@ -179,23 +179,23 @@ class TestRuleDeduplicationContract:
         prompt = _load_prompt(domain, "rule_deduplication")
         assert _prompt_contains_field(prompt, field), (
             f'{domain}/rule_deduplication.txt should include "{field}" in '
-            f"duplicate_groups for full Agent 5 compatibility"
+            f"duplicate_groups for full agent_06 compatibility"
         )
 
     @pytest.mark.parametrize("domain", DOMAINS)
     def test_no_legacy_merge_decisions_key(self, domain):
-        """Ensure old 'merge_decisions' key is NOT present (Agent 5 never reads it)."""
+        """Ensure old 'merge_decisions' key is NOT present (agent_06 never reads it)."""
         prompt = _load_prompt(domain, "rule_deduplication")
         assert not _prompt_contains_field(prompt, "merge_decisions"), (
             f'{domain}/rule_deduplication.txt still contains "merge_decisions" — '
-            f"Agent 5 reads duplicate_groups, not merge_decisions"
+            f"agent_06 reads duplicate_groups, not merge_decisions"
         )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 2. dependency_analysis  →  Agent 5 (analyze_dependencies) + Agent 6
+# 2. dependency_analysis  →  agent_06 (analyze_dependencies) + agent_10
 #
-#    Agent 5 reads from LLM response:
+#    agent_06 reads from LLM response:
 #      dep_result.get("dependencies", [])
 #      dep["source_rule_id"]
 #      dep["target_rule_id"]
@@ -206,13 +206,13 @@ class TestRuleDeduplicationContract:
 #      dep_result.get("dependency_chains", [])
 #      dep_result.get("circular_dependencies", [])
 #
-#    Agent 5 writes to rule (Agent 6 reads):
+#    agent_06 writes to rule (agent_10 reads):
 #      rule["dependencies"][i]["depends_on_rule"]
 #      rule["dependencies"][i]["dependency_type"]
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestDependencyAnalysisContract:
-    """dependency_analysis.txt must produce fields that Agent 5 reads."""
+    """dependency_analysis.txt must produce fields that agent_06 reads."""
 
     REQUIRED_DEP_FIELDS = [
         "source_rule_id",
@@ -244,7 +244,7 @@ class TestDependencyAnalysisContract:
         prompt = _load_prompt(domain, "dependency_analysis")
         assert _prompt_contains_field(prompt, field), (
             f'{domain}/dependency_analysis.txt must include "{field}" '
-            f"(Agent 5 reads dep[\"{field}\"])"
+            f"(agent_06 reads dep[\"{field}\"])"
         )
 
     @pytest.mark.parametrize("domain", DOMAINS)
@@ -252,7 +252,7 @@ class TestDependencyAnalysisContract:
         prompt = _load_prompt(domain, "dependency_analysis")
         assert _prompt_contains_field(prompt, "strength"), (
             f'{domain}/dependency_analysis.txt must include "strength" '
-            f"(Agent 5 reads dep.get('strength', 3))"
+            f"(agent_06 reads dep.get('strength', 3))"
         )
 
     @pytest.mark.parametrize("domain", DOMAINS)
@@ -277,7 +277,7 @@ class TestDependencyAnalysisContract:
         for dep_type in self.VALID_DEPENDENCY_TYPES:
             assert dep_type in prompt.lower(), (
                 f'{domain}/dependency_analysis.txt must mention dependency type '
-                f'"{dep_type}". Agent 5 expects all 7 types.'
+                f'"{dep_type}". agent_06 expects all 7 types.'
             )
 
     @pytest.mark.parametrize("domain", DOMAINS)
@@ -287,14 +287,14 @@ class TestDependencyAnalysisContract:
         for legacy in ["prerequisite_rule_id", "dependent_rule_id"]:
             assert not _prompt_contains_field(prompt, legacy), (
                 f'{domain}/dependency_analysis.txt contains legacy field '
-                f'"{legacy}" — Agent 5 reads source_rule_id/target_rule_id'
+                f'"{legacy}" — agent_06 reads source_rule_id/target_rule_id'
             )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 3. rule_matcher_batch  →  Agent 8 (SemanticRuleMatcher)
+# 3. rule_matcher_batch  → upstream comparison matcher (not shipped here)
 #
-#    Agent 8 reads from each result:
+#    The upstream comparison matcher reads from each result:
 #      result.get("relationship", "UNRELATED")
 #      result.get("confidence", 0.5)
 #      result.get("similarity_score", 0)
@@ -304,7 +304,7 @@ class TestDependencyAnalysisContract:
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestRuleMatcherBatchContract:
-    """rule_matcher_batch.txt must produce fields that Agent 8 reads."""
+    """rule_matcher_batch.txt preserves the upstream comparison contract."""
 
     REQUIRED_FIELDS = [
         "pair_id",
@@ -321,7 +321,7 @@ class TestRuleMatcherBatchContract:
         prompt = _load_prompt(domain, "rule_matcher_batch")
         assert _prompt_contains_field(prompt, field), (
             f'{domain}/rule_matcher_batch.txt must include "{field}" '
-            f"(Agent 8 reads it)"
+            f"(the upstream comparison matcher reads it)"
         )
 
     @pytest.mark.parametrize("domain", DOMAINS)
@@ -339,19 +339,19 @@ class TestRuleMatcherBatchContract:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 4. entity_extraction  →  Agent 2 / Agent 4
+# 4. entity_extraction  →  agent_02 / agent_05
 #
-#    Agent 2 reads:
+#    agent_02 reads:
 #      result.get("entity_types", {})
 #      result.get("relationships", {})
-#    Agent 4 reads:
+#    agent_05 reads:
 #      entity_data.get("entity_types") or entity_data.get("entities", {})
 #      entity_data.get("relationships", {})
 #      entity_info.get("business_rules", [])
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestEntityExtractionContract:
-    """entity_extraction.txt must produce fields that Agent 2 and Agent 4 read."""
+    """entity_extraction.txt must produce fields that agent_02 and agent_05 read."""
 
     @pytest.mark.parametrize("domain", DOMAINS)
     def test_entity_types_key(self, domain):
@@ -360,7 +360,7 @@ class TestEntityExtractionContract:
         has_entities = _prompt_contains_field(prompt, "entities")
         assert has_entity_types or has_entities, (
             f'{domain}/entity_extraction.txt must include "entity_types" or '
-            f'"entities" (Agent 2/4 read one or both)'
+            f'"entities" (agent_02 or agent_05 read one or both)'
         )
 
     @pytest.mark.parametrize("domain", DOMAINS)
@@ -378,7 +378,7 @@ class TestEntityExtractionContract:
         has_summaries = _prompt_contains_field(prompt, "business_rule_summaries")
         assert has_business_rules or has_summaries, (
             f'{domain}/entity_extraction.txt must include "business_rules" or '
-            f'"business_rule_summaries" within each entity (used as context for Agent 3)'
+            f'"business_rule_summaries" within each entity (used as context for agent_03)'
         )
 
     @pytest.mark.parametrize("domain", DOMAINS)
@@ -395,7 +395,7 @@ class TestEntityExtractionContract:
     @pytest.mark.parametrize("domain", DOMAINS)
     def test_relationship_source_target(self, domain):
         """Relationships must have source/target: mortgage uses source_entity/target_entity,
-        AML uses source/target.  Agent 4 reads with .get() defaults."""
+        AML uses source/target.  agent_05 reads with .get() defaults."""
         prompt = _load_prompt(domain, "entity_extraction")
         has_source_entity = _prompt_contains_field(prompt, "source_entity")
         has_source = _prompt_contains_field(prompt, "source")
@@ -412,14 +412,14 @@ class TestEntityExtractionContract:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 5. business_rules_extraction  →  Agent 3 / Agent 4
+# 5. business_rules_extraction  →  agent_03 / agent_05
 #
-#    Agent 3 reads:
+#    agent_03 reads:
 #      result.get("rules", [])      # flat format (AML)
 #      result.get("entity_types")   # nested format (mortgage)
 #      r.get("relationship")
 #      r.get("entity", "UNKNOWN_ENTITY")
-#    Agent 3.5 reads:
+#    agent_04 reads:
 #      rule.get("rule_id")
 #      rule.get("rule_type")
 #      rule.get("description")
@@ -431,7 +431,7 @@ class TestEntityExtractionContract:
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestBusinessRulesExtractionContract:
-    """business_rules_extraction.txt must contain rule field names that Agent 3/3.5/4 read."""
+    """business_rules_extraction.txt must contain fields read by agent_03, agent_04, and agent_05."""
 
     CORE_RULE_FIELDS = [
         "rule_id",
@@ -457,18 +457,18 @@ class TestBusinessRulesExtractionContract:
         prompt = _load_prompt(domain, "business_rules_extraction")
         assert _prompt_contains_field(prompt, field), (
             f'{domain}/business_rules_extraction.txt must include "{field}" '
-            f"in each rule (Agent 3.5 validates it)"
+            f"in each rule (agent_04 validates it)"
         )
 
     def test_confidence_score_field_mortgage(self):
-        """Mortgage prompt must include confidence_score (Agent 3.5 validates confidence ranges)."""
+        """Mortgage prompt must include confidence_score (agent_04 validates confidence ranges)."""
         prompt = _load_prompt("mortgage", "business_rules_extraction")
         assert _prompt_contains_field(prompt, "confidence_score"), (
             'mortgage/business_rules_extraction.txt must include "confidence_score"'
         )
 
     def test_source_reference_field_mortgage(self):
-        """Mortgage prompt must include source_reference (Agent 3.5 validates it)."""
+        """Mortgage prompt must include source_reference (agent_04 validates it)."""
         prompt = _load_prompt("mortgage", "business_rules_extraction")
         assert _prompt_contains_field(prompt, "source_reference"), (
             'mortgage/business_rules_extraction.txt must include "source_reference"'
@@ -490,21 +490,21 @@ class TestBusinessRulesExtractionContract:
         prompt = _load_prompt(domain, "business_rules_extraction")
         assert _prompt_contains_field(prompt, "mandatory"), (
             f'{domain}/business_rules_extraction.txt must include "mandatory" '
-            f"(Agent 3.5/6 read it)"
+            f"(agent_04 and agent_05 read it)"
         )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 6. document_structure_analysis  →  Agent 1
+# 6. document_structure_analysis  →  agent_01
 #
-#    Agent 1 reads:
+#    agent_01 reads:
 #      result.get("sections", [])
 #      section.get("start_marker")
 #      section.get("end_marker")
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestDocumentStructureContract:
-    """document_structure_analysis.txt must produce fields Agent 1 reads."""
+    """document_structure_analysis.txt must produce fields agent_01 reads."""
 
     @pytest.mark.parametrize("domain", DOMAINS)
     def test_sections_key(self, domain):
@@ -547,9 +547,9 @@ class TestCrossDomainConsistency:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 8. Agent 5 output → Agent 6 input contract
+# 8. agent_06 output → agent_10 input contract
 #
-#    Agent 6 reads from the optimized graph:
+#    agent_10 reads from the optimized graph:
 #      data.get("business_rules", [])
 #      rule.get("rule_id")
 #      rule.get("rule_type")
@@ -561,109 +561,106 @@ class TestCrossDomainConsistency:
 #      rule.get("source_reference") or rule.get("legacy_source_reference")
 # ─────────────────────────────────────────────────────────────────────────────
 
-class TestAgent5ToAgent6Contract:
-    """Verify Agent 5 output structure matches what Agent 6 reads.
+class TestAgent06ToAgent10Contract:
+    """Verify agent_06 output structure matches what agent_10 reads.
 
-    We test this by verifying Agent 5 code writes the correct keys that
-    Agent 6 accesses, using import-level introspection of the code.
+    We test this by verifying agent_06 code writes the correct keys that
+    agent_10 accesses, using import-level introspection of the code.
     """
 
-    def test_agent5_writes_depends_on_rule(self):
-        """Agent 5 must write 'depends_on_rule' (not 'source_rule_id') into rule deps."""
-        agent5_code = (PROJECT_ROOT / "agents" / "agent_06_knowledge_graph_optimizer.py").read_text()
-        assert '"depends_on_rule"' in agent5_code or "'depends_on_rule'" in agent5_code, (
-            "Agent 5 must write 'depends_on_rule' key into rule dependencies "
-            "(Agent 6 reads dep.get('depends_on_rule'))"
+    def test_agent_06_writes_depends_on_rule(self):
+        """agent_06 must write 'depends_on_rule' (not 'source_rule_id') into rule deps."""
+        agent_06_code = (PROJECT_ROOT / "agents" / "agent_06_knowledge_graph_optimizer.py").read_text()
+        assert '"depends_on_rule"' in agent_06_code or "'depends_on_rule'" in agent_06_code, (
+            "agent_06 must write 'depends_on_rule' key into rule dependencies "
+            "(agent_10 reads dep.get('depends_on_rule'))"
         )
 
-    def test_agent5_writes_dependency_type(self):
-        agent5_code = (PROJECT_ROOT / "agents" / "agent_06_knowledge_graph_optimizer.py").read_text()
-        assert '"dependency_type"' in agent5_code or "'dependency_type'" in agent5_code
+    def test_agent_06_writes_dependency_type(self):
+        agent_06_code = (PROJECT_ROOT / "agents" / "agent_06_knowledge_graph_optimizer.py").read_text()
+        assert '"dependency_type"' in agent_06_code or "'dependency_type'" in agent_06_code
 
-    def test_agent5_writes_deduplication_info(self):
-        agent5_code = (PROJECT_ROOT / "agents" / "agent_06_knowledge_graph_optimizer.py").read_text()
-        assert '"deduplication_info"' in agent5_code or "'deduplication_info'" in agent5_code
+    def test_agent_06_writes_deduplication_info(self):
+        agent_06_code = (PROJECT_ROOT / "agents" / "agent_06_knowledge_graph_optimizer.py").read_text()
+        assert '"deduplication_info"' in agent_06_code or "'deduplication_info'" in agent_06_code
 
-    def test_agent6_reads_depends_on_rule(self):
-        """Agent 6 (dependency-DAG generator, via utils/dag_builder.py's
+    def test_agent_10_reads_depends_on_rule(self):
+        """agent_10 (dependency-DAG generator, via utils/dag_builder.py's
         dependency_edges()) must read 'depends_on_rule' for dependency edges.
 
         The source pipeline's version of this test points at
-        agent_6_visualization_and_report.py (the HTML visualizer); this repo
-        has no visualizer (see README.md "Scope") and Agent 6 here is the
+        the upstream HTML visualizer module; this repo
+        has no visualizer (see README.md "Scope") and agent_10 here is the
         dependency-DAG generator instead.
         """
         dag_builder_code = (PROJECT_ROOT / "utils" / "dag_builder.py").read_text()
         kg_readiness_code = (PROJECT_ROOT / "utils" / "kg_readiness.py").read_text()
         assert "depends_on_rule" in dag_builder_code + kg_readiness_code
 
-    def test_agent6_reads_dependency_type(self):
+    def test_agent_10_reads_dependency_type(self):
         dag_builder_code = (PROJECT_ROOT / "utils" / "dag_builder.py").read_text()
         assert "dependency_type" in dag_builder_code
 
 
-# NOTE: the source pipeline has TestAgent8ToAgent9Contract and
-# TestAgent9ToAgent10Contract here, covering the cross-graph comparison
-# pipeline (agents 7-10: rule-type clustering, semantic matching, set
-# operations, comparison visualization). This repo ships only the
-# extraction/readiness/grounding/DAG pipeline (agents 1-5.7 and 6); comparing
-# two already-extracted graphs is a different task, out of scope (see
-# README.md "Scope").
+# NOTE: the upstream source pipeline has additional contracts for its
+# cross-graph comparison modules. This repository ships only the ten canonical
+# extraction/readiness/grounding/DAG agents; comparing two already-extracted
+# graphs is a different task, out of scope (see README.md "Scope").
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 11. Agent 3 normalization shim
+# 11. agent_03 normalization shim
 #
-#    Agent 3 must handle BOTH:
+#    agent_03 must handle BOTH:
 #      - Nested format: {"entity_types": {...}, "relationships": {...}}
 #      - Flat format:   {"rules": [...]}  (AML)
-#    And normalize flat → nested so Agent 4 always gets entity_types.
+#    And normalize flat → nested so agent_05 always gets entity_types.
 # ─────────────────────────────────────────────────────────────────────────────
 
-class TestAgent3NormalizationContract:
-    """Agent 3 must handle both flat and nested rule formats."""
+class TestAgent03NormalizationContract:
+    """agent_03 must handle both flat and nested rule formats."""
 
-    def test_agent3_handles_flat_rules(self):
-        agent3_code = (PROJECT_ROOT / "agents" / "agent_03_rules_extractor.py").read_text()
-        assert "'rules'" in agent3_code or '"rules"' in agent3_code, (
-            "Agent 3 must check for flat 'rules' array format"
+    def test_agent_03_handles_flat_rules(self):
+        agent_03_code = (PROJECT_ROOT / "agents" / "agent_03_rules_extractor.py").read_text()
+        assert "'rules'" in agent_03_code or '"rules"' in agent_03_code, (
+            "agent_03 must check for flat 'rules' array format"
         )
 
-    def test_agent3_handles_entity_types(self):
-        agent3_code = (PROJECT_ROOT / "agents" / "agent_03_rules_extractor.py").read_text()
-        assert "'entity_types'" in agent3_code or '"entity_types"' in agent3_code, (
-            "Agent 3 must handle nested 'entity_types' format"
+    def test_agent_03_handles_entity_types(self):
+        agent_03_code = (PROJECT_ROOT / "agents" / "agent_03_rules_extractor.py").read_text()
+        assert "'entity_types'" in agent_03_code or '"entity_types"' in agent_03_code, (
+            "agent_03 must handle nested 'entity_types' format"
         )
 
-    def test_agent3_normalizes_flat_to_nested(self):
-        """Agent 3 must convert flat rules → entity_types/relationships."""
-        agent3_code = (PROJECT_ROOT / "agents" / "agent_03_rules_extractor.py").read_text()
+    def test_agent_03_normalizes_flat_to_nested(self):
+        """agent_03 must convert flat rules → entity_types/relationships."""
+        agent_03_code = (PROJECT_ROOT / "agents" / "agent_03_rules_extractor.py").read_text()
         # Must have normalization: if 'rules' in result and 'entity_types' not in result
-        assert "entity_types" in agent3_code and "rules" in agent3_code, (
-            "Agent 3 must normalize flat rules to entity_types structure"
+        assert "entity_types" in agent_03_code and "rules" in agent_03_code, (
+            "agent_03 must normalize flat rules to entity_types structure"
         )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 12. Agent 4 entity format flexibility
+# 12. agent_05 entity format flexibility
 #
-#    Agent 4 must handle both:
+#    agent_05 must handle both:
 #      entity_data.get("entity_types") — dict keyed by entity name
 #      entity_data.get("entities")     — list of entity objects
 # ─────────────────────────────────────────────────────────────────────────────
 
-class TestAgent4EntityFormatContract:
-    """Agent 4 must accept both dict and list entity formats."""
+class TestAgent05EntityFormatContract:
+    """agent_05 must accept both dict and list entity formats."""
 
-    def test_agent4_handles_entity_types_dict(self):
-        agent4_code = (PROJECT_ROOT / "agents" / "agent_05_rules_with_entities_merger.py").read_text()
-        assert "entity_types" in agent4_code
+    def test_agent_05_handles_entity_types_dict(self):
+        agent_05_code = (PROJECT_ROOT / "agents" / "agent_05_rules_with_entities_merger.py").read_text()
+        assert "entity_types" in agent_05_code
 
-    def test_agent4_handles_entities_list(self):
-        agent4_code = (PROJECT_ROOT / "agents" / "agent_05_rules_with_entities_merger.py").read_text()
-        # Agent 4 must have fallback: entity_data.get('entity_types') or entity_data.get('entities', {})
-        assert "entities" in agent4_code, (
-            "Agent 4 must support 'entities' list format as fallback"
+    def test_agent_05_handles_entities_list(self):
+        agent_05_code = (PROJECT_ROOT / "agents" / "agent_05_rules_with_entities_merger.py").read_text()
+        # agent_05 must have fallback: entity_data.get('entity_types') or entity_data.get('entities', {})
+        assert "entities" in agent_05_code, (
+            "agent_05 must support 'entities' list format as fallback"
         )
 
 

@@ -21,25 +21,23 @@ real, citable dataset.
 
 ## Scope
 
-**Kept**: Agents 1 through 5.7 (document organization → entity/relationship
-extraction → business-rule extraction → validation → merge → deduplication +
-dependency analysis → four-invariant executable-readiness gate → focused
-remediation → independent grounding certification), plus Agent 6 (dependency
-DAG generation, 100%-coverage guarantee). A lean CLI orchestrator
+**Kept**: the ten canonical agents `agent_01` through `agent_10` (document
+organization → entity/relationship extraction → business-rule extraction →
+validation → merge → deduplication + dependency analysis → four-invariant
+executable-readiness gate → focused remediation → independent grounding
+certification → dependency DAG generation). A lean CLI orchestrator
 (`cli/extract.py`) runs them in order.
 
 **Cut, deliberately**:
 
 - **No UI, no backend.** No FastAPI, no React, no WebSocket streaming, no run
   history database. This is a CLI-and-library research repo.
-- **No cross-graph comparison pipeline** (the source repo's agents 7-10: rule
-  clustering, semantic matching, set operations, comparison visualization).
-  Comparing two already-extracted graphs is a different task from extracting
-  one.
-- **No HTML visualizer** (the source repo's Agent 6). Its job — an
-  interactive network graph and rules table — doesn't serve this repo's
-  research question, which stops at a grounding-certified,
-  dependency-partitioned knowledge graph, not a picture of it.
+- **No cross-graph comparison pipeline** (rule clustering, semantic matching,
+  set operations, or comparison visualization). Comparing two already-extracted
+  graphs is a different task from extracting one.
+- **No HTML visualizer.** The separate interactive network graph and rules
+  table do not serve this repo's research question, which stops at a
+  grounding-certified, dependency-partitioned knowledge graph.
 - **Only 4 of the source repo's 8 compliance domains**: `nda_confidentiality`,
   `privacy_policy`, `mobile_app_privacy`, `commercial_contracts`. The other
   four (`mortgage`, `healthcare`, `aml`, `commercial_lending`) have no paired
@@ -56,9 +54,9 @@ silently inherited):
   (`condition_predicates`/`outcomes`/...) in the same request. Fixed at the
   source (`scripts/generate_benchmark_domain_prompts.py`) for all 4 domains.
 - **P3** — `contract_issues`/`requires_review` were stamped once at
-  extraction time and never recomputed after Agent 5.5 normalizes legacy
+  extraction time and never recomputed after `agent_07` normalizes legacy
   operator/value-type aliases, so a structurally clean rule could still carry
-  stale "invalid operator" errors. Agent 5.5 now re-validates after
+  stale "invalid operator" errors. `agent_07` now re-validates after
   normalization.
 - **P6** — BPMN eligibility was gated on a hardcoded, mortgage-shaped
   `rule_type` set (`process`/`validation`/`compliance`/`exception`). None of
@@ -93,17 +91,19 @@ python3 cli/extract.py --dir nda_confidentiality --domain nda_confidentiality --
 
 Output lands under `pipeline-output/<batch-name>/`:
 
-- `agent-5-optimized/optimized_compliance_knowledge_graph.json` — the final,
+- `agent_06-optimized/optimized_compliance_knowledge_graph.json` — the final,
   grounding-certified knowledge graph.
-- `agent-5-optimized/kg_readiness_report.{json,md}` and
+- `agent_06-optimized/kg_readiness_report.{json,md}` and
   `kg_grounding_report.{json,md}` — the four-invariant self-report and the
   independent claim-level certification.
-- `agent-6-dag-generation/dependency_dags.json` — every rule partitioned into
+- `agent_10-dag-generation/dependency_dags.json` — every rule partitioned into
   one or more dependency DAGs, with an explicit, checked coverage guarantee.
 
-Run a single stage with `--step` (e.g. `--step 5.7` to re-run only grounding
-certification), or `--skip-optimize` to skip deduplication/readiness/grounding
-entirely and go straight from the merged graph to DAG generation.
+Run a single agent with `--agent` (e.g. `--agent agent_09` to re-run only
+grounding certification), or `--skip-optimize` to skip
+`agent_06`–`agent_09` entirely and go straight from the merged graph to
+`agent_10` DAG generation. The deprecated numeric `--step` selector remains
+accepted for backwards compatibility.
 
 ## Data and licensing
 
@@ -133,8 +133,8 @@ then points at whichever domain folder you built.
 ## Structure
 
 ```
-cli/extract.py              10-stage orchestrator (1, 2, 3, 3.5, 4, 5, 5.5, 5.6, 5.7, 6)
-agents/                     one module per stage
+cli/extract.py              `agent_01`–`agent_10` orchestrator
+agents/                     one zero-padded module per agent
 utils/                      config, LLM client, adaptive rate limiter,
                             rule contract + validator, readiness/grounding
                             helpers, dependency-DAG partitioning

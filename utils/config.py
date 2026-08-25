@@ -5,11 +5,11 @@ Loads and manages configuration from config.json with environment variable
 overrides.
 
 This is a trimmed fork of policy-to-knowledge/apps/pipeline/utils/config.py,
-kept in sync only for what the extraction/readiness/grounding/DAG stages
-(Agents 1-5.7 and 6) actually use. Removed relative to the source: rule-type
-color palettes, priority-filter buttons, and directory getters that existed
-only to serve the HTML visualizer and the cross-graph comparison pipeline
-(agents 7-10), neither of which is part of this repo. See README.md for why.
+kept in sync only for what ``agent_01`` through ``agent_10`` actually use.
+Removed relative to the source: rule-type color palettes, priority-filter
+buttons, and directory getters that existed only to serve the HTML visualizer
+and the cross-graph comparison pipeline, neither of which is part of this repo.
+See README.md for why.
 """
 
 import os
@@ -18,6 +18,8 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 import re
 from dotenv import load_dotenv
+
+from utils.agent_names import output_dir_name
 
 # Load environment variables from the repo-root .env at module level.
 _repo_root = Path(__file__).resolve().parents[1]
@@ -222,34 +224,34 @@ class Config:
         return Path(self.get('directories.source', 'compliance-files'))
 
     def get_organized_dir(self) -> Path:
-        """Agent 1 output directory."""
+        """``agent_01`` output directory."""
         base = self.get_pipeline_base_path()
-        return base / 'agent-1-organized-documents'
+        return base / output_dir_name("agent_01")
 
     def get_entity_relationship_dir(self) -> Path:
-        """Agent 2 output directory."""
+        """``agent_02`` output directory."""
         base = self.get_pipeline_base_path()
-        return base / 'agent-2-entities'
+        return base / output_dir_name("agent_02")
 
     def get_rules_extracted_dir(self) -> Path:
-        """Agent 3 output directory."""
+        """``agent_03`` output directory."""
         base = self.get_pipeline_base_path()
-        return base / 'agent-3-rules'
+        return base / output_dir_name("agent_03")
 
     def get_rules_with_entities_dir(self) -> Path:
-        """Agent 4 output directory."""
+        """``agent_05`` output directory."""
         base = self.get_pipeline_base_path()
-        return base / 'agent-4-rules-with-entities'
+        return base / output_dir_name("agent_05")
 
     def get_optimized_dir(self) -> Path:
-        """Agent 5 (and 5.5/5.6/5.7, which mutate this in place) output directory."""
+        """``agent_06``–``agent_09`` shared optimized-graph directory."""
         base = self.get_pipeline_base_path()
-        return base / 'agent-5-optimized'
+        return base / output_dir_name("agent_06")
 
     def get_dag_dir(self) -> Path:
-        """Agent 6 (agent_10_dag_generator.py) output directory."""
+        """``agent_10`` output directory."""
         base = self.get_pipeline_base_path()
-        return base / 'agent-6-dag-generation'
+        return base / output_dir_name("agent_10")
 
     def get_target_rules(self) -> int:
         """Get target number of rules to extract."""
@@ -405,7 +407,7 @@ class Config:
         return self.get('rules_extractor.chunk_overlap_words', 150)
 
     def get_pilot_batch_limit(self) -> Optional[int]:
-        """Cap on the number of word-balanced batches Agent 3 processes.
+        """Cap on the number of word-balanced batches agent_03 processes.
 
         `None` (the default) means full coverage: every organized chunk is
         read without truncation and every resulting batch is processed. Set
@@ -444,7 +446,7 @@ class Config:
             'logical_consistency': 0.10
         })
 
-    # -- Optimizer (Agent 5) --
+    # -- Optimizer (agent_06) --
 
     def get_optimizer_model_name(self) -> str:
         return self.get('optimizer.model', 'gpt-5.6-luna')

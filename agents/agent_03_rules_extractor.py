@@ -52,7 +52,7 @@ def bridge_exact_span(
     The result scores well against `_verify_rule`'s fuzzy SequenceMatcher ratio
     (that threshold exists precisely to tolerate minor wording drift), but it
     is not a real substring of the document, so it fails any downstream check
-    that requires one (Agent 5.7's grounding verifier does).
+    that requires one (agent_09's grounding verifier does).
 
     This finds where the genuinely-matching words actually sit in the chunk —
     using word-level SequenceMatcher.get_matching_blocks(), which naturally
@@ -258,7 +258,7 @@ class BusinessRulesExtractor:
         characters is re-split into overlapping windows via
         `split_oversized_content` rather than truncated, and every resulting
         batch is returned; `target_rules_count` no longer caps how many
-        batches come back, because it bounds how many rules Agent 3 tries to
+        batches come back, because it bounds how many rules agent_03 tries to
         extract per batch, not how much source gets read. Set
         `self.config.pilot_batch_limit` to an int for a deliberately cheap
         pilot/smoke run: chunks are truncated with recorded loss exactly as
@@ -759,7 +759,7 @@ class BusinessRulesExtractor:
         """Extract rules from batches in parallel."""
         max_workers = max_workers or self.global_config.get_max_workers()
         print(f"\n{'='*70}", flush=True)
-        print(f"🚀 AGENT 3: PARALLEL BUSINESS RULES EXTRACTION", flush=True)
+        print(f"🚀 agent_03: PARALLEL BUSINESS RULES EXTRACTION", flush=True)
         print(f"{'='*70}", flush=True)
         print(f"\n📋 Configuration:", flush=True)
         print(f"   • Workers: {max_workers}", flush=True)
@@ -981,7 +981,7 @@ class BusinessRulesExtractor:
 
         if self.count_rules() == 0:
             raise RuntimeError(
-                "Agent 3 extracted zero rules; refusing to continue with an empty knowledge graph"
+                "agent_03 extracted zero rules; refusing to continue with an empty knowledge graph"
             )
     
     def count_rules(self) -> int:
@@ -995,12 +995,12 @@ class BusinessRulesExtractor:
 
     # ── Entity-coverage validation with bounded retries ──────────────
     def validate_entity_coverage(self, max_retries: int = 3) -> Dict[str, int]:
-        """Re-classify rules whose bucket key is not in Agent 2's catalog.
+        """Re-classify rules whose bucket key is not in agent_02's catalog.
 
         After parallel extraction completes, every rule lives under either
         ``self.all_entity_types[<entity_name>]`` or
         ``self.all_relationships[<rel_name>]``. If that bucket key does not
-        match any canonical name from Agent 2 (case/punctuation insensitive),
+        match any canonical name from agent_02 (case/punctuation insensitive),
         the rule is an *orphan* and will not get a ``belongs_to_category``
         edge in the published graph.
 
@@ -1669,7 +1669,7 @@ def main():
     max_workers = config.get_max_workers()
     extractor.extract_rules_parallel(batches, max_workers=max_workers)
 
-    # Validate that every rule is bucketed under a canonical Agent 2
+    # Validate that every rule is bucketed under a canonical agent_02
     # entity/relationship name and re-classify (or drop) any orphans.
     # Set AGENT3_VALIDATE_ENTITY_RETRIES=0 to disable. Default: 3 retries.
     validate_retries = int(os.environ.get('AGENT3_VALIDATE_ENTITY_RETRIES', '3'))

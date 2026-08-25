@@ -159,7 +159,7 @@ def _extractor(pilot_batch_limit=None, max_content_length=8000, chunk_overlap_wo
                 target_rules_count=30, batch_size=8):
     """A bare BusinessRulesExtractor with no API key / LLM client, matching
     the object.__new__() construction pattern used for agent_06 in
-    tests/test_agent_5_dependency_support.py -- read_text_files_batch only
+    tests/test_agent_06_dependency_support.py -- read_text_files_batch only
     touches self.config (a plain RulesExtractionConfig) and
     self.global_config.get_rules_target_words_per_batch()."""
     extractor = object.__new__(BusinessRulesExtractor)

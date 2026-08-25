@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Agent 5.5: evidence-backed completion for DMN/BPMN-ready graph rules."""
+"""agent_07: evidence-backed completion for DMN/BPMN-ready graph rules."""
 
 from __future__ import annotations
 
@@ -215,7 +215,7 @@ def _build_entity_name_map(graph: Any) -> dict[str, str]:
     SCREAMING_SNAKE_CASE form, merged over the fixed legacy list.
 
     The extraction prompt asks for entity type keys in this form, but nothing
-    enforces it at extraction time — Agent 2 has produced PascalCase names
+    enforces it at extraction time — agent_02 has produced PascalCase names
     (CreditScore, DocumentCustodian, ...) for entire graphs, and the fixed
     LEGACY_ENTITY_NAMES list only ever covered six specific names discovered
     reactively in earlier datasets. Building the map from the graph's own
@@ -306,9 +306,9 @@ def _normalise_operator(value: Any) -> Any:
 
 def _evidence_pointer(value: Any) -> dict[str, str] | None:
     # source_reference is documented (rule_contract_v2.txt, every domain
-    # prompt) as a single object, but Agent 3 sometimes emits a list of
+    # prompt) as a single object, but agent_03 sometimes emits a list of
     # citations for a rule whose justification spans more than one excerpt —
-    # Agent 5.7's own _iter_references already treats that as legitimate.
+    # agent_09's own _iter_references already treats that as legitimate.
     # Take the first usable entry rather than discarding real evidence: on
     # one ContractNLI pilot run, a rule with source_reference shaped this way
     # and no exceptions left field_evidence.exceptions empty, which is a hard
@@ -929,7 +929,7 @@ class ExecutableReadinessCompleter:
             for key in ("loan_types", "occupancy_types", "transaction_types"):
                 rule["applicability_scope"].setdefault(key, [])
             rule = _normalise_rule_contract(rule)
-            # Re-validate against the now-normalised values. Agent 3 stamped
+            # Re-validate against the now-normalised values. agent_03 stamped
             # contract_issues/requires_review against the raw model output at
             # extraction time; _normalise_rule_contract above can alias a
             # legacy operator/value_type into canonical form afterward, which
@@ -974,7 +974,7 @@ class ExecutableReadinessCompleter:
         if skip_evidence is None:
             skip_evidence = os.getenv("KG_READINESS_SKIP_EVIDENCE", "").lower() in {"1", "true", "yes"}
         if skip_evidence:
-            print(f"▶ Agent 5.5 rule evidence: reusing {len(rules)} completed rules", flush=True)
+            print(f"▶ agent_07 rule evidence: reusing {len(rules)} completed rules", flush=True)
             rules = [annotate_rule_contract(_normalise_rule_contract(rule)) for rule in rules]
             for rule in rules:
                 rule["execution"] = _project_execution(rule)
@@ -982,7 +982,7 @@ class ExecutableReadinessCompleter:
             batch_size = max(1, int(os.getenv("KG_READINESS_RULES_PER_REQUEST", "4")))
             indexed = list(enumerate(rules))
             batches = [indexed[start:start + batch_size] for start in range(0, len(indexed), batch_size)]
-            print(f"▶ Agent 5.5 rule evidence: {len(rules)} rules in {len(batches)} batches, "
+            print(f"▶ agent_07 rule evidence: {len(rules)} rules in {len(batches)} batches, "
                   f"{readiness_workers} workers, {getattr(self.resolver, 'readiness_concurrency', 'bounded') if self.resolver else 0} API concurrency", flush=True)
             completed_rules: list[dict[str, Any] | None] = [None] * len(rules)
             with ThreadPoolExecutor(max_workers=readiness_workers, thread_name_prefix="kg-readiness") as executor:
@@ -1122,7 +1122,7 @@ class ExecutableReadinessCompleter:
             skip_conflicts = os.getenv("KG_READINESS_SKIP_CONFLICTS", "").lower() in {"1", "true", "yes"}
         existing_conflicts = (final_graph.get("dependency_details") or {}).get("conflicts", [])
         if skip_conflicts and isinstance(existing_conflicts, list) and existing_conflicts:
-            print(f"▶ Agent 5.5 conflicts: reusing {len(existing_conflicts)} completed analyses", flush=True)
+            print(f"▶ agent_07 conflicts: reusing {len(existing_conflicts)} completed analyses", flush=True)
             conflict_entries = [deepcopy(dict(item)) for item in existing_conflicts if isinstance(item, Mapping)]
         else:
             entity_results: dict[str, list[dict[str, Any]]] = {}
@@ -1189,7 +1189,7 @@ class ExecutableReadinessCompleter:
                 # this invariant made schema_consistency fail on every real
                 # run that had any review-required rule, which always fires
                 # main()'s SystemExit(2) before the SystemExit(3) branch that
-                # launches Agent 5.6 is ever reached, silently defeating the
+                # launches agent_08 is ever reached, silently defeating the
                 # auto-remediation this README documents. Both counts stay in
                 # the evidence string for visibility.
                 "schema_consistency": {"pass": contract_error_count == 0, "evidence": f"{len(reviewed_rules)} rules checked; {contract_error_count} v2 and {final_contract_error_count} final-readiness contract violations."},
@@ -1205,14 +1205,14 @@ class ExecutableReadinessCompleter:
 
     def run(self, baseline_path: Path, graph_path: Path, organized_dir: Path, output_dir: Path) -> dict[str, Any]:
         baseline, graph = json.loads(baseline_path.read_text()), json.loads(graph_path.read_text())
-        self.checkpoint_path = output_dir / "agent_5_5_rule_checkpoint.jsonl"
+        self.checkpoint_path = output_dir / "agent_07_rule_checkpoint.jsonl"
         final_graph, report = self.complete(baseline, graph, str(organized_dir))
         output_dir.mkdir(parents=True, exist_ok=True)
         graph_path.write_text(json.dumps(final_graph, indent=2, ensure_ascii=False) + "\n")
         (output_dir / "corpus_manifest.json").write_text(json.dumps(final_graph["corpus_manifest"], indent=2) + "\n")
         (output_dir / "kg_readiness_report.json").write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n")
         (output_dir / "kg_readiness_report.md").write_text(_report_markdown(report))
-        print(f"✅ Agent 5.5 completed: {report['rules_ready']} ready, {report['rules_requiring_review']} require review", flush=True)
+        print(f"✅ agent_07 completed: {report['rules_ready']} ready, {report['rules_requiring_review']} require review", flush=True)
         return report
 
 
@@ -1225,10 +1225,10 @@ def main() -> None:
     report = completer.run(baseline, output_dir / "optimized_compliance_knowledge_graph.json", config.get_organized_dir(), output_dir)
     invariant_pass = all(result["pass"] for result in report["invariants"].values())
     if not invariant_pass:
-        print("❌ Agent 5.5 invariant validation failed; inspect kg_readiness_report.json.", flush=True)
+        print("❌ agent_07 invariant validation failed; inspect kg_readiness_report.json.", flush=True)
         raise SystemExit(2)
     if report["rules_requiring_review"]:
-        print("⚠️ Agent 5.5 found rules requiring focused Agent 5.6 remediation.", flush=True)
+        print("⚠️ agent_07 found rules requiring focused agent_08 remediation.", flush=True)
         raise SystemExit(3)
 
 

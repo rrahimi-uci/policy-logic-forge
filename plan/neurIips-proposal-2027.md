@@ -990,7 +990,7 @@ organized chunk to `max_content_length` (**8,000 characters** by default, line
 240). With the CLI default `--target-rules 30` and `rules_per_batch_openai: 5`,
 that is **at most 16 batches regardless of how many documents were organized**
 *(verified-in-code)*. The sample is biased toward the longest chunks, and because
-Agent 1 chunks by ~2,000 *words* while Agent 3 clips by *characters*, long chunks
+agent_01 chunks by ~2,000 *words* while agent_03 clips by *characters*, long chunks
 lose trailing content before extraction.
 
 *Consequence:* `benchmarks/README.md`'s "each command above is one full corpus as
@@ -1698,8 +1698,8 @@ default), then returns only
 `target_rules // rules_per_batch + 10` batches. With the CLI default of 30 target
 rules and five rules per OpenAI batch, that is at most 16 batches even if hundreds
 of documents were organized. The result is biased toward the longest chunks and
-is not a document-complete extraction. In addition, Agent 1 targets roughly
-2,000-word chunks while Agent 3 clips by characters, so long organized chunks can
+is not a document-complete extraction. In addition, agent_01 targets roughly
+2,000-word chunks while agent_03 clips by characters, so long organized chunks can
 lose substantial trailing content before extraction.
 
 This invalidates the current reading of “run one full corpus as one batch,” and
@@ -1713,7 +1713,7 @@ coverage.
 
 #### R3. The optimizer's v2 handoff is broken for both deduplication and dependency analysis
 
-Agent 3's compact prompts explicitly forbid the legacy prose fields
+agent_03's compact prompts explicitly forbid the legacy prose fields
 `conditions` and `consequences`. However,
 `KnowledgeGraphOptimizer._deduplicate_rules_single()`,
 `analyze_dependencies()`, and both batched dependency paths still construct
@@ -1791,7 +1791,7 @@ for example when both tables are limited to a known finite threshold set and the
 certificate covers every induced cell with correctly handled open/closed bounds.
 
 The current readiness check is much weaker still: it requires only that at least
-one numeric input appear in one `boundary_condition: true` vector, and Agent 5.7
+one numeric input appear in one `boundary_condition: true` vector, and agent_09
 checks only that vector keys name declared variables/outcomes; it explicitly does
 not execute the predicates or validate the expected value.
 
@@ -2036,7 +2036,7 @@ acceptance test. This is the bridge to `neurips-plan-2027.md`.
 - **PIPE-1** — per-document extraction unit; every chunk processed; coverage
   recorded; fail on skip/truncation. *Accept:* a 40-chunk document yields 40
   processed chunks at any `--target-rules`.
-- **PIPE-2** — reconcile Agent 1's word-based chunking with Agent 3's
+- **PIPE-2** — reconcile agent_01's word-based chunking with agent_03's
   character-based clipping. *Accept:* no chunk loses trailing content silently;
   any clip is logged and counted.
 - **PIPE-3** — full v2 fields into dedup and dependency summaries. *Accept:* a

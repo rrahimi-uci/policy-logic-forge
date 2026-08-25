@@ -1764,7 +1764,7 @@ If no TOC is found, return {{"has_toc": false, "toc_entries": []}}
         # Create folder for this document (sanitized to match naming rule)
         doc_folder = output_base / self._sanitize_folder_name(source_file.stem)
         if doc_folder.exists():
-            # Chunking is LLM-driven and non-deterministic: a re-run of Step 1
+            # Chunking is LLM-driven and non-deterministic: a re-run of agent_01
             # (retry, resumed batch, manual reprocessing) can produce a
             # different set of chunk filenames than the previous run. Without
             # clearing the folder first, files from the earlier pass that
@@ -2111,7 +2111,8 @@ If no TOC is found, return {{"has_toc": false, "toc_entries": []}}
 def resolve_output_folder(argv, default="knowledge-files-organized"):
     """Resolve the optional positional output folder from argv.
 
-    The CLI accepts ``python agent_1.py <input> [<output>] [--files a.pdf ...]``.
+    The CLI accepts ``python agents/agent_01_document_organizer.py <input>
+    [<output>] [--files a.pdf ...]``.
     A second positional that actually starts an option (e.g. ``--files``) must NOT
     be treated as the output folder, otherwise output_folder would become
     ``"--files"``. Return the default when argv[2] is missing or option-like.

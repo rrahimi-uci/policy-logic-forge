@@ -1,7 +1,7 @@
 """Tests for generalized entity-name normalization.
 
 Context: `_normalise_graph_entity_names` only ever replaced six hardcoded
-legacy names (LEGACY_ENTITY_NAMES). On a real fresh extraction run, Agent 2
+legacy names (LEGACY_ENTITY_NAMES). On a real fresh extraction run, agent_02
 produced 24 entity type keys, most in PascalCase (CreditScore,
 DocumentCustodian, PostClosingQCReview, ...) — none of which matched the
 hardcoded list, so all 24 passed through unnormalized and the
