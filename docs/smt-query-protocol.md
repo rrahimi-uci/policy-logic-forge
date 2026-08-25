@@ -24,8 +24,10 @@ The public functions are:
 
 Every result includes `query_type`, `status`, `witness`, `explored`, `reason`,
 and a deterministic `query_sha256`. Query hashes include the query kind,
-formula/rule payload, and symbol declarations. A witness is only returned for
-a concrete `sat` result; `unknown` and `timeout` never become negative proofs.
+formula/rule payload, symbol declarations, and the `max_assignments` bound.
+Changing a domain or search budget therefore invalidates the old query
+identity. A witness is only returned for a concrete `sat` result; `unknown`
+and `timeout` never become negative proofs.
 
 ## Status contract
 

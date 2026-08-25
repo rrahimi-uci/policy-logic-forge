@@ -292,7 +292,7 @@ def query_satisfiable(
 ) -> dict[str, Any]:
     """Run the bounded satisfiability query and retain its witness contract."""
 
-    query = {"formula": formula, "symbols": symbols}
+    query = {"formula": formula, "symbols": symbols, "max_assignments": max_assignments}
     return _query_record("satisfiable", query, solve_formula(formula, symbols, max_assignments=max_assignments))
 
 
@@ -314,6 +314,7 @@ def query_overlap(
         "left_rule": {"id": left_id, "condition": left_condition},
         "right_rule": {"id": right_id, "condition": right_condition},
         "symbols": symbols,
+        "max_assignments": max_assignments,
     }
     result = solve_formula(formula, symbols, max_assignments=max_assignments)
     record = _query_record("overlap", query, result)
@@ -339,7 +340,7 @@ def query_counterexample(
 
     record = _query_record(
         "counterexample",
-        {"formula": formula, "symbols": symbols},
+        {"formula": formula, "symbols": symbols, "max_assignments": max_assignments},
         solve_formula(formula, symbols, max_assignments=max_assignments),
     )
     record["found"] = record["status"] == "sat"
@@ -356,7 +357,7 @@ def query_witness(
 
     record = _query_record(
         "witness",
-        {"formula": formula, "symbols": symbols},
+        {"formula": formula, "symbols": symbols, "max_assignments": max_assignments},
         solve_formula(formula, symbols, max_assignments=max_assignments),
     )
     record["found"] = record["status"] == "sat"
@@ -383,6 +384,7 @@ def query_coverage(
     query = {
         "rules": [{"id": rule.get("id"), "condition": rule.get("condition")} for rule in rule_list],
         "symbols": symbols,
+        "max_assignments": max_assignments,
     }
     if rule_list and (len(conditions) != len(rule_list) or any(not isinstance(rule, Mapping) for rule in rule_list)):
         return {
@@ -522,6 +524,7 @@ def query_conflicts(
             for rule in rule_list
         ],
         "symbols": symbols,
+        "max_assignments": max_assignments,
     }
     if any(
         not isinstance(rule, Mapping)
@@ -649,6 +652,8 @@ def prove_table(
             for rule in selected
             if isinstance(rule, Mapping)
         ],
+        "symbols": symbols,
+        "max_assignments": max_assignments,
     }
     policy = table.get("hit_policy")
     method = "pairwise_disjointness" if policy == "UNIQUE" else "equal_outputs_on_overlap"

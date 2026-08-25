@@ -47,6 +47,16 @@ def test_satisfiable_and_witness_queries_preserve_status_and_hash():
     assert result["query_sha256"] != query_satisfiable(_eq("x", False), symbols)["query_sha256"]
 
 
+def test_query_hash_binds_the_bounded_search_budget():
+    symbols = [_bool_symbol()]
+    formula = _eq("x", True)
+
+    default = query_satisfiable(formula, symbols)
+    bounded = query_satisfiable(formula, symbols, max_assignments=1)
+
+    assert default["query_sha256"] != bounded["query_sha256"]
+
+
 def test_unsatisfiable_and_counterexample_queries_do_not_invent_witnesses():
     symbols = [_bool_symbol()]
     formula = {"op": "and", "args": [_eq("x", True), _eq("x", False)]}
