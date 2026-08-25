@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Evaluate the checked-in PIPE-2B rule-recall fixture without model calls."""
+"""Evaluate a PIPE-2B rule-recall frame without model calls.
+
+The report includes frame-level Wilson intervals and semantic-key agreement;
+neither is a corpus claim for the checked-in synthetic fixture.
+"""
 
 from __future__ import annotations
 

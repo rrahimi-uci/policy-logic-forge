@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -110,6 +111,65 @@ def _validate_rule_sources(rules: list[dict[str, Any]], sources: Mapping[str, Ma
             raise RuleRecallError(f"{label}.rules[{index}] source_quote is not present in {source_id}")
 
 
+def _wilson_interval(successes: int, trials: int, *, z: float = 1.959963984540054) -> dict[str, Any]:
+    """Return a descriptive 95% Wilson interval for one frozen frame.
+
+    The interval is deliberately labeled frame-level: PIPE-2B cannot turn it
+    into a corpus estimate without the declared stratified sampling weights and
+    a licensed real annotation frame.
+    """
+
+    if trials < 0 or successes < 0 or successes > trials:
+        raise RuleRecallError("interval successes/trials must satisfy 0 <= successes <= trials")
+    if trials == 0:
+        return {
+            "method": "wilson_95_binomial",
+            "confidence": 0.95,
+            "successes": successes,
+            "trials": trials,
+            "lower": None,
+            "upper": None,
+            "interpretation": "descriptive frame-level interval; not a population estimate",
+        }
+    proportion = successes / trials
+    z_squared = z * z
+    denominator = 1 + z_squared / trials
+    center = (proportion + z_squared / (2 * trials)) / denominator
+    margin = z / denominator * math.sqrt(
+        proportion * (1 - proportion) / trials + z_squared / (4 * trials * trials)
+    )
+    return {
+        "method": "wilson_95_binomial",
+        "confidence": 0.95,
+        "successes": successes,
+        "trials": trials,
+        "lower": max(0.0, center - margin),
+        "upper": min(1.0, center + margin),
+        "interpretation": "descriptive frame-level interval; not a population estimate",
+    }
+
+
+def _annotator_agreement(annotators: list[Mapping[str, Any]]) -> dict[str, Any]:
+    """Summarize semantic-key agreement without treating it as legal IAA."""
+
+    semantic_sets = [
+        {_rule_signature(rule) for rule in record["rules"]}
+        for record in annotators
+    ]
+    union = set.union(*semantic_sets) if semantic_sets else set()
+    intersection = set.intersection(*semantic_sets) if semantic_sets else set()
+    return {
+        "metric": "semantic_key_jaccard",
+        "annotator_count": len(semantic_sets),
+        "annotator_rule_counts": [len(values) for values in semantic_sets],
+        "intersection": len(intersection),
+        "union": len(union),
+        "jaccard": len(intersection) / len(union) if union else 1.0,
+        "exact_set_agreement": bool(semantic_sets) and all(values == semantic_sets[0] for values in semantic_sets[1:]),
+        "interpretation": "descriptive semantic-key agreement; chance-corrected IAA remains a real-frame requirement",
+    }
+
+
 def load_frame(fixture_dir: str | Path) -> dict[str, Any]:
     """Load and validate a complete frozen frame from ``fixture_dir``."""
 
@@ -176,6 +236,8 @@ def evaluate_frame(frame: Mapping[str, Any]) -> dict[str, Any]:
             "matched": len(source_matched),
             "recall": len(source_matched) / len(source_gold) if source_gold else None,
             "precision": len(source_matched) / len(source_predictions) if source_predictions else None,
+            "recall_uncertainty": _wilson_interval(len(source_matched), len(source_gold)),
+            "precision_uncertainty": _wilson_interval(len(source_matched), len(source_predictions)),
         }
 
     return {
@@ -189,6 +251,8 @@ def evaluate_frame(frame: Mapping[str, Any]) -> dict[str, Any]:
         "false_positive_rules": len(false_positives),
         "recall": len(matched) / len(gold_set) if gold_set else None,
         "precision": len(matched) / len(prediction_set) if prediction_set else None,
+        "recall_uncertainty": _wilson_interval(len(matched), len(gold_set)),
+        "precision_uncertainty": _wilson_interval(len(matched), len(prediction_set)),
         "missing_rule_keys": sorted(
             str(rule["rule_key"])
             for rule in frame["adjudicated_rules"]
@@ -201,6 +265,7 @@ def evaluate_frame(frame: Mapping[str, Any]) -> dict[str, Any]:
         ),
         "per_source": per_source,
         "annotator_count": len(frame["annotators"]),
+        "annotator_agreement": _annotator_agreement(frame["annotators"]),
         "adjudication_method": frame["adjudication"]["method"],
     }
 
