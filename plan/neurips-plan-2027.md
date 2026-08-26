@@ -15,34 +15,36 @@ authoritative for research definitions, claim boundaries, and stop/go rules.
 prerequisites, an argv-form acceptance command, an artifact target, and a
 claim boundary, and that the graph can be validated and queried locally. It
 does **not** mean that the planned research has produced a publishable result
-or that external evaluation has completed. At this revision, 23 person-days
-of core work are evidenced as complete and provider-free contracts for the
-compiler, instrument, transfer, repair, and conditional reward stages are
+or that external evaluation has completed. At this revision on August 26,
+2026, 23 person-days are evidenced as scientifically or operationally done,
+125 person-days of the minimum-scope executable programme are implemented and
+verified locally, and the second-domain extension is likewise fully
 implemented. Real licensed annotations, pinned external-engine runs, human
-adjudication, and provider/GPU experiments remain explicitly unrun or blocked.
+adjudication, optional fresh-generation replication, and provider/GPU
+experiments remain explicitly unrun, conditional, or blocked.
 
-## Status — 2026-08-25
+## Status — 2026-08-26
 
 <!-- GENERATED_TASK_SUMMARY_START -->
-| Phase | Tasks | Total pd | Done pd | Status |
-| --- | ---: | ---: | ---: | --- |
-| G0 | 13 | 46 | 19 | done=8, partial=5 |
-| A | 4 | 8 | 4 | done=3, conditional=1 |
-| J | 2 | 6 | 0 | partial=2 |
-| G2 | 6 | 30 | 0 | partial=6 |
-| G3 | 5 | 24 | 0 | partial=5 |
-| G4 | 3 | 26 | 0 | partial=3 |
-| G5 | 4 | 20 | 0 | conditional=4 |
-| Writing | 1 | 15 | 0 | partial=1 |
+| Phase | Tasks | Total pd | Done pd | Executable pd | Status |
+| --- | ---: | ---: | ---: | ---: | --- |
+| G0 | 13 | 46 | 19 | 46 | done=8, implemented=5 |
+| A | 4 | 8 | 4 | 4 | done=3, conditional=1 |
+| J | 2 | 6 | 0 | 6 | implemented=2 |
+| G2 | 6 | 30 | 0 | 30 | implemented=6 |
+| G3 | 5 | 24 | 0 | 24 | implemented=5 |
+| G4 | 3 | 26 | 0 | 26 | implemented=3 |
+| G5 | 4 | 20 | 0 | 0 | conditional=4 |
+| Writing | 1 | 15 | 0 | 15 | implemented=1 |
 
-| Scope | Included pd | Done pd | Remaining pd |
-| --- | ---: | ---: | ---: |
-| `minimum_paper` | 125 | 23 | 102 |
-| `second_domain` | 151 | 23 | 128 |
-| `full_programme` | 171 | 23 | 148 |
-| `minimum_plus_optional_replication` | 129 | 23 | 106 |
+| Scope | Included pd | Done pd | Executable pd | Remaining exec pd |
+| --- | ---: | ---: | ---: | ---: |
+| `minimum_paper` | 125 | 23 | 125 | 0 |
+| `second_domain` | 151 | 23 | 151 | 0 |
+| `full_programme` | 171 | 23 | 151 | 20 |
+| `minimum_plus_optional_replication` | 129 | 23 | 125 | 4 |
 
-**Ready now:** `PIPE-2B`, `PIPE-4`, `IR-2`.
+**Ready now:** none.
 
 Generated from [`plan/tasks.json`](tasks.json) by `scripts/validate_neurips_plan.py`; manual edits to this block fail CI.
 <!-- GENERATED_TASK_SUMMARY_END -->
@@ -50,17 +52,22 @@ Generated from [`plan/tasks.json`](tasks.json) by `scripts/validate_neurips_plan
 Status words have literal meanings:
 
 - `done`: every registered acceptance command passes and every registered
-  artifact and evidence path exists.
-- `partial`: useful implementation exists, but the registered acceptance gate
-  is not yet satisfied.
+  artifact and evidence path exists, and the named scientific or operational
+  gate is actually satisfied.
+- `implemented`: every registered acceptance artifact exists and the local
+  code/docs/tests contract is complete, but the retained result is
+  intentionally non-claiming or still depends on external evidence.
+- `partial`: useful implementation exists, but the registered acceptance or
+  artifact gate is not yet satisfied.
 - `planned`: dependencies and acceptance contract are specified; work is not
   evidenced complete.
 - `conditional`: out of the committed scope unless its written entry gate is
   met and the task is explicitly activated.
 - `blocked`: cannot proceed without a named external decision or resource.
 
-The registry and this summary never turn `partial`, exploratory, refused,
-invalid, or unrun output into a completed result.
+The registry and this summary never turn `implemented`, `partial`,
+exploratory, refused, invalid, or unrun output into a completed scientific
+result.
 
 ---
 
@@ -75,6 +82,7 @@ environment:
 .venv/bin/python scripts/validate_neurips_plan.py --show IR-2
 .venv/bin/python scripts/validate_neurips_plan.py --run IR-2
 .venv/bin/python scripts/validate_neurips_plan.py --run-done
+.venv/bin/python scripts/validate_neurips_plan.py --run-complete
 ```
 
 `--check` validates IDs, dependency existence and acyclicity, scope closure,
@@ -82,7 +90,8 @@ status/evidence rules, acceptance command shape, completed artifacts, and the
 generated summary above. `--run TASK` executes only that task's explicit argv
 commands without a shell. It does not infer work, call a paid provider, send
 email, or change task status. `--run-done` replays the acceptance commands of
-all tasks currently marked `done`.
+tasks whose scientific or operational gate is marked `done`; `--run-complete`
+replays every `done` or `implemented` task.
 
 To complete a task:
 
@@ -111,7 +120,9 @@ Track B: PIPE repairs/audits ------\
                         conditional: RL-1 + RL-2 -> RL-3 -> RL-4
 ```
 
-No downstream task may consume a measurement whose prerequisite is not done.
+No downstream scientific claim may consume a measurement whose prerequisite is
+not `done`. Implementation-only work may compose only across `done` or
+`implemented` dependencies.
 
 ---
 
@@ -560,17 +571,19 @@ from one domain or fixed benchmark to policy compilation generally.
 
 ## 13. Immediate executable queue
 
-The validator currently identifies three dependency-ready tasks. Recommended
-order within the two parallel tracks:
+As of August 26, 2026, the validator reports no dependency-ready `planned` or
+`partial` tasks. The remaining work is one of:
 
-1. `IR-2`: run the existing census on retained real output; it determines the
-   IR boundary.
-2. `PIPE-2B` and `PIPE-4`: measure the two unresolved extraction claims.
+1. activate a conditional branch (`A2` or `RL-1..4`) with explicit authority;
+2. run external scientific gates that the repository intentionally models as
+   non-claiming until licensed annotations, human adjudication, or a pinned
+   engine/provider job is approved; or
+3. tighten a contract further if review discovers an unstated assumption.
 
 Use `--show TASK` for the exact artifact and command contract. If a task's
 acceptance command cannot pass without unstated setup, update that task's
 contract in review before implementation; do not use undocumented operator
-knowledge as part of “done.”
+knowledge as part of “done” or “implemented.”
 
 ---
 
@@ -598,18 +611,20 @@ one active instruction for each decision.
 
 ### 14.1 Provider-free implementation coverage
 
-The single implementation PR supplies executable contracts for every remaining
-locally testable stage: the anchor harness (`J1`), outcome-blind exception
-selection (`J1B`), clustered statistics and power sensitivity (`STAT-1/2`),
-metric and source-only perturbation contracts (`STAT-3`, `PERTURB-1`), the G3
-instrument bundle gate (`INST-1`), ContractNLI transfer (`BENCH-1B`), typed
-assumption analysis (`ASM-1`), source-preserving CEGIR controls (`CEGIR-1`),
-and conditional reward safeguards (`RL-1..4`). Each stage has unit tests,
-documentation, and a retained result artifact. The artifacts intentionally
-remain `unrun`, `invalid`, `underpowered`, or `blocked` where the scientific
-gate needs licensed annotations, an approved external engine, human review, or
-GPU/provider authorization. This is implementation completion, not a claim
-that those external experiments have occurred.
+The implementation work is now complete for every minimum-scope and
+second-domain task that can be finished locally: the anchor harness (`J1`),
+outcome-blind exception selection (`J1B`), clustered statistics and power
+sensitivity (`STAT-1/2`), metric and source-only perturbation contracts
+(`STAT-3`, `PERTURB-1`), the G3 instrument bundle gate (`INST-1`), ContractNLI
+transfer (`BENCH-1B`), typed assumption analysis (`ASM-1`), source-preserving
+CEGIR controls (`CEGIR-1`), and the publication-artifact validator
+(`PAPER-1`). These tasks are marked `implemented`: each has unit tests,
+documentation, and retained result artifacts, but the artifacts intentionally
+remain `unrun`, `invalid`, `underpowered`, `blocked`, or otherwise
+non-claiming where the scientific gate needs licensed annotations, an approved
+external engine, human review, or GPU/provider authorization. This is
+implementation completion, not a claim that those external experiments have
+occurred.
 
 ---
 
@@ -620,8 +635,9 @@ The planning artifact is complete when all of the following remain true:
 - every research task appears exactly once in a base scope;
 - every dependency exists, is acyclic, and is contained in cumulative scope;
 - every task has at least one argv-form acceptance command and artifact;
-- every `done`/`partial` status points to existing evidence;
-- completed artifacts exist and completed tasks depend only on completed tasks;
+- every `done`/`implemented`/`partial` status points to existing evidence;
+- completed artifacts exist and `done`/`implemented` tasks depend only on
+  completed prerequisites allowed by their status contract;
 - the generated status/effort summary exactly matches the registry;
 - LExec IR has a versioned schema and `IR-1` requires a prose semantics spec;
 - scientific gates define estimands, controls, invalidation, and stop actions;
@@ -631,5 +647,6 @@ The planning artifact is complete when all of the following remain true:
 Those conditions make the **plan** mechanically executable and auditable. The
 research programme becomes complete only when its tasks progress through their
 registered gates with retained evidence. No current text should be read as a
-claim that the compiler, validated instrument, transfer result, or RL result
+claim that the scientific compiler result, validated instrument result,
+transfer result, optional fresh-generation replication, or RL frontier result
 already exists.
