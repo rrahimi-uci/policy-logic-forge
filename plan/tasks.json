@@ -58,10 +58,13 @@
       "effort_pd": 3,
       "depends_on": ["PIPE-1", "PIPE-2"],
       "acceptance": {
-        "commands": [[".venv/bin/python", "-m", "pytest", "tests/test_rule_recall.py", "-q"]],
-        "artifacts": ["tests/fixtures/rule_recall_gold/", "docs/rule_recall_protocol.md", "results/aggregates/rule_recall.json"]
+        "commands": [
+          [".venv/bin/python", "-m", "pytest", "tests/test_rule_recall.py", "-q"],
+          [".venv/bin/python", "scripts/validate_g0_evidence.py"]
+        ],
+        "artifacts": ["tests/fixtures/rule_recall_gold/", "docs/rule_recall_protocol.md", "results/aggregates/rule_recall.json", "scripts/validate_g0_evidence.py"]
       },
-      "evidence": ["utils/rule_recall.py", "scripts/rule_recall.py", "tests/test_rule_recall.py", "docs/rule_recall_protocol.md", "results/aggregates/rule_recall.json"],
+      "evidence": ["utils/rule_recall.py", "scripts/rule_recall.py", "tests/test_rule_recall.py", "docs/rule_recall_protocol.md", "results/aggregates/rule_recall.json", "scripts/validate_g0_evidence.py"],
       "claim_boundary": "The deterministic evaluator now reports semantic-key agreement and descriptive frame-level Wilson intervals, but the checked-in fixture remains contract-only. A real semantic-recall claim remains blocked pending a licensed stratified sample, two independent human annotations, adjudication, sampling weights, and agreement statistics."
     },
     {
@@ -88,10 +91,13 @@
       "effort_pd": 6,
       "depends_on": ["PIPE-3"],
       "acceptance": {
-        "commands": [[".venv/bin/python", "-m", "pytest", "tests/test_dependency_audit.py", "-q"]],
-        "artifacts": ["tests/fixtures/dependency_gold/", "docs/dependency_fixture_construction.md", "results/aggregates/dependency_audit.json"]
+        "commands": [
+          [".venv/bin/python", "-m", "pytest", "tests/test_dependency_audit.py", "-q"],
+          [".venv/bin/python", "scripts/validate_g0_evidence.py"]
+        ],
+        "artifacts": ["tests/fixtures/dependency_gold/", "docs/dependency_fixture_construction.md", "results/aggregates/dependency_audit.json", "scripts/validate_g0_evidence.py"]
       },
-      "evidence": ["utils/dependency_audit.py", "scripts/dependency_audit.py", "tests/test_dependency_audit.py", "docs/dependency_fixture_construction.md", "results/aggregates/dependency_audit.json"],
+      "evidence": ["utils/dependency_audit.py", "scripts/dependency_audit.py", "tests/test_dependency_audit.py", "docs/dependency_fixture_construction.md", "results/aggregates/dependency_audit.json", "scripts/validate_g0_evidence.py"],
       "claim_boundary": "The deterministic evaluator now fail-closed validates complete positive/negative edge labels and reports descriptive frame-level Wilson intervals plus typed-edge agreement, but the synthetic fixture remains contract-only. A real dependency precision/recall claim remains blocked pending a licensed rule sample, explicit negatives, two independent human annotations, adjudication, sampling weights, and agreement statistics."
     },
     {
@@ -105,7 +111,8 @@
       "acceptance": {
         "commands": [
           [".venv/bin/python", "-m", "pytest", "tests/test_corpus_census.py", "-q"],
-          [".venv/bin/python", "scripts/validate_neurips_plan.py", "--check"]
+          [".venv/bin/python", "scripts/validate_neurips_plan.py", "--check"],
+          [".venv/bin/python", "scripts/validate_g0_evidence.py"]
         ],
         "artifacts": [
           "docs/theory_coverage.md",
@@ -114,7 +121,8 @@
           "results/aggregates/ir2_full_smallest_privacy/run_manifest.json",
           "results/aggregates/ir2_agent_naming_smallest/theory_coverage.md",
           "results/aggregates/ir2_agent_naming_smallest/expressiveness_census.md",
-          "results/aggregates/ir2_agent_naming_smallest/run_manifest.json"
+          "results/aggregates/ir2_agent_naming_smallest/run_manifest.json",
+          "scripts/validate_g0_evidence.py"
         ]
       },
       "evidence": [
@@ -127,7 +135,8 @@
         "results/aggregates/ir2_full_smallest_privacy/run_manifest.json",
         "results/aggregates/ir2_agent_naming_smallest/theory_coverage.md",
         "results/aggregates/ir2_agent_naming_smallest/expressiveness_census.md",
-        "results/aggregates/ir2_agent_naming_smallest/run_manifest.json"
+        "results/aggregates/ir2_agent_naming_smallest/run_manifest.json",
+        "scripts/validate_g0_evidence.py"
       ],
       "claim_boundary": "Bounded local NDA and privacy-policy pilots are retained and explicitly labeled exploratory. The current-agent-naming smallest privacy run also covers 3/4 rules under boolean/number/enum and explicitly refuses one string rule. These runs are not a full-corpus estimate; the NDA pilot found contract issues (including invalid predicate operators), and none authorizes freezing the IR subset."
     },
