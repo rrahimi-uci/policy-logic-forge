@@ -7,6 +7,7 @@ Examples:
     .venv/bin/python scripts/validate_neurips_plan.py --ready
     .venv/bin/python scripts/validate_neurips_plan.py --show IR-1
     .venv/bin/python scripts/validate_neurips_plan.py --run-done
+    .venv/bin/python scripts/validate_neurips_plan.py --run-complete
 
 The validator is deliberately standard-library only. It validates structure,
 dependency closure, cycles, status/evidence contracts, acceptance commands,
@@ -32,6 +33,7 @@ IR_SCHEMA = ROOT / "plan" / "lexec-ir-v1.schema.json"
 SUMMARY_START = "<!-- GENERATED_TASK_SUMMARY_START -->"
 SUMMARY_END = "<!-- GENERATED_TASK_SUMMARY_END -->"
 PHASE_ORDER = ("G0", "A", "J", "G2", "G3", "G4", "G5", "Writing")
+COMPLETE_STATUSES = {"done", "implemented"}
 
 
 class PlanValidationError(ValueError):
@@ -135,17 +137,23 @@ def validate_registry(registry: dict[str, Any], root: Path = ROOT) -> list[str]:
         for artifact in artifacts:
             _require(isinstance(artifact, str) and bool(artifact), f"{task_id}: invalid artifact path", errors)
 
-        if task["status"] in {"done", "partial"}:
+        if task["status"] in {"done", "implemented", "partial"}:
             _require(bool(task.get("evidence")), f"{task_id}: {task['status']} task requires evidence", errors)
             for evidence in task.get("evidence", []):
                 _require((root / evidence).exists(), f"{task_id}: evidence does not exist: {evidence}", errors)
-        if task["status"] == "done":
+        if task["status"] in COMPLETE_STATUSES:
             for artifact in artifacts:
                 _require((root / artifact).exists(), f"{task_id}: completed artifact does not exist: {artifact}", errors)
+        if task["status"] == "done":
             for dependency in task["depends_on"]:
                 if dependency in tasks:
                     _require(tasks[dependency]["status"] == "done",
                              f"{task_id}: done task depends on non-done {dependency}", errors)
+        if task["status"] == "implemented":
+            for dependency in task["depends_on"]:
+                if dependency in tasks:
+                    _require(tasks[dependency]["status"] in COMPLETE_STATUSES,
+                             f"{task_id}: implemented task depends on incomplete {dependency}", errors)
 
     errors.extend(_cycle_errors(tasks))
 
@@ -224,31 +232,41 @@ def render_summary(registry: dict[str, Any]) -> str:
 
     lines = [
         SUMMARY_START,
-        "| Phase | Tasks | Total pd | Done pd | Status |",
-        "| --- | ---: | ---: | ---: | --- |",
+        "| Phase | Tasks | Total pd | Done pd | Executable pd | Status |",
+        "| --- | ---: | ---: | ---: | ---: | --- |",
     ]
     for phase in PHASE_ORDER:
         phase_tasks = by_phase.get(phase, [])
         total = sum(float(task["effort_pd"]) for task in phase_tasks)
         done = sum(float(task["effort_pd"]) for task in phase_tasks if task["status"] == "done")
+        executable = sum(float(task["effort_pd"]) for task in phase_tasks if task["status"] in COMPLETE_STATUSES)
         counts = Counter(task["status"] for task in phase_tasks)
         status_text = ", ".join(f"{name}={counts[name]}" for name in registry["status_values"] if counts[name])
-        lines.append(f"| {phase} | {len(phase_tasks)} | {_format_pd(total)} | {_format_pd(done)} | {status_text} |")
+        lines.append(
+            f"| {phase} | {len(phase_tasks)} | {_format_pd(total)} | {_format_pd(done)} | "
+            f"{_format_pd(executable)} | {status_text} |"
+        )
 
     lines.extend([
         "",
-        "| Scope | Included pd | Done pd | Remaining pd |",
-        "| --- | ---: | ---: | ---: |",
+        "| Scope | Included pd | Done pd | Executable pd | Remaining exec pd |",
+        "| --- | ---: | ---: | ---: | ---: |",
     ])
     for scope_name, ids in _scope_sets(registry).items():
         total = sum(float(tasks[task_id]["effort_pd"]) for task_id in ids)
         done = sum(float(tasks[task_id]["effort_pd"]) for task_id in ids if tasks[task_id]["status"] == "done")
-        lines.append(f"| `{scope_name}` | {_format_pd(total)} | {_format_pd(done)} | {_format_pd(total-done)} |")
+        executable = sum(
+            float(tasks[task_id]["effort_pd"]) for task_id in ids if tasks[task_id]["status"] in COMPLETE_STATUSES
+        )
+        lines.append(
+            f"| `{scope_name}` | {_format_pd(total)} | {_format_pd(done)} | "
+            f"{_format_pd(executable)} | {_format_pd(total-executable)} |"
+        )
 
     ready = [
         task["id"] for task in registry["tasks"]
         if task["status"] in {"planned", "partial"}
-        and all(tasks[dependency]["status"] == "done" for dependency in task["depends_on"])
+        and all(tasks[dependency]["status"] in COMPLETE_STATUSES for dependency in task["depends_on"])
     ]
     lines.extend([
         "",
@@ -290,7 +308,8 @@ def main() -> int:
     mode.add_argument("--ready", action="store_true", help="List non-complete tasks whose dependencies are done")
     mode.add_argument("--show", metavar="TASK_ID", help="Show one task as JSON")
     mode.add_argument("--run", metavar="TASK_ID", help="Run one task's acceptance commands")
-    mode.add_argument("--run-done", action="store_true", help="Run acceptance commands for every completed task")
+    mode.add_argument("--run-done", action="store_true", help="Run acceptance commands for every scientifically done task")
+    mode.add_argument("--run-complete", action="store_true", help="Run acceptance commands for every done or implemented task")
     args = parser.parse_args()
 
     registry = load_registry()
@@ -331,6 +350,13 @@ def main() -> int:
     if args.run_done:
         for task in registry["tasks"]:
             if task["status"] == "done":
+                result = run_commands(task)
+                if result:
+                    return result
+        return 0
+    if args.run_complete:
+        for task in registry["tasks"]:
+            if task["status"] in COMPLETE_STATUSES:
                 result = run_commands(task)
                 if result:
                     return result

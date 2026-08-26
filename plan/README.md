@@ -19,10 +19,15 @@ From the repository root:
 .venv/bin/python scripts/validate_neurips_plan.py --show TASK_ID
 .venv/bin/python scripts/validate_neurips_plan.py --run TASK_ID
 .venv/bin/python scripts/validate_neurips_plan.py --run-done
+.venv/bin/python scripts/validate_neurips_plan.py --run-complete
 ```
 
 Do not mark a task `done` until all its acceptance commands pass and all its
-artifact/evidence paths exist. Use `conditional` for work outside the committed
+artifact/evidence paths exist and the named scientific or prerequisite gate is
+actually satisfied. Use `implemented` when code, tests, docs, and retained
+non-claiming artifacts are complete but the scientific gate still depends on
+licensed data, approved external engines, human adjudication, or
+GPU/provider-approved runs. Use `conditional` for work outside the committed
 scope and `blocked` only when a named external dependency prevents execution.
-Update the generated summary in the Markdown plan with exact `--summary`
-output in the same PR as any registry change.
+Update the generated summary in the Markdown plan with exact `--summary` output
+in the same PR as any registry change.

@@ -42,5 +42,6 @@ reports.
 The harness also rejects non-positive, non-finite, or boolean timeout values
 before launching an adapter. The current repository has no pinned third-party
 engine installed, so BE-4 is implemented as an executable protocol harness
-and remains `partial` until an approved engine job supplies the required
-metadata and run artifact.
+with retained non-claiming coverage. It is not a completed engine-agreement
+result until an approved pinned engine job supplies the required metadata and
+run artifact.

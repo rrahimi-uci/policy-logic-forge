@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0",
-  "updated": "2026-08-25",
-  "status_values": ["done", "partial", "planned", "conditional", "blocked"],
+  "updated": "2026-08-26",
+  "status_values": ["done", "implemented", "partial", "planned", "conditional", "blocked"],
   "scope_order": ["minimum_paper", "second_domain", "full_programme"],
   "tasks": [
     {
@@ -54,7 +54,7 @@
       "title": "Measure semantic rule recall",
       "phase": "G0",
       "track": "B",
-      "status": "partial",
+      "status": "implemented",
       "effort_pd": 3,
       "depends_on": ["PIPE-1", "PIPE-2"],
       "acceptance": {
@@ -87,7 +87,7 @@
       "title": "Audit dependency discovery precision and recall",
       "phase": "G0",
       "track": "B",
-      "status": "partial",
+      "status": "implemented",
       "effort_pd": 6,
       "depends_on": ["PIPE-3"],
       "acceptance": {
@@ -105,7 +105,7 @@
       "title": "Run corpus feature and expressiveness census",
       "phase": "G0",
       "track": "B",
-      "status": "partial",
+      "status": "implemented",
       "effort_pd": 3,
       "depends_on": ["A1A"],
       "acceptance": {
@@ -145,7 +145,7 @@
       "title": "Implement versioned compiler IR and total lowering",
       "phase": "G0",
       "track": "B",
-      "status": "partial",
+      "status": "implemented",
       "effort_pd": 12,
       "depends_on": ["IR-2"],
       "acceptance": {
@@ -159,14 +159,14 @@
         "tests/test_lexec_ir.py",
         "tests/test_lowering_oracle.py"
       ],
-      "claim_boundary": "The dependency-free v1 subset, semantics document, total fail-closed lowering, string predicates, ignored-field ledger, and independent expected-value tests are implemented. Status remains partial because the bounded IR-2 pilot is not a corpus-wide freeze, table policies are unproved, and date/duration/list/other unsupported constructs are explicit refusals."
+      "claim_boundary": "The dependency-free v1 subset, semantics document, total fail-closed lowering, string predicates, ignored-field ledger, and independent expected-value tests are implemented. The bounded IR-2 pilot is not a corpus-wide freeze, full table-policy proofs remain incomplete, and date/duration/list and other unsupported constructs remain explicit refusals, so this is executable compiler coverage rather than a publishable completeness claim."
     },
     {
       "id": "IR-3",
       "title": "Implement solver core and hit-policy proof obligations",
       "phase": "G0",
       "track": "B",
-      "status": "partial",
+      "status": "implemented",
       "effort_pd": 3,
       "depends_on": ["IR-1"],
       "acceptance": {
@@ -319,7 +319,7 @@
       "title": "Validate v2-to-IR lowering against an independent oracle",
       "phase": "G2",
       "track": "G2",
-      "status": "partial",
+      "status": "implemented",
       "effort_pd": 8,
       "depends_on": ["IR-1"],
       "acceptance": {
@@ -344,7 +344,7 @@
       "title": "Implement bounded reference evaluator",
       "phase": "G2",
       "track": "G2",
-      "status": "partial",
+      "status": "implemented",
       "effort_pd": 6,
       "depends_on": ["IR-1"],
       "acceptance": {
@@ -364,7 +364,7 @@
       "title": "Emit and validate DMN 1.3",
       "phase": "G2",
       "track": "G2",
-      "status": "partial",
+      "status": "implemented",
       "effort_pd": 5,
       "depends_on": ["IR-1", "IR-3"],
       "acceptance": {
@@ -385,7 +385,7 @@
       "title": "Implement bounded SMT-shaped backend and witness queries",
       "phase": "G2",
       "track": "G2",
-      "status": "partial",
+      "status": "implemented",
       "effort_pd": 6,
       "depends_on": ["IR-1", "IR-3"],
       "acceptance": {
@@ -400,7 +400,7 @@
       "title": "Cross-check through a pinned third-party DMN engine",
       "phase": "G2",
       "track": "G2",
-      "status": "partial",
+      "status": "implemented",
       "effort_pd": 3,
       "depends_on": ["BE-1", "BE-2", "BE-3"],
       "acceptance": {
@@ -415,7 +415,7 @@
       "title": "Regression-test restricted P3-prime comparison",
       "phase": "G2",
       "track": "G2",
-      "status": "partial",
+      "status": "implemented",
       "effort_pd": 2,
       "depends_on": ["BE-1", "BE-3"],
       "acceptance": {
@@ -430,7 +430,7 @@
       "title": "Evaluate our compiled artifacts in the anchor executor",
       "phase": "J",
       "track": "J",
-      "status": "partial",
+      "status": "implemented",
       "effort_pd": 4,
       "depends_on": ["A1B", "BENCH-1", "BENCH-3", "BENCH-4", "LOWER-1", "BE-1", "BE-3"],
       "acceptance": {
@@ -445,7 +445,7 @@
       "title": "Choose exception semantics empirically",
       "phase": "J",
       "track": "J",
-      "status": "partial",
+      "status": "implemented",
       "effort_pd": 2,
       "depends_on": ["J1", "IR-1"],
       "acceptance": {
@@ -460,7 +460,7 @@
       "title": "Freeze estimand and power analysis",
       "phase": "G3",
       "track": "G3",
-      "status": "partial",
+      "status": "implemented",
       "effort_pd": 2,
       "depends_on": ["J1", "J1B", "BENCH-2"],
       "acceptance": {
@@ -475,7 +475,7 @@
       "title": "Implement model-clustered estimation",
       "phase": "G3",
       "track": "G3",
-      "status": "partial",
+      "status": "implemented",
       "effort_pd": 4,
       "depends_on": ["STAT-1"],
       "acceptance": {
@@ -490,7 +490,7 @@
       "title": "Implement AFS, sOE, OE, EY, and conditional CQI",
       "phase": "G3",
       "track": "G3",
-      "status": "partial",
+      "status": "implemented",
       "effort_pd": 3,
       "depends_on": ["BENCH-2", "BE-1"],
       "acceptance": {
@@ -505,7 +505,7 @@
       "title": "Build source-grounded metamorphic artifact-free signals",
       "phase": "G3",
       "track": "G3",
-      "status": "partial",
+      "status": "implemented",
       "effort_pd": 10,
       "depends_on": ["STAT-3", "BENCH-2"],
       "acceptance": {
@@ -520,7 +520,7 @@
       "title": "Run instrument validation with controls",
       "phase": "G3",
       "track": "G3",
-      "status": "partial",
+      "status": "implemented",
       "effort_pd": 5,
       "depends_on": ["LOWER-1", "BE-4", "P3P", "STAT-1", "STAT-2", "STAT-3", "PERTURB-1", "BENCH-4"],
       "acceptance": {
@@ -535,7 +535,7 @@
       "title": "Implement ContractNLI transfer adapter",
       "phase": "G4",
       "track": "G4",
-      "status": "partial",
+      "status": "implemented",
       "effort_pd": 4,
       "depends_on": ["INST-1"],
       "acceptance": {
@@ -550,7 +550,7 @@
       "title": "Implement typed, provenance-bound assumption analysis",
       "phase": "G4",
       "track": "G4",
-      "status": "partial",
+      "status": "implemented",
       "effort_pd": 10,
       "depends_on": ["BENCH-1B", "BE-3"],
       "acceptance": {
@@ -565,7 +565,7 @@
       "title": "Implement and ablate source-preserving counterexample repair",
       "phase": "G4",
       "track": "G4",
-      "status": "partial",
+      "status": "implemented",
       "effort_pd": 12,
       "depends_on": ["ASM-1", "BE-3", "STAT-2"],
       "acceptance": {
@@ -640,7 +640,7 @@
       "title": "Freeze and validate publication artifacts",
       "phase": "Writing",
       "track": "W",
-      "status": "partial",
+      "status": "implemented",
       "effort_pd": 15,
       "depends_on": ["INST-1", "A3"],
       "acceptance": {

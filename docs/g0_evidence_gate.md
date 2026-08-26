@@ -22,4 +22,5 @@ contract.
 A passing gate means the retained artifacts are internally consistent. It does
 not supply a licensed stratified sample, human annotations, adjudication,
 sampling weights, or a full-corpus IR-2 census. PIPE-2B, PIPE-4, and IR-2
-therefore remain partial until those external evidence requirements are met.
+therefore count as implemented executable contracts, not completed scientific
+results, until those external evidence requirements are met.
