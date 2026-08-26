@@ -482,28 +482,34 @@ grounding or human acceptability.
 The generated status table is the sole source of numeric totals. The scopes
 are cumulative:
 
-- minimum paper: 125 pd total, 23 done, 102 remaining;
-- minimum plus optional fresh-generation replication: 129 pd;
-- second-domain extension: 151 pd cumulative;
-- full programme including provider-gated RL: 171 pd cumulative.
+- minimum paper: 125 pd total, 23 scientifically/operationally done, 125 pd
+  locally executable, **0 remaining executable pd**;
+- minimum plus optional fresh-generation replication: 129 pd total and locally
+  executable, with the fresh provider run still blocked;
+- second-domain extension: 151 pd cumulative and locally executable, with real
+  transfer/human evidence still pending; and
+- full programme including provider-gated RL: 171 pd cumulative and locally
+  executable, with training and frontier evidence unrun.
 
 These are engineering person-days for a contributor already fluent in the
 repository. They exclude queue time, model-provider latency, author replies,
 recruitment, ethics review, and scientific iteration after a failed gate.
 Therefore the calendar cannot be obtained by dividing totals by headcount.
 
-With one contributor, the minimum scope is not credible by simply serializing
-102 remaining pd into the submission window. The recommended execution is:
+The implementation schedule is complete; the scientific schedule is now driven
+by external evidence and cannot be inferred from the zero remaining executable
+pd. The recommended execution is:
 
-- immediately parallelize provider-free G0 work (`IR-2`, `BENCH-3`, pipeline
-  audits) with the remaining extraction audits;
-- freeze IR semantics only after the census;
-- build the reference evaluator and bounded SMT-shaped query core in parallel
-  after `IR-1`; add a native SMT backend only with an explicit solver
-  dependency and cross-check protocol;
+- complete licensed PIPE-2B/PIPE-4 annotation frames and the real IR-2 census;
+- root-cause the A1 replay mismatch before quoting Dutch anchor aggregates;
+- execute the pinned third-party DMN engine cross-check;
+- collect J1/J1B observations under the frozen isolation and retention
+  contracts;
 - freeze statistics before instrument outcomes are inspected;
-- begin `PAPER-1` artifact plumbing early, while scientific conclusions remain
-  gated on `INST-1`.
+- execute `INST-1` with positive, negative, permutation, and leakage controls;
+  and
+- use the implemented `PAPER-1` validator continuously while scientific
+  conclusions remain gated on retained evidence.
 
 Any date commitment must add named owners, availability, external budgets, and
 calendar slack. The registry deliberately stores effort and dependencies, not

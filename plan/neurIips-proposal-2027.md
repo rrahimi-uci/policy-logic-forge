@@ -1,27 +1,31 @@
-# NeurIPS 2027 Research Proposal — v3 (literature-grounded, review-applied)
+# NeurIPS 2027 Research Proposal — v4 (implementation-audited, evidence-gated)
 
-> **v3 changes.** A repository-grounded review (preserved verbatim in §24) raised
-> 13 blocking concerns. All 13 were verified against this repo's code and the
-> cited papers, and all 13 are applied. Two are applied with an added
-> consequence the review did not state — see the disposition table in §25. The
-> net effect is a **scope cut**: the primary deliverable is now Dutch-corpus
-> reproduction + compiler correctness + instrument validation + one non-Dutch
-> domain, which **moves the primary target track from main to Datasets &
-> Benchmarks** (§25, D2).
+> **v4 changes (2026-08-26).** The earlier reviews correctly identified missing
+> compiler, pipeline, benchmark, statistics, and reward contracts. Those local
+> implementation gaps are now closed: the machine-readable plan contains 38
+> validated tasks, and every task in the 171 person-day programme has a locally
+> executable implementation contract. That does **not** mean the scientific
+> programme is complete. Only 23 person-days are classified `done`; the
+> remaining task implementations are deliberately `implemented` because their
+> publishable claims still need licensed data, independent human annotation,
+> a pinned external DMN engine, approved provider/GPU runs, or real experimental
+> observations. Sections 12.3–12.4, 16–17, 19, 23, and 28 now state that boundary
+> explicitly. Sections 24–27 remain a dated review record and are not the active
+> status source.
 
-**Working title:** *Verified Compilation of Normative Text: Instrument Validation,
-Assumption-Explicit Semantics, and Solver Rewards for Document-to-Logic Extraction*
+**Working title:** *Executable Evaluation of Normative Text-to-Logic Systems:
+A Bounded Compiler and Instrument Validation*
 
 **Umbrella project name:** **LEXEC** — compile normative documents into executable
 decision logic, and use the compiler as the measuring instrument.
 
 | | |
 | --- | --- |
-| Target venue | **Datasets & Benchmarks track (primary, post-scope-cut); main track only if CEGIR and solver-reward RL both land (§25, D2). Verify the 2027 track names — do not assume "Datasets & Benchmarks" persists.** |
-| Target deadline | **Confirmed: NeurIPS lists 2027 — Europe. Not confirmed: the month, the dates, the CFP, or the track list. "December 2027" is a historical expectation, not an announced date.** Recent deadlines were May 6 (2026), May 16 (2025), May 22 (2024); plan for ~May 1, 2027 and re-verify. |
-| Time available | ~8.5 months from 2026-08-24 |
-| Substrate | This repository: 10-stage extraction pipeline, v2 *candidate* rule contract, four-invariant readiness gate, claim-level grounding verifier, deterministic DAG **node**-coverage partition, and **four corpus input adapters + prompt packs — not four benchmark results** (no label loaders, query builders, splits, scoring code, or run manifests exist; `pytest` 770 passed makes no model calls and tests fixed graphs/prompts). See §24 R1. |
-| Status | Proposal for discussion. `(measured)` = a real run. `(target)` = pre-registered success criterion. `(published)` = a number from cited prior work, verified against the source. `(verified-in-code)` = checked against this repo at commit time. |
+| Target venue | **Working assumption: NeurIPS Evaluations & Datasets track.** The 2027 CFP and track list are not published; the [2026 official call](https://neurips.cc/Conferences/2026/CallForEvaluationsDatasets) renamed “Datasets & Benchmarks” to “Evaluations & Datasets” and explicitly welcomes evaluation methods, audits, tools, and negative results. Main track is credible only if a method result such as CEGIR or solver-reward training lands in addition to the evaluation contribution. |
+| Target deadline | **Confirmed only: [NeurIPS lists 2027 — Europe](https://neurips.cc/Conferences/FutureMeetings).** The month, submission dates, CFP, paper format, and track list remain unannounced. Use **2027-04-15 internal freeze / ~2027-05-01 planning deadline** until the official CFP appears, then replace both dates. |
+| Time available | About eight months to the internal freeze from 2026-08-26 |
+| Substrate | Current checkout: complete 10-stage extraction pipeline; full source-chunk coverage; v2 extraction contract; canonical LExec IR v1 and total fail-closed lowering; bounded reference/FEEL evaluation; DMN 1.3 emission; bounded solver queries and proof records; Dutch and ContractNLI adapters; run retention, statistics, perturbation, CEGIR, reward-audit, and publication-artifact contracts; and an interactive review workbench. `pytest` currently collects **1,051 core Python tests**. These are engineering assets, not benchmark results. |
+| Status | **Implementation-complete, evidence-incomplete.** `(measured)` = a retained real run with a declared observation unit. `(exploratory)` = a real but non-claiming run. `(fixture-only)` = contract validation only. `(unrun)` / `(blocked)` remain visible. `(target)` and `(published)` are never presented as repository results. |
 | Development plan | [`neurips-plan-2027.md`](neurips-plan-2027.md) — the buildable form of §26: task IDs, module layout, acceptance tests, effort in person-days, and the G0→G5 sequence |
 | Filename | `plan/neurIips-proposal-2027.md` preserves the original filename typo; both proposal and companion plan now live under `plan/`. Rename only with a repository-wide link migration. |
 
@@ -29,9 +33,13 @@ decision logic, and use the compiler as the measuring instrument.
 
 ## TL;DR
 
-**The claim.** Compile a normative document into an executable decision artifact
-and extraction quality becomes *decidable* — so you can measure it, verify it
-with a solver, and train on the solver's verdict instead of a judge's opinion.
+**The claim.** Compiling a normative document into an executable decision
+artifact makes a **bounded set of semantic properties and behaviors decidable**:
+type validity, table overlap, hit-policy safety, satisfiability, selected
+conflicts, and outcome behavior inside the supported IR. It does **not** make
+source fidelity or legal correctness decidable. The paper's central empirical
+question is whether source-grounded, artifact-free signals predict gold-artifact
+outcome equivalence well enough to serve as a measurement instrument.
 
 **The problem it solves.** There is no gold DMN for real contracts, and even
 where one exists, correctness is invariant under renaming, reordering, and table
@@ -49,48 +57,52 @@ fraction"** (§14.6).
 
 **Four pieces**, in dependency order:
 
-1. **LEXEC-Verify** — an LLM-free compiler (v2 rule contract → DMN 1.3/FEEL,
-   SMT-LIB, reference interpreter) plus a solver layer deciding co-firing
-   conflict, subsumption, vacuity, coverage gaps, equivalence, and
-   UNIQUE-safety. We found no prior work applying these over LLM-extracted
-   rule sets at corpus scale (§21 states the search protocol). → §7
+1. **LEXEC-Verify** — an LLM-free, fail-closed compiler (v2 rule contract →
+   LExec IR v1 → bounded reference/FEEL execution and DMN 1.3) plus bounded
+   solver-shaped queries and proof records. The implementation and conformance
+   tests exist; a pinned third-party DMN-engine result and corpus-scale
+   correctness result do not. → §§7, 12.3, 28
 2. **Instrument validation** (the spine) — do **artifact-free signals** predict
    **artifact-based** outcome equivalence? The Dutch DMN corpus makes it testable
    on **58** models. If yes, results on corpora with no gold formalization
    inherit **bounded** credibility — bounded by one jurisdiction, one language,
    one statute; if no, that finding should change how the subfield evaluates
    itself. It is also the contribution that does not depend on publishing first.
-   → §9. *v3 called this "gold-free DA"; the metric was misnamed and §9.2 fixes
-   it — that correction is the most important change in this document.* → §9
+   The adapter, isolation boundary, estimator, controls, and retained artifact
+   schema exist; the observation bundle is still `unrun`. → §§9, 28
 3. **Assumption-explicit compilation** — gold legal labels smuggle in unstated
    assumptions (**71** ContractNLI entailments flip to neutral under strict
    logic *(published)*). So the artifact emits a verdict *plus* the minimal
-   assumption set it needed, and the solver checks each assumption is
-   necessary. → §10
+   assumption set it needed, and the solver checks typed consistency and
+   selected necessity obligations. The analyzer exists; the human source-support
+   and legal-admissibility study is `unrun`. → §§10, 28
 4. **Solver-reward RL + counterexample-guided repair** — the verifier becomes a
-   programmatic reward; solver witnesses drive repair. Target: an 8–14B open
-   model beating a frontier prompted model on decision agreement at equal
-   coverage. → §12
+   programmatic reward; solver witnesses drive repair. The source-preserving
+   CEGIR and adversarial reward-audit contracts exist. No training frontier has
+   been run, and no RL claim belongs in the minimum paper. → §§12, 28
 
-**Scope, after review (§24 R13, §25 D2).** Pieces 1–2 plus one non-Dutch domain
-are the **minimum paper**; pieces 3–4 are earned, not planned. That cut moves the
-primary target to **Datasets & Benchmarks**, with main track available only if
-the RL result lands. Also cut to follow-on work: LEXEC-Perturb, three of four
-compilation backends, cross-lingual and cross-jurisdiction transfer, and four of
-six corpora as *evaluated* resources.
+**Scope after implementation audit.** The minimum paper is now narrower and more
+executable: (1) bounded compiler correctness, (2) Dutch-anchor replay and our
+compiled-artifact evaluation, (3) instrument validation with frozen controls,
+and (4) one carefully bounded non-Dutch transfer result only if its evidence
+gate passes. Assumption analysis and CEGIR are extensions. Solver-reward RL is
+optional and cannot delay the minimum paper. This points to **Evaluations &
+Datasets** as the working track; a main-track submission needs a genuine method
+result, not merely implemented scaffolding.
 
-**Two defects gate everything** (§12.4, both confirmed in code). A "full corpus"
-run reads at most 16 batches of character-truncated, length-sorted chunks; and
-the optimizer still feeds itself the legacy prose fields the v2 prompts forbid,
-so dependency-edge recall is unmeasured. Until those are fixed, every
-corpus-level denominator is wrong. **G0 is a bug fix, not research, and it comes
-first.**
+**The old engineering blockers are fixed; evidence blockers replace them.** The
+extractor now processes every source chunk and records zero dropped bytes, and
+the optimizer receives full v2 fields. What remains is scientific: real
+PIPE-2B/PIPE-4 annotation frames, a corpus-scale IR census, a pinned external
+engine run, resolution of the anchor replay mismatch, a real J1 observation
+bundle, and the G3 instrument study. Fixture scores and exploratory local runs
+must not be promoted into conference results.
 
 **Why it is worth doing now.** The closest published work sits at **42.6%**
-macro-averaged outcome equivalence *(published)* — the task is wide open. And
-every fallback is still a paper: if compilation does not generalize, the compiler
-becomes a *diagnostic* and the paper is a decidable taxonomy of why
-document-to-logic extraction fails (§20).
+macro-averaged outcome equivalence *(published)* — the task is wide open. If
+compilation does not generalize, a valid, adequately powered diagnostic study
+may still support a paper about where document-to-logic extraction fails. An
+invalid or underpowered study is not automatically publishable (§20).
 
 **Three things this proposal explicitly does *not* claim**, after checking the
 literature: that gold artifacts never exist (§1.1), that ContractNLI-as-SMT-entailment
@@ -101,11 +113,10 @@ is new (§1.2), or that metamorphic evaluation by formal equivalence is new
 
 ## 0. The one-sentence claim (revised)
 
-> Compiling a normative document into an executable decision artifact makes
-> extraction quality *decidable* — and once you can decide it, you can
-> **calibrate** the metric against real gold artifacts, **name** the unstated
-> assumptions the gold labels smuggle in, and **train** on a solver's verdict
-> instead of a judge's opinion.
+> Compiling a normative document into a bounded, executable IR makes selected
+> semantic properties and outcome behavior decidable; validating source fidelity
+> still requires independent evidence, gold-artifact calibration, and explicit
+> accounting for assumptions and refusals.
 
 Version 1 of this proposal claimed something broader ("no gold program exists,
 so extensional evaluation is the only escape"). The literature review below
@@ -330,26 +341,31 @@ semantic effect; check with a solver (§11), positioned against LGMT.
 
 | # | Contribution | Closest prior work | What is actually new |
 | --- | --- | --- | --- |
-| **C1** | **LEXEC-Verify** — LLM-free compiler (v2 rule contract → DMN 1.3/FEEL, SMT-LIB, reference interpreter) + solver layer deciding row disjointness, subsumption, equivalence, co-firing conflict, coverage gaps, vacuity, entailment | ContractCheck (manual blocks, one SPA); PolicyGuard (Z3, contract-vs-policy review); Graus (executor, **no solver checking**) | Solver-decided *internal* consistency of **LLM-extracted** rule sets at corpus scale; witness extraction for repair; UNIQUE-safety proofs |
-| **C2** | **Instrument validation** — do **artifact-free signals** (expert-label entailment, metamorphic relations, human scenarios) predict **artifact-based** OE, with sOE as positive control and random/stratified/biased samples as negative controls? | None found (§21 search protocol) | Calibrates the metric the whole methodology rests on (§9.2). **Primary contribution; does not depend on publishing first.** Bounded by one anchor corpus (§16) |
-| **C3** | **Assumption-explicit compilation** — the artifact emits the minimal assumption set needed to reach the pragmatic answer; measure necessity/minimality | *Know Your Limits* documents the gap and names "assumption-surfacing tools" as future work | Turns a measured negative result into a compilation requirement and a metric |
-| **C4** | **LEXEC-Bench** — **2 committed corpora, 4 reserve** (§8) | LegalBench (162 tasks, label-level); PrivacyGLUE (7 tasks); ObliQA; ContractEval; RuleArena | We found no *extensional, artifact-level* benchmark for normative documents. With 2 corpora, **breadth is no longer a delta** — the delta is the artifact-level evaluation itself plus the instrument validation. Stated as a bounded absence claim |
-| **C5** | **CEGIR + solver-reward RL** *(conditional — not committed work; §17 G5)* | LLM-CEGIS repair (AAAI 2025, arXiv:2502.07786); Logic-LM self-refinement; RLVR for SQL/IE/structured output | Counterexamples from *cross-rule* consistency inside one extracted artifact (no external spec, no gold artifact); reward is a solver verdict on the artifact's *denotation* |
-| **C6** | **Two findings**: (a) LLM grounding-verification is miscalibrated on this task; (b) surface metrics are weakly predictive of decision agreement across four domains | *Know Your Limits* (scope laundering, faithfulness); Graus (structure vs. outcome) | (a) is unclaimed and we have striking `(measured)` n=1 evidence; (b) becomes a *replication at corpus scale across domains*, honestly framed |
+| **C1** | **LEXEC-Verify** — LLM-free, fail-closed lowering from the v2 extraction contract to LExec IR v1, bounded reference/FEEL execution, DMN 1.3 emission, and bounded solver queries/proof records | ContractCheck (manual blocks, one SPA); PolicyGuard (Z3, contract-vs-policy review); Graus (executor, no solver checking) | Potential contribution: provenance-preserving compilation plus explicit refusals and machine-checkable proof obligations for LLM-extracted rules. **Implemented; corpus correctness and independent-engine evidence pending.** |
+| **C2** | **Instrument validation** — do artifact-free signals predict gold-artifact OE, with sOE as a positive control and random, biased, permuted, and leakage-canary controls? | None found under the bounded §21 search protocol | The primary empirical contribution if the frozen study is valid. **Harness/statistics implemented; observation bundle unrun.** |
+| **C3** | **Assumption-explicit analysis** — typed, provenance-bound assumptions analyzed individually and as sets, with solver witnesses and human source-support review | *Know Your Limits* documents the gap and names assumption-surfacing tools as future work | Potential contribution: connects formal consistency to source support without claiming that solver validity establishes legal admissibility. **Analyzer implemented; human study unrun.** |
+| **C4** | **LEXEC-Bench contracts** — Dutch anchor plus bounded ContractNLI transfer, with gold isolation, frozen splits, retained run manifests, and explicit release roles | LegalBench; PrivacyGLUE; ObliQA; ContractEval; RuleArena | Potential contribution: artifact-level, extensional evaluation with a validated instrument. **Infrastructure implemented; no claimable benchmark bundle yet.** |
+| **C5** | **Source-preserving CEGIR** *(extension)* | LLM-CEGIS repair; Logic-LM self-refinement | Counterexamples from cross-rule consistency with deletion/no-op/oracle-withheld controls and provenance preservation. **Implemented; real comparison unrun.** |
+| **C6** | **Solver-reward training** *(optional, provider-gated)* | RLVR for SQL, IE, and structured output | Solver feedback over an extracted artifact's denotation, guarded by independent coverage, held-out signals, and adversarial degenerate policies. **Reward contracts implemented; training frontier unrun.** |
 
 ---
 
 ## 5. Formal setup
 
-**Objects.** Document *d*; extraction *R* = *f*(*d*); compiler *γ*; artifact
-*A* = *γ*(*R*) with semantics ⟦*A*⟧.
+**Objects.** Document *d*; extraction *R* = *f*(*d*); total lowering
+*λ*(*R*) = *I* or an explicit refusal, where *I* is LExec IR v1; backend
+*γ*; artifact *A* = *γ*(*I*) with semantics ⟦*A*⟧. The existing v2 rule JSON
+is an extraction contract and compiler input, **not** the executable IR.
 
-**Rules.** Each *r* ∈ *R* is ( *V*, *C*, *X*, *O*, *σ*, *π* ): typed variables
-*V* (number/boolean/enum/date/date_time/duration/string/list; role ∈
-{input, derived, output}); condition *C* over predicates with operators
-`== != < <= > >= in not_in`; defeaters *X*; output assignments *O* (`=` only);
-scope *σ*; hit policy *π* ∈ {UNIQUE, FIRST, PRIORITY, COLLECT, ANY}. This is the
-repository's existing v2 contract (`utils/rule_contract.py`), not a new one.
+**Rules.** The v2 input contract permits a wider surface language. LExec IR v1
+normalizes supported rules into typed symbols (`bool`, `int`, `real`, `enum`,
+`string`), recursive formulas, explicit scope, per-effect modality, explicit
+exception readings, typed assignments, and proof-bound decision tables. Date,
+duration, list, open-domain, malformed, and other unsupported constructs are
+refused with stable reason codes and `requires_review: true`; they are never
+silently projected. The structural contract is
+`plan/lexec-ir-v1.schema.json`; the semantic contract is
+`docs/ir-semantics-v1.md`.
 
 **Defeater semantics.** The contract keeps `exceptions` separate from
 `condition_logic` and never specifies the combination. In the one run available,
@@ -391,22 +407,20 @@ hypothesis *"Receiving Party may share some Confidential Information with third
 parties"* becomes an entailment query — **and, per §1.2, one that needs an
 explicit assumption record to be gradable against the corpus label.** See §10.
 
-**Fragment — corrected (§24 R4).** v2 defines **8 operators**, **1 output
+**Input fragment and implemented compiler subset.** v2 defines **8 operators**, **1 output
 operator**, **8 variable types** (`number`, `boolean`, `enum`, `date`,
 `date_time`, `duration`, `string`, `list`) and **10 value types** — the variable
 types plus `range` and `variable_reference` *(verified-in-code:
 `utils/rule_contract.py`)*. v2 of this proposal said "7 value types" and then
 called the fragment linear arithmetic. Both were wrong.
 
-Only a strict subset is linear arithmetic over integers/rationals + finite enums
-+ equality. `date`, `date_time`, and `duration` need an explicit temporal theory
-(or a total order plus a unit-normalisation rule); `string` needs equality-only
-treatment with a declared collation; `list` and `range` need container and
-interval theories; `variable_reference` needs global symbol resolution and an
-acyclicity check. **The supported subset is a deliverable, not an assumption**
-(§26 IR-1), and every construct outside it must produce a *measured refusal*
-rather than a silent projection. The bounded FEEL renderer **fails loudly**
-outside the subset; silent coercion would contaminate the measurement.
+The implemented v1 subset supports booleans, bounded integer/real values,
+finite enums, and bounded string predicates covered by the conformance suite.
+It implements total, fail-closed lowering, an ignored-field ledger, global
+symbol validation, and explicit proof/unknown/refusal records. It does not
+claim complete temporal, duration, list, open-string, open-interval, or general
+SMT semantics. The expressiveness census must therefore report both successful
+coverage and refusal reasons; backend agreement cannot expand the language.
 
 ---
 
@@ -945,88 +959,51 @@ frontier prompted model on decision agreement at equal or better coverage
 
 ### 12.3 Where this repository already sits
 
-| Needed | Status |
-| --- | --- |
-| v2 typed rule contract + validator, closed enums | ✅ `utils/rule_contract.py` |
-| Four-invariant hard gate | ✅ `agents/agent_07_executable_readiness.py` |
-| Claim-level grounding certification | ✅ `agents/agent_09_grounding_verifier.py` (6 of 12 claim types LLM-verified; rest structural) |
-| DAG partition, 100% coverage, SCC condensation | ✅ `utils/dag_builder.py` |
-| Selective-prediction machinery (`readiness`, `unresolved`) | ✅ `utils/readiness.py`, `utils/kg_readiness.py` |
-| DMN/BPMN *projection* | ⚠️ 12-line column manifest (`_project_execution`) — a hint, not a model |
-| DMN 1.3 XML / FEEL renderer + evaluator | ❌ |
-| SMT-LIB backend + the seven queries | ❌ |
-| Vector-replay conformance gate | ❌ |
-| Metamorphic harness | ❌ |
-| Assumption extraction/minimization | ❌ |
-| RL environment wrapping the verifier | ❌ |
-| Corpus **input adapters** (download + normalise), checksummed | ✅ `benchmarks/` (4; +2 to add) |
-| Corpus **label loaders, query builders, fixed splits, scoring code, run manifests** | ❌ **none exist** *(verified-in-code: `benchmarks/` holds only `README.md`, `datasets.json`, `.gitignore`, and two download/normalise scripts)* |
-| Document/chunk-complete extraction | ❌ **broken** — see §12.4 |
-| v2-aware deduplication and dependency analysis | ❌ **broken** — see §12.4 |
+| Capability | Implementation evidence | Scientific evidence boundary |
+| --- | --- | --- |
+| v2 extraction contract, readiness/remediation, grounding, DAG partition | `utils/rule_contract.py`; agents 07–10; provider-free tests | Engineering invariants only; LLM grounding remains model-dependent and failures stay review-visible |
+| Full source-chunk extraction | `PIPE-1/2`; `chunk_coverage.json`; regression tests | Proves read/byte coverage, not semantic rule recall |
+| v2-aware optimizer handoff | `PIPE-3`; optimizer handoff tests | Restores input context; does not prove dependency accuracy |
+| Semantic rule-recall evaluator | `utils/rule_recall.py`; `results/aggregates/rule_recall.json` | `fixture_only`; needs a licensed stratified frame, two independent annotators, adjudication, weights, and agreement |
+| Dependency audit | `utils/dependency_audit.py`; `results/aggregates/dependency_audit.json` | `fixture_only`; needs real positive/negative edge labels and human adjudication |
+| Canonical compiler IR and total lowering | `plan/lexec-ir-v1.schema.json`; `docs/ir-semantics-v1.md`; `utils/lexec_ir.py` | Implemented bounded subset; full-corpus expressiveness and refusal distribution not established |
+| Reference/FEEL evaluator, DMN 1.3 emitter | `utils/feel.py`; `utils/dmn_builder.py`; `utils/dmn_emit.py` | Local conformance passes; a pinned independent engine run is still required |
+| Bounded solver queries and hit-policy proof obligations | `utils/smt.py`; solver/query/proof tests | Intentionally not a complete native SMT backend; unknown/timeout/open-domain cases do not pass |
+| Dutch anchor audit, split, replay, and harness | `bench/adapters/dutch_dmn.py`; `bench/splits/dutch_58.json`; `bench/anchor_replay.py` | Replay completed but disagrees with released metrics on 792/1,900 rows; no paper claim until root-caused |
+| Gold isolation, manifests, bundles, estimators | `bench/queries.py`; `bench/manifest.py`; `bench/run_bundle.py`; `bench/stats.py` | Contracts exist; no claimable J1/G3 run bundle has been collected |
+| Perturbation, assumptions, CEGIR | `bench/perturb.py`; `utils/assumptions.py`; `compiler/cegir.py` | Implemented and tested; real annotations/observations remain `unrun` |
+| Reward components, held-out signals, frontier reporting | `training/` and reward-hacking tests | Provider/GPU-gated; no training result exists |
+| Interactive review workbench | `ui/` with pipeline/stage, rule, evidence, graph, comparison, diagnostics, and review views | Review/observability infrastructure; useful for adjudication and demos, not a scientific result |
 
-**Corrected summary (§24 R1).** The extraction half is *implemented and covered
-by 770 provider-free tests that make no model calls and exercise fixed graphs
-and prompt files* — which establishes engineering invariants, **not scientific
-readiness, and not a single completed end-to-end benchmark run**. "Four
-benchmark-backed domains" means four input adapters and four prompt packs. Live
-pipeline runs will be reported separately from the test suite, and every corpus
-needs a deterministic evaluation contract — document IDs, gold-query
-construction, frozen train/dev/test boundaries, metrics, and immutable run
-manifests — before any decision-score, EY, defect-density, or cost number is
-quoted (§26
-BENCH-1..3).
+The current checkout passes 1,051 core Python tests, the plan validator, the G0
+artifact validator, and the research-artifact overclaiming guard. These establish
+implementation quality. They do not establish extraction accuracy, compiler
+correctness on a real corpus, instrument validity, transfer, or training gains.
 
-### 12.4 Two pipeline defects that invalidate corpus-level claims
+### 12.4 Resolved engineering defects and active evidence blockers
 
-Both were raised in §24 (R2, R3) and both are confirmed in code. Neither is a
-research risk — they are bugs that make the *denominators* wrong, so they gate
-everything.
+The two defects identified in v3 are resolved in code:
 
-**D-1 — a "full corpus" run does not read the full corpus.**
-`agents/agent_03_rules_extractor.py::read_text_files_batch()` truncates every
-organized chunk to `max_content_length` (**8,000 characters** by default, line
-195), sorts chunks by word count **descending** (line 205), and then returns only
-`min(len(batches), target_rules_count // rules_per_batch + 10)` batches (line
-240). With the CLI default `--target-rules 30` and `rules_per_batch_openai: 5`,
-that is **at most 16 batches regardless of how many documents were organized**
-*(verified-in-code)*. The sample is biased toward the longest chunks, and because
-agent_01 chunks by ~2,000 *words* while agent_03 clips by *characters*, long chunks
-lose trailing content before extraction.
+- **D-1 resolved (`PIPE-1/2`).** Every source chunk is processed, oversized
+  chunks are re-split, coverage is recorded, and silently dropped bytes fail the
+  contract. The retained privacy-policy run processed 1,260 chunks in 231/231
+  batches with zero dropped bytes. This is an exploratory operational run, not
+  a semantic-recall estimate.
+- **D-2 implementation resolved (`PIPE-3`).** Optimizer prompts receive complete
+  v2 predicates, logic, outcomes, scope, variables, and exceptions. Dependency
+  correctness is still unmeasured on a real frame; `PIPE-4` is only
+  `fixture_only` until independent annotation is completed.
 
-*Consequence:* `benchmarks/README.md`'s "each command above is one full corpus as
-one batch" is not what happens, and every decision-score, EY, defect-density,
-and cost denominator is ambiguous until it is fixed.
+The active blockers are now evidence gates, not missing code:
 
-*Required before G1:* **one artifact per gold document** (or an explicitly frozen
-multi-document unit), every chunk of that unit processed, chunk coverage
-recorded, and the run **failed** if any required chunk is skipped or truncated.
-`target_rules` may cap a pilot; a capped run must never be scored as corpus
-coverage.
-
-**D-2 — the optimizer's v2 handoff is broken.** The domain prompts explicitly
-forbid the legacy prose fields `conditions` / `consequences`, yet
-`agents/agent_06_knowledge_graph_optimizer.py` builds its LLM summaries from
-exactly those fields in `_deduplicate_rules_single()` (lines 349–350),
-`analyze_dependencies()` (536–537), and both batched dependency paths (706–707,
-768–769) *(verified-in-code)*. For v2-only rules the optimizer sees a **truncated
-description, type, and entity attachments** — not the predicates, Boolean logic,
-outcomes, scope, or exceptions the proposed solver semantics depend on. The
-cross-batch pass is also deliberately partial: it samples
-`min(20, batch_size // 4)` (~25%) of each batch and caps batch pairs at **20** by
-default (lines 737–751).
-
-*Consequence:* dependency-edge **recall** is unmeasured and probably poor. This
-undermines CEGIR's cross-rule witnesses, the cross-reference perturbation
-relation, the semantic-dedup baseline, and §16's inherited edge-type counts.
-`utils/dag_builder.py` guarantees 100% **node** coverage of whatever edges it is
-handed — it guarantees nothing about edge recall or semantic correctness, and
-condensing a cycle preserves nodes without producing a valid order inside the
-cycle. **"DAG partition coverage" and "dependency discovery coverage" are
-different claims and are kept separate from here on.**
-
-*Required before using any graph result:* pass full v2 fields to the optimizer,
-make candidate-pair generation deterministic and recall-auditable, and measure
-dependency precision/recall against a human-reviewed fixture.
+1. root-cause the 792-row Dutch anchor replay mismatch before using released
+   or replayed aggregates;
+2. complete real PIPE-2B and PIPE-4 annotation frames;
+3. run and retain a corpus-scale IR/expressiveness census;
+4. cross-check supported DMN cases with a pinned third-party engine;
+5. collect J1/J1B observations under the frozen isolation boundary; and
+6. execute the G3 instrument study with preregistered controls and clustered
+   uncertainty.
 
 ---
 
@@ -1220,7 +1197,7 @@ Now anchored to *published* numbers rather than invented ones.
 | --- | --- | --- |
 | Outcome equivalence, Dutch corpus (Outcome / Requirements) | **42.6% / 60.4%** — Graus `Text+srl+io`, **macro-averaged over 5 runs**, and a **gold-leaking** condition (I/O specs from the gold models). **No raw-`text` OE baseline exists** (§9.3) | **≥ 55% / ≥ 70%** *in the matched `+io` condition only*, macro-averaged over ≥5 runs. Our raw-text and self-derived-interface numbers are reported **without a comparison claim** |
 | Models reaching full outcome equivalence | **33%** = 19/58, **best-of-5 per model** | **≥ 45% best-of-5** (estimator named, so it is comparable) |
-| **Instrument validation: ρ(AFS, OE)** — the primary endpoint | none exists | **ρ ≥ 0.6 with 95% CI lower bound > 0.3**, at n = 58. Achievable: CI ≈ [0.40, 0.74], power ≈ 88% vs. H₀: ρ ≤ 0.3. **At n = 24 (string theory unimplemented) the CI is [0.26, 0.74] and the criterion fails even at the true target** (§9.4) |
+| **Instrument validation: ρ(AFS, OE)** — the primary endpoint | none exists | **ρ ≥ 0.6 with 95% CI lower bound > 0.3**, at n = 58. The bounded string implementation exists, but eligibility across all 58 models is not established; recompute power from the actual eligible cluster count before preregistration (§9.4) |
 | ContractNLI, strict-entailment accuracy | **83.0%** (Claude, LLM-based formal reasoning) | ≥ comparable *from a compiled artifact*, at ≥ 90% EY |
 | Assumption minimality | none exists | ≥ 80% of declared assumptions provably necessary |
 | Scope-laundering analogue | **15.3–52.5%** in LLM self-reported formal reasoning | **Reworded — v3's "0 by construction, verified by audit" was incoherent** (either it needs no audit or it is not by construction). Correct claim: the compiler cannot launder a *verdict*, because it makes no LLM calls — but the failure **relocates** to extraction, where the model may assert a predicate it did not derive from the text. That relocated rate is **measured, not assumed to be zero**, via provenance precision against evidence spans |
@@ -1238,6 +1215,27 @@ Now anchored to *published* numbers rather than invented ones.
 ---
 
 ## 16. Preliminary evidence in hand, and its limits
+
+### 16.1 Current repository evidence (2026-08-26)
+
+| Evidence | Current result | What it supports | What it does not support |
+| --- | --- | --- | --- |
+| Core Python test suite | 1,051 collected tests pass | Local engineering and contract regression coverage | Scientific validity, benchmark quality, or real-world generalization |
+| Plan/research validators | 38-task plan valid; G0 retained artifacts internally consistent; 9 research artifacts pass the overclaiming guard | Evidence taxonomy, dependency graph, artifact contracts, and visible non-results | Completion of tasks marked `implemented` |
+| Full privacy-policy pipeline run | 1,012 source files; 1,260 chunks; 231/231 extraction batches; zero dropped bytes; 879 final rules | End-to-end operability and repaired source-read coverage | Semantic rule recall, dependency accuracy, or corpus-level legal correctness |
+| Readiness and grounding on that run | readiness: 537 ready / 342 review before grounding; grounding: 108 certified / 771 failed, 100% claim-response coverage | The pipeline preserves review failures and produces useful audit queues | Model calibration or accuracy; the run is exploratory and locally retained |
+| PIPE-2B semantic recall | 2/3 fixture matches; precision/recall 0.667 with descriptive Wilson intervals | Evaluator and uncertainty-reporting contract | Population semantic recall; fixture is synthetic |
+| PIPE-4 dependency audit | 1/2 fixture matches; precision/recall 0.5 with descriptive Wilson intervals | Positive/negative edge accounting and evaluator contract | Population dependency quality; fixture is synthetic |
+| IR-2 pilots | bounded NDA and privacy-policy manifests retained; unsupported constructs remain explicit refusals | Census tooling, provenance, and refusal accounting | Full-corpus construct prevalence or an IR completeness claim |
+| Dutch A1 replay | 1,900 rows compared; 1,108 exact and 792 mismatched | Reproducible detection of a material upstream/replay disagreement | Any headline OE number until the mismatch is root-caused |
+| J1, G3, G4, G5 retained artifacts | explicit `unrun` / `blocked` records | Honest release boundary and executable schemas | Compiler performance, instrument validity, CEGIR gain, or RL gain |
+
+The interactive UI makes these run, artifact, evidence, diagnostic, and review
+states inspectable. It is valuable for annotation and artifact demonstration,
+but it must appear in the paper as research infrastructure or supplementary
+material, not as an empirical contribution.
+
+### 16.2 Historical predecessor feasibility spike
 
 From a throwaway spike against this pipeline's predecessor monorepo on a
 352-rule certified graph. **One run, one domain (mortgage), n = 1**; the
@@ -1316,40 +1314,27 @@ claims only the composition.
 
 ---
 
-## 17. Timeline — rebuilt around the review's go/no-go sequence (§24 R13)
+## 17. Timeline — evidence acquisition and paper freeze
 
-v2 asked, in ~8.5 months, for: external reproduction; a compiler, interpreter,
-and four backends; six corpus adapters; a new annotated perturbation suite; 500
-human scenarios; CEGIR; multi-model studies; four transfer studies; and 2–4 RL
-runs — with **zero completed end-to-end benchmark runs** behind it. That was not
-a schedule. The review's sequence is adopted, and **G0 is new**: the measurement
-unit has to be real before anything is measured.
+Local implementation is no longer the critical path. The schedule is now driven
+by external evidence, adjudication, mismatch diagnosis, and preregistered runs.
+Dates below are internal commitments and must be replaced when the official 2027
+CFP is published.
 
-| Phase | Months | Work | Gate |
+| Phase | Internal window | Work | Exit gate |
 | --- | --- | --- | --- |
-| **G0 — make the measurement unit real** | Sep–Oct 2026 | Fix D-1 (per-document unit, full chunk coverage, fail-on-skip) and D-2 (full v2 fields into the optimizer; deterministic, recall-auditable pair generation). Publish **compiler IR v1** — and, per §9.4, the supported subset **must include a string theory** (`contains()` substring predicates, binned-numeric strings, null-checks) or the primary endpoint runs at n = 24 and fails its own criterion. Also: typed scope, modality located on the rule not the variable, exception structure as a *parameter* (not hard-coded before REPRO-4 decides it), derived expressions, global symbol resolution, table grouping, null/missing semantics. Run the **§14.6 expressiveness census** here. Deterministic label/query adapters + immutable run manifests. | Chunk coverage = 100% on a frozen unit or the run fails; dependency precision/recall measured on a declared sampling frame; every unsupported construct produces a counted refusal; **≥ 55 of 58 anchor models lower without refusal**; the expressiveness census is published |
-| **G1 — reproduce before extending** | Nov 2026 | Reproduce Graus's published protocol on **his** harness: 58 testable models, 4 conditions, **5 runs each**, 13,080 input variations, macro-averaged. | Our reproduction matches his reported numbers within CI. *Nothing downstream is trusted until this passes.* |
-| **G2 — validate the compiler** | Nov–Dec 2026 | Differential testing: reference interpreter vs. SMT encoding vs. **one real third-party DMN engine**, on generated and corpus tables. Retain exhaustive enumeration (P3 is withdrawn; P3′ is a comparison theorem only). Hit-policy proof obligations implemented per revised P2. | Three backends agree on 100% of a generated conformance suite; every disagreement is root-caused |
-| **G3 — validate the instrument** | Dec 2026–Jan 2027 | Freeze the **information-isolation** protocol (§9.6) and the statistical plan (§9.5, §13.1) **before** looking at results. Estimate **ρ(AFS, OE)** with model-clustered uncertainty; run the positive (sOE) and negative (random / stratified / biased sample) controls; structured disagreement review. | Primary endpoint estimated with a CI; declared in advance: ρ ≥ 0.6 with CI lower bound > 0.3, achievable only at n = 58 (§9.4) |
-| **G4 — choose the paper from the result** | Feb 2027 | If G3 succeeds: add **one** non-Dutch domain (ContractNLI, with §10 assumption-explicit compilation) + CEGIR. If G3 fails: write the diagnostic paper (§20 Plan B). | A decision, recorded, with the evidence |
-| **G5 — method, only if earned** | Mar 2027 | Solver-reward RL **only if** an omission-resistant, held-out, adversarially-tested reward already survives §12.2's degenerate-policy gate. | Degenerate policies score worse than the honest baseline; then and only then, train |
-| **Freeze + write** | Apr 2027 (freeze **Apr 15**) → submit ~May 1 | Writing, figures, artifact release, reproducibility checklist, broader impact. | — |
+| **E0 — freeze evidence frames** | Sep 2026 | Freeze licensed PIPE-2B and PIPE-4 sampling frames; recruit two independent annotators; freeze the corpus census population; pin the third-party DMN engine; archive the Dutch replay inputs and environment. | Licenses/release roles recorded; annotator instructions and adjudication protocol frozen; all hashes retained |
+| **E1 — resolve reproducibility blockers** | Sep–Oct 2026 | Root-cause the 792/1,900-row Dutch replay mismatch; run the external DMN engine; execute the real IR census; complete rule/dependency annotations. | A1 replay either matches or has a documented root cause; BE-4 evidence retained; PIPE-2B/PIPE-4/IR-2 can move from `implemented` to `done` or stop the claim |
+| **E2 — compiler and anchor observations** | Oct–Nov 2026 | Run J1 on the frozen Dutch units, record refusals and eligible clusters, select exception readings outcome-blind, and retain every run/failure. | Valid J1/J1B bundle; actual eligible cluster count and power recomputed; compiler claim bounded to observed coverage |
+| **E3 — instrument study** | Nov–Dec 2026 | Freeze preregistration, collect source-only AFS observations, run sOE positive control and permutation/bias/leakage controls, then estimate clustered uncertainty. | `g3_instrument.json` is `useful`, `weak`, `underpowered`, or `invalid` under the frozen rule; no retrospective relabeling |
+| **E4 — choose submission shape** | Jan 2027 | If G3 is valid/useful, add bounded ContractNLI transfer and optionally CEGIR. If weak but valid, write a limitations/diagnostic paper. If invalid, stop the instrument claim and decide whether C1 alone is sufficient. | Written go/no-go memo naming the exact paper claim, tables, and excluded claims |
+| **E5 — optional method branch** | Jan–Feb 2027 | Run CEGIR first. Activate solver-reward training only with separate provider/GPU approval and only after the held-out reward audit passes. | Method result is included only if fully retained and statistically interpretable; otherwise omitted without delaying the paper |
+| **Artifact + manuscript freeze** | Mar–Apr 2027 | Re-run the accepted configuration; generate tables/figures from retained bundles; complete limitations, ethics, data cards, reproducibility checklist, and anonymized artifact. | **Internal artifact freeze 2027-04-01; manuscript freeze 2027-04-15**; no new headline result afterward without reopening validation |
 
-**Explicitly moved to follow-on work** (§24 R13): three of the four
-target-language backends (SMT-LIB retained because G2 needs it; Python /
-ASP / Datalog cut); cross-lingual (MAPP German) and cross-jurisdiction transfer;
-the cross-task (clinical/benefits) study; and ObliQA, CUAD, OPP-115, MAPP as
-*evaluated* corpora (§8 RESERVE).
-
-**Restored to the critical path by §9.2's correction:** **LEXEC-Perturb** and the
-**~500 human-authored scenarios**. v3 cut both — Perturb as "most expendable"
-given LGMT, scenarios as annotation load. But once the metric is corrected, they
-are the *only* artifact-free signals available: Perturb needs no gold label at
-all, and the scenario set is the only expert-labeled artifact-free signal on the
-Dutch corpus. Cutting them leaves C2 with nothing to validate except expert
-labels on ContractNLI, which has no gold artifact to validate *against*. **This
-adds roughly 10 pd of engineering plus ~90 annotator hours to the committed
-scope, and it is not optional** — it is what a coherent primary claim costs.
+Cross-lingual/cross-jurisdiction expansion, additional target languages, broad
+multi-corpus sweeps, and RL are follow-on work unless E1–E4 finish early. The UI
+review workbench supports adjudication and supplementary demonstrations but is
+not on the scientific critical path.
 
 ## 18. Budget, separated by line (§24 R13)
 
@@ -1357,14 +1342,14 @@ v2 gave one `$15k–$30k` figure "presented mainly as extraction spend" and did 
 reconcile GPU weeks, annotation, or engineering time. Separated, with the
 scope-cut scope:
 
-| Line | **Minimum paper** (G0 + A + J + G2 + G3 + writing = **126 pd**) | Full programme (adds G4 + G5 + follow-ons) |
+| Line | **Minimum paper** (registered implementation scope = **125 pd**) | Full programme (registered implementation scope = **171 pd**) |
 | --- | --- | --- |
 | **API / inference** | Anchor: 58 testable models × 5 runs × the conditions we can match (§9.3), plus the A2 replication if in scope → **$3k–$7k**. **No CEGIR in the minimum paper** | four-corpus sweeps, multi-model, ablations → **$15k–$30k** |
 | **GPU** | none (no RL in the minimum paper) | 8×H100 × 1–2 weeks × 2–4 runs ≈ **600–1,300 GPU-hours**, plus false starts → **$8k–$25k** at commodity rates, or a cluster allocation |
 | **Solver / CPU** | modest, but the RL bottleneck later — cache by rule-set hash, bound row counts, time-box calls and report the timeout rate | a solver farm; budget separately from GPU |
 | **Annotation** | **now includes LEXEC-Perturb**, restored to committed scope by §9.2: ~1.5–2k items at 2–4 min with 20% double annotation → **~120–160 hours**, plus ~500 scenario validations and a stratified assumption-admissibility review → **~60–90 hours**. **Total ~180–250 hours** | + the reserve corpora's scenario sets |
 | **Storage / artifacts** | run manifests, all 5 runs retained per condition, generated artifacts → tens of GB | hundreds of GB with RL rollouts |
-| **Engineering time** | **the dominant cost, and previously unbudgeted.** G0 alone is **43 pd** (two pipeline fixes, the compiler IR with a string theory, the censuses, adapters, manifests). Minimum paper **126 pd ≈ 0.80 FTE** over ~157 working days *with zero research allowance* — see the plan's §9 | + G4 (26 pd) and G5 (20 pd) → 172 pd ≈ 1.10 FTE |
+| **Engineering time** | The 125 pd implementation contract is complete locally. Remaining calendar effort is experiment operation, annotation, adjudication, mismatch diagnosis, artifact generation, and scientific iteration; it must not be reported as zero remaining work. | The 171 pd implementation contract is complete locally, but real G4/G5 evidence still consumes reviewer, provider, GPU, and analysis time. |
 
 Hard cap plus per-experiment cost logging from day one. The repo's adaptive
 global rate limiter already makes concurrent batch runs safe.
@@ -1375,16 +1360,18 @@ global rate limiter already makes concurrent batch runs safe.
 
 | Risk | Severity | Mitigation |
 | --- | --- | --- |
-| **D-1: corpus-level denominators are wrong today** — a "full corpus" run reads ≤16 batches of truncated, length-sorted chunks | **Blocking** | G0 / PIPE-1..2 before any measurement; fail-on-skip; a capped pilot is never scored as coverage (§12.4) |
-| **D-2: dependency-edge recall is unmeasured** — the optimizer reads forbidden legacy fields and samples ~25% of each batch | **Blocking** | G0 / PIPE-3..4; report dependency precision/recall on a declared sampling frame with negatives and adjudication; keep DAG node coverage separate from discovery coverage (§12.4) |
-| **D-3: no string theory ⇒ n = 24 ⇒ the primary endpoint fails its own criterion** even at the true target effect | **Blocking** | String theory (`contains()`, binned-numeric, null-check) is a G0 deliverable, not an IR-2 measurement (§9.4) |
+| **Source-read coverage is fixed, but semantic recall is unknown** | **Blocking for extraction claims** | Retain PIPE-1/2 coverage; complete the licensed PIPE-2B frame with two annotators, adjudication, weights, and agreement |
+| **Optimizer context is fixed, but dependency precision/recall is unknown** | **Blocking for graph/CEGIR claims** | Complete PIPE-4 on a declared frame with explicit negatives; keep DAG node coverage separate from discovery accuracy |
+| **Actual anchor eligibility may be below 58 despite bounded string support** | **Blocking for the powered primary endpoint** | Run the corpus census and J1 lowering first; recompute power from the observed eligible cluster count; do not assume implementation implies 58/58 coverage |
 | **D-4: the anchor reports no raw-`text` OE**, so v3's headline comparison does not exist | **Blocking for the claim, not the work** | Report raw-text OE standalone; add *interface-derivation accuracy* as a measured sub-result; treat `+io` comparisons as gold-leaking and label them (§9.3) |
 | **D-5: the anchor is n = 1 corpus** — one jurisdiction, language, statute, genre, generating model | **High** | State the bound in the same words §16 uses for our own n = 1; hunt a second gold-artifact source; **abandonment condition declared** (§16) |
-| **Zero completed end-to-end benchmark runs behind the plan** | **High** | The minimum paper is defined so that one reproduction + one instrument-validation result is publishable (§25 D2) |
+| **No claimable J1/G3 benchmark bundle yet** | **High** | E1–E3 are the critical path; all failures/refusals are retained and the paper claim is chosen only after the frozen outcome |
+| **Dutch replay disagrees with released metrics on 792/1,900 rows** | **Blocking** | Root-cause representation, evaluator-version, inclusion, and environment differences before quoting either aggregate |
+| **No pinned third-party DMN-engine result** | **Blocking for independent backend claims** | Execute BE-4 against a content-addressed engine/runtime and retain every disagreement |
 | **Someone publishes the solver-reward RL first.** Wang et al. named it as future work in June 2026 (and separately proposed the MCS idea §10 builds on). | **High** | Move C5 earlier if G3 lands early; and make C2 (instrument validation) the paper's spine, since it does not depend on the method being first |
 | **Extraction quality, not compilation, is the bottleneck** — garbage rules compile perfectly | **High** | The benchmark is the primary contribution; a rigorous "nobody can do this yet" is publishable. Graus at 42.6% already establishes headroom |
 | §16's numbers don't replicate off-mortgage | High | G2; Plan B ready (§20) |
-| **The gold-free metric doesn't track gold-based OE** (§9 fails) | **High** | That *is* a publishable finding, and it redirects the paper to Plan B. But it must be discovered in Nov 2026, not April 2027 |
+| **AFS does not track gold-based OE** (§9 fails) | **High** | Report a bounded negative result only if the instrument study is valid and adequately powered; an invalid or underpowered study supports no correlation conclusion |
 | Direct long-context QA simply wins on the decision scores | High | Pre-committed: report it; pivot to PP/CQI/amortization, all pre-registered. Do not hide it |
 | Dutch corpus is one jurisdiction/language/genre | Medium | It is the *anchor*, not the benchmark; five other corpora carry breadth. Graus lists this limitation himself |
 | Defeater semantics wrong | Medium | Compare all three readings empirically; report which the vectors and Perturb support |
@@ -1410,7 +1397,7 @@ global rate limiter already makes concurrent batch runs safe.
   adverse change"). Graus's finding that generated models keep 26–35% of gold
   nodes yet match behavior 42.6% of the time is the perfect opening figure for
   this paper. No RL needed.
-- **Plan C (if RL doesn't beat SFT).** Datasets & Benchmarks track: LEXEC-Bench +
+- **Plan C (if RL doesn't beat SFT).** Evaluations & Datasets track: LEXEC-Bench +
   instrument validation + assumption-explicit metrics + CEGIR + the
   miscalibration finding. LegalBench set the precedent for legal benchmarks at
   NeurIPS D&B.
@@ -1594,52 +1581,49 @@ explicit, decide consistency with a solver, and train on the solver's verdict.*
 
 ---
 
-## 23. Immediate next four weeks — reordered to G0 (§24 R13)
+## 23. Immediate next four weeks — produce claimable material
 
-v2 put "clone the Dutch repo" first. The review is right that this is second: a
-reproduction is only interpretable once our own measurement unit is real. Both
-still fit in four weeks because item 1 is a bug fix, not research.
+The implementation queue is empty; the evidence queue is not. The next four
+weeks should create the minimum set of retained observations needed to decide
+whether a NeurIPS paper exists.
 
-1. **Fix D-1 (chunk/document coverage).** Make the extraction unit one gold
-   document; process every chunk; record coverage; fail the run on any skip or
-   truncation. Add a regression test that a 40-chunk unit yields 40 processed
-   chunks regardless of `--target-rules`. *This is the single highest-value
-   change in the list, because every corpus-level number depends on it.*
-2. **Fix D-2 (v2 optimizer handoff).** Pass `condition_predicates`,
-   `condition_logic`, `outcomes`, `variables`, `applicability_scope`, and
-   `exceptions` into the dedup and dependency summaries instead of the forbidden
-   `conditions`/`consequences`. Make pair generation deterministic. Add a
-   human-reviewed dependency fixture and report precision/recall.
-3. **Clone and reproduce `github.com/opengov-lab/legal-text-to-decision-model`** —
-   58 models, 4 conditions, 5 runs, 13,080 input variations, macro-averaged.
-   External, cheap, decisive. Nothing downstream is trusted until this matches.
-4. **Draft compiler IR v1** (§26 IR-1) with an explicit supported subset, and a
-   refusal path that is *counted*. Then `utils/feel.py` + `utils/dmn_builder.py`
-   in the repo's dependency-free, unit-tested style. Constraint verified in code:
-   `tests/test_inter_agent_contract_alignment.py` pins `_project_execution`'s key
-   set to what `final_rule_issues` reads, so the compiler sits strictly
-   downstream and treats `execution` as read-only.
-5. **Run our pipeline on the Dutch 58** through their harness, matched to the
-   `text` condition only, and report an honest first OE number.
-6. **Resolve the defeater semantics empirically** on the Dutch corpus — it has
-   gold behavior to check against, which our own self-generated vectors do not.
-7. **Email the arXiv:2606.16118 authors** about the 400/610 strict-entailment
-   re-annotation, and ask whether they are pursuing the solver-feedback training
-   direction they list in §5.6 (this is the scooping risk in §19, and asking is
-   cheaper than guessing).
-8. **Citation-verification pass** on the items Appendix B still lists as
-   unverified (MAUD, SatLM, LINC, CheckList, Spider).
+1. **Root-cause the Dutch A1 mismatch.** Re-run from the pinned upstream commit
+   and compare evaluator version, input enumeration, inclusion rules, parsing,
+   and aggregation. Preserve the current mismatch artifact; do not overwrite it
+   with a normalized result that hides the disagreement.
+2. **Freeze and launch PIPE-2B/PIPE-4 annotation.** Record corpus/license,
+   sampling strata and weights, inclusion/exclusion, explicit dependency
+   negatives, two independent annotations, adjudication, and agreement. The
+   synthetic fixtures remain test data only.
+3. **Run the real IR-2 census.** Produce type/operator/exception/table/dependency
+   and refusal distributions over the frozen population. Use it to define the
+   actual compiler eligibility denominator and update the primary-study power
+   calculation.
+4. **Execute BE-4.** Pin an independent DMN engine and runtime, run the generated
+   conformance suite plus eligible corpus cases, retain hashes and disagreements,
+   and refuse the independent-backend claim if the engine job is unavailable.
+5. **Build the J1 pilot bundle.** Run a small, frozen Dutch subset end to end to
+   validate isolation, manifests, estimator labels, and failure retention. The
+   pilot is operational until the full preregistered frame runs.
+6. **Freeze G3 before inspecting G3 outcomes.** Commit the estimand, controls,
+   eligible clusters, power curve, seeds, bootstrap replicates, missingness,
+   multiplicity, and invalidation rules. Then collect the full observation
+   bundle.
+7. **Prepare conference artifacts in parallel.** Create the claim/evidence
+   ledger, table/figure generation scripts, data/release cards, anonymized setup,
+   and UI demonstration dataset described in §28.
 
-**Deliberately *not* in the next four weeks**, and previously were: LEXEC-Perturb
-annotation logistics, three of four target-language backends, any RL work, and
-the four non-Dutch evaluated corpora.
+**Deliberately excluded from this four-week window:** provider/GPU training,
+broad multi-corpus expansion, and cosmetic paper writing that depends on an
+unknown G3 outcome.
 
 ---
 
 ## 24. Review — repository-grounded comments and concerns (2026-08-24)
 
-*Preserved verbatim, unedited. Disposition of every item is in §25; the work each
-item requires is in §26.*
+*Historical record, preserved verbatim. Disposition of every item is in §25;
+the original work checklist is in §26. Some implementation-status statements
+below are intentionally stale and are superseded by §§12.3–12.4 and §28.*
 
 ### Overall assessment
 
@@ -2028,8 +2012,12 @@ That sentence should survive into the paper's limitations section.
 
 ## 26. Required work, itemized (the G0 checklist)
 
-Each item is a prerequisite named by §24, with an owner-sized unit of work and an
-acceptance test. This is the bridge to `neurips-plan-2027.md`.
+*Historical implementation checklist from 2026-08-24. The code contracts below
+have since been implemented and are tracked authoritatively in `tasks.json`.
+They are not all scientifically `done`; §28 maps each remaining evidence gate.*
+
+Each item was a prerequisite named by §24, with an owner-sized unit of work and
+an acceptance test. This was the bridge to `neurips-plan-2027.md`.
 
 **Pipeline correctness (blocks everything)**
 
@@ -2109,7 +2097,8 @@ wrong — see the plan's §9), and the staffing conclusion that follows.
 
 ## 27. Final review (third pass) — findings and corrections applied
 
-*Third and final review pass, 2026-08-24. §24 is the first review (R1–R13,
+*Historical third review pass, 2026-08-24; superseded for current implementation
+status by §28. §24 is the first review (R1–R13,
 applied in §25). The development plan's §14 is the second review (P1–P12). This
 section records the third pass: my disposition of P1–P12, plus **seventeen
 findings neither prior review made**, and the corrections applied for each.*
@@ -2262,6 +2251,167 @@ back badly would change the paper more than another review pass would.**
 
 ---
 
+## 28. NeurIPS material plan from the current implementation
+
+This section is the active bridge from “implemented repository” to “submission
+with defensible evidence.” It supersedes implementation-status statements in
+§§24–27. `plan/tasks.json` remains authoritative for task status and acceptance
+commands; this section is authoritative for the conference package.
+
+### 28.1 Claim freeze
+
+The minimum claim should be written as:
+
+> For a declared, bounded subset of normative decision logic, LExec compiles
+> source-grounded extracted rules into fail-closed executable artifacts and
+> exposes machine-checkable semantic defects. On a frozen Dutch gold-artifact
+> benchmark, we test whether independently constructed artifact-free signals
+> predict outcome equivalence, reporting executable yield and refusals beside
+> conditional quality.
+
+The submission must **not** claim that compilation decides legal correctness,
+that source coverage implies rule recall, that fixture audits estimate
+population accuracy, that local backend agreement proves independent
+correctness, that a review UI is a research result, or that implemented RL
+contracts are training evidence.
+
+### 28.2 Required scientific evidence
+
+| Package | Data required | Current state | Completion criterion | Material produced |
+| --- | --- | --- | --- | --- |
+| **M1 — extraction denominator** | Licensed, frozen rule and dependency frames; strata/weights; explicit negatives; two annotators | PIPE-2B/PIPE-4 evaluators complete; fixtures only | Adjudicated precision/recall, uncertainty, agreement, and error taxonomy retained | Main coverage table; annotation appendix; data card |
+| **M2 — IR construct validity** | Frozen real corpus population and all lowering/refusal records | Census tooling and bounded pilots complete | Full population manifest; type/operator/exception/table distributions; refusal denominator; eligible Dutch cluster count | Expressiveness figure; compiler-coverage table; refusal taxonomy |
+| **M3 — compiler correctness** | Independent lowering oracle, generated conformance cases, eligible corpus cases, pinned external DMN engine | Local oracle/reference/DMN/bounded-query tests complete; BE-4 real run absent | All supported cases agree or every disagreement is root-caused; unsupported cases refuse | Backend agreement table; mutation score; counterexample examples |
+| **M4 — Dutch anchor reproducibility** | Pinned upstream checkout, released metrics, replayed metrics, environment lock | Audit and replay complete; 792/1,900 rows mismatch | Mismatch explained and corrected or reported as an upstream/reproduction limitation with no borrowed headline number | Reproduction table; discrepancy appendix; exact aggregation recipe |
+| **M5 — compiled-artifact benchmark** | Frozen Dutch units, isolated query artifacts, all systems/runs/failures | J1/J1B schemas and harnesses implemented; observations unrun | Content-addressed bundle with estimator labels, OE/sOE/EY, refusal reasons, cost/tokens, and exception-reading result | Primary system table; risk/coverage plot; qualitative failures |
+| **M6 — instrument validation** | Independent AFS labels/relations/scenarios, positive and negative controls, J1 OE | Estimator, power, controls, and artifact schema implemented; study unrun | Preregistered clustered estimate with validity checks and a frozen `useful`/`weak`/`underpowered`/`invalid` outcome | Primary correlation figure; control table; disagreement analysis |
+| **M7 — bounded transfer** | ContractNLI within the adapter's supported boundary; source-supported assumption review | Adapter and assumption analyzer implemented; human review unrun | Transfer result reported separately, with unsupported modes excluded and assumption agreement/admissibility measured | Transfer table and boundary statement |
+| **M8 — CEGIR extension** | Frozen baseline, source-preserving edits, witnesses, deletion/no-op/oracle-withheld ablations | Implementation and retained `unrun` artifact complete | Paired real comparison with no provenance regressions | Repair-gain/ablation table; witness case study |
+| **M9 — RL extension** | Approved provider/GPU budget; disjoint training/reward/audit/test sets | Components and adversarial audit code implemented; no training | Held-out reward audit passes, then full frontier with failed runs and exploit checks | Optional main-track method figure/table; otherwise omit completely |
+
+M1–M6 are the minimum evidence path. M7 is useful breadth. M8 can strengthen a
+main-track story. M9 is optional and must never consume the artifact-free time
+needed by M1–M6.
+
+### 28.3 Paper tables and figures
+
+Every number must be generated from a retained, content-addressed bundle; no
+manual spreadsheet should be the source of a paper result.
+
+1. **Figure 1 — measurement chain and trust boundary.** Source document → v2
+   extraction → total lowering/refusal → LExec IR → reference/DMN/bounded-query
+   backends → AFS/sOE/OE. Visually separate source-grounding evidence from
+   internal solver evidence and gold-artifact evidence.
+2. **Figure 2 — expressiveness and refusals.** Stacked distribution of supported,
+   ignored-with-reason, and refused constructs by type/operator/exception
+   family, with the eligible denominator used by later tables.
+3. **Figure 3 — instrument validation.** AFS vs. OE at the
+   `model × system × run` level, model-clustered interval, positive control, and
+   negative/permuted/leakage controls. Plot EY/risk–coverage beside conditional
+   quality.
+4. **Figure 4 — failure flow.** Source coverage → extracted rules → lowered →
+   emitted → independently executed → outcome-equivalent, with explicit counts
+   and refusal reasons. This prevents denominator drift.
+5. **Table 1 — corpus and evidence card.** Documents, units, language,
+   jurisdiction, license/reuse posture, splits, annotations, IAA, and release
+   role.
+6. **Table 2 — compiler correctness.** Oracle mutation score, local backend
+   agreement, independent-engine agreement, unsupported cases, timeouts, and
+   unknowns.
+7. **Table 3 — anchor and system results.** Matched conditions and estimators,
+   OE/sOE/EY, cost, and all failed/refused runs. Keep released and replayed Dutch
+   results separate until M4 closes.
+8. **Table 4 — instruments and controls.** AFS definition, information source,
+   artifact/gold access, correlation, uncertainty, and validity outcome.
+9. **Table 5 — ablations.** No solver, no grounding, no CEGIR, no assumptions,
+   alternative exception reading, deletion/no-op repair, and direct
+   long-context application under matched information.
+10. **Table 6 — scoped transfer.** Only if M7 passes; never pool incompatible
+    endpoints into the Dutch primary result.
+
+The appendix should include IR semantics, operator/type matrix, refusal codes,
+query and isolation protocols, power curves, estimator details, annotation
+instructions, disagreement taxonomy, prompt/config hashes, model parameters,
+cost accounting, and the full limitations/claim ledger.
+
+### 28.4 Reproducibility and release package
+
+The artifact must contain or point to:
+
+- an anonymized source snapshot and immutable release tag;
+- `tasks.json`, LExec IR schema/semantics, exact acceptance commands, and the
+  generated plan summary;
+- locked dependencies, OS/Python metadata, provider/model identifiers,
+  reasoning effort, seeds, rate/concurrency settings, prompts, and configs;
+- content-addressed run manifests containing successes, failures, refusals,
+  timeouts, unknowns, and costs;
+- corpus/data cards, licenses, restricted/local-only roles, and an explicit
+  redistribution allowlist;
+- one command per table/figure plus a validator that fails on stale or manually
+  edited outputs;
+- a claim/evidence ledger mapping every abstract, table, and conclusion claim to
+  a retained artifact and evidence class;
+- an anonymized, sanitized review-workbench demo bundle for traceability and
+  qualitative inspection; and
+- exported adjudication records in immutable JSON/CSV with reviewer IDs
+  pseudonymized, timestamps, artifact hashes, and stale-review detection.
+
+The UI currently supports comments, decisions, labels, saved views, audit
+history, stale-hash detection, and selected-rule CSV export. A canonical
+**review-delta/adjudication export** is still a conference-material gap; the
+SQLite overlay itself must not be the only copy of study labels.
+
+### 28.5 Submission gates and stop rules
+
+The paper is ready for internal submission review only when all are true:
+
+- M1–M6 have retained artifacts and their validators pass;
+- the Dutch replay mismatch is closed or explicitly prevents borrowed-result
+  claims;
+- the eligible denominator and power analysis use observed, not assumed,
+  compiler coverage;
+- at least one independent backend has executed the supported subset;
+- every table reports EY/refusals beside conditional quality;
+- the primary analysis was frozen before outcome inspection;
+- no `fixture_only`, `exploratory`, `unrun`, `blocked`, `invalid`, or
+  `underpowered` artifact appears as positive evidence;
+- all paper numbers regenerate from the release bundle; and
+- the official 2027 CFP, track name, dates, format, anonymity, and checklist have
+  been re-verified.
+
+Stop or narrow the paper when any of these occur:
+
+- **M2 low expressiveness:** narrow the claim to the supported construct family;
+- **M3 backend disagreement:** report a compiler limitation and remove the
+  independent-correctness claim;
+- **M4 unresolved mismatch:** do not use the released anchor aggregate as a
+  reproduction baseline;
+- **M6 invalid/underpowered:** make no instrument-correlation conclusion;
+- **M6 valid but weak:** consider a bounded diagnostic result, not an automatic
+  positive paper; or
+- **M7/M8/M9 fail:** remove the extension without moving the minimum-paper
+  deadline.
+
+### 28.6 Verification commands
+
+Before each evidence freeze and the final artifact tag, run:
+
+```bash
+.venv/bin/python scripts/validate_neurips_plan.py --check
+.venv/bin/python scripts/validate_neurips_plan.py --run-complete
+.venv/bin/python scripts/validate_g0_evidence.py
+.venv/bin/python scripts/validate_research_artifacts.py
+.venv/bin/python scripts/validate_config.py
+.venv/bin/python -m pytest -q
+```
+
+For the UI supplement, additionally run its Python tests/coverage, frontend
+lint, frontend coverage, type-aware production build, and browser smoke flow.
+Record the exact commands and reports in the release manifest rather than
+copying a historical test count into the paper.
+
+---
+
 ## Appendix A — Naming
 
 | Name | What it is |
@@ -2272,11 +2422,33 @@ back badly would change the paper more than another review pass would.**
 | **LEXEC-Perturb** | relational (metamorphic) suite |
 | **CEGIR** | Counterexample-Guided Iterative Repair |
 | **SDI** | Semantic Discrimination Index, `SR + SE − 1` |
-| **OE / DA** | gold-based Outcome Equivalence / gold-free Decision Agreement — the two sides of §9 |
+| **AFS / sOE / OE** | artifact-free signal / sampled gold-labeled outcome equivalence / oracle outcome equivalence; non-interchangeable measures in §9 |
 
 ## Appendix B — Provenance of every claim
 
-**Verified in code while applying the §24 review (2026-08-24):**
+**Verified in the current implementation audit (2026-08-26):**
+`scripts/validate_neurips_plan.py --check` reports 38 valid tasks with no
+missing dependencies or cycles; `scripts/validate_g0_evidence.py` verifies all
+five retained G0 artifacts as internally consistent and non-claiming;
+`scripts/validate_research_artifacts.py` validates nine research artifacts with
+no overclaiming status; and the core test suite collects 1,051 tests and passes.
+The canonical compiler assets are `plan/lexec-ir-v1.schema.json`,
+`docs/ir-semantics-v1.md`, `utils/lexec_ir.py`, `utils/feel.py`,
+`utils/dmn_builder.py`, `utils/dmn_emit.py`, and `utils/smt.py`. Benchmark,
+statistics, transfer, CEGIR, reward, and publication contracts are present in
+`bench/`, `compiler/`, `training/`, and `scripts/`. The retained research
+artifacts explicitly preserve `fixture_only`, `exploratory`, `unrun`, and
+`blocked` states.
+
+The local full privacy-policy run records 1,012 source files, 1,260 chunks,
+231/231 extraction batches, zero dropped bytes, and 879 final rules. Its
+grounding report records 108 certified and 771 failed rules with 100% response
+coverage. These values are operational diagnostics from a locally retained run,
+not a population-quality estimate or a release artifact. The Dutch anchor replay
+compares 1,900 rows and records 792 mismatches; this is a reproducibility blocker,
+not a headline result.
+
+**Historical verification while applying the §24 review (2026-08-24):**
 `agent_03_rules_extractor.py:195` (8,000-char truncation), `:205` (descending
 word-count sort), `:240` (`target_rules // rules_per_batch + 10` batch cap);
 `cli/extract.py:264` (`--target-rules` default 30); `config.example.json:69-70`
@@ -2303,16 +2475,18 @@ training named as future work; `opengov-lab/legal-text-to-decision-model` README
 the upstream government models carry no explicit license (reuse assumed under the
 Dutch *Wet hergebruik van overheidsinformatie*).
 
-**Verified by reading this repository's code (2026-08-24):** the v2 contract's
+**Historical repository state verified on 2026-08-24:** the v2 contract's
 closed enums (`utils/rule_contract.py`); the four invariants and
 `_project_execution` (`agents/agent_07_executable_readiness.py`); which grounding
 claim types reach the LLM verifier vs. are structural
 (`agents/agent_09_grounding_verifier.py`, `MODEL_CLAIM_TYPES`); the DAG partition
 and SCC condensation (`utils/dag_builder.py`); readiness/selective-prediction
-(`utils/readiness.py`, `utils/kg_readiness.py`); the absence of any FEEL/DMN/BPMN
-XML or SMT code in the repo (grep); the `_project_execution` key-set pinning in
+(`utils/readiness.py`, `utils/kg_readiness.py`); the then-absence of FEEL/DMN/BPMN
+XML or SMT code in the repo; the `_project_execution` key-set pinning in
 `tests/test_inter_agent_contract_alignment.py`; corpus sizes/licenses/checksums
-(`benchmarks/datasets.json`, `benchmarks/README.md`); `pytest` → 770 passed.
+(`benchmarks/datasets.json`, `benchmarks/README.md`); `pytest` → 770 passed at
+that historical revision. These absence and test-count statements are
+superseded by the current implementation audit above.
 
 **Verified against primary sources this session (web search + fetch):** every
 `(published)` number and every citation in §21 and Appendix C — titles, authors, venues,
@@ -2341,6 +2515,7 @@ answer is that the upstream data has no explicit license at all.
 
 | Work | Identifier |
 | --- | --- |
+| NeurIPS official future-meetings page / 2026 Evaluations & Datasets call | `neurips.cc/Conferences/FutureMeetings` · `neurips.cc/Conferences/2026/CallForEvaluationsDatasets` |
 | Graus, *From Legal Text to Executable Decision Models*, ICAIL 2026 | arXiv:2604.17153 · `github.com/opengov-lab/legal-text-to-decision-model` |
 | Wang et al., *Know Your Limits* (LLM faithfulness, ContractNLI + Z3) | arXiv:2606.16118 |
 | Zhou et al., *LGMT* (logic-grounded metamorphic testing) | arXiv:2605.23965 |
