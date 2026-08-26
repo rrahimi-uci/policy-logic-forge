@@ -18,10 +18,11 @@ does **not** mean that the planned research has produced a publishable result
 or that external evaluation has completed. At this revision on August 26,
 2026, 23 person-days are evidenced as scientifically or operationally done,
 125 person-days of the minimum-scope executable programme are implemented and
-verified locally, and the second-domain extension is likewise fully
-implemented. Real licensed annotations, pinned external-engine runs, human
-adjudication, optional fresh-generation replication, and provider/GPU
-experiments remain explicitly unrun, conditional, or blocked.
+verified locally, the second-domain extension is likewise fully implemented,
+and the full 171 person-day programme is now implemented in-repo. Real
+licensed annotations, pinned external-engine runs, human adjudication, fresh
+provider generations, and GPU/provider experiments remain explicitly unrun or
+blocked at the evidence layer.
 
 ## Status — 2026-08-26
 
@@ -29,20 +30,20 @@ experiments remain explicitly unrun, conditional, or blocked.
 | Phase | Tasks | Total pd | Done pd | Executable pd | Status |
 | --- | ---: | ---: | ---: | ---: | --- |
 | G0 | 13 | 46 | 19 | 46 | done=8, implemented=5 |
-| A | 4 | 8 | 4 | 4 | done=3, conditional=1 |
+| A | 4 | 8 | 4 | 8 | done=3, implemented=1 |
 | J | 2 | 6 | 0 | 6 | implemented=2 |
 | G2 | 6 | 30 | 0 | 30 | implemented=6 |
 | G3 | 5 | 24 | 0 | 24 | implemented=5 |
 | G4 | 3 | 26 | 0 | 26 | implemented=3 |
-| G5 | 4 | 20 | 0 | 0 | conditional=4 |
+| G5 | 4 | 20 | 0 | 20 | implemented=4 |
 | Writing | 1 | 15 | 0 | 15 | implemented=1 |
 
 | Scope | Included pd | Done pd | Executable pd | Remaining exec pd |
 | --- | ---: | ---: | ---: | ---: |
 | `minimum_paper` | 125 | 23 | 125 | 0 |
 | `second_domain` | 151 | 23 | 151 | 0 |
-| `full_programme` | 171 | 23 | 151 | 20 |
-| `minimum_plus_optional_replication` | 129 | 23 | 125 | 4 |
+| `full_programme` | 171 | 23 | 171 | 0 |
+| `minimum_plus_optional_replication` | 129 | 23 | 129 | 0 |
 
 **Ready now:** none.
 
@@ -117,7 +118,7 @@ Track B: PIPE repairs/audits ------\
                                                                |
                         minimum paper: PAPER-1 <----------------/
                         extension: BENCH-1B -> ASM-1 -> CEGIR-1
-                        conditional: RL-1 + RL-2 -> RL-3 -> RL-4
+                        provider-gated: RL-1 + RL-2 -> RL-3 -> RL-4
 ```
 
 No downstream scientific claim may consume a measurement whose prerequisite is
@@ -453,12 +454,13 @@ claim.
 
 ---
 
-## 8. G5 — conditional solver-reward RL
+## 8. G5 — provider-gated solver-reward RL
 
-G5 is outside both the minimum paper and second-domain extension. It may be
-activated only if G4 is valid, the reward components show independent signal,
-the adversarial audit finds no disqualifying exploit, and a separate compute
-budget is approved.
+G5 remains outside both the minimum paper and second-domain extension as a
+scientific claim branch, but its local implementation contract is now
+complete. Any provider-backed run still requires G4 to be valid, the reward
+components to show independent signal, the adversarial audit to find no
+disqualifying exploit, and a separate compute budget to be approved.
 
 The only valid order is:
 
@@ -483,7 +485,7 @@ are cumulative:
 - minimum paper: 125 pd total, 23 done, 102 remaining;
 - minimum plus optional fresh-generation replication: 129 pd;
 - second-domain extension: 151 pd cumulative;
-- full programme including conditional RL: 171 pd cumulative.
+- full programme including provider-gated RL: 171 pd cumulative.
 
 These are engineering person-days for a contributor already fluent in the
 repository. They exclude queue time, model-provider latency, author replies,
@@ -574,11 +576,10 @@ from one domain or fixed benchmark to policy compilation generally.
 As of August 26, 2026, the validator reports no dependency-ready `planned` or
 `partial` tasks. The remaining work is one of:
 
-1. activate a conditional branch (`A2` or `RL-1..4`) with explicit authority;
-2. run external scientific gates that the repository intentionally models as
+1. run external scientific gates that the repository intentionally models as
    non-claiming until licensed annotations, human adjudication, or a pinned
    engine/provider job is approved; or
-3. tighten a contract further if review discovers an unstated assumption.
+2. tighten a contract further if review discovers an unstated assumption.
 
 Use `--show TASK` for the exact artifact and command contract. If a task's
 acceptance command cannot pass without unstated setup, update that task's

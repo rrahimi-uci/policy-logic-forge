@@ -10,6 +10,7 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parent.parent
 REQUIRED = {
+    "a2_replication.json": ("a2-replication/1.0", {"completed", "blocked", "unrun"}),
     "j1.json": ("anchor-harness/1.0", {"completed", "disagreement", "invalid", "timeout", "unrun"}),
     "exception_readings.json": ("exception-reading/1.0", {"selected", "unrun"}),
     "perturb_iaa.json": ("perturbation/1.0", {"valid", "review", "unrun"}),
@@ -45,6 +46,10 @@ def validate(root: Path = ROOT) -> tuple[str, ...]:
             raise ArtifactValidationError(f"{filename}: non-terminal status cannot be claimable")
         if status in {"unrun", "blocked", "invalid", "underpowered", "review", "fail", "disagreement", "timeout"} and payload.get("claimable") is not False:
             raise ArtifactValidationError(f"{filename}: non-claiming status must set claimable=false")
+        if filename == "a2_replication.json" and status == "blocked":
+            blocked_on = payload.get("blocked_on")
+            if not isinstance(blocked_on, list) or not blocked_on or not all(isinstance(item, str) and item for item in blocked_on):
+                raise ArtifactValidationError("a2_replication.json: blocked status requires a non-empty blocked_on list")
         checked.append(filename)
     return tuple(checked)
 

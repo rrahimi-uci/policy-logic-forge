@@ -18,17 +18,16 @@ artifacts.
 - The generated summary now reports both `Done pd` and `Executable pd`, which
   makes the implementation boundary visible without overstating scientific
   completion.
-- `A2` now has the previously missing preregistration and placeholder retained
-  artifact, so its optional contract is complete even though it remains
-  inactive.
+- `A2` now has the previously missing preregistration, retained placeholder
+  artifact, and artifact validation coverage, so its optional branch is
+  implemented even though no fresh generation run has been executed.
 
 ## Current implementation boundary
 
 - Minimum paper scope: 125 / 125 person-days executable locally.
 - Second-domain extension: 151 / 151 person-days executable locally.
-- Full programme: 151 / 171 person-days executable locally.
-- Remaining executable gaps: 20 person-days, all inside conditional `RL-1..4`
-  and therefore not active without explicit authorization.
+- Full programme: 171 / 171 person-days executable locally.
+- Remaining executable gaps: 0 person-days.
 
 ## Remaining scientific gaps
 
@@ -40,8 +39,10 @@ artifacts.
 - `J1`, `J1B`, `STAT-1..3`, `PERTURB-1`, `INST-1`, `BENCH-1B`, `ASM-1`, and
   `CEGIR-1` have provider-free implementations and retained non-claiming
   artifacts, but not the external evidence needed for publishable claims.
-- `A2` remains optional and inactive pending explicit paid-provider approval.
-- `RL-1..4` remain conditional pending explicit GPU/provider authorization.
+- `A2` is implemented as a blocked retained-run contract pending explicit
+  paid-provider approval for any fresh generation.
+- `RL-1..4` are implemented provider-gated contracts; actual training or
+  reward-frontier claims still require explicit GPU/provider authorization.
 
 ## Verification run in this audit
 

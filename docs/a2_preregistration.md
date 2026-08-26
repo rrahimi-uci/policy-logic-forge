@@ -1,7 +1,8 @@
 # A2 fresh-generation preregistration
 
-`A2` is optional and remains outside the committed minimum-scope plan until the
-repository owner explicitly authorizes a paid fresh-generation rerun.
+`A2` is optional from a research-scope standpoint, but its implementation
+contract is now complete in-repo. A paid fresh-generation rerun still requires
+explicit approval before any provider-backed execution.
 
 If activated, the run must freeze before generation:
 
@@ -21,4 +22,5 @@ The activation PR must also record:
 - how fresh generations will remain separated from gold or otherwise
   leakage-prone views.
 
-Until that approval exists, `A2` is a prepared but inactive contract.
+Until that approval exists, `A2` remains a blocked retained-run contract rather
+than an executed fresh-generation result.
