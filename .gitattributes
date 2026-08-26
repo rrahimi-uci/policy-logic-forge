@@ -1,0 +1,3 @@
+# The official NeurIPS archive is vendored byte-for-byte; preserve its
+# upstream trailing whitespace so the recorded hashes remain verifiable.
+paper/template/official/* -whitespace

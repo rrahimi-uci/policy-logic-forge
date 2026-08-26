@@ -1,0 +1,30 @@
+\section{Problem formulation and evidence boundary}
+
+Let $D$ be a source document, $S(D)$ its segmented spans, and $R$ the set of
+candidate rules extracted from those spans. A rule is retained only with a
+provenance packet $P(r)=(d, s, q)$ containing document identity $d$, character
+or page span $s$, and an evidence quote $q$. A compiler maps a retained rule to
+an intermediate representation $I(r)$ or to an explicit refusal $F(r)$:
+\[
+  C: (r,P(r)) \longrightarrow I(r) \;\cup\; F(r).
+\]
+Lowering $L$ is total over the declared IR: it returns an executable decision,
+a structured validation error, or a refusal; it never guesses a missing
+branch. For an input $x$, execution $E(L(I(r)),x)$ is therefore a statement
+about the lowered artifact, not a claim that $I(r)$ is the only valid legal
+interpretation.
+
+We use three evidence planes. Source-evidence fidelity (AFS) asks whether a
+candidate is supported by the cited span and whether exceptions, thresholds,
+and modalities survived extraction. Executable behavior (OE) asks whether a
+compiled artifact produces the expected outcome for a declared input and
+whether independent engines agree. Operational evidence (OPS) records
+coverage, failures, latency, and resource use for a run. AFS and OE require
+human or independent-engine anchors; OPS is useful for engineering decisions
+but cannot substitute for either.
+
+Every artifact also carries an epistemic state: `measured', `exploratory',
+`fixture-only', `unrun', `blocked', or `invalid'. The state is part of the
+schema and is surfaced by the review UI. This prevents a failed or incomplete
+experiment from being silently promoted to a result and makes the paper
+reproducible even when a planned measurement is unavailable.

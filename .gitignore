@@ -8,6 +8,9 @@ __pycache__/
 .coverage
 htmlcov/
 
+# Generated NeurIPS paper build output (regenerable)
+paper/build/
+
 # Secrets
 .env
 .env.*

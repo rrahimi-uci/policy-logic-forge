@@ -1,0 +1,34 @@
+\section{Introduction}
+
+Compliance systems must answer two different questions. First, what does a
+source document say, and where is the evidence? Second, what does an
+implemented decision artifact do on an input? Current text-to-logic pipelines
+frequently conflate these questions: a fluent extraction is treated as a rule,
+an executable model is treated as a faithful reading, and a passing unit test
+is treated as evidence of quality. The resulting systems are hard to inspect
+and their failures are hard to localize.
+
+We study a narrower and more useful objective. Given a normative document, can
+we compile a declared subset into executable logic while preserving provenance,
+making unsupported constructs explicit, and measuring the two questions with
+separate protocols? LEXEC (Lexically grounded EXecutable Compliance) is the
+repository's answer. It combines a ten-stage extraction pipeline with a typed
+\lexir, total fail-closed lowering, bounded decision evaluation, DMN 1.3
+emission, solver/proof records, and an interactive review workbench. The system
+does not claim to decide legal meaning. Instead, it defines the boundary at
+which deterministic checks are valid and refuses to silently cross it.
+
+This paper makes three contributions. (1) We specify an auditable compilation
+contract: every retained rule has source spans, a stable identifier, a typed
+representation, and either an executable lowering or a refusal code. (2) We
+provide an evaluation instrument that separates source-evidence fidelity,
+executable behavior, and reviewer agreement, with negative and unrun states
+preserved in the artifacts. (3) We release an implementation and a concrete
+experiment plan whose missing observations are enumerated rather than replaced
+with proxy numbers. The distinction matters: the current fixture evaluator
+contains only three labeled rules, and its output is a contract check, not a
+population estimate.
+
+The remainder of the paper defines the supported problem, describes the
+compiler and review layer, records current engineering evidence, and states the
+gates needed before any headline result can be claimed.

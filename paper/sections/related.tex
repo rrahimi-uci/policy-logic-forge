@@ -1,0 +1,24 @@
+\section{Related work}
+
+LegalBench established a broad expert-built benchmark for legal language
+understanding \citep{guha2023legalbench}; CUAD supplied a contract-analysis
+corpus with span and category supervision \citep{hendrycks2021cuad}. ContractNLI
+connects natural-language clauses to entailment, contradiction, and
+insufficient-information judgments \citep{koreeda2021contractnli}. These
+benchmarks motivate separate evidence and behavior units, but they do not by
+themselves specify a fail-closed compiler contract.
+
+Formalization systems expose a complementary tension. Grammars of Formal
+Uncertainty reports that autoformalization can improve or harm downstream
+behavior depending on the grammar and task \citep{ganguly2025grammars}.
+Catala demonstrates that legal rules can be represented in a domain-specific
+language with executable semantics \citep{bavard2021catala}. RuleArena studies
+rule-following evaluation under adversarial conditions \citep{wang2024rulearena}.
+Recent work on legal-text decision models and policy guards further motivates
+grounded evidence and explicit uncertainty \citep{graus2026legaltext,zhou2026lgmt}.
+
+LEXEC differs in emphasis. It treats provenance, refusal, schema version, and
+unrun status as part of the evaluation object, and it makes the boundary
+between source fidelity and executable behavior operational. The resulting
+instrument can host existing benchmarks without claiming that a compiler's
+internal checks replace expert judgments.

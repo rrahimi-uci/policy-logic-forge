@@ -1,0 +1,56 @@
+\documentclass{article}
+
+% The 2026 archive is the latest official template available while preparing
+% this draft.  Keep the style file unchanged and replace it when the 2027
+% archive is published.
+\usepackage[eandd]{template/official/neurips_2026}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{hyperref}
+\usepackage{url}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{amsfonts}
+\usepackage{nicefrac}
+\usepackage{microtype}
+\usepackage{xcolor}
+
+\newcommand{\status}[1]{\textsc{#1}}
+\newcommand{\lexec}{LEXEC}
+\newcommand{\lexir}{LExec\mbox{-}IR}
+
+\title{Executable Evaluation of Normative Text-to-Logic Systems: A Bounded Compiler and Instrument Validation}
+
+\author{Anonymous Authors}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+Normative documents are often converted into decision logic by systems whose outputs are difficult to audit, execute, or compare. We present LEXEC, a bounded compiler and review protocol that makes a declared subset of normative text executable while retaining source evidence, refusal states, and validation traces. The contribution is an instrument: typed intermediate representation, total fail-closed lowering, bounded FEEL/reference evaluation, DMN emission, solver-backed checks, and a run contract expose which properties are decidable inside the supported subset and which remain semantic or legal judgments. We describe the complete implementation and an evidence-gated evaluation plan spanning source fidelity, executable behavior, and review reliability. The current checkout passes its engineering contract and contains exploratory and fixture-only artifacts, but it does not yet contain the licensed annotations, independent engine comparison, or preregistered human observations required for a scientific quality claim. We therefore report implementation facts and non-results explicitly and give a reproducible path from the present snapshot to a defensible NeurIPS evaluation.
+\end{abstract}
+
+\input{sections/introduction}
+\input{sections/problem}
+\input{sections/system}
+\input{sections/protocol}
+\input{sections/implementation}
+\input{sections/results}
+\input{sections/readiness}
+\input{sections/related}
+\input{sections/ethics}
+\input{sections/conclusion}
+
+{\small
+\bibliographystyle{plainnat}
+\bibliography{references/references}
+}
+
+\appendix
+\input{sections/appendix_ir}
+\input{sections/appendix_reproducibility}
+\input{sections/appendix_ledger}
+\input{build/checklist}
+
+\end{document}
