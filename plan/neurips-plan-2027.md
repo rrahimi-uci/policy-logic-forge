@@ -206,6 +206,14 @@ outcome, never an incorrect successful compilation.
 
 G0 must finish before any corpus-level compiler or instrument claim.
 
+The retained provider-free artifacts for `PIPE-2B`, `PIPE-4`, and `IR-2` share
+an executable consistency gate:
+`.venv/bin/python scripts/validate_g0_evidence.py`. It recomputes the two
+fixture reports and verifies the content-addressed IR-2 pilot outputs. A
+passing gate establishes internal artifact consistency only; it does not
+replace the licensed samples, human annotation, adjudication, or full-corpus
+census required for the G0 exit gate.
+
 ### 3.1 Completed work
 
 - `CFG-1`: exposes full-coverage configuration in `config.example.json`.
