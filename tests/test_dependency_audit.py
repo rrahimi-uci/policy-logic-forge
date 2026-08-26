@@ -72,6 +72,45 @@ def test_fixture_rejects_edge_labelled_both_positive_and_negative(tmp_path):
         load_frame(tmp_path)
 
 
+def test_fixture_rejects_coerced_rule_and_edge_values(tmp_path):
+    frame = json.loads((FIXTURE / "frame.json").read_text(encoding="utf-8"))
+    frame["universe"]["rule_ids"][0] = 1
+    (tmp_path / "frame.json").write_text(json.dumps(frame), encoding="utf-8")
+
+    with pytest.raises(DependencyAuditError, match=r"rule_ids\[0\]"):
+        load_frame(tmp_path)
+
+    frame["universe"]["rule_ids"][0] = "r1"
+    frame["universe"]["candidate_edges"][0]["source_rule_id"] = 2
+    (tmp_path / "frame.json").write_text(json.dumps(frame), encoding="utf-8")
+    with pytest.raises(DependencyAuditError, match="every dependency edge"):
+        load_frame(tmp_path)
+
+
+def test_fixture_rejects_duplicate_or_self_loop_candidate_edges(tmp_path):
+    frame = json.loads((FIXTURE / "frame.json").read_text(encoding="utf-8"))
+    frame["universe"]["candidate_edges"].append(frame["universe"]["candidate_edges"][0])
+    (tmp_path / "frame.json").write_text(json.dumps(frame), encoding="utf-8")
+
+    with pytest.raises(DependencyAuditError, match="duplicate edge"):
+        load_frame(tmp_path)
+
+    frame["universe"]["candidate_edges"].pop()
+    frame["universe"]["candidate_edges"][0]["target_rule_id"] = frame["universe"]["candidate_edges"][0]["source_rule_id"]
+    (tmp_path / "frame.json").write_text(json.dumps(frame), encoding="utf-8")
+    with pytest.raises(DependencyAuditError, match="self-loop"):
+        load_frame(tmp_path)
+
+
+def test_fixture_requires_an_explicit_claim_boundary(tmp_path):
+    frame = json.loads((FIXTURE / "frame.json").read_text(encoding="utf-8"))
+    frame.pop("claim_boundary")
+    (tmp_path / "frame.json").write_text(json.dumps(frame), encoding="utf-8")
+
+    with pytest.raises(DependencyAuditError, match="claim_boundary"):
+        load_frame(tmp_path)
+
+
 def test_wilson_interval_handles_empty_denominator():
     interval = _wilson_interval(0, 0)
 
