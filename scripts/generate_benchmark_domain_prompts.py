@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Generate the four benchmark-corpus domain prompt packs.
+"""Generate the five benchmark-corpus domain prompt packs.
 
 The packs under `domain-prompts/{commercial_contracts,nda_confidentiality,
-privacy_policy,mobile_app_privacy}/` are produced by this script rather than
-hand-authored, so that 4 domains x 13 templates stay structurally consistent and
+privacy_policy,mobile_app_privacy,deonticbench}/` are produced by this script rather than
+hand-authored, so that 5 domains x 13 templates stay structurally consistent and
 satisfy every field contract in `tests/test_data_contracts.py`. The generated
 `.txt` files are committed and are what `PromptManager` reads at runtime; this
 script is the source of truth when they need to change.
@@ -637,7 +637,141 @@ MOBILE_APP_PRIVACY = Profile(
     ),
 )
 
-PROFILES = [COMMERCIAL_CONTRACTS, NDA_CONFIDENTIALITY, PRIVACY_POLICY, MOBILE_APP_PRIVACY]
+DEONTICBENCH = Profile(
+    key="deonticbench",
+    title="Deontic Legal Reasoning",
+    benchmark=("DeonticBench (6,232 whole cases + 251 independently verified hard cases "
+                "across SARA, airline, housing, and USCIS-AAO configurations)"),
+    persona=("a legal-rule analyst who extracts explicit obligations, permissions, "
+              "prohibitions, exceptions, conditions, and executable outcomes from statutes "
+              "and case facts"),
+    genre=("statutes and regulatory provisions paired with case facts and a decision or "
+           "calculation question — covering tax, airline baggage, housing, and immigration"),
+    corpus_note=(
+        "DeonticBench rows contain source-bearing case facts or text, statutes, and a question. "
+        "The dataset also supplies a gold label and an independently verified reference Prolog "
+        "program for evaluation. Treat label and reference_prolog as evaluation metadata only: "
+        "never copy them into extracted source evidence, never infer a rule from the gold answer, "
+        "and mark an outcome unresolved when the supplied text is insufficient. Preserve the "
+        "configuration, case id, state or case number, and statute section in provenance."
+    ),
+    entity_types=[
+        ("STATUTE", "A cited statutory or regulatory provision that governs the case",
+         "citation, section, title, jurisdiction, effective_date, text",
+         "NEV. REV. STAT. § 40.380"),
+        ("ACTOR", "A person, organisation, agency, or legal role in the case",
+         "name, role, status, jurisdiction, representation",
+         "The tenant appealing an eviction judgment"),
+        ("CASE_FACT", "A source-stated fact, event, amount, date, or status",
+         "subject, predicate, value, unit, date, source_quote",
+         "The appeal was filed within ten days of judgment"),
+        ("CONDITION", "A fact pattern or predicate that activates or limits a rule",
+         "predicate, operator, value, temporal_scope, jurisdiction",
+         "The defendant files an appeal within the statutory period"),
+        ("DEONTIC_RULE", "An obligation, permission, prohibition, or eligibility rule",
+         "modality, actor, action, trigger, exceptions, source_section",
+         "An appeal may be filed within ten days"),
+        ("CALCULATION", "A statutory formula, amount, threshold, or comparison",
+         "inputs, operator, unit, threshold, rounding, result",
+         "Taxable remuneration after the statutory exclusion"),
+        ("EXCEPTION", "A source-stated carve-out or override to a general rule",
+         "trigger, overridden_rule, scope, consequence, source_section",
+         "An appeal does not stay execution in a specified proceeding"),
+        ("OUTCOME", "The decision, classification, amount, or status asked by the question",
+         "value, polarity, rationale, confidence, evidence",
+         "Dismissed; no automatic stay of the writ"),
+    ],
+    relationships=[
+        ("STATUTE_GOVERNS_CASE", "STATUTE", "CASE_FACT",
+         "A cited provision supplies the legal authority for a case fact or question"),
+        ("CONDITION_ACTIVATES_RULE", "CONDITION", "DEONTIC_RULE",
+         "A fact predicate activates, limits, or disables a deontic rule"),
+        ("RULE_HAS_EXCEPTION", "DEONTIC_RULE", "EXCEPTION",
+         "An express carve-out overrides or narrows a general rule"),
+        ("RULE_PRODUCES_OUTCOME", "DEONTIC_RULE", "OUTCOME",
+         "Applying a rule to the stated facts yields the requested outcome"),
+    ],
+    rule_types=["obligation", "permission", "prohibition", "eligibility", "calculation",
+                "exception", "temporal_condition", "jurisdiction_scope", "outcome_mapping",
+                "evidence_requirement"],
+    rule_type_notes=(
+        "obligation = an actor must perform an action; permission = an actor may perform an "
+        "action; prohibition = an actor must not perform an action; eligibility = a status or "
+        "benefit is available only when predicates hold; calculation = a formula, threshold, "
+        "or amount determines the result; exception = an express carve-out or override; "
+        "temporal_condition = a date, deadline, duration, or sequence constraint; "
+        "jurisdiction_scope = the state, agency, court, or territorial boundary; "
+        "outcome_mapping = a rule mapping facts to the answer category or decision; "
+        "evidence_requirement = a required document, fact, or proof. Modality and polarity "
+        "must be explicit — do not collapse permission into obligation or a missing fact into "
+        "a negative answer."
+    ),
+    colors={"obligation": "#3b82f6", "permission": "#10b981", "prohibition": "#ef4444",
+            "eligibility": "#8b5cf6", "calculation": "#f59e0b", "exception": "#ec4899",
+            "temporal_condition": "#06b6d4", "jurisdiction_scope": "#6366f1",
+            "outcome_mapping": "#f97316", "evidence_requirement": "#14b8a6"},
+    priority_filters=["obligation", "prohibition", "calculation"],
+    scope_fields=["configurations", "jurisdictions", "case_types"],
+    segmentation=(
+        "Keep the case facts/text, statutes, and question as separate top-level sections. "
+        "Within statutes, preserve every citation and section heading (for example, === section1 "
+        "=== or a numbered citation) and keep its paragraphs together. Do not merge facts into a "
+        "statute or place the question inside a statute section. For long housing and USCIS rows, "
+        "segment at citation boundaries while retaining the citation in every chunk; for SARA and "
+        "airline rows, retain the scenario narrative before the question."
+    ),
+    dedup_rules=(
+        "Two rules are duplicates only when modality, actor, action, trigger, jurisdiction, and "
+        "outcome semantics all match. Keep separate: permission versus obligation; a general rule "
+        "versus its exception; rules from different states or agencies; distinct deadlines or "
+        "numeric thresholds; and rules that yield different labels or amounts. Never deduplicate "
+        "a rule merely because its prose resembles the reference Prolog — the executable program "
+        "is gold metadata, not source evidence."
+    ),
+    dependency_examples=(
+        "- A condition is a prerequisite for the deontic rule it activates.\n"
+        "- A calculation depends on every source-stated input, threshold, and unit.\n"
+        "- An exception overrides the general obligation, permission, or prohibition it names.\n"
+        "- A filing deadline is sequential with the event that starts the statutory clock.\n"
+        "- A jurisdiction scope is a validation gate: do not apply a state statute to another state.\n"
+        "- A requested outcome depends on applying the rule chain to the stated case facts; an "
+        "unstated fact creates an unresolved dependency rather than a guessed label."
+    ),
+    matcher_axes=(
+        "the legal modality (obligation, permission, prohibition), actor and role, action, "
+        "trigger predicates, exception or override, jurisdiction and cited section, deadline or "
+        "date, numeric inputs and units, and the outcome polarity or amount"
+    ),
+    validation_criteria=(
+        "A high-quality DeonticBench rule identifies the actor, modality, action, trigger, "
+        "jurisdiction, and exact statute citation; quotes the supporting source text; preserves "
+        "numeric values and units; and distinguishes an unknown or not-applicable fact from a "
+        "negative answer. Each extracted outcome must be derivable from source facts and statutes "
+        "without consulting label or reference_prolog."
+    ),
+    worked_rule=(
+        "\"A defendant may appeal an eviction judgment within ten days, but the appeal does not "
+        "automatically stay execution of the writ\" — emit one temporal permission and one "
+        "exception/override rule, bound to the defendant and the cited statute section, with the "
+        "filing deadline as a condition and the stay question as the outcome. Do not emit the gold "
+        "label or Prolog as source evidence."
+    ),
+    language_note=(
+        "All current DeonticBench source text is English. Preserve statute citations, dates, "
+        "currency, units, and quoted source wording exactly; write normalized rule descriptions "
+        "in English and record the configuration and jurisdiction on every rule."
+    ),
+    extra_extraction_note=(
+        "The row's question is a query, not a rule. Extract rules from facts and statutes first, "
+        "then map them to the query outcome only when the evidence supports it. Treat label and "
+        "reference_prolog as held-out evaluation fields; never include either in source_reference "
+        "or source_text. For responsible_party and counterparties, use ACTOR (or another "
+        "canonical legal-role entity) only; never use a STATUTE, CASE_FACT, BAGGAGE_ITEM, "
+        "CALCULATION, or outcome entity as a party."
+    ),
+)
+
+PROFILES = [COMMERCIAL_CONTRACTS, NDA_CONFIDENTIALITY, PRIVACY_POLICY, MOBILE_APP_PRIVACY, DEONTICBENCH]
 
 
 # ═══════════════════════════════════════════════════════════════════════════

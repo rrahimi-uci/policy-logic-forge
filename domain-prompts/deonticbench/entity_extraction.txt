@@ -1,0 +1,96 @@
+# Deontic Legal Reasoning domain — entity_extraction.txt
+# Benchmark corpus: DeonticBench (6,232 whole cases + 251 independently verified hard cases across SARA, airline, housing, and USCIS-AAO configurations)
+
+You are a legal-rule analyst who extracts explicit obligations, permissions,
+prohibitions, exceptions, conditions, and executable outcomes from statutes
+and case facts.
+
+Extract the domain model — entity types and relationships — from statutes and regulatory provisions paired with case facts and a decision or
+calculation question — covering tax, airline baggage, housing, and immigration.
+DeonticBench rows contain source-bearing case facts or text, statutes, and a
+question. The dataset also supplies a gold label and an independently verified
+reference Prolog program for evaluation. Treat label and reference_prolog as
+evaluation metadata only: never copy them into extracted source evidence,
+never infer a rule from the gold answer, and mark an outcome unresolved when
+the supplied text is insufficient. Preserve the configuration, case id, state
+or case number, and statute section in provenance.
+
+All current DeonticBench source text is English. Preserve statute citations,
+dates, currency, units, and quoted source wording exactly; write normalized
+rule descriptions in English and record the configuration and jurisdiction on
+every rule.
+
+CANONICAL ENTITY TYPES FOR THIS DOMAIN:
+- STATUTE — A cited statutory or regulatory provision that governs the case
+  attributes: citation, section, title, jurisdiction, effective_date, text
+  example: NEV. REV. STAT. § 40.380
+- ACTOR — A person, organisation, agency, or legal role in the case
+  attributes: name, role, status, jurisdiction, representation
+  example: The tenant appealing an eviction judgment
+- CASE_FACT — A source-stated fact, event, amount, date, or status
+  attributes: subject, predicate, value, unit, date, source_quote
+  example: The appeal was filed within ten days of judgment
+- CONDITION — A fact pattern or predicate that activates or limits a rule
+  attributes: predicate, operator, value, temporal_scope, jurisdiction
+  example: The defendant files an appeal within the statutory period
+- DEONTIC_RULE — An obligation, permission, prohibition, or eligibility rule
+  attributes: modality, actor, action, trigger, exceptions, source_section
+  example: An appeal may be filed within ten days
+- CALCULATION — A statutory formula, amount, threshold, or comparison
+  attributes: inputs, operator, unit, threshold, rounding, result
+  example: Taxable remuneration after the statutory exclusion
+- EXCEPTION — A source-stated carve-out or override to a general rule
+  attributes: trigger, overridden_rule, scope, consequence, source_section
+  example: An appeal does not stay execution in a specified proceeding
+- OUTCOME — The decision, classification, amount, or status asked by the
+  question
+  attributes: value, polarity, rationale, confidence, evidence
+  example: Dismissed; no automatic stay of the writ
+
+CANONICAL RELATIONSHIPS:
+- STATUTE_GOVERNS_CASE (STATUTE → CASE_FACT) — A cited provision supplies the
+  legal authority for a case fact or question
+- CONDITION_ACTIVATES_RULE (CONDITION → DEONTIC_RULE) — A fact predicate
+  activates, limits, or disables a deontic rule
+- RULE_HAS_EXCEPTION (DEONTIC_RULE → EXCEPTION) — An express carve-out
+  overrides or narrows a general rule
+- RULE_PRODUCES_OUTCOME (DEONTIC_RULE → OUTCOME) — Applying a rule to the
+  stated facts yields the requested outcome
+
+Return ONLY one valid JSON object, no Markdown:
+{{
+  "entity_types": {{
+    "ENTITY_NAME": {{
+      "definition": "Clear business definition in Deontic Legal Reasoning context",
+      "description": "Longer explanation of the role this entity plays",
+      "attributes": ["attribute_one", "attribute_two", "attribute_three"],
+      "examples": ["excerpt-grounded example"],
+      "business_rules": ["High-level summary of a rule involving this entity"],
+      "business_rule_summaries": ["Alternate summary list for downstream compatibility"]
+    }}
+  }},
+  "relationships": {{
+    "RELATIONSHIP_NAME": {{
+      "source_entity": "SOURCE_ENTITY_NAME",
+      "target_entity": "TARGET_ENTITY_NAME",
+      "source": "SOURCE_ENTITY_NAME",
+      "target": "TARGET_ENTITY_NAME",
+      "definition": "What this relationship means in Deontic Legal Reasoning context",
+      "description": "Directional semantics of the relationship",
+      "cardinality": "one-to-one|one-to-many|many-to-many",
+      "examples": ["excerpt-grounded example"],
+      "business_rules": ["High-level summary of a rule governing this relationship"]
+    }}
+  }},
+  "extraction_metadata": {{
+    "source_document": "Document name or section",
+    "entity_count": 0,
+    "relationship_count": 0
+  }}
+}}
+
+Ground every entity and relationship in the excerpts. Do not invent entities the
+text does not support.
+
+EXCERPTS:
+{sample_content}

@@ -1,4 +1,4 @@
-"""Tests for the four benchmark-corpus domain packs.
+"""Tests for the five benchmark-corpus domain packs.
 
 `test_data_contracts.py` already parametrises its field contracts over every
 entry in its DOMAINS list, so these tests cover only what it cannot:

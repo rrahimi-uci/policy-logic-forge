@@ -36,7 +36,10 @@ sys.path.insert(0, str(_ROOT))
 from utils.agent_names import AGENT_IDS, agent_spec, output_dir_name  # noqa: E402
 from utils.config import get_config  # noqa: E402
 
-DOMAINS = ["nda_confidentiality", "privacy_policy", "mobile_app_privacy", "commercial_contracts"]
+DOMAINS = [
+    "nda_confidentiality", "privacy_policy", "mobile_app_privacy", "commercial_contracts",
+    "deonticbench",
+]
 
 # Env vars every agent subprocess inherits, mapped from pipeline.performance in
 # config.json. Kept as a flat table (name -> (config_key, fallback)) so a new
@@ -108,6 +111,7 @@ class ExtractionPipeline:
         )
         profile = self.config.get_performance_profile()
         self._perf_env = {}
+        self._last_exit_codes: dict[str, int] = {}
         for env_name, (key, fallback) in _PERFORMANCE_ENV.items():
             value = profile.get(key, fallback)
             if isinstance(value, bool):
@@ -166,6 +170,7 @@ class ExtractionPipeline:
         for line in process.stdout:
             print(line, end="", flush=True)
         code = process.wait()
+        self._last_exit_codes[agent_id] = code
         ok = code == 0
         print(f"\n{'PASS' if ok else 'FAIL'} {agent_id}: {spec.role} (exit {code})")
         return ok
@@ -221,6 +226,25 @@ class ExtractionPipeline:
     def run_agent_10(self) -> bool:
         return self._run("agent_10", [])
 
+    def _review_only_readiness(self) -> bool:
+        """Return true when readiness is structurally sound but still review-gated.
+
+        Exit code 3 is a deliberate data-quality signal from agents 07/08, not
+        a process failure. We may continue to independent grounding and DAG
+        generation in this state, provided all four readiness invariants pass;
+        the report and each affected rule retain ``requires_review: true``.
+        """
+        report_path = self.optimized_dir / "kg_readiness_report.json"
+        try:
+            report = json.loads(report_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return False
+        invariants = report.get("invariants") or {}
+        return bool(invariants) and all(
+            isinstance(value, dict) and value.get("pass") is True
+            for value in invariants.values()
+        ) and bool(report.get("rules_requiring_review"))
+
     def run_all(self) -> bool:
         start = datetime.now()
         if not self.run_agent_01():
@@ -252,10 +276,14 @@ class ExtractionPipeline:
                     return False
                 print("\nagent_07 requested focused remediation -> running agent_08")
                 if not self.run_agent_08():
-                    return False
+                    if self._last_exit_codes.get("agent_08") != 3:
+                        return False
+                    print("agent_08 retained review-required rules; continuing fail-closed")
                 if not self.run_agent_07(reuse_conflicts=True):
-                    print("\nSTOPPED: readiness still failing after remediation.")
-                    return False
+                    if self._last_exit_codes.get("agent_07") != 3 or not self._review_only_readiness():
+                        print("\nSTOPPED: readiness invariants still failing after remediation.")
+                        return False
+                    print("readiness remains review-gated; preserving review flags and continuing")
 
             if not self.run_agent_09():
                 print("\nSTOPPED: agent_09 grounding certification failed.")

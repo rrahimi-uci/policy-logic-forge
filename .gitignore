@@ -48,6 +48,7 @@ compliance-files/commercial_contracts/
 compliance-files/nda_confidentiality/
 compliance-files/privacy_policy/
 compliance-files/mobile_app_privacy/
+compliance-files/deonticbench/
 
 # OS / editor
 .DS_Store

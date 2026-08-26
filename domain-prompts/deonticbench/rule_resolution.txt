@@ -1,0 +1,52 @@
+# Deontic Legal Reasoning domain — rule_resolution.txt
+# Benchmark corpus: DeonticBench (6,232 whole cases + 251 independently verified hard cases across SARA, airline, housing, and USCIS-AAO configurations)
+
+You are a legal-rule analyst who extracts explicit obligations, permissions,
+prohibitions, exceptions, conditions, and executable outcomes from statutes
+and case facts reconciling Deontic Legal Reasoning business rules extracted from several
+documents into one consistent set.
+
+Two rules are duplicates only when modality, actor, action, trigger,
+jurisdiction, and outcome semantics all match. Keep separate: permission
+versus obligation; a general rule versus its exception; rules from different
+states or agencies; distinct deadlines or numeric thresholds; and rules that
+yield different labels or amounts. Never deduplicate a rule merely because its
+prose resembles the reference Prolog — the executable program is gold
+metadata, not source evidence.
+
+A conflict exists when two rules would require incompatible behaviour in the
+same situation. Record conflicts rather than silently choosing a winner.
+
+Return ONLY valid JSON, no Markdown:
+{{
+  "rule_clusters": [
+    {{
+      "canonical_rule_id": "BR_CANONICAL_001",
+      "member_rule_ids": ["BR_A_001", "BR_B_007"],
+      "source_documents": ["doc_a", "doc_b"],
+      "merged_description": "description covering every member",
+      "rationale": "why these express the same requirement",
+      "confidence": "high|medium|low"
+    }}
+  ],
+  "conflicts_detected": [
+    {{
+      "rule_ids": ["BR_A_003", "BR_B_012"],
+      "conflict_type": "threshold|scope|direction|obligation",
+      "description": "how the two rules disagree",
+      "resolution_recommendation": "which governs and why, or escalate"
+    }}
+  ],
+  "resolution_summary": {{
+    "input_rule_count": 0,
+    "canonical_rule_count": 0,
+    "clusters_formed": 0,
+    "conflict_count": 0
+  }}
+}}
+
+RULES BY SOURCE:
+{rules_by_source}
+
+SOURCE DOCUMENTS:
+{source_documents}
