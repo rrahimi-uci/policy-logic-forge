@@ -7,14 +7,21 @@ counts describe tests and retained artifacts, not accuracy.
 
 \input{tables/implementation-evidence}
 
-The end-to-end privacy-policy run processed 1,012 source files in 1,260 chunks,
-completed 231 of 231 batches, dropped no bytes, and retained 879 final rules.
-Before grounding, 537 rules were ready and 342 required review. Grounding
-certified 108 rules and failed 771, with complete response coverage. This is an
+The end-to-end privacy-policy run processed \PrivacyFiles{} source files in
+\PrivacyChunks{} chunks, completed \PrivacyBatches{} of \PrivacyBatches{} batches,
+dropped no bytes, and retained \PrivacyRules{} final rules. Before grounding,
+\PrivacyReady{} rules were ready and \PrivacyReview{} required review. Grounding
+certified \PrivacyCertified{} rules and failed \PrivacyFailed{}, with complete
+response coverage. This is an
 operational, exploratory observation: provider behavior, corpus licensing, and
 the absence of independent labels preclude an AFS or OE claim. The high failure
 rate is useful for hardening the review path and is not evidence that the
 source or compiler is incorrect.
+
+The retained dependency output contains \PrivacyDags{} generated DAGs, including
+\PrivacyMultiRuleDags{} multi-rule DAGs and one condensed cycle group. This
+reports graph coverage and review workload; it is not dependency precision or
+recall.
 
 The repository's deterministic suite currently collects 1,051 core Python
 tests. Plan, configuration, research-artifact, and G0 evidence validators also

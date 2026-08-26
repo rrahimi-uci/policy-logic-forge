@@ -2,14 +2,22 @@
 
 \subsection{What is measured}
 
-The retained fixture evaluator reports two of three rules matched for rule
-recall and one of two dependency edges for the dependency audit. Both artifacts
-are explicitly `fixture-only' and use descriptive Wilson intervals with no
+The retained fixture evaluator reports \RuleRecallMatched{} of \RuleRecallGold{}
+rules matched for rule recall and \DependencyMatched{} of \DependencyGold{}
+dependency edges for the dependency audit. Both artifacts are explicitly
+`fixture-only' and use descriptive Wilson intervals with no
 population claim. They validate schema, denominator, and refusal behavior;
 they are too small to support a benchmark result.
 
-The Dutch replay artifact compares 1,900 rows: 1,108 are exact and 792 differ.
-The mismatch is retained as `mismatch-reported'. Until it is root-caused and
+The bounded lowering fixture kills \MutationKilled{} of \MutationTotal{} seeded
+mutations across \MutationCases{} cases. Its status is also `fixture-only': it
+tests that expected projections and mutations are detected, not that a corpus
+of natural-language rules is lowered correctly. The instrument bundle remains
+\GThreeStatus{}, so RQ3 has no observed correlation in this snapshot.
+
+The Dutch replay artifact compares \ReplayRows{} rows: \ReplayExactRows{} are exact
+and \ReplayMismatchRows{} differ. The mismatch is retained as
+`mismatch-reported'. Until it is root-caused and
 replayed from pinned inputs, no headline OE anchor is reported. This is a
 positive result about observability---the system exposed a disagreement that a
 single aggregate score would hide---and a negative result about readiness.

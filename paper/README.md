@@ -19,6 +19,8 @@ claim is made from the current repository snapshot.
 - `sections/` — manuscript sections, included in order by `main.tex`.
 - `figures/` and `tables/` — source files for paper figures and tables.
 - `references/` — BibTeX database.
+- `data/` — immutable, non-redistributable observation metadata and source hashes.
+- `EXPERIMENT_RUNBOOK.md` — commands, inputs, promotion rules, and external-access checklist for M1--M9.
 - `template/official/` — unchanged official style, checklist, source, and hash manifest.
 - `scripts/` — reproducible build and source/artifact validator.
 - `tests/` — Python tests for the paper contract.
@@ -44,3 +46,9 @@ The latest NeurIPS instructions allow up to nine pages of content for the
 Evaluations & Datasets track; references, checklist, and appendices are kept
 outside that content budget according to the official style.  Always re-check
 the current call before submission.
+
+Evidence macros and `evidence_manifest.json` are generated from the tracked
+aggregate artifacts and `data/privacy_operational_run.json`; when the local
+non-redistributable pipeline bundle is present, hashes and reported counts are
+cross-checked before compilation. A clean checkout can still rebuild the paper
+from the tracked metadata without receiving restricted source documents.
