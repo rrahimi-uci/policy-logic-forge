@@ -3,6 +3,8 @@ branch = false
 source =
     utils
     bench
+    compiler
+    training
 
 [report]
 include =
@@ -12,5 +14,19 @@ include =
     utils/dmn_builder.py
     utils/dmn_emit.py
     bench/dmn_engine_harness.py
+    bench/harness.py
+    bench/stats.py
+    bench/power.py
+    bench/metrics.py
+    bench/perturb.py
+    bench/instrument.py
+    bench/exception_reading.py
+    bench/adapters/contract_nli.py
+    utils/assumptions.py
+    compiler/cegir.py
+    training/coverage_inventory.py
+    training/held_out_signals.py
+    training/reward.py
+    training/frontier.py
 show_missing = true
 fail_under = 85

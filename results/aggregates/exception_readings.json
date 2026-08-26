@@ -1,0 +1,9 @@
+{
+  "schema_version": "exception-reading/1.0",
+  "status": "unrun",
+  "claimable": false,
+  "selected": null,
+  "criterion": "source_annotation_agreement",
+  "outcome_blind": true,
+  "reason": "Independent source annotations have not yet been collected."
+}

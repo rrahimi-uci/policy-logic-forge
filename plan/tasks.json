@@ -430,14 +430,14 @@
       "title": "Evaluate our compiled artifacts in the anchor executor",
       "phase": "J",
       "track": "J",
-      "status": "planned",
+      "status": "partial",
       "effort_pd": 4,
       "depends_on": ["A1B", "BENCH-1", "BENCH-3", "BENCH-4", "LOWER-1", "BE-1", "BE-3"],
       "acceptance": {
         "commands": [[".venv/bin/python", "-m", "pytest", "tests/test_anchor_harness.py", "-q"]],
         "artifacts": ["bench/harness.py", "results/aggregates/j1.json"]
       },
-      "evidence": [],
+      "evidence": ["bench/harness.py", "tests/test_anchor_harness.py", "tests/test_anchor_harness_contract.py", "results/aggregates/j1.json"],
       "claim_boundary": "Raw text has no published OE comparator; gold-I/O conditions are labeled gold-leaking."
     },
     {
@@ -445,14 +445,14 @@
       "title": "Choose exception semantics empirically",
       "phase": "J",
       "track": "J",
-      "status": "planned",
+      "status": "partial",
       "effort_pd": 2,
       "depends_on": ["J1", "IR-1"],
       "acceptance": {
-        "commands": [["test", "-f", "docs/defeater_semantics.md"]],
+        "commands": [[".venv/bin/python", "-m", "pytest", "tests/test_exception_reading.py", "-q"], ["test", "-f", "docs/defeater_semantics.md"]],
         "artifacts": ["docs/defeater_semantics.md", "results/aggregates/exception_readings.json"]
       },
-      "evidence": [],
+      "evidence": ["bench/exception_reading.py", "docs/defeater_semantics.md", "results/aggregates/exception_readings.json", "tests/test_exception_reading.py"],
       "claim_boundary": "Exception default is unset until this comparison completes."
     },
     {
@@ -460,14 +460,14 @@
       "title": "Freeze estimand and power analysis",
       "phase": "G3",
       "track": "G3",
-      "status": "planned",
+      "status": "partial",
       "effort_pd": 2,
       "depends_on": ["J1", "J1B", "BENCH-2"],
       "acceptance": {
         "commands": [[".venv/bin/python", "-m", "pytest", "tests/test_power_analysis.py", "-q"]],
         "artifacts": ["docs/analysis_plan.md"]
       },
-      "evidence": [],
+      "evidence": ["bench/power.py", "docs/analysis_plan.md", "tests/test_power_analysis.py"],
       "claim_boundary": "Tests H0 rho<=0.3 for the declared lower-bound criterion; no post-hoc population expansion."
     },
     {
@@ -475,14 +475,14 @@
       "title": "Implement model-clustered estimation",
       "phase": "G3",
       "track": "G3",
-      "status": "planned",
+      "status": "partial",
       "effort_pd": 4,
       "depends_on": ["STAT-1"],
       "acceptance": {
         "commands": [[".venv/bin/python", "-m", "pytest", "tests/test_stats.py", "-q"]],
         "artifacts": ["bench/stats.py"]
       },
-      "evidence": [],
+      "evidence": ["bench/stats.py", "tests/test_stats.py"],
       "claim_boundary": "Run-level table with model-clustered bootstrap; mixed effects is sensitivity analysis only."
     },
     {
@@ -490,14 +490,14 @@
       "title": "Implement AFS, sOE, OE, EY, and conditional CQI",
       "phase": "G3",
       "track": "G3",
-      "status": "planned",
+      "status": "partial",
       "effort_pd": 3,
       "depends_on": ["BENCH-2", "BE-1"],
       "acceptance": {
         "commands": [[".venv/bin/python", "-m", "pytest", "tests/test_metrics.py", "-q"]],
         "artifacts": ["bench/metrics.py", "docs/metric_contract.md"]
       },
-      "evidence": [],
+      "evidence": ["bench/metrics.py", "docs/metric_contract.md", "tests/test_metrics.py"],
       "claim_boundary": "AFS has no gold-derived query or label; sOE is explicitly gold-labeled; CQI is never correctness."
     },
     {
@@ -505,14 +505,14 @@
       "title": "Build source-grounded metamorphic artifact-free signals",
       "phase": "G3",
       "track": "G3",
-      "status": "planned",
+      "status": "partial",
       "effort_pd": 10,
       "depends_on": ["STAT-3", "BENCH-2"],
       "acceptance": {
         "commands": [[".venv/bin/python", "-m", "pytest", "tests/test_perturb_relations.py", "-q"]],
         "artifacts": ["bench/perturb.py", "docs/perturb_annotation_protocol.md", "results/aggregates/perturb_iaa.json"]
       },
-      "evidence": [],
+      "evidence": ["bench/perturb.py", "docs/perturb_annotation_protocol.md", "results/aggregates/perturb_iaa.json", "tests/test_perturb_relations.py"],
       "claim_boundary": "Relations are source-grounded and independently adjudicated; they do not use the candidate or gold artifact."
     },
     {
@@ -520,14 +520,14 @@
       "title": "Run instrument validation with controls",
       "phase": "G3",
       "track": "G3",
-      "status": "planned",
+      "status": "partial",
       "effort_pd": 5,
       "depends_on": ["LOWER-1", "BE-4", "P3P", "STAT-1", "STAT-2", "STAT-3", "PERTURB-1", "BENCH-4"],
       "acceptance": {
         "commands": [[".venv/bin/python", "-m", "pytest", "tests/test_instrument_bundle.py", "-q"]],
         "artifacts": ["results/aggregates/g3_instrument.json", "docs/g3_disagreement_taxonomy.md"]
       },
-      "evidence": [],
+      "evidence": ["bench/instrument.py", "docs/g3_disagreement_taxonomy.md", "results/aggregates/g3_instrument.json", "tests/test_instrument_bundle.py"],
       "claim_boundary": "Positive, random, stratified, and biased controls required; invalid/underpowered is distinct from low association."
     },
     {
@@ -535,14 +535,14 @@
       "title": "Implement ContractNLI transfer adapter",
       "phase": "G4",
       "track": "G4",
-      "status": "planned",
+      "status": "partial",
       "effort_pd": 4,
       "depends_on": ["INST-1"],
       "acceptance": {
         "commands": [[".venv/bin/python", "-m", "pytest", "tests/test_contractnli_adapter.py", "-q"]],
         "artifacts": ["bench/adapters/contract_nli.py", "docs/contractnli_transfer_boundary.md"]
       },
-      "evidence": [],
+      "evidence": ["bench/adapters/contract_nli.py", "docs/contractnli_transfer_boundary.md", "tests/test_contractnli_adapter.py"],
       "claim_boundary": "ContractNLI supplies labels/spans and AFS evaluation, not gold-artifact OE."
     },
     {
@@ -550,14 +550,14 @@
       "title": "Implement typed, provenance-bound assumption analysis",
       "phase": "G4",
       "track": "G4",
-      "status": "planned",
+      "status": "partial",
       "effort_pd": 10,
       "depends_on": ["BENCH-1B", "BE-3"],
       "acceptance": {
         "commands": [[".venv/bin/python", "-m", "pytest", "tests/test_assumptions.py", "-q"]],
         "artifacts": ["utils/assumptions.py", "docs/assumption_review_protocol.md", "results/aggregates/assumption_review.json"]
       },
-      "evidence": [],
+      "evidence": ["utils/assumptions.py", "docs/assumption_review_protocol.md", "results/aggregates/assumption_review.json", "tests/test_assumptions.py"],
       "claim_boundary": "Checks individual and set-level conclusion laundering; legal admissibility remains blinded human judgment."
     },
     {
@@ -565,14 +565,14 @@
       "title": "Implement and ablate source-preserving counterexample repair",
       "phase": "G4",
       "track": "G4",
-      "status": "planned",
+      "status": "partial",
       "effort_pd": 12,
       "depends_on": ["ASM-1", "BE-3", "STAT-2"],
       "acceptance": {
         "commands": [[".venv/bin/python", "-m", "pytest", "tests/test_cegir.py", "-q"]],
         "artifacts": ["compiler/cegir.py", "results/aggregates/g4_cegir.json"]
       },
-      "evidence": [],
+      "evidence": ["compiler/cegir.py", "results/aggregates/g4_cegir.json", "tests/test_cegir.py"],
       "claim_boundary": "Deletion/no-op baselines, source preservation, omission rate, held-out evaluation, and cost are mandatory."
     },
     {
@@ -587,7 +587,7 @@
         "commands": [[".venv/bin/python", "-m", "pytest", "tests/test_reward_components.py", "-q"]],
         "artifacts": ["training/coverage_inventory.py"]
       },
-      "evidence": [],
+      "evidence": ["training/coverage_inventory.py", "tests/test_reward_components.py"],
       "claim_boundary": "Inventory is independently authored, completeness-audited, training-only, and absent from held-out evaluation."
     },
     {
@@ -602,7 +602,7 @@
         "commands": [[".venv/bin/python", "-m", "pytest", "tests/test_reward_components.py", "-q"]],
         "artifacts": ["training/held_out_signals.py"]
       },
-      "evidence": [],
+      "evidence": ["training/held_out_signals.py", "tests/test_reward_components.py"],
       "claim_boundary": "Self-generated vectors are logged but never rewarded."
     },
     {
@@ -617,7 +617,7 @@
         "commands": [[".venv/bin/python", "-m", "pytest", "tests/test_reward_hacking.py", "-q"]],
         "artifacts": ["results/aggregates/reward_red_team.json"]
       },
-      "evidence": [],
+      "evidence": ["training/reward.py", "results/aggregates/reward_red_team.json", "tests/test_reward_hacking.py"],
       "claim_boundary": "Runs after reward components exist and includes held-out/fuzzed attacks, not four overfit fixtures."
     },
     {
@@ -632,7 +632,7 @@
         "commands": [["test", "-f", "results/aggregates/g5_training.json"]],
         "artifacts": ["results/aggregates/g5_training.json"]
       },
-      "evidence": [],
+      "evidence": ["training/frontier.py", "results/aggregates/g5_training.json", "tests/test_reward_components.py"],
       "claim_boundary": "Requires explicit GPU/provider authorization; every component, Pareto front, size, reuse, and omission rate is reported."
     },
     {
@@ -640,14 +640,14 @@
       "title": "Freeze and validate publication artifacts",
       "phase": "Writing",
       "track": "W",
-      "status": "planned",
+      "status": "partial",
       "effort_pd": 15,
       "depends_on": ["INST-1", "A3"],
       "acceptance": {
-        "commands": [[".venv/bin/python", "scripts/validate_neurips_plan.py", "--check"], [".venv/bin/python", "-m", "pytest", "-q"]],
+        "commands": [[".venv/bin/python", "scripts/validate_neurips_plan.py", "--check"], [".venv/bin/python", "scripts/validate_research_artifacts.py"], [".venv/bin/python", "-m", "pytest", "-q"]],
         "artifacts": ["results/aggregates/", "docs/analysis_plan.md"]
       },
-      "evidence": [],
+      "evidence": ["docs/analysis_plan.md", "docs/metric_contract.md", "results/aggregates/", "tests/test_neurips_plan.py"],
       "claim_boundary": "Every headline value traces to a valid bundle and is labeled implemented, run, valid, exploratory, refused, or unrun."
     }
   ],

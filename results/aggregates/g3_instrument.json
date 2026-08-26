@@ -1,0 +1,8 @@
+{
+  "schema_version": "g3-instrument/1.0",
+  "status": "unrun",
+  "claimable": false,
+  "reasons": ["No approved instrument observation bundle has been collected."],
+  "observation_unit": "model_system_run",
+  "controls": ["positive", "random", "stratified", "biased", "leakage_canary", "permuted"]
+}

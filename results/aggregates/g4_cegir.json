@@ -1,0 +1,6 @@
+{
+  "schema_version": "cegir-ablation/1.0",
+  "status": "unrun",
+  "claimable": false,
+  "reason": "No approved source-grounded repair corpus has been supplied."
+}
