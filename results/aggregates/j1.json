@@ -1,0 +1,9 @@
+{
+  "schema_version": "anchor-harness/1.0",
+  "status": "unrun",
+  "claimable": false,
+  "reason": "No approved anchor executor command and gold-I/O evaluation bundle was supplied.",
+  "metadata": {},
+  "summary": {"total": 0, "agree": 0, "disagree": 0},
+  "cases": []
+}

@@ -137,7 +137,14 @@ cli/extract.py              `agent_01`–`agent_10` orchestrator
 agents/                     one zero-padded module per agent
 utils/                      config, LLM client, adaptive rate limiter,
                             rule contract + validator, readiness/grounding
-                            helpers, dependency-DAG partitioning
+                            helpers, dependency-DAG partitioning, typed
+                            assumption analysis
+bench/                      benchmark retention, isolation, anchor/DMN
+                            harnesses, metrics, clustered statistics,
+                            perturbation and instrument contracts
+compiler/                   source-preserving counterexample-guided repair
+training/                   conditional reward components and
+                            provider-gated frontier safeguards
 prompts/                    shared prompts (the v2 rule contract, readiness/
                             grounding/remediation prompts) — apply to every domain
 domain-prompts/<domain>/    per-domain extraction prompts, one dir per kept domain
@@ -154,12 +161,18 @@ tests/                      pytest suite
 ```bash
 .venv/bin/python scripts/validate_config.py
 .venv/bin/python scripts/validate_neurips_plan.py --check
+.venv/bin/python scripts/validate_research_artifacts.py
 pytest
 ```
 
 No API key needed — the suite tests contract validation, readiness/grounding
 logic, dependency-DAG partitioning, and prompt-pack consistency against fixed
 graphs and prompt files, not live extraction runs.
+
+Research-stage contracts are provider-free and retain explicit `unrun`,
+`invalid`, `underpowered`, and `blocked` result artifacts until licensed
+annotations, a pinned external engine, human adjudication, or GPU/provider
+authorization is available. Validators never promote those states to claims.
 
 For a provider-backed one-document configuration smoke run, follow
 [`docs/pipeline_smoke.md`](docs/pipeline_smoke.md). It is explicitly a pilot,

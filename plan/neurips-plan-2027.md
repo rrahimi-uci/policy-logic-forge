@@ -14,10 +14,12 @@ authoritative for research definitions, claim boundaries, and stop/go rules.
 “Executable” means that every registered task has machine-readable
 prerequisites, an argv-form acceptance command, an artifact target, and a
 claim boundary, and that the graph can be validated and queried locally. It
-does **not** mean that the planned research has already been implemented or
-that a publishable result is guaranteed. At this revision, 23 person-days of
-work are evidenced as complete; the compiler, benchmark, instrument study,
-transfer study, and optional RL work remain future work.
+does **not** mean that the planned research has produced a publishable result
+or that external evaluation has completed. At this revision, 23 person-days
+of core work are evidenced as complete and provider-free contracts for the
+compiler, instrument, transfer, repair, and conditional reward stages are
+implemented. Real licensed annotations, pinned external-engine runs, human
+adjudication, and provider/GPU experiments remain explicitly unrun or blocked.
 
 ## Status — 2026-08-25
 
@@ -26,12 +28,12 @@ transfer study, and optional RL work remain future work.
 | --- | ---: | ---: | ---: | --- |
 | G0 | 13 | 46 | 19 | done=8, partial=5 |
 | A | 4 | 8 | 4 | done=3, conditional=1 |
-| J | 2 | 6 | 0 | planned=2 |
+| J | 2 | 6 | 0 | partial=2 |
 | G2 | 6 | 30 | 0 | partial=6 |
-| G3 | 5 | 24 | 0 | planned=5 |
-| G4 | 3 | 26 | 0 | planned=3 |
+| G3 | 5 | 24 | 0 | partial=5 |
+| G4 | 3 | 26 | 0 | partial=3 |
 | G5 | 4 | 20 | 0 | conditional=4 |
-| Writing | 1 | 15 | 0 | planned=1 |
+| Writing | 1 | 15 | 0 | partial=1 |
 
 | Scope | Included pd | Done pd | Remaining pd |
 | --- | ---: | ---: | ---: |
@@ -593,6 +595,21 @@ particular, it fixes:
 Historical comments are recoverable in Git history and the proposal's review
 section. They are not duplicated here because an execution document must have
 one active instruction for each decision.
+
+### 14.1 Provider-free implementation coverage
+
+The single implementation PR supplies executable contracts for every remaining
+locally testable stage: the anchor harness (`J1`), outcome-blind exception
+selection (`J1B`), clustered statistics and power sensitivity (`STAT-1/2`),
+metric and source-only perturbation contracts (`STAT-3`, `PERTURB-1`), the G3
+instrument bundle gate (`INST-1`), ContractNLI transfer (`BENCH-1B`), typed
+assumption analysis (`ASM-1`), source-preserving CEGIR controls (`CEGIR-1`),
+and conditional reward safeguards (`RL-1..4`). Each stage has unit tests,
+documentation, and a retained result artifact. The artifacts intentionally
+remain `unrun`, `invalid`, `underpowered`, or `blocked` where the scientific
+gate needs licensed annotations, an approved external engine, human review, or
+GPU/provider authorization. This is implementation completion, not a claim
+that those external experiments have occurred.
 
 ---
 

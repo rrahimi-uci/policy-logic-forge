@@ -367,3 +367,17 @@ def test_condition_logic_and_test_vector_absent_from_model_packet():
     claim_types = {c["claim_type"] for c in packet["claims"]}
     assert "condition_logic" not in claim_types
     assert "test_vector" not in claim_types
+
+
+def test_markdown_response_coverage_uses_model_claim_denominator():
+    report = {
+        "pass": False, "rules_certified": 0, "total_rules": 1,
+        "supported_claims": 1, "total_claims": 3,
+        "contradicted_claims": 0, "insufficient_evidence_claims": 2,
+        "response_claims_returned": 1, "model_claims": 1,
+        "claim_coverage_percent": 100.0,
+        "relationship_verification": {"total_relationships": 0, "deterministic_checks": [], "model_failures": 0},
+    }
+    markdown = GroundingVerifier.report_markdown(report)
+    assert "Verifier response coverage: 1 / 1 (100.0%)" in markdown
+    assert "Verifier response coverage: 1 / 3" not in markdown

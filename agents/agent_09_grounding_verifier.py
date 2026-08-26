@@ -909,7 +909,7 @@ class GroundingVerifier:
             f"- Contradicted claims: {report.get('contradicted_claims')}",
             f"- Insufficient-evidence claims: {report.get('insufficient_evidence_claims')}",
             f"- Invalid evidence records: {report.get('invalid_evidence_records')}", "",
-            f"- Verifier response coverage: {report.get('response_claims_returned')} / {report.get('total_claims')} "
+            f"- Verifier response coverage: {report.get('response_claims_returned')} / {report.get('model_claims')} "
             f"({report.get('claim_coverage_percent')}%)",
             f"- Missing / duplicate / unexpected responses: {report.get('missing_claim_responses')} / "
             f"{report.get('duplicate_claim_responses')} / {report.get('unexpected_claim_responses')}", "",
