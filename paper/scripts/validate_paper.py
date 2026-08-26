@@ -60,6 +60,7 @@ def check_source(source: Path) -> list[str]:
         paper_root / "template/official/neurips_2026_formatting_instructions.tex",
         paper_root / "template/official/template-manifest.json",
         paper_root / "references/references.bib",
+        paper_root / "data/privacy_operational_run.json",
     ]
     for path in required:
         if not path.is_file():
@@ -92,7 +93,7 @@ def check_source(source: Path) -> list[str]:
             include_path = include_path.with_suffix(".tex")
         # The completed checklist is generated from the official source during
         # the build and intentionally lives in the ignored build directory.
-        if include == "build/checklist" and not include_path.is_file():
+        if include in {"build/checklist", "build/evidence_macros"} and not include_path.is_file():
             continue
         if not include_path.is_file():
             errors.append(f"missing input referenced by main.tex: {include_path}")
@@ -137,6 +138,10 @@ def check_build(build_dir: Path) -> list[str]:
             errors.append("generated checklist contains TODO answers")
         if "%%% BEGIN INSTRUCTIONS %%%" in checklist_text:
             errors.append("generated checklist still contains the official instruction block")
+    macros = build_dir / "evidence_macros.tex"
+    evidence_manifest = build_dir / "evidence_manifest.json"
+    if not macros.is_file() or not evidence_manifest.is_file():
+        errors.append("generated evidence macros/manifest are missing")
     for log in sorted(build_dir.glob("*.log")):
         content = log.read_text(encoding="utf-8", errors="replace")
         if re.search(r"undefined (?:references|citations)", content, flags=re.IGNORECASE):

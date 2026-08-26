@@ -3,6 +3,18 @@
 The protocol is designed to turn the compiler into a measuring instrument, not
 to imply that implementation completeness is a scientific result.
 
+We preregister three questions. RQ1 asks how often source-grounded candidates
+survive the bounded compiler and which constructs are refused. RQ2 asks whether
+machine checks and independent execution agree on the supported subset. RQ3
+asks whether an artifact-free source signal predicts outcome equivalence after
+conditioning on model, system, and run. The corresponding hypotheses are
+directional but not assumed to hold: H1 predicts that unsupported and malformed
+constructs are concentrated in explicit refusal/error classes; H2 predicts that
+independent-engine disagreements are explainable by a finite set of lowering
+or semantic-boundary causes; and H3 predicts positive association between AFS
+and OE under the preregistered controls. A null, weak, underpowered, or invalid
+outcome is a valid result and triggers the stop rules in Section 7.
+
 \subsection{Corpora and units}
 
 The primary unit is a source-bearing rule, not a generated sentence or model
@@ -28,6 +40,13 @@ latency summaries. We preregister handling of refusals, missing evidence,
 unresolved references, and ties before unsealing labels. Multiple comparisons
 are controlled within a declared family; a stopped or underpowered study is
 reported as such.
+
+We report executable yield and conditional quality separately. If $U$ is the
+retained rule universe and $E$ the rules that lower and execute, executable
+yield is $EY=|E|/|U|$. Quality is reported conditional on $E$ (for example,
+outcome agreement or source recall); refusals and invalid cases remain in the
+yield denominator. This avoids turning a selective compiler into an apparently
+accurate system by silently dropping hard cases.
 
 \subsection{Reproducibility contract}
 
