@@ -60,6 +60,48 @@ def test_fixture_rejects_source_hash_drift(tmp_path):
         load_frame(tmp_path)
 
 
+def test_fixture_rejects_non_hex_source_hash(tmp_path):
+    frame = json.loads((FIXTURE / "frame.json").read_text(encoding="utf-8"))
+    frame["source_manifest"][0]["sha256"] = "g" * 64
+    (tmp_path / "source").mkdir()
+    (tmp_path / "source" / "sample_privacy.txt").write_text(
+        (FIXTURE / "source" / "sample_privacy.txt").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    (tmp_path / "frame.json").write_text(json.dumps(frame), encoding="utf-8")
+
+    with pytest.raises(RuleRecallError, match="needs source_id, path, and sha256"):
+        load_frame(tmp_path)
+
+
+def test_fixture_rejects_non_string_semantic_fields(tmp_path):
+    frame = json.loads((FIXTURE / "frame.json").read_text(encoding="utf-8"))
+    frame["predictions"][0]["subject"] = None
+    (tmp_path / "source").mkdir()
+    (tmp_path / "source" / "sample_privacy.txt").write_text(
+        (FIXTURE / "source" / "sample_privacy.txt").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    (tmp_path / "frame.json").write_text(json.dumps(frame), encoding="utf-8")
+
+    with pytest.raises(RuleRecallError, match="missing required fields: subject"):
+        load_frame(tmp_path)
+
+
+def test_fixture_requires_an_explicit_claim_boundary(tmp_path):
+    frame = json.loads((FIXTURE / "frame.json").read_text(encoding="utf-8"))
+    frame.pop("claim_boundary")
+    (tmp_path / "source").mkdir()
+    (tmp_path / "source" / "sample_privacy.txt").write_text(
+        (FIXTURE / "source" / "sample_privacy.txt").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    (tmp_path / "frame.json").write_text(json.dumps(frame), encoding="utf-8")
+
+    with pytest.raises(RuleRecallError, match="claim_boundary"):
+        load_frame(tmp_path)
+
+
 def test_empty_denominator_has_explicit_missing_interval():
     interval = _wilson_interval(0, 0)
     assert interval["method"] == "wilson_95_binomial"
