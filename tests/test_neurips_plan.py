@@ -38,8 +38,8 @@ def test_generated_summary_has_frozen_scope_totals_and_ready_queue() -> None:
 
     assert "| `minimum_paper` | 125 | 23 | 125 | 0 |" in summary
     assert "| `second_domain` | 151 | 23 | 151 | 0 |" in summary
-    assert "| `full_programme` | 171 | 23 | 151 | 20 |" in summary
-    assert "| `minimum_plus_optional_replication` | 129 | 23 | 125 | 4 |" in summary
+    assert "| `full_programme` | 171 | 23 | 171 | 0 |" in summary
+    assert "| `minimum_plus_optional_replication` | 129 | 23 | 129 | 0 |" in summary
     assert "**Ready now:** none." in summary
 
 

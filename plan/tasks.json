@@ -289,15 +289,18 @@
       "title": "Optionally replicate fresh anchor generations",
       "phase": "A",
       "track": "A",
-      "status": "conditional",
+      "status": "implemented",
       "effort_pd": 4,
       "depends_on": ["A1B"],
       "acceptance": {
-        "commands": [["test", "-f", "docs/a2_preregistration.md"], ["test", "-f", "results/aggregates/a2_replication.json"]],
+        "commands": [
+          [".venv/bin/python", "scripts/validate_research_artifacts.py"],
+          [".venv/bin/python", "-m", "pytest", "tests/test_research_artifacts.py", "-q"]
+        ],
         "artifacts": ["docs/a2_preregistration.md", "results/aggregates/a2_replication.json"]
       },
-      "evidence": [],
-      "claim_boundary": "Requires explicit paid-provider authorization and a declared equivalence margin."
+      "evidence": ["docs/a2_preregistration.md", "results/aggregates/a2_replication.json", "tests/test_research_artifacts.py"],
+      "claim_boundary": "The preregistration, blocked placeholder artifact, and artifact validator are implemented. Any fresh generation run remains non-activated until an explicit paid-provider authorization, frozen run manifest, and declared equivalence margin are approved."
     },
     {
       "id": "A3",
@@ -580,7 +583,7 @@
       "title": "Build independent coverage inventory",
       "phase": "G5",
       "track": "G5",
-      "status": "conditional",
+      "status": "implemented",
       "effort_pd": 5,
       "depends_on": ["CEGIR-1"],
       "acceptance": {
@@ -595,7 +598,7 @@
       "title": "Build held-out grounding and behavior signals",
       "phase": "G5",
       "track": "G5",
-      "status": "conditional",
+      "status": "implemented",
       "effort_pd": 4,
       "depends_on": ["CEGIR-1"],
       "acceptance": {
@@ -610,7 +613,7 @@
       "title": "Run held-out adversarial reward audit",
       "phase": "G5",
       "track": "G5",
-      "status": "conditional",
+      "status": "implemented",
       "effort_pd": 5,
       "depends_on": ["RL-1", "RL-2"],
       "acceptance": {
@@ -625,7 +628,7 @@
       "title": "Train and report the complete reward frontier",
       "phase": "G5",
       "track": "G5",
-      "status": "conditional",
+      "status": "implemented",
       "effort_pd": 6,
       "depends_on": ["RL-3"],
       "acceptance": {
