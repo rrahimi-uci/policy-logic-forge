@@ -39,12 +39,60 @@ def _read_json(path: Path) -> dict[str, Any]:
 
 
 def _edge_key(edge: Mapping[str, Any]) -> tuple[str, str, str]:
-    source = str(edge.get("source_rule_id", "")).strip()
-    target = str(edge.get("target_rule_id", "")).strip()
-    kind = str(edge.get("dependency_type", "")).strip().lower()
-    if not source or not target or not kind:
+    source = edge.get("source_rule_id")
+    target = edge.get("target_rule_id")
+    kind = edge.get("dependency_type")
+    if (
+        not isinstance(source, str)
+        or not source.strip()
+        or not isinstance(target, str)
+        or not target.strip()
+        or not isinstance(kind, str)
+        or not kind.strip()
+    ):
         raise DependencyAuditError("every dependency edge needs source_rule_id, target_rule_id, and dependency_type")
-    return source, target, kind
+    return source.strip(), target.strip(), kind.strip().lower()
+
+
+def _validate_rule_ids(raw_ids: Any) -> set[str]:
+    if not isinstance(raw_ids, list):
+        raise DependencyAuditError("universe.rule_ids must be a list of non-empty strings")
+    rule_ids: set[str] = set()
+    for index, raw_id in enumerate(raw_ids):
+        if not isinstance(raw_id, str) or not raw_id.strip():
+            raise DependencyAuditError(f"universe.rule_ids[{index}] must be a non-empty string")
+        rule_id = raw_id.strip()
+        if rule_id in rule_ids:
+            raise DependencyAuditError(f"universe.rule_ids contains duplicate rule ID {rule_id!r}")
+        rule_ids.add(rule_id)
+    if len(rule_ids) < 2:
+        raise DependencyAuditError("universe.rule_ids must contain at least two rules")
+    return rule_ids
+
+
+def _validate_candidate_edges(raw_edges: Any, *, rule_ids: set[str]) -> set[tuple[str, str, str]]:
+    if not isinstance(raw_edges, list) or not raw_edges:
+        raise DependencyAuditError("universe.candidate_edges must be a non-empty list")
+    candidate_edges: set[tuple[str, str, str]] = set()
+    for index, raw in enumerate(raw_edges):
+        if not isinstance(raw, Mapping):
+            raise DependencyAuditError(f"universe.candidate_edges[{index}] must be an object")
+        key = _edge_key(raw)
+        source, target, kind = key
+        if source == target:
+            raise DependencyAuditError(f"universe.candidate_edges[{index}] contains a self-loop: {source}")
+        if source not in rule_ids or target not in rule_ids:
+            raise DependencyAuditError(
+                f"universe.candidate_edges[{index}] references a rule outside the declared universe"
+            )
+        if kind not in DEPENDENCY_TYPES:
+            raise DependencyAuditError(
+                f"universe.candidate_edges[{index}] has unsupported dependency_type {kind!r}"
+            )
+        if key in candidate_edges:
+            raise DependencyAuditError(f"universe.candidate_edges contains duplicate edge {key}")
+        candidate_edges.add(key)
+    return candidate_edges
 
 
 def _validate_edges(
@@ -78,6 +126,8 @@ def _validate_edges(
         if key in seen:
             raise DependencyAuditError(f"{label} contains duplicate edge {key}")
         seen.add(key)
+        edge["source_rule_id"] = source
+        edge["target_rule_id"] = target
         edge["dependency_type"] = kind
         checked.append(edge)
     return checked
@@ -150,20 +200,14 @@ def load_frame(fixture_dir: str | Path) -> dict[str, Any]:
         raise DependencyAuditError("frame.schema_version must be '1.0'")
     if frame.get("evidence_status") != "fixture_only":
         raise DependencyAuditError("PIPE-4 fixtures must declare evidence_status='fixture_only'")
+    if not isinstance(frame.get("claim_boundary"), str) or not frame["claim_boundary"].strip():
+        raise DependencyAuditError("frame.claim_boundary must be a non-empty string")
 
     universe = frame.get("universe")
     if not isinstance(universe, Mapping):
         raise DependencyAuditError("universe is required")
-    rule_ids = {str(rule_id).strip() for rule_id in universe.get("rule_ids", []) if str(rule_id).strip()}
-    if len(rule_ids) < 2:
-        raise DependencyAuditError("universe.rule_ids must contain at least two rules")
-    candidate_edges = {
-        _edge_key(edge)
-        for edge in universe.get("candidate_edges", [])
-        if isinstance(edge, Mapping)
-    }
-    if not candidate_edges:
-        raise DependencyAuditError("universe.candidate_edges must not be empty")
+    rule_ids = _validate_rule_ids(universe.get("rule_ids"))
+    candidate_edges = _validate_candidate_edges(universe.get("candidate_edges"), rule_ids=rule_ids)
     negative_edges = _validate_edges(
         universe.get("negative_edges"),
         label="universe.negative_edges",
@@ -182,9 +226,14 @@ def load_frame(fixture_dir: str | Path) -> dict[str, Any]:
     for index, record in enumerate(annotators):
         if not isinstance(record, Mapping):
             raise DependencyAuditError(f"annotators[{index}] must be an object")
-        annotator_id = str(record.get("annotator_id", "")).strip()
-        if not annotator_id or annotator_id in annotator_ids:
+        annotator_id = record.get("annotator_id")
+        if (
+            not isinstance(annotator_id, str)
+            or not annotator_id.strip()
+            or annotator_id.strip() in annotator_ids
+        ):
             raise DependencyAuditError("annotator IDs must be present and unique")
+        annotator_id = annotator_id.strip()
         if record.get("independent") is not True:
             raise DependencyAuditError(f"annotators[{index}] must declare independent=true")
         annotator_ids.add(annotator_id)
@@ -205,7 +254,11 @@ def load_frame(fixture_dir: str | Path) -> dict[str, Any]:
         )
 
     adjudication = frame.get("adjudication")
-    if not isinstance(adjudication, Mapping) or not str(adjudication.get("method", "")).strip():
+    if (
+        not isinstance(adjudication, Mapping)
+        or not isinstance(adjudication.get("method"), str)
+        or not adjudication["method"].strip()
+    ):
         raise DependencyAuditError("adjudication with a method is required")
     checked_adjudication = {
         **dict(adjudication),
