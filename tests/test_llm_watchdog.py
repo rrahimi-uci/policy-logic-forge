@@ -46,6 +46,14 @@ def _client_with(behaviour, *, timeout, max_retries=0, margin=0.3):
     return c
 
 
+def test_watchdog_margin_uses_bounded_default_and_override(monkeypatch):
+    monkeypatch.delenv("KG_LLM_WATCHDOG_MARGIN", raising=False)
+    assert LLMClient(api_key="test", model="gpt-4o", timeout=5).watchdog_margin == 30
+
+    monkeypatch.setenv("KG_LLM_WATCHDOG_MARGIN", "7.5")
+    assert LLMClient(api_key="test", model="gpt-4o", timeout=5).watchdog_margin == 7.5
+
+
 @allure.feature("LLM client robustness")
 @allure.story("Hard watchdog on every completion")
 class TestWatchdog:

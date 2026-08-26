@@ -512,6 +512,7 @@ class BusinessRulesExtractor:
                             messages=[{"role": "user", "content": prompt}],
                             temperature=self.global_config.get_rules_temperature(),
                             max_tokens=completion_limit,
+                            response_format={"type": "json_object"},
                             reasoning_effort=self.reasoning_effort
                         )
                     else:
@@ -520,6 +521,7 @@ class BusinessRulesExtractor:
                                 messages=[{"role": "user", "content": prompt}],
                                 temperature=self.global_config.get_rules_temperature(),
                                 max_tokens=completion_limit,
+                                response_format={"type": "json_object"},
                                 reasoning_effort=self.reasoning_effort
                             )
                     break
@@ -540,7 +542,7 @@ class BusinessRulesExtractor:
                         if is_transport_error:
                             delay = max(
                                 1,
-                                int(os.getenv("KG_BATCH_CONNECTION_BACKOFF_SECONDS", "30")),
+                                int(os.getenv("KG_BATCH_CONNECTION_BACKOFF_SECONDS", "10")),
                             )
                         else:
                             delay = min(30, 2 ** (attempt - 1))
@@ -578,6 +580,7 @@ class BusinessRulesExtractor:
                                 messages=[{"role": "user", "content": compact_prompt}],
                                 temperature=self.global_config.get_rules_temperature(),
                                 max_tokens=completion_limit,
+                                response_format={"type": "json_object"},
                                 reasoning_effort=self.reasoning_effort,
                             )
                         else:
@@ -586,6 +589,7 @@ class BusinessRulesExtractor:
                                     messages=[{"role": "user", "content": compact_prompt}],
                                     temperature=self.global_config.get_rules_temperature(),
                                     max_tokens=completion_limit,
+                                    response_format={"type": "json_object"},
                                     reasoning_effort=self.reasoning_effort,
                                 )
                         content = response.choices[0].message.content
@@ -597,10 +601,19 @@ class BusinessRulesExtractor:
                     return {"entity_types": {}, "relationships": {}, "batch_num": batch_num, "error": "Empty response after compact retries"}
             
             def _decode_json(raw_content: str) -> Dict[str, Any]:
-                """Decode a model response, allowing one fenced/object slice."""
+                """Decode a model response, allowing fenced/object slices.
+
+                Reasoning-model responses can contain a single malformed
+                delimiter or an unescaped quote even when JSON mode is
+                requested. After the normal decoder fails, use the
+                dependency-backed repairer in strict mode. Strict mode still
+                rejects multiple top-level values and non-object payloads, so
+                this is a syntax recovery path rather than permission to
+                accept arbitrary prose or silently merge unrelated objects.
+                """
                 try:
                     return json.loads(raw_content)
-                except json.JSONDecodeError:
+                except json.JSONDecodeError as original_error:
                     if "```json" in raw_content:
                         json_str = raw_content.split("```json", 1)[1].split("```", 1)[0].strip()
                     elif "```" in raw_content:
@@ -609,9 +622,31 @@ class BusinessRulesExtractor:
                         json_start = raw_content.find("{")
                         json_end = raw_content.rfind("}") + 1
                         if json_start < 0 or json_end <= json_start:
-                            raise
+                            raise original_error
                         json_str = raw_content[json_start:json_end]
-                    return json.loads(json_str)
+                    try:
+                        return json.loads(json_str)
+                    except json.JSONDecodeError as candidate_error:
+                        try:
+                            from json_repair import repair_json
+                        except ImportError:
+                            raise candidate_error
+                        try:
+                            repaired = repair_json(
+                                json_str,
+                                return_objects=True,
+                                strict=True,
+                            )
+                        except Exception:
+                            raise candidate_error
+                        if not isinstance(repaired, dict):
+                            raise candidate_error
+                        print(
+                            f"  DEBUG Batch {batch_num}: recovered malformed JSON "
+                            "with strict json-repair",
+                            flush=True,
+                        )
+                        return repaired
 
             # GPT-5 occasionally returns a syntactically invalid object even
             # with a stop finish reason. Retry only that batch, rather than
@@ -636,6 +671,7 @@ class BusinessRulesExtractor:
                             messages=[{"role": "user", "content": retry_prompt}],
                             temperature=self.global_config.get_rules_temperature(),
                             max_tokens=completion_limit,
+                            response_format={"type": "json_object"},
                             reasoning_effort=self.reasoning_effort,
                         )
                     else:
@@ -644,6 +680,7 @@ class BusinessRulesExtractor:
                                 messages=[{"role": "user", "content": retry_prompt}],
                                 temperature=self.global_config.get_rules_temperature(),
                                 max_tokens=completion_limit,
+                                response_format={"type": "json_object"},
                                 reasoning_effort=self.reasoning_effort,
                             )
                     content = response.choices[0].message.content or ""
@@ -755,8 +792,13 @@ class BusinessRulesExtractor:
         
         return rule
     
-    def extract_rules_parallel(self, batches: List[List[Dict[str, str]]], max_workers: int = None) -> None:
-        """Extract rules from batches in parallel."""
+    def extract_rules_parallel(self, batches: List[List[Dict[str, str]]], max_workers: int = None) -> bool:
+        """Extract rules from batches in parallel.
+
+        Returns ``True`` only when every batch has a successful result.  A
+        partial extraction is deliberately a failed stage: downstream agents
+        must never consume a graph that silently dropped source batches.
+        """
         max_workers = max_workers or self.global_config.get_max_workers()
         print(f"\n{'='*70}", flush=True)
         print(f"🚀 agent_03: PARALLEL BUSINESS RULES EXTRACTION", flush=True)
@@ -979,10 +1021,25 @@ class BusinessRulesExtractor:
         print(f"   • Avg time per batch: {elapsed_time/len(batches):.1f} seconds", flush=True)
         print(f"{'='*70}\n", flush=True)
 
+        failed_after_retry = sorted(
+            batch_num for batch_num, result in results if result.get("error")
+        )
+        self.last_failed_batches = failed_after_retry
+        if failed_after_retry:
+            print(
+                "❌ Extraction incomplete: "
+                f"{len(failed_after_retry)} batch(es) failed after retries "
+                f"({failed_after_retry[:20]}{'...' if len(failed_after_retry) > 20 else ''}). "
+                "Refusing to report stage success; rerun agent_03 to resume from checkpoints.",
+                flush=True,
+            )
+            return False
+
         if self.count_rules() == 0:
             raise RuntimeError(
                 "agent_03 extracted zero rules; refusing to continue with an empty knowledge graph"
             )
+        return True
     
     def count_rules(self) -> int:
         """Count total business rules."""
@@ -1113,6 +1170,7 @@ class BusinessRulesExtractor:
                     messages=[{"role": "user", "content": prompt}],
                     temperature=self.global_config.get_rules_temperature(),
                     max_tokens=self.global_config.get_rules_max_tokens(),
+                    response_format={"type": "json_object"},
                     reasoning_effort=self.reasoning_effort,
                 )
                 content = response.choices[0].message.content or ""
@@ -1667,7 +1725,11 @@ def main():
     # pipeline.max_workers (40)" — reading os.environ directly here
     # duplicated that logic with a different, lower hardcoded fallback (20).
     max_workers = config.get_max_workers()
-    extractor.extract_rules_parallel(batches, max_workers=max_workers)
+    extraction_ok = extractor.extract_rules_parallel(batches, max_workers=max_workers)
+    if not extraction_ok:
+        # Keep the partial checkpoint and coverage artifacts for diagnosis and
+        # resume, but do not let later agents consume an incomplete graph.
+        sys.exit(3)
 
     # Validate that every rule is bucketed under a canonical agent_02
     # entity/relationship name and re-classify (or drop) any orphans.

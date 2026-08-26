@@ -89,6 +89,13 @@ cp benchmarks/contract-nli-source-docs/*.txt compliance-files/nda_confidentialit
 python3 cli/extract.py --dir nda_confidentiality --domain nda_confidentiality --target-rules 20
 ```
 
+The default runtime profile is tuned for bounded throughput: 40 scheduling
+workers, up to 32 concurrent remediation/grounding requests, a 300-second
+request and lease bound, a 30-second watchdog margin, and a 10-second
+connection backoff. Operators can override these values through the `KG_*`
+environment variables exported by `cli/extract.py` (for example,
+`KG_GROUNDING_LLM_CONCURRENCY` or `KG_OPENAI_TIMEOUT`).
+
 Output lands under `pipeline-output/<batch-name>/`:
 
 - `agent_06-optimized/optimized_compliance_knowledge_graph.json` — the final,

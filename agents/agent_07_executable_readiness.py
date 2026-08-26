@@ -72,7 +72,18 @@ class OpenAIEvidenceResolver:
         content = content.strip()
         if content.startswith("```"):
             content = content.split("\n", 1)[1].rsplit("```", 1)[0]
-        value = json.loads(content)
+        try:
+            value = json.loads(content)
+        except json.JSONDecodeError as original_error:
+            # JSON mode still occasionally returns a single trailing comma or
+            # unterminated delimiter. Repair only that one object; strict mode
+            # rejects concatenated top-level values and non-object payloads.
+            try:
+                from json_repair import repair_json
+
+                value = repair_json(content, return_objects=True, strict=True)
+            except Exception:
+                raise original_error
         if not isinstance(value, Mapping):
             raise ValueError("readiness response must be an object")
         return value
@@ -85,7 +96,9 @@ class OpenAIEvidenceResolver:
         for attempt in range(attempts):
             response = self.client.chat_completion(
                 messages=[{"role": "user", "content": retry_prompt}], temperature=0,
-                max_tokens=max_tokens, reasoning_effort=self.reasoning_effort,
+                max_tokens=max_tokens,
+                response_format={"type": "json_object"},
+                reasoning_effort=self.reasoning_effort,
             )
             content = response.choices[0].message.content or ""
             try:

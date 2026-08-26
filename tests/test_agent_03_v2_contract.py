@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 from agents.agent_03_rules_extractor import BusinessRulesExtractor
 from tests.test_rule_contract import valid_rule
 
@@ -43,3 +45,77 @@ def test_agent_three_retains_invalid_v2_candidate_for_review():
     assert annotated["rule_id"] == "BR-1"
     assert annotated["requires_review"] is True
     assert annotated["readiness"]["status"] == "review_required"
+
+
+def test_agent_three_requests_json_mode_on_initial_and_parse_retry():
+    """Rule extraction asks the provider for JSON on every parse attempt."""
+
+    class _Response:
+        def __init__(self, content):
+            self.choices = [SimpleNamespace(
+                message=SimpleNamespace(content=content),
+                finish_reason="stop",
+            )]
+
+    class _Client:
+        def __init__(self):
+            self.calls = []
+            self.responses = iter([
+                _Response('{"entity_types": {}}{"unexpected": 1}'),
+                _Response('{"entity_types": {}, "relationships": {}}'),
+            ])
+
+        def chat_completion(self, **kwargs):
+            self.calls.append(kwargs)
+            return next(self.responses)
+
+    extractor = object.__new__(BusinessRulesExtractor)
+    extractor.client = _Client()
+    extractor.reasoning_effort = "high"
+    extractor.global_config = SimpleNamespace(
+        get_rules_max_tokens=lambda: 128,
+        get_rules_temperature=lambda: 0.0,
+    )
+    extractor._request_gate = None
+
+    result = extractor.extract_batch("extract rules", batch_num=1)
+
+    assert "error" not in result
+    assert result["total_rules"] == 0
+    assert len(extractor.client.calls) == 2
+    assert all(call["response_format"] == {"type": "json_object"}
+               for call in extractor.client.calls)
+
+
+def test_agent_three_strictly_repairs_single_malformed_json_object():
+    """A recoverable delimiter error is repaired without accepting prose."""
+
+    class _Client:
+        def __init__(self):
+            self.calls = []
+
+        def chat_completion(self, **kwargs):
+            self.calls.append(kwargs)
+            return SimpleNamespace(
+                choices=[SimpleNamespace(
+                    message=SimpleNamespace(
+                        content='{"entity_types": {}, "relationships": {},}'
+                    ),
+                    finish_reason="stop",
+                )]
+            )
+
+    extractor = object.__new__(BusinessRulesExtractor)
+    extractor.client = _Client()
+    extractor.reasoning_effort = "high"
+    extractor.global_config = SimpleNamespace(
+        get_rules_max_tokens=lambda: 128,
+        get_rules_temperature=lambda: 0.0,
+    )
+    extractor._request_gate = None
+
+    result = extractor.extract_batch("extract rules", batch_num=1)
+
+    assert "error" not in result
+    assert result["total_rules"] == 0
+    assert len(extractor.client.calls) == 1

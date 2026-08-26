@@ -198,10 +198,49 @@ class OpenAIGroundingResolver:
         content = content.strip()
         if content.startswith("```"):
             content = content.split("\n", 1)[1].rsplit("```", 1)[0]
-        value = json.loads(content)
+        try:
+            value = json.loads(content)
+        except json.JSONDecodeError as original_error:
+            # Long grounding batches can contain one malformed delimiter even
+            # with provider JSON mode. Repair only that object in strict mode;
+            # concatenated values and non-objects remain rejected.
+            try:
+                from json_repair import repair_json
+
+                value = repair_json(content, return_objects=True, strict=True)
+            except Exception:
+                raise original_error
         if not isinstance(value, dict) or not isinstance(value.get("verifications"), list):
             raise ValueError("agent_09 response must contain a verifications list")
         return value
+
+    @staticmethod
+    def _split_packets(
+        packets: list[Mapping[str, Any]],
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]] | None:
+        """Split a packet batch by claim count without losing packet metadata."""
+        total = sum(len(packet.get("claims", []) or []) for packet in packets)
+        if total <= 1:
+            return None
+        target = max(1, total // 2)
+        left: list[dict[str, Any]] = []
+        right: list[dict[str, Any]] = []
+        left_count = 0
+        for packet in packets:
+            claims = list(packet.get("claims", []) or [])
+            if not claims:
+                continue
+            if left_count < target:
+                take = min(len(claims), target - left_count)
+                left.append({**dict(packet), "claims": claims[:take]})
+                left_count += take
+                if take < len(claims):
+                    right.append({**dict(packet), "claims": claims[take:]})
+            else:
+                right.append({**dict(packet), "claims": claims})
+        if not left or not right:
+            return None
+        return left, right
 
     def verify(self, packets: list[Mapping[str, Any]]) -> list[dict[str, Any]]:
         prompt = self.prompts.format_prompt(
@@ -217,6 +256,7 @@ class OpenAIGroundingResolver:
                     messages=[{"role": "user", "content": prompt}],
                     temperature=0,
                     max_tokens=max_tokens,
+                    response_format={"type": "json_object"},
                     reasoning_effort=self.reasoning_effort,
                 )
                 value = self._parse(response.choices[0].message.content or "")
@@ -227,6 +267,13 @@ class OpenAIGroundingResolver:
                 )
                 returned = Counter((str(item.get("rule_id")), str(item.get("claim_id"))) for item in results)
                 if returned != expected:
+                    split = self._split_packets(packets)
+                    if split is not None:
+                        print(
+                            "⚠️ agent_09 response coverage mismatch; splitting the claim batch",
+                            flush=True,
+                        )
+                        return self.verify(split[0]) + self.verify(split[1])
                     raise ValueError(
                         f"verifier response coverage mismatch: expected {sum(expected.values())}, "
                         f"received {sum(returned.values())}"

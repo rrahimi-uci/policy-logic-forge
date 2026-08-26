@@ -21,6 +21,7 @@ iniconfig==2.3.0
 jiter==0.16.0
 jsonpatch==1.33
 jsonpointer==3.1.1
+json-repair==0.63.4
 langchain-core==1.6.0
 langchain-protocol==0.0.18
 langchain-text-splitters==1.1.2
