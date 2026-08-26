@@ -13,6 +13,7 @@ fi
 
 mkdir -p "${build_dir}"
 cd "${paper_dir}"
+python3 scripts/generate_evidence.py --repo-root .. --output-dir "${build_dir}"
 python3 scripts/render_checklist.py --source template/official/checklist.tex --output "${build_dir}/checklist.tex"
 "${tectonic_bin}" --outdir "${build_dir}" --keep-logs main.tex
 echo "paper built: ${build_dir}/main.pdf"
