@@ -1,0 +1,112 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import pytest
+
+from ui.backend.review_index import ReviewIndex, build_review_index, stable_hash
+
+
+def _write(path: Path, value: object) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(value), encoding="utf-8")
+
+
+def make_run(root: Path, name: str = "fixture-run") -> Path:
+    run = root / name
+    for directory, filename in [
+        ("agent_01-organized-documents", "_processing_results.json"),
+        ("agent_02-entities", "entity_types_and_relationships.json"),
+        ("agent_03-rules", "compliance_rules_with_entities.json"),
+        ("agent_04-validation", "validation_report.json"),
+        ("agent_05-rules-with-entities", "compliance_knowledge_graph.json"),
+        ("agent_06-optimized", "kg_readiness_report.json"),
+        ("agent_10-dag-generation", "dependency_dags.json"),
+    ]:
+        _write(run / directory / filename, {})
+    rule = {
+        "schema_version": "2.0",
+        "rule_id": "r1",
+        "rule_name": "Collect email",
+        "rule_type": "collection",
+        "description": "Collect email for account support.",
+        "condition_predicates": [{"predicate_id": "p1", "variable": "account", "operator": "==", "value": True}],
+        "condition_logic": {"predicate_ref": "p1"},
+        "outcomes": [{"variable": "email_collected", "operator": "=", "value": True}],
+        "variables": [{"name": "account", "role": "input", "type": "boolean"}, {"name": "email_collected", "role": "output", "type": "boolean"}],
+        "recommended_hit_policy": "UNIQUE",
+        "responsible_party": "FIRST_PARTY",
+        "risk_level": "high",
+        "requires_review": True,
+        "review_reason": "check evidence",
+        "confidence_score": 80,
+        "contract_issues": ["example issue"],
+        "readiness": {"status": "failed", "failed_requirements": ["source"]},
+        "grounding": {"status": "failed", "counts": {"supported": 0, "insufficient_evidence": 1}},
+        "source_reference": {"chunk_path": "site/privacy.txt", "section_id": "Collection", "source_text": "We collect your email."},
+        "field_evidence": {"outcomes": [{"chunk_path": "site/privacy.txt", "section_id": "Collection", "source_text": "collect your email"}]},
+        "execution": {"targets": ["DMN", "BPMN"], "dmn": {"input_columns": ["account"], "output_columns": ["email_collected"], "hit_policy": "UNIQUE"}, "bpmn": {"gateway_type": "exclusive", "lane": "FIRST_PARTY", "true_path_outcome_variables": ["email_collected"]}},
+        "test_vectors": [],
+        "exceptions": [],
+        "related_rules": [],
+    }
+    optimized = {"metadata": {"model_used": "gpt-5.6-luna", "reasoning_effort": "high"}, "business_rules": [rule], "relationships": {"RULE_LINK": {"source_entity": "FIRST_PARTY", "target_entity": "INFORMATION_TYPE", "definition": "links an operator to information", "cardinality": "one-to-many", "examples": ["operator links data"], "business_rules": ["retain the association"]}}, "dependency_details": {"dependencies": [{"source_rule_id": "r1", "target_rule_id": "r2", "dependency_type": "sequential", "confidence": 70, "structurally_supported": True, "rationale": "before", "impact": "ordering"}], "conflicts": [{"entity": "EMAIL", "rule_ids": ["r1", "r2"], "status": "unresolved", "reasoning": "overlap", "resolution": ""}]}, "corpus_manifest": {"corpus_sha256": "corpus"}}
+    _write(run / "agent_06-optimized" / "optimized_compliance_knowledge_graph.json", optimized)
+    _write(run / "agent_01-organized-documents" / "site" / "privacy.txt", "not json")
+    (run / "agent_01-organized-documents" / "site" / "privacy.txt").write_text("We collect your email.", encoding="utf-8")
+    (run / "agent_03-rules" / "batch_results.jsonl").write_text('{"rule_id":"r1"}\n', encoding="utf-8")
+    (run / "agent_06-optimized" / "agent_07_rule_checkpoint.jsonl").write_text('{"rule_id":"r1"}\n', encoding="utf-8")
+    _write(run / "agent_04-validation" / "validation_report.json", {"failures": [{"rule_id": "r1", "check": "completeness", "issue": "missing field", "recommendation": "fix"}], "warnings": [{"check": "scope", "issue": "scope warning"}]})
+    _write(run / "agent_10-dag-generation" / "dependency_dags.json", {"dags": [{"dag_id": "dag_1", "rule_ids": ["r1", "r2"], "edges": [{"source": "r1", "target": "r2"}], "is_acyclic": True}]})
+    return run
+
+
+def test_index_normalizes_artifacts_and_queues(tmp_path: Path) -> None:
+    run = make_run(tmp_path)
+    index = ReviewIndex.from_directory(run)
+    assert index.run_id == "fixture-run"
+    assert index.run_summary["corpus_sha256"] == "corpus"
+    assert index.rules[0]["machine_status"] == "requires_review"
+    assert len(index.queue("requires_review")) == 1
+    assert len(index.queue("grounding_failed")) == 1
+    assert len(index.queue("readiness_failed")) == 1
+    assert len(index.queue("unresolved_conflicts")) == 1
+    assert len(index.queue("all_open")) == 1
+    assert index.search("email")[0]["kind"] == "rule"
+    assert index.search("privacy", kind="document")[0]["kind"] == "document"
+    assert index.search("missing", kind="diagnostic")[0]["kind"] == "diagnostic"
+    assert index.search("overlap", kind="relationship")[0]["kind"] == "relationship"
+    assert any(row["kind"] == "entity_relationship" and row["source_entity"] == "FIRST_PARTY" for row in index.relationships)
+    assert index.search("collect your email", kind="evidence")[0]["kind"] == "evidence"
+    assert index.rules[0]["evidence"][0]["evidence_id"] == index.evidence[0]["evidence_id"]
+    assert index.stages[0]["primary_artifacts"] == ["agent_01-organized-documents/_processing_results.json"]
+    assert "output_counts" in index.stages[0]
+    assert index.get_rule("unknown") is None
+    assert stable_hash({"a": 1}) == stable_hash({"a": 1})
+    with pytest.raises(KeyError):
+        index.queue("nope")
+
+
+def test_index_writes_contract_and_search_database(tmp_path: Path) -> None:
+    index = build_review_index(make_run(tmp_path), tmp_path / "index")
+    output = tmp_path / "index"
+    for name in ("run_summary.json", "run_manifest.json", "stage_index.json", "stage_status.json", "rule_index.jsonl", "relationship_index.jsonl", "document_index.jsonl", "evidence_index.jsonl", "comparison_keys.json", "search.sqlite"):
+        assert (output / name).exists(), name
+    payload = json.loads((output / "run_summary.json").read_text())
+    assert payload["rule_count"] == 1
+    assert index.to_dict()["run_id"] == "fixture-run"
+
+
+def test_missing_run_is_rejected(tmp_path: Path) -> None:
+    with pytest.raises(FileNotFoundError):
+        ReviewIndex.from_directory(tmp_path / "missing")
+
+
+def test_malformed_checkpoint_is_a_visible_failure(tmp_path: Path) -> None:
+    run = make_run(tmp_path)
+    with (run / "agent_03-rules" / "batch_results.jsonl").open("a", encoding="utf-8") as handle:
+        handle.write("not-json\n")
+    index = ReviewIndex.from_directory(run)
+    assert index.run_summary["status"] == "requires_review"
+    assert any(item["check"] == "agent_03" and item["severity"] == "error" for item in index.diagnostics)
