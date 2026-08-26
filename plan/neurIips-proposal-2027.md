@@ -2336,6 +2336,17 @@ cost accounting, and the full limitations/claim ledger.
 
 ### 28.4 Reproducibility and release package
 
+The current paper package is under `paper/`: `main.tex` loads the unchanged
+official NeurIPS 2026 style with the Evaluations & Datasets option, while
+`paper/scripts/build_paper.sh` renders the completed official checklist and
+compiles the modular sections, figures, tables, and bibliography.  The
+template archive URL and SHA-256 hashes are recorded in
+`paper/template/official/template-manifest.json`; this proxy must be refreshed
+when the official 2027 archive is published.  Source and build validators are
+covered by `paper/tests/` and the CI source-contract step.  The resulting draft
+is an implementation/evidence-boundary paper, not a substitute for the M1--M6
+observations below.
+
 The artifact must contain or point to:
 
 - an anonymized source snapshot and immutable release tag;
@@ -2403,6 +2414,8 @@ Before each evidence freeze and the final artifact tag, run:
 .venv/bin/python scripts/validate_research_artifacts.py
 .venv/bin/python scripts/validate_config.py
 .venv/bin/python -m pytest -q
+paper/scripts/build_paper.sh
+.venv/bin/python paper/scripts/validate_paper.py --source paper/main.tex --build-dir paper/build --check-build
 ```
 
 For the UI supplement, additionally run its Python tests/coverage, frontend

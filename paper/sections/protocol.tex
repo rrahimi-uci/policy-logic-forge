@@ -1,0 +1,39 @@
+\section{Evaluation protocol}
+
+The protocol is designed to turn the compiler into a measuring instrument, not
+to imply that implementation completeness is a scientific result.
+
+\subsection{Corpora and units}
+
+The primary unit is a source-bearing rule, not a generated sentence or model
+call. A licensed, stratified frame must contain document spans, rule labels,
+exception and threshold annotations, and dependency edges. Dutch regulatory
+text is the planned natural-language anchor; ContractNLI is a planned
+cross-domain adapter. Privacy-policy runs are useful operational stress tests
+but cannot stand in for the licensed annotation frame.
+
+\subsection{Measurements and controls}
+
+AFS is measured with two independent annotators, adjudication, weighted
+precision/recall, and agreement on presence, value, exception, and evidence
+span. OE uses frozen source models, generated models, and a pinned independent
+DMN engine; exact outcomes and disagreement classes are retained. Controls
+include source-only, generated-only, and executable-oracle conditions. Prompt,
+model, temperature, retry, and batch settings are pinned. Exploratory pilots
+are labeled and excluded from headline intervals.
+
+For a binomial proportion, we report Wilson intervals and the realized
+denominator. Bootstrap intervals are paired by document for agreement and
+latency summaries. We preregister handling of refusals, missing evidence,
+unresolved references, and ties before unsealing labels. Multiple comparisons
+are controlled within a declared family; a stopped or underpowered study is
+reported as such.
+
+\subsection{Reproducibility contract}
+
+Each result ships a manifest containing source and artifact hashes, code commit,
+environment lock, model/provider configuration, random seeds, exclusion log,
+and validator output. A replay is valid only if schema versions and evidence
+packet semantics match. The release artifact distinguishes code that is
+executable locally from observations that require licensed data, provider
+access, GPU time, or human adjudication.

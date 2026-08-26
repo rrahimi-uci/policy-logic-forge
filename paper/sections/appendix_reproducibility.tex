@@ -1,0 +1,27 @@
+\section{Reproducibility checklist}
+
+The release bundle contains the source commit, Python lock and platform
+metadata, model/provider configuration, random seeds, input and output hashes,
+schema versions, validator logs, and an exclusion/stop-rule record. A local
+reviewer can run the deterministic suite and compile this paper without
+licensed corpora. Licensed or provider-dependent experiments are represented
+by manifests and explicit `blocked' or `unrun' statuses until their inputs and
+observations are available.
+
+\begin{table}[h]
+\centering
+\caption{Paper and artifact checks used before submission.}
+\label{tab:repro-checklist}
+\begin{tabular}{p{0.52\linewidth}p{0.28\linewidth}}
+\toprule
+Check & Required state \\
+\midrule
+Official style hash matches template manifest & pass \\
+Source validator and bibliography checks & pass \\
+LaTeX compilation with no undefined references & pass \\
+Repository tests and plan validators & pass \\
+Licensed AFS/OE frame, pinned independent engine, G3 observation & reported or explicitly blocked \\
+Claims table agrees with retained artifact status & pass \\
+\bottomrule
+\end{tabular}
+\end{table}

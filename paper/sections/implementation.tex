@@ -1,0 +1,22 @@
+\section{Implementation evidence}
+
+The current checkout is implementation-complete for the planned engineering
+surface and evidence-incomplete for the scientific surface. Table
+\ref{tab:implementation} records facts that can be checked locally. The
+counts describe tests and retained artifacts, not accuracy.
+
+\input{tables/implementation-evidence}
+
+The end-to-end privacy-policy run processed 1,012 source files in 1,260 chunks,
+completed 231 of 231 batches, dropped no bytes, and retained 879 final rules.
+Before grounding, 537 rules were ready and 342 required review. Grounding
+certified 108 rules and failed 771, with complete response coverage. This is an
+operational, exploratory observation: provider behavior, corpus licensing, and
+the absence of independent labels preclude an AFS or OE claim. The high failure
+rate is useful for hardening the review path and is not evidence that the
+source or compiler is incorrect.
+
+The repository's deterministic suite currently collects 1,051 core Python
+tests. Plan, configuration, research-artifact, and G0 evidence validators also
+pass. These checks establish contract integrity and regression protection; they
+do not establish that extracted rules are legally or semantically correct.

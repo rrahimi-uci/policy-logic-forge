@@ -1,0 +1,13 @@
+{
+  "conference": "NeurIPS",
+  "template_year": 2026,
+  "track_option": "eandd",
+  "source_url": "https://media.neurips.cc/Conferences/NeurIPS2026/Formatting_Instructions_For_NeurIPS_2026.zip",
+  "archive_sha256": "82473931e3ef710fcd3f4a8cd4119b9de32e56825f90f9e5a6d55f2d01b817d9",
+  "files": {
+    "neurips_2026.sty": "c3fc2894e83d2517ca18b66741d6c595986d97957dc08ec08bb2125a7ec4555a",
+    "checklist.tex": "780ba13c480f652dcc42e69ed61a752ce0ea270f15d332d4a45b059dabad84f6",
+    "neurips_2026_formatting_instructions.tex": "cf4cee7991665306d1daaa3985be4feec7f8889d6d072ffa12f99a8e1537d797"
+  },
+  "notes": "Official 2026 archive used as the latest available proxy for a 2027 submission; refresh when the 2027 archive is published. Files are copied unchanged."
+}

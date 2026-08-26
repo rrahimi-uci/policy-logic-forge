@@ -1,0 +1,53 @@
+\section{LEXEC: a provenance-preserving bounded compiler}
+
+\subsection{Pipeline and provenance}
+
+The pipeline ingests a document, preserves byte and chunk identities, extracts
+candidate rules, normalizes them into a versioned contract, compiles supported
+constructs to \lexir, validates the graph and references, and emits executable
+artifacts. Each stage records its input and output hashes, configuration, model
+identity, timing, and failure state. The same records feed the review workbench,
+so a reviewer can move from a run summary to a rule, its source span, and its
+validation trace without reconstructing an implicit chain.
+
+\begin{figure}[t]
+\centering
+\input{figures/measurement-chain}
+\caption{The declared measurement chain. Evidence is retained at each boundary;
+unsupported semantics terminate in a visible refusal rather than a guessed
+program.}
+\label{fig:measurement-chain}
+\end{figure}
+
+\subsection{LExec-IR and fail-closed lowering}
+
+\lexir{} v1 has typed values (including dates, durations, lists, ranges, and
+nullable values), predicates, decisions, tables, references, exceptions, and
+source anchors. The validator checks type compatibility, totality of branches,
+reference resolution, table overlap, and selected satisfiability properties.
+The lowering relation is intentionally bounded: unsupported temporal,
+quantified, or context-dependent constructs receive a stable refusal code with
+the source span and a remediation hint. A refusal is not a negative answer to
+the normative question; it is a precise statement that this compiler version
+will not manufacture an executable interpretation.
+
+\subsection{Execution, DMN, and proof records}
+
+The runtime evaluates a bounded FEEL/reference subset with explicit null and
+error semantics. DMN 1.3 emission is checked against the same intermediate
+representation, and bounded solver queries produce proof records for
+satisfiability, overlap, and selected counterexamples. These records are
+diagnostic: a satisfiable encoding demonstrates consistency of the encoding,
+not truth of the source document. A pinned independent DMN engine is a planned
+evaluation gate, not an assumption of equivalence.
+
+\subsection{Review workbench}
+
+The UI is deliberately downstream of the run contract. It consumes versioned
+run manifests and evidence packets through a small API rather than importing
+pipeline internals. It provides stage status, sortable rule tables, source and
+artifact side-by-side views, graph exploration, confidence and refusal filters,
+search, annotations, and run comparison. Comments and approvals are review
+records with author, timestamp, target hash, and decision; they do not mutate a
+compiled artifact. This makes review reproducible and allows the pipeline to
+evolve without coupling the visual layer to agent implementation details.
