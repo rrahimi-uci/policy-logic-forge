@@ -134,7 +134,12 @@ class LLMClient:
         # Hard watchdog margin (seconds) added on top of the SDK's own worst-case
         # (timeout × attempts). The watchdog only ever fires when the socket-level
         # timeout fails to — e.g. a connection killed mid-flight by a machine sleep.
-        self.watchdog_margin = 60
+        # Keep the default bounded for long-running 40-worker runs while allowing
+        # operators to tune it with the same environment-based configuration path.
+        try:
+            self.watchdog_margin = max(0.0, float(os.getenv("KG_LLM_WATCHDOG_MARGIN", "30")))
+        except (TypeError, ValueError):
+            self.watchdog_margin = 30.0
 
         self._api_key = api_key
         self._client: Optional[OpenAI] = None

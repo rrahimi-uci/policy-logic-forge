@@ -34,3 +34,17 @@ def test_validator_rejects_invalid_concurrency_order() -> None:
     errors = validate_config(config, source="fixture")
 
     assert any("global_llm_concurrency_min" in error for error in errors)
+
+
+def test_default_profile_is_parallel_but_has_bounded_stall_recovery() -> None:
+    config = json.loads((ROOT / "config.example.json").read_text(encoding="utf-8"))
+    performance = config["pipeline"]["performance"]
+
+    assert config["pipeline"]["max_workers"] == 40
+    assert performance["llm_concurrency"] == 16
+    assert performance["remediation_llm_concurrency"] == 32
+    assert performance["grounding_llm_concurrency"] == 32
+    assert config["openai"]["rate_limiting"]["timeout"] == 300
+    assert performance["global_llm_lease_seconds"] == 300
+    assert performance["llm_watchdog_margin"] == 30
+    assert performance["batch_connection_backoff_seconds"] == 10

@@ -104,7 +104,18 @@ class OpenAIRemediationResolver:
         content = content.strip()
         if content.startswith("```"):
             content = content.split("\n", 1)[1].rsplit("```", 1)[0]
-        value = json.loads(content)
+        try:
+            value = json.loads(content)
+        except json.JSONDecodeError as original_error:
+            # JSON mode can still yield a single malformed delimiter on long
+            # high-reasoning responses. Repair only that object in strict mode;
+            # concatenated values and non-objects remain rejected.
+            try:
+                from json_repair import repair_json
+
+                value = repair_json(content, return_objects=True, strict=True)
+            except Exception:
+                raise original_error
         if not isinstance(value, dict):
             raise ValueError("agent_08 response must be a JSON object")
         return value
@@ -118,6 +129,7 @@ class OpenAIRemediationResolver:
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0,
                 max_tokens=max_tokens,
+                response_format={"type": "json_object"},
                 reasoning_effort=self.reasoning_effort,
             )
             try:

@@ -299,7 +299,7 @@ class Config:
         env_val = os.getenv('KG_OPENAI_TIMEOUT')
         if env_val:
             return int(env_val)
-        return self.get('openai.rate_limiting.timeout', 900)
+        return self.get('openai.rate_limiting.timeout', 300)
 
     # -- LLM defaults --
 

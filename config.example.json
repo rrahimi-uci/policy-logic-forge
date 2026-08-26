@@ -8,7 +8,7 @@
     },
     "rate_limiting": {
       "max_retries": 1,
-      "timeout": 900
+      "timeout": 300
     }
   },
   "llm": {
@@ -26,18 +26,20 @@
       "global_llm_concurrency_max": 32,
       "global_llm_concurrency_min": 1,
       "global_llm_success_window": 3,
-      "global_llm_lease_seconds": 900,
+      "global_llm_lease_seconds": 300,
+      "llm_watchdog_margin": 30,
+      "batch_connection_backoff_seconds": 10,
       "global_llm_poll_seconds": 0.1,
       "readiness_workers": 40,
       "readiness_llm_concurrency": 16,
       "readiness_rules_per_request": 4,
       "remediation_workers": 40,
-      "remediation_llm_concurrency": 16,
+      "remediation_llm_concurrency": 32,
       "remediation_rules_per_request": 4,
       "remediation_pairs_per_request": 12,
       "remediation_max_passes": 3,
       "grounding_workers": 40,
-      "grounding_llm_concurrency": 24,
+      "grounding_llm_concurrency": 32,
       "grounding_rules_per_request": 4,
       "grounding_claims_per_request": 48,
       "grounding_relationships_per_request": 12,
