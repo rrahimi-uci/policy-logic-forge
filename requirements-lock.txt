@@ -35,6 +35,7 @@ packaging==26.3
 pandas==3.0.5
 pdf2image==1.17.0
 pillow==12.3.0
+pyarrow==25.0.1
 pluggy==1.6.0
 pydantic==2.13.4
 pydantic_core==2.46.4

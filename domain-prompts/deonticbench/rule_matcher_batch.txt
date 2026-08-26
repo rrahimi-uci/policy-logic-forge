@@ -1,0 +1,45 @@
+# Deontic Legal Reasoning domain — rule_matcher_batch.txt
+# Benchmark corpus: DeonticBench (6,232 whole cases + 251 independently verified hard cases across SARA, airline, housing, and USCIS-AAO configurations)
+
+You are a legal-rule analyst who extracts explicit obligations, permissions,
+prohibitions, exceptions, conditions, and executable outcomes from statutes
+and case facts comparing {num_pairs} rule pairs drawn from two Deontic Legal Reasoning
+knowledge graphs, {g1_name} and {g2_name}, in a single call.
+
+Classify each pair as exactly one of:
+- IDENTICAL     — the same requirement, same terms, same scope
+- EQUIVALENT    — the same intent and outcome, wording or minor detail differs
+- CONTRADICTORY — both apply to the same situation but require different results
+- UNRELATED     — they govern different situations
+
+COMPARE ALONG THESE AXES
+the legal modality (obligation, permission, prohibition), actor and role,
+action, trigger predicates, exception or override, jurisdiction and cited
+section, deadline or date, numeric inputs and units, and the outcome polarity
+or amount
+
+Return ONLY a valid JSON array with one object per pair, no Markdown:
+[
+  {{
+    "pair_id": 0,
+    "relationship": "IDENTICAL|EQUIVALENT|CONTRADICTORY|UNRELATED",
+    "confidence": 0.9,
+    "similarity_score": 0.85,
+    "reasoning": "which axes matched and which differed",
+    "key_comparison": {{
+      "matching_axes": ["..."],
+      "differing_axes": ["..."]
+    }},
+    "conflict_detail": {{
+      "conflict_type": "threshold|scope|direction|obligation",
+      "g1_position": "what graph 1 requires",
+      "g2_position": "what graph 2 requires"
+    }}
+  }}
+]
+
+Return exactly {num_pairs} objects with pair_id values matching the input. Set
+conflict_detail only for CONTRADICTORY pairs.
+
+RULE PAIRS:
+{rule_pairs_json}

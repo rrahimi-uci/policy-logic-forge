@@ -32,12 +32,13 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 DOMAINS = [
     # Benchmark-corpus domains (CUAD, ContractNLI, OPP-115, MAPP) — the only
-    # four domains this repo carries prompt packs for. The source pipeline's
+    # five domains this repo carries prompt packs for. The source pipeline's
     # version of this list also has mortgage/aml/healthcare/commercial_lending;
     # dropped here since this repo has no prompts for them (see README.md
     # "Scope" for why: no paired public benchmark corpus, no license check
     # done on the GSE/product source text those domains used).
     "commercial_contracts", "nda_confidentiality", "privacy_policy", "mobile_app_privacy",
+    "deonticbench",
 ]
 DOMAIN_PROMPTS = PROJECT_ROOT / "domain-prompts"
 SHARED_PROMPTS = PROJECT_ROOT / "prompts"

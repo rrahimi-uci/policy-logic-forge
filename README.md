@@ -15,7 +15,7 @@ cut, and why.
 graph explorer, a cross-graph comparison pipeline, 8 compliance domains). This
 repo pulls out only the part relevant to a "compliance text → executable
 logic" research question — the extraction/readiness/grounding/DAG pipeline —
-re-scoped to the 4 domains that have a paired, cleanly-licensed public
+re-scoped to the 5 domains that have a paired, documented public
 benchmark corpus, so every claim this repo can make is checkable against a
 real, citable dataset.
 
@@ -38,9 +38,10 @@ certification → dependency DAG generation). A lean CLI orchestrator
 - **No HTML visualizer.** The separate interactive network graph and rules
   table do not serve this repo's research question, which stops at a
   grounding-certified, dependency-partitioned knowledge graph.
-- **Only 4 of the source repo's 8 compliance domains**: `nda_confidentiality`,
-  `privacy_policy`, `mobile_app_privacy`, `commercial_contracts`. The other
-  four (`mortgage`, `healthcare`, `aml`, `commercial_lending`) have no paired
+- **Only 5 of the source repo's 8 compliance domains**: `nda_confidentiality`,
+  `privacy_policy`, `mobile_app_privacy`, `commercial_contracts`, and
+  `deonticbench`. The other source domains (`mortgage`, `healthcare`, `aml`,
+  `commercial_lending`) have no paired
   public benchmark corpus and use proprietary/product source text whose
   redistribution terms were never checked — inappropriate for a repo meant to
   produce checkable, citable results.
@@ -52,7 +53,7 @@ silently inherited):
 - **P2** — the extraction prompt used to instruct the model to emit both v1
   prose (`conditions`/`consequences`) and the v2 structured contract
   (`condition_predicates`/`outcomes`/...) in the same request. Fixed at the
-  source (`scripts/generate_benchmark_domain_prompts.py`) for all 4 domains.
+  source (`scripts/generate_benchmark_domain_prompts.py`) for all 5 domains.
 - **P3** — `contract_issues`/`requires_review` were stamped once at
   extraction time and never recomputed after `agent_07` normalizes legacy
   operator/value-type aliases, so a structurally clean rule could still carry
@@ -60,7 +61,7 @@ silently inherited):
   normalization.
 - **P6** — BPMN eligibility was gated on a hardcoded, mortgage-shaped
   `rule_type` set (`process`/`validation`/`compliance`/`exception`). None of
-  this repo's 4 domains use that vocabulary (see each domain's
+  this repo's 5 domains use that vocabulary (see each domain's
   `business_rules_extraction_compact.txt`), so every rule would have silently
   gotten zero BPMN targets. Now gated on a domain-agnostic signal
   (`responsible_party` set + at least one output variable).
@@ -78,7 +79,14 @@ cp .env.example .env   # add your OPENAI_API_KEY
 # from config.example.json; config.json is intentionally ignored.
 
 # No sample documents are committed (see "Data and licensing" below) — build
-# one corpus first, e.g. ContractNLI's NDAs:
+# one corpus first, e.g. DeonticBench's airline hard split:
+cd benchmarks
+python3 scripts/download_deonticbench.py
+cd ..
+python3 cli/extract.py --dir deonticbench/source/airline/hard \
+  --domain deonticbench --target-rules 20
+
+# Or use ContractNLI's NDAs:
 cd benchmarks
 python3 scripts/download_benchmarks.py contract-nli
 python3 scripts/build_source_docs.py contract-nli
@@ -112,6 +120,12 @@ grounding certification), or `--skip-optimize` to skip
 `agent_10` DAG generation. The deprecated numeric `--step` selector remains
 accepted for backwards compatibility.
 
+Readiness exit code 3 is a review signal, not a subprocess crash. The full
+orchestrator runs remediation, then continues to independent grounding and DAG
+generation when all four readiness invariants pass; affected rules remain
+`requires_review: true` in the final artifacts. Structural invariant failures
+still stop the run.
+
 ## Data and licensing
 
 Benchmark corpora are downloaded, not vendored (`benchmarks/README.md` has
@@ -119,8 +133,9 @@ the full reproduction story — checksummed URLs in `benchmarks/datasets.json`):
 
 ```bash
 cd benchmarks
-python3 scripts/download_benchmarks.py           # all 4, ~640 MB
-python3 scripts/build_source_docs.py             # normalize into flat .txt per corpus
+python3 scripts/download_benchmarks.py           # four archive corpora, ~640 MB
+python3 scripts/build_source_docs.py             # normalize archive corpora to .txt
+python3 scripts/download_deonticbench.py        # five configs, 6,483 rows
 ```
 
 | Domain | Corpus | License | Local folder (after building) |
@@ -129,8 +144,9 @@ python3 scripts/build_source_docs.py             # normalize into flat .txt per 
 | `commercial_contracts` | CUAD (510 contracts) | CC BY 4.0 | `compliance-files/commercial_contracts/` |
 | `privacy_policy` | OPP-115 (115 policies) | Free for research use; no redistribution grant | `compliance-files/privacy_policy/` |
 | `mobile_app_privacy` | MAPP | Free for research use; no redistribution grant | `compliance-files/mobile_app_privacy/` |
+| `deonticbench` | DeonticBench (6,483 legal/regulatory cases) | CC BY 4.0 | `compliance-files/deonticbench/source/<config>/<split>/` |
 
-None of the four are committed to this repo, regardless of license — build
+None of the five are committed to this repo, regardless of license — build
 whichever domain you need (`benchmarks/scripts/download_benchmarks.py` then
 `build_source_docs.py`, see `benchmarks/README.md`), then copy that
 corpus's `benchmarks/<id>-source-docs/*.txt` into
@@ -156,7 +172,7 @@ prompts/                    shared prompts (the v2 rule contract, readiness/
                             grounding/remediation prompts) — apply to every domain
 domain-prompts/<domain>/    per-domain extraction prompts, one dir per kept domain
 scripts/generate_benchmark_domain_prompts.py
-                            source of truth for the 4 domain-prompt packs —
+                            source of truth for the 5 domain-prompt packs —
                             regenerate after editing a template, don't hand-edit
                             the committed .txt files
 benchmarks/                 dataset registry + download/build scripts

@@ -107,7 +107,8 @@
       "nda_confidentiality",
       "privacy_policy",
       "mobile_app_privacy",
-      "commercial_contracts"
+      "commercial_contracts",
+      "deonticbench"
     ]
   }
 }

@@ -1,0 +1,84 @@
+# Deontic Legal Reasoning domain — entity_extraction_compact.txt
+# Benchmark corpus: DeonticBench (6,232 whole cases + 251 independently verified hard cases across SARA, airline, housing, and USCIS-AAO configurations)
+
+You build the small, source-grounded entity foundation for a Deontic Legal Reasoning
+compliance knowledge graph. You are a legal-rule analyst who extracts explicit obligations, permissions,
+prohibitions, exceptions, conditions, and executable outcomes from statutes
+and case facts.
+Use only concepts supported by the excerpts below. Prefer concrete deonticbench concepts
+over generic words, and do not invent a complete domain model; detailed rule
+extraction happens later from the full corpus.
+
+All current DeonticBench source text is English. Preserve statute citations,
+dates, currency, units, and quoted source wording exactly; write normalized
+rule descriptions in English and record the configuration and jurisdiction on
+every rule.
+
+CANONICAL ENTITY TYPES FOR THIS DOMAIN (prefer these names when supported):
+- STATUTE — A cited statutory or regulatory provision that governs the case
+  attributes: citation, section, title, jurisdiction, effective_date, text
+  example: NEV. REV. STAT. § 40.380
+- ACTOR — A person, organisation, agency, or legal role in the case
+  attributes: name, role, status, jurisdiction, representation
+  example: The tenant appealing an eviction judgment
+- CASE_FACT — A source-stated fact, event, amount, date, or status
+  attributes: subject, predicate, value, unit, date, source_quote
+  example: The appeal was filed within ten days of judgment
+- CONDITION — A fact pattern or predicate that activates or limits a rule
+  attributes: predicate, operator, value, temporal_scope, jurisdiction
+  example: The defendant files an appeal within the statutory period
+- DEONTIC_RULE — An obligation, permission, prohibition, or eligibility rule
+  attributes: modality, actor, action, trigger, exceptions, source_section
+  example: An appeal may be filed within ten days
+- CALCULATION — A statutory formula, amount, threshold, or comparison
+  attributes: inputs, operator, unit, threshold, rounding, result
+  example: Taxable remuneration after the statutory exclusion
+- EXCEPTION — A source-stated carve-out or override to a general rule
+  attributes: trigger, overridden_rule, scope, consequence, source_section
+  example: An appeal does not stay execution in a specified proceeding
+- OUTCOME — The decision, classification, amount, or status asked by the
+  question
+  attributes: value, polarity, rationale, confidence, evidence
+  example: Dismissed; no automatic stay of the writ
+
+CANONICAL RELATIONSHIPS:
+- STATUTE_GOVERNS_CASE (STATUTE → CASE_FACT) — A cited provision supplies the
+  legal authority for a case fact or question
+- CONDITION_ACTIVATES_RULE (CONDITION → DEONTIC_RULE) — A fact predicate
+  activates, limits, or disables a deontic rule
+- RULE_HAS_EXCEPTION (DEONTIC_RULE → EXCEPTION) — An express carve-out
+  overrides or narrows a general rule
+- RULE_PRODUCES_OUTCOME (DEONTIC_RULE → OUTCOME) — Applying a rule to the
+  stated facts yields the requested outcome
+
+Return ONLY one valid JSON object, with no Markdown or explanation. Return at
+{max_entities} entity types and {max_relationships} relationships. Keep every definition
+under 20 words. Each entity needs exactly five short attribute names, one
+excerpt-grounded example, and one short business-rule summary. Each relationship
+needs source_entity, target_entity, definition, cardinality, one example, and
+one business-rule summary.
+
+Required JSON shape:
+{{
+  "entity_types": {{
+    "ENTITY_NAME": {{
+      "definition": "...",
+      "attributes": ["...", "...", "...", "...", "..."],
+      "examples": ["..."],
+      "business_rules": ["..."]
+    }}
+  }},
+  "relationships": {{
+    "RELATIONSHIP_NAME": {{
+      "source_entity": "ENTITY_NAME",
+      "target_entity": "ENTITY_NAME",
+      "definition": "...",
+      "cardinality": "one-to-one|one-to-many|many-to-many",
+      "examples": ["..."],
+      "business_rules": ["..."]
+    }}
+  }}
+}}
+
+EXCERPTS:
+{sample_content}

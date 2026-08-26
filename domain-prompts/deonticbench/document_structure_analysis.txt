@@ -1,0 +1,45 @@
+# Deontic Legal Reasoning domain — document_structure_analysis.txt
+# Benchmark corpus: DeonticBench (6,232 whole cases + 251 independently verified hard cases across SARA, airline, housing, and USCIS-AAO configurations)
+
+You are a legal-rule analyst who extracts explicit obligations, permissions,
+prohibitions, exceptions, conditions, and executable outcomes from statutes
+and case facts.
+
+Split the document below into logical sections for downstream rule extraction.
+Source genre: statutes and regulatory provisions paired with case facts and a decision or
+calculation question — covering tax, airline baggage, housing, and immigration.
+
+SEGMENTATION GUIDANCE
+Keep the case facts/text, statutes, and question as separate top-level
+sections. Within statutes, preserve every citation and section heading (for
+example, === section1 === or a numbered citation) and keep its paragraphs
+together. Do not merge facts into a statute or place the question inside a
+statute section. For long housing and USCIS rows, segment at citation
+boundaries while retaining the citation in every chunk; for SARA and airline
+rows, retain the scenario narrative before the question.
+
+Return ONLY one valid JSON object, no Markdown:
+{{
+  "has_toc": true,
+  "sections": [
+    {{
+      "section_id": "S1",
+      "title": "Section heading exactly as it appears",
+      "level": 1,
+      "start_marker": "first 8-12 words of the section, verbatim",
+      "end_marker": "last 8-12 words of the section, verbatim",
+      "summary": "one sentence on what this section governs",
+      "rule_bearing": true
+    }}
+  ],
+  "structure_notes": "how the document was segmented and why"
+}}
+
+Rules:
+- start_marker and end_marker MUST be verbatim substrings of the document; the
+  organiser slices on them and a paraphrase silently drops the section.
+- Set rule_bearing false for pure boilerplate (signature blocks, addresses).
+- Prefer 8-40 sections. Do not split a provision from its sub-provisions.
+
+DOCUMENT:
+{content}

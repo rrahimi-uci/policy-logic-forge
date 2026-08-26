@@ -1,0 +1,96 @@
+# Deontic Legal Reasoning domain — business_rules_extraction.txt
+# Benchmark corpus: DeonticBench (6,232 whole cases + 251 independently verified hard cases across SARA, airline, housing, and USCIS-AAO configurations)
+
+You are a legal-rule analyst who extracts explicit obligations, permissions,
+prohibitions, exceptions, conditions, and executable outcomes from statutes
+and case facts. Extract comprehensive, actionable business rules from
+statutes and regulatory provisions paired with case facts and a decision or
+calculation question — covering tax, airline baggage, housing, and immigration that will power a compliance knowledge graph.
+
+DeonticBench rows contain source-bearing case facts or text, statutes, and a
+question. The dataset also supplies a gold label and an independently verified
+reference Prolog program for evaluation. Treat label and reference_prolog as
+evaluation metadata only: never copy them into extracted source evidence,
+never infer a rule from the gold answer, and mark an outcome unresolved when
+the supplied text is insufficient. Preserve the configuration, case id, state
+or case number, and statute section in provenance.
+
+All current DeonticBench source text is English. Preserve statute citations,
+dates, currency, units, and quoted source wording exactly; write normalized
+rule descriptions in English and record the configuration and jurisdiction on
+every rule.
+The row's question is a query, not a rule. Extract rules from facts and
+statutes first, then map them to the query outcome only when the evidence
+supports it. Treat label and reference_prolog as held-out evaluation fields;
+never include either in source_reference or source_text. For responsible_party
+and counterparties, use ACTOR (or another canonical legal-role entity) only;
+never use a STATUTE, CASE_FACT, BAGGAGE_ITEM, CALCULATION, or outcome entity
+as a party.
+
+Extract up to {rules_per_batch} rules for batch {batch_num}. Quality over
+quantity: a complete rule with exact terms beats three vague ones.
+
+RULE TYPES FOR THIS DOMAIN: obligation, permission, prohibition, eligibility, calculation, exception,
+temporal_condition, jurisdiction_scope, outcome_mapping, evidence_requirement
+
+obligation = an actor must perform an action; permission = an actor may
+perform an action; prohibition = an actor must not perform an action;
+eligibility = a status or benefit is available only when predicates hold;
+calculation = a formula, threshold, or amount determines the result; exception
+= an express carve-out or override; temporal_condition = a date, deadline,
+duration, or sequence constraint; jurisdiction_scope = the state, agency,
+court, or territorial boundary; outcome_mapping = a rule mapping facts to the
+answer category or decision; evidence_requirement = a required document, fact,
+or proof. Modality and polarity must be explicit — do not collapse permission
+into obligation or a missing fact into a negative answer.
+
+Worked example:
+"A defendant may appeal an eviction judgment within ten days, but the appeal
+does not automatically stay execution of the writ" — emit one temporal
+permission and one exception/override rule, bound to the defendant and the
+cited statute section, with the filing deadline as a condition and the stay
+question as the outcome. Do not emit the gold label or Prolog as source
+evidence.
+
+Return ONLY valid JSON, no Markdown:
+{{
+  "batch_metadata": {{
+    "batch_number": {batch_num},
+    "rules_extracted": 0,
+    "source_section": "Section name or title"
+  }},
+  "rules": [
+    {{
+      "rule_id": "BR_ENTITY_CATEGORY_BATCH_SEQ",
+      "rule_name": "Human-readable title in plain English, no underscores",
+      "rule_type": "obligation|permission|prohibition|eligibility|calculation|exception|temporal_condition|jurisdiction_scope|outcome_mapping|evidence_requirement",
+      "entity": "STATUTE",
+      "relationship": "STATUTE_GOVERNS_CASE",
+      "description": "Complete, specific rule description",
+      "conditions": ["Condition 1 (specific and checkable)", "Condition 2"],
+      "consequences": {{
+        "if_compliant": "What follows when the rule is satisfied",
+        "if_violated": "Consequence, remedy, or exposure"
+      }},
+      "exceptions": ["Express carve-out stated in the source"],
+      "source_reference": {{
+        "chunk_path": "exact input FILE path",
+        "section_id": "source section",
+        "source_text": "verbatim quote supporting this rule"
+      }},
+      "mandatory": true,
+      "confidence_score": 0.9,
+      "examples": ["Concrete application of the rule"],
+      "applicability_scope": {{"note": "configurations (array), jurisdictions (array), case_types (array)"}},
+      "related_rules": []
+    }}
+  ]
+}}
+
+Every rule MUST be traceable to verbatim source text. Do not invent thresholds.
+
+CANONICAL ENTITY/RELATIONSHIP CONTEXT:
+{entity_context}
+
+SOURCE BATCH EXCERPTS:
+{sample_content}

@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "dataset": "gydou/DeonticBench",
+  "revision": "805fb0529d7ae295679c5c1730765ec07d2c20ac",
+  "license": "CC BY 4.0",
+  "homepage": "https://huggingface.co/datasets/gydou/DeonticBench",
+  "repository": "https://github.com/guangyaodou/DeonticBench",
+  "citation": "Dou, G. et al. (2025). DeonticBench: A Benchmark for Deontic Reasoning in Large Language Models.",
+  "task": "Deontic reasoning over legal and regulatory statutes with verified reference Prolog programs.",
+  "total_rows": 6483,
+  "configurations": {
+    "sara_numeric": {
+      "whole": {"rows": 100, "bytes": 168723, "sha256": "f6601ff5c48b6bcc34724b4b493c5128f6f28a652f573bcbbdbb3e28d5fc4ac2"},
+      "hard": {"rows": 35, "bytes": 77246, "sha256": "d97c29e51f8ead262145a0e61948bea72cd85af7d148e62b7a363ee802c8bc55"}
+    },
+    "sara_binary": {
+      "whole": {"rows": 276, "bytes": 162804, "sha256": "297a5d859e1165a1a69f773443d720c88a8f96574c4d7941ab0e891df78ebd57"},
+      "hard": {"rows": 30, "bytes": 38096, "sha256": "ff8b295b33e1356767c7fdd37af4bf76d4e959a36bd1bbb45ea4bba63293c0df"}
+    },
+    "airline": {
+      "whole": {"rows": 300, "bytes": 413921, "sha256": "c3ab7ffc403929dc3c5ac3851c784656f0d8b93d0b4e573661928a598361c6bb"},
+      "hard": {"rows": 80, "bytes": 122780, "sha256": "e45cad6c5f1719baaf52fde3aaa6daf626dbec4cd3ad6a731d2a868c38db85e8"}
+    },
+    "housing": {
+      "whole": {"rows": 5314, "bytes": 28909596, "sha256": "f74240fc3cfb8807dc8f7c89023169b5aa33a292ea39fa19b147dbfd987f4310"},
+      "hard": {"rows": 78, "bytes": 174340, "sha256": "39906400943ef8c3220188189de3612944588a45689bf966888e15fe7c11b916"}
+    },
+    "uscis-aao": {
+      "whole": {"rows": 242, "bytes": 817973, "sha256": "6b030c96adb08de9c19a0dc429bd1cd7e2e249c6088f318b0fcd8b23626ad15b"},
+      "hard": {"rows": 28, "bytes": 107347, "sha256": "841fbaa5ac003d21bdd4750d9174462f7ab2c7094a71314503544e0fd93ab717"}
+    }
+  }
+}

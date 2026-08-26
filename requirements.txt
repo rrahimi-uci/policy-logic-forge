@@ -11,5 +11,6 @@ Pillow>=10.0.0                    # Image processing (pdf2image dependency)
 # Document Chunking Libraries
 langchain-text-splitters>=0.2.0  # Markdown/text splitting with header metadata
 pandas>=2.0.0                     # CSV/Excel processing
+pyarrow>=15.0.0                   # local Parquet reads for the DeonticBench materializer
 openpyxl>=3.1.0                   # Excel file support for pandas
 python-docx>=1.1.0                # Word document (.docx) support
