@@ -1,10 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Background, Controls, MiniMap, ReactFlow } from "@xyflow/react";
+import { useEffect, useRef, useState } from "react";
 import cytoscape from "cytoscape";
 import type { CompareResult, Diagnostic, DocumentRecord, Evidence, Relationship, RuleDetail, RuleRow, RunSummary, Stage, SearchResult } from "./types";
 import { addComment, addDecision, addLabel, compare, fetchDiagnostics, fetchDocuments, fetchEvidenceList, fetchRelationships, fetchRule, fetchRules, fetchSavedViews, saveView, search } from "./api";
 import { formatDate, formatNumber, percent, runOption, stageProgress, statusLabel, statusTone } from "./utils";
-import "@xyflow/react/dist/style.css";
 
 export function Badge({ value, label }: { value: string; label?: string }) {
   return <span className={`badge badge-${statusTone(value)}`}>{label || statusLabel(value)}</span>;
@@ -23,23 +21,22 @@ export function Loading({ label = "Loading review data…" }: { label?: string }
 }
 
 export function StageFlow({ stages, onStage }: { stages: Stage[]; onStage?: (stage: Stage) => void }) {
-  const nodes = useMemo(() => stages.map((stage, index) => ({ id: stage.stage_id, position: { x: index * 190, y: 20 }, data: { label: `${stage.stage_id.replace("agent_", "Agent ")}\n${stage.name}` }, type: "default", className: `flow-node flow-${statusTone(stage.status)}` })), [stages]);
-  const edges = useMemo(() => stages.slice(1).map((stage, index) => ({ id: `${stages[index].stage_id}-${stage.stage_id}`, source: stages[index].stage_id, target: stage.stage_id, animated: stage.status === "incomplete" })), [stages]);
   if (!stages.length) return <div className="empty-state">No stage status snapshots are available.</div>;
-  return <div className="flow-shell" aria-label="Pipeline stage flow"><ReactFlow nodes={nodes} edges={edges} fitView nodesDraggable={false} nodesConnectable={false} zoomOnScroll={false} onNodeClick={(_, node) => onStage?.(stages.find((stage) => stage.stage_id === node.id) as Stage)}><Background color="#d7e1ee" gap={24} /><MiniMap pannable zoomable /><Controls showInteractive={false} /></ReactFlow></div>;
+  return <div className="stage-flow" aria-label="Pipeline stage flow"><ol className="stage-stepper">{stages.map((stage, index) => <li className={`stage-step step-${statusTone(stage.status)}`} key={stage.stage_id}><button onClick={() => onStage?.(stage)} disabled={!onStage} aria-label={`Open ${stage.stage_id.replace("agent_", "Agent ")} ${stage.name}`}><span className="stage-number">{String(index + 1).padStart(2, "0")}</span><span className="stage-copy"><strong>{stage.name}</strong><small>{statusLabel(stage.status)}</small></span><span className="stage-state" aria-hidden="true" /></button></li>)}</ol></div>;
 }
 
 export function Overview({ run, stages, onStage, onView }: { run: RunSummary; stages: Stage[]; onStage: (stage: Stage) => void; onView: (view: string) => void }) {
   const queue = run.review_queue_count;
+  const sourceName = run.source_dir.split(/[\\/]/).filter(Boolean).pop() || run.source_dir;
   return <div className="view-stack">
-    <section className="hero"><div><p className="eyebrow">Evidence bundle</p><h1>{run.run_id}</h1><p className="muted">{run.source_dir}</p></div><div className="hero-meta"><Badge value={run.status} /><span>Indexed {formatDate(run.generated_at)}</span></div></section>
+    <section className="hero overview-hero"><div><p className="eyebrow">Evidence bundle</p><h1>{run.run_id}</h1><p className="muted">Source bundle: <span className="mono">{sourceName}</span></p></div><div className="hero-meta"><Badge value={run.status} /><span>Indexed {formatDate(run.generated_at)}</span><button className="button" onClick={() => onView("queue")}>{queue ? `Review ${formatNumber(queue)} rules` : "View rules"}</button></div></section>
     <div className="metric-grid">
       <MetricCard label="Rules" value={run.rule_count} detail={`${run.rule_status_counts.certified || 0} certified`} tone="good" />
       <MetricCard label="Review queue" value={queue} detail={`${percent(queue, run.rule_count)}% of rules`} tone={queue ? "warn" : "good"} />
       <MetricCard label="Evidence links" value={run.evidence_count} detail={`${run.document_count} source chunks`} />
       <MetricCard label="Diagnostics" value={run.diagnostic_count} detail={`${run.error_count} errors · ${run.warning_count} warnings`} tone={run.error_count ? "bad" : "warn"} />
     </div>
-    <section className="panel"><div className="panel-heading"><div><p className="eyebrow">Execution flow</p><h2>{stageProgress(stages)}% of stages indexed</h2></div><button className="button secondary" onClick={() => onView("diagnostics")}>Open diagnostics</button></div><StageFlow stages={stages} onStage={onStage} /></section>
+    <section className="panel"><div className="panel-heading"><div><p className="eyebrow">Pipeline progress</p><h2>{stageProgress(stages)}% of stages indexed</h2><p className="muted panel-description">Select a stage to inspect its artifacts and diagnostics.</p></div><button className="button secondary" onClick={() => onView("diagnostics")}>Open diagnostics</button></div><StageFlow stages={stages} onStage={onStage} /></section>
     <div className="two-column">
       <section className="panel"><div className="panel-heading"><div><p className="eyebrow">Review triage</p><h2>Where attention is needed</h2></div></div><div className="queue-list"><QueueLink label="Requires review" value={run.queues?.requires_review ?? run.review_queue_count} onClick={() => onView("queue")} tone="warn" /><QueueLink label="Grounding failures" value={run.queues?.grounding_failed ?? 0} onClick={() => onView("queue:grounding_failed")} tone="bad" /><QueueLink label="Readiness failures" value={run.queues?.readiness_failed ?? 0} onClick={() => onView("queue:readiness_failed")} tone="bad" /><QueueLink label="Unresolved conflicts" value={run.queues?.unresolved_conflicts ?? run.unresolved_conflict_count} onClick={() => onView("graph:conflicts")} tone="warn" /></div></section>
       <section className="panel"><div className="panel-heading"><div><p className="eyebrow">Run provenance</p><h2>Configuration binding</h2></div></div><dl className="details"><dt>Model</dt><dd>{run.model || "Not recorded"}</dd><dt>Reasoning</dt><dd>{run.reasoning_effort || "Not recorded"}</dd><dt>Corpus hash</dt><dd className="mono">{String(run.corpus_sha256 || "Not recorded").slice(0, 24)}…</dd><dt>Graph hash</dt><dd className="mono">{String(run.optimized_graph_sha256 || "Not recorded").slice(0, 24)}…</dd><dt>Canonical outputs</dt><dd>Read-only · hash-bound</dd></dl></section>
@@ -169,6 +166,22 @@ export function CompareView({ runs, onError }: { runs: RunSummary[]; onError: (m
 
 export function SearchOverlay({ runId, query, onClose, onRule }: { runId: string; query: string; onClose: () => void; onRule: (id: string) => void }) {
   const [results, setResults] = useState<SearchResult[]>([]);
-  useEffect(() => { if (query.trim()) search(runId, query).then((result) => setResults(result.items)).catch(() => setResults([])); }, [runId, query]);
-  return <div className="search-overlay"><div className="search-panel"><div className="panel-heading"><div><p className="eyebrow">Global search</p><h2>Results for “{query}”</h2></div><button className="icon-button" aria-label="Close search" onClick={onClose}>×</button></div>{results.map((result) => <button className="search-result" key={`${result.kind}-${result.id}`} onClick={() => result.kind === "rule" ? onRule(result.id) : undefined}><Badge value={result.status} /><div><strong>{result.title}</strong><p>{result.snippet}</p><small>{result.kind} · {result.id}</small></div></button>)}{!results.length && <div className="empty-state">No results.</div>}</div></div>;
+  const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
+  const closeButton = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setFailed(false);
+    if (!query.trim()) { setResults([]); setLoading(false); return; }
+    search(runId, query).then((result) => { if (active) setResults(result.items); }).catch(() => { if (active) { setResults([]); setFailed(true); } }).finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [runId, query]);
+  useEffect(() => {
+    closeButton.current?.focus();
+    const onKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+  return <div className="search-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><div className="search-panel" role="dialog" aria-modal="true" aria-labelledby="search-title"><div className="panel-heading"><div><p className="eyebrow">Global search</p><h2 id="search-title">Results for “{query}”</h2><p className="muted">Searches rules, evidence, relationships, and diagnostics in this run.</p></div><button ref={closeButton} className="icon-button" aria-label="Close search" onClick={onClose}>×</button></div><div aria-live="polite">{loading ? <Loading label="Searching this evidence bundle…" /> : failed ? <div className="empty-state"><strong>Search is temporarily unavailable</strong><span>Close this dialog and try again.</span></div> : results.length ? results.map((result) => <button className="search-result" key={`${result.kind}-${result.id}`} onClick={() => result.kind === "rule" ? onRule(result.id) : undefined}><Badge value={result.status} /><div><strong>{result.title}</strong><p>{result.snippet}</p><small>{statusLabel(result.kind)} · {result.id}</small></div></button>) : <div className="empty-state"><strong>No matching evidence found</strong><span>Try a rule ID, policy term, or diagnostic message.</span></div>}</div></div></div>;
 }

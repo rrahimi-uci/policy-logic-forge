@@ -22,11 +22,23 @@ describe("App shell", () => {
   it("discovers a run and navigates between major workspaces", async () => {
     render(<App />);
     await waitFor(() => expect(screen.getByRole("heading", { name: "run-a" })).toBeInTheDocument());
-    expect(screen.getByText("Run overview")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Run overview" })).toHaveAttribute("aria-current", "page");
+    fireEvent.click(screen.getByRole("button", { name: "Open navigation" }));
+    expect(document.querySelector(".sidebar")).toHaveClass("open");
+    fireEvent.click(screen.getByRole("button", { name: "Close navigation" }));
+    fireEvent.click(screen.getByRole("button", { name: "Collapse navigation" }));
+    expect(document.querySelector(".app-shell")).toHaveClass("nav-compact");
+    fireEvent.keyDown(window, { key: "/" });
+    expect(screen.getByLabelText("Search all outputs")).toHaveFocus();
+    fireEvent.click(screen.getByRole("button", { name: "Refresh run catalog" }));
+    await waitFor(() => expect(api.fetchRuns).toHaveBeenCalledTimes(2));
     fireEvent.click(screen.getByRole("button", { name: /Runs$/ })); await waitFor(() => expect(screen.getByRole("heading", { name: "Runs" })).toBeInTheDocument());
     fireEvent.click(screen.getByRole("button", { name: /Review queue$/ })); await waitFor(() => expect(screen.getByRole("heading", { name: "Review queue" })).toBeInTheDocument());
     fireEvent.click(screen.getByRole("button", { name: /Documents & evidence$/ })); await waitFor(() => expect(screen.getByRole("heading", { name: "Documents & evidence" })).toBeInTheDocument());
     fireEvent.click(screen.getByRole("button", { name: /Graph explorer$/ })); await waitFor(() => expect(screen.getByRole("heading", { name: "Knowledge graph explorer" })).toBeInTheDocument());
     fireEvent.change(screen.getByLabelText("Search all outputs"), { target: { value: "retention" } }); fireEvent.submit(screen.getByLabelText("Search all outputs"));
+    await waitFor(() => expect(screen.getByRole("dialog", { name: /Results for/ })).toBeInTheDocument());
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   });
 });
