@@ -1,24 +1,37 @@
 \section{Related work}
 
-LegalBench established a broad expert-built benchmark for legal language
-understanding \citep{guha2023legalbench}; CUAD supplied a contract-analysis
-corpus with span and category supervision \citep{hendrycks2021cuad}. ContractNLI
-connects natural-language clauses to entailment, contradiction, and
-insufficient-information judgments \citep{koreeda2021contractnli}. These
-benchmarks motivate separate evidence and behavior units, but they do not by
-themselves specify a fail-closed compiler contract.
+\textbf{Semantic parsing and executable evaluation.}
+Semantic parsing maps language to machine-interpretable meaning
+representations. Spider popularized cross-domain text-to-SQL evaluation
+\citep{yu2018spider}, while UNIMER showed that meaning representation, program
+aliases, and execution-engine availability materially affect comparisons
+\citep{guo2020unimer}. We inherit execution-based evaluation but add explicit
+source-evidence and refusal accounting for normative artifacts.
 
-Formalization systems expose a complementary tension. Grammars of Formal
-Uncertainty reports that autoformalization can improve or harm downstream
-behavior depending on the grammar and task \citep{ganguly2025grammars}.
-Catala demonstrates that legal rules can be represented in a domain-specific
-language with executable semantics \citep{bavard2021catala}. RuleArena studies
-rule-following evaluation under adversarial conditions \citep{wang2024rulearena}.
-Recent work on legal-text decision models and policy guards further motivates
-grounded evidence and explicit uncertainty \citep{graus2026legaltext,zhou2026lgmt}.
+\textbf{Legal language benchmarks.}
+CUAD provides expert clause annotations; ContractNLI combines document-level
+inference with evidence spans; LegalBench spans multiple types of legal
+reasoning; and RuleArena stresses real-world rule selection and application
+\citep{hendrycks2021cuad,koreeda2021contractnli,guha2023legalbench,zhou2025rulearena}.
+These resources motivate expert anchors and construct stratification, but are
+not interchangeable with executable-program equivalence.
 
-LEXEC differs in emphasis. It treats provenance, refusal, schema version, and
-unrun status as part of the evaluation object, and it makes the boundary
-between source fidelity and executable behavior operational. The resulting
-instrument can host existing benchmarks without claiming that a compiler's
-internal checks replace expert judgments.
+\textbf{Computational law and autoformalization.}
+Catala demonstrates a language designed for collaborative, executable
+formalization of computational law \citep{merigoux2021catala}. Graus provides
+a rare source-to-production-DMN benchmark and shows that structural and outcome
+similarity are complementary \citep{graus2026legaltext}. Grammars of Formal
+Uncertainty studies selective trust in LLM-generated formal artifacts
+\citep{ganguly2025grammars}; Wang et al. identify gaps between legal benchmark
+accuracy and faithful solver use \citep{wang2026limits}. \lexec{} does not claim
+novelty for executable law or solver use. Its contribution is the evidence
+contract that keeps source fidelity, internal validity, independent execution,
+and operational status from collapsing into one score.
+
+\textbf{Behavioral and selective evaluation.}
+CheckList argues for capability-specific behavioral tests beyond aggregate
+accuracy \citep{ribeiro2020checklist}, and selective classification separates
+coverage from risk \citep{geifman2017selective}. Our protocol combines these
+ideas at an artifact boundary: metamorphic and solver checks diagnose declared
+behaviors, while refusals remain in a coverage denominator and cannot be used
+to inflate conditional quality.

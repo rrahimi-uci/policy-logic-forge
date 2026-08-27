@@ -1,14 +1,14 @@
 \section{Conclusion}
 
-We presented LEXEC as an evidence-gated compiler and review instrument for
-normative text-to-logic systems. Its central design choice is to preserve the
-boundary between what can be checked inside a bounded executable subset and
-what still requires source evidence, expert annotation, or independent
-execution. The implementation supplies that boundary with typed IR, total
-fail-closed lowering, provenance packets, diagnostic proof records, and a
-review workbench. The current repository supports reproducible engineering
-checks and exposes its exploratory and missing measurements, including a
-substantial replay mismatch. It does not yet justify a quality or legal-
-correctness claim. Completing the declared gates will turn this transparent
-instrument into a scientific evaluation; failing a gate will remain a useful,
-publishable audit rather than an invisible limitation.
+Executable validity is not source fidelity. We introduced an evidence-gated
+evaluation contract that makes this distinction operational through separate
+AFS, OPS, and OE planes, explicit denominators, and retained epistemic states.
+\lexec{} implements the contract as a bounded, provenance-preserving compiler
+and review instrument. Its current artifact exposes a consequential negative
+result: 792 of 1,900 rows in a benchmark replay disagree, so the anchor is
+quarantined rather than converted into a favorable score. A second stress run
+demonstrates operational observability while remaining non-claiming about
+semantic accuracy. The broader scientific hypothesis---that source-grounded
+signals predict correct executable behavior---now has a precise, reproducible
+test, but awaits independent labels and execution. Preserving that boundary is
+the paper's central result and the condition for any stronger future claim.

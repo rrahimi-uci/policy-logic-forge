@@ -1,29 +1,19 @@
-\section{Implementation evidence}
+\section{Artifact implementation}
 
-The current checkout is implementation-complete for the planned engineering
-surface and evidence-incomplete for the scientific surface. Table
-\ref{tab:implementation} records facts that can be checked locally. The
-counts describe tests and retained artifacts, not accuracy.
+The repository implements the complete local path needed to exercise the
+instrument: versioned extraction and IR contracts, fail-closed lowering,
+bounded FEEL and solver evaluation, DMN serialization, run-bundle validation,
+statistics, perturbation contracts, and a provenance-first review UI. The paper
+build reads retained JSON artifacts, verifies an available restricted bundle
+against SHA-256 hashes, and generates all reported counts and plot labels.
+Source checks reject missing bibliography entries, modified template files,
+unresolved inputs, and forbidden claims.
 
 \input{tables/implementation-evidence}
 
-The end-to-end privacy-policy run processed \PrivacyFiles{} source files in
-\PrivacyChunks{} chunks, completed \PrivacyBatches{} of \PrivacyBatches{} batches,
-dropped no bytes, and retained \PrivacyRules{} final rules. Before grounding,
-\PrivacyReady{} rules were ready and \PrivacyReview{} required review. Grounding
-certified \PrivacyCertified{} rules and failed \PrivacyFailed{}, with complete
-response coverage. This is an
-operational, exploratory observation: provider behavior, corpus licensing, and
-the absence of independent labels preclude an AFS or OE claim. The high failure
-rate is useful for hardening the review path and is not evidence that the
-source or compiler is incorrect.
-
-The retained dependency output contains \PrivacyDags{} generated DAGs, including
-\PrivacyMultiRuleDags{} multi-rule DAGs and one condensed cycle group. This
-reports graph coverage and review workload; it is not dependency precision or
-recall.
-
-The repository's deterministic suite currently collects 1,051 core Python
-tests. Plan, configuration, research-artifact, and G0 evidence validators also
-pass. These checks establish contract integrity and regression protection; they
-do not establish that extracted rules are legally or semantically correct.
+The artifact distinguishes \emph{implemented} from \emph{measured}. Local tests
+establish contract integrity and regression protection, not extraction
+accuracy. Provider-dependent runs, licensed annotations, and external-engine
+observations remain unavailable until their own manifests satisfy the protocol.
+This separation is enforced by aggregate validators and by the claim ledger
+included with the paper.

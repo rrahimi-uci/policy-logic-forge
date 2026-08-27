@@ -38,6 +38,16 @@ def _tex_status(value: Any) -> str:
     return r"\textsc{" + value.replace("_", r"\_") + "}"
 
 
+def _tex_percent(numerator: Any, denominator: Any) -> str:
+    if not isinstance(numerator, int) or isinstance(numerator, bool) or numerator < 0:
+        raise ValueError(f"expected a non-negative integer numerator, got {numerator!r}")
+    if not isinstance(denominator, int) or isinstance(denominator, bool) or denominator <= 0:
+        raise ValueError(f"expected a positive integer denominator, got {denominator!r}")
+    if numerator > denominator:
+        raise ValueError(f"percentage numerator exceeds denominator: {numerator} > {denominator}")
+    return f"{100 * numerator / denominator:.1f}"
+
+
 def _verify_optional_bundle(repo_root: Path, observation: dict[str, Any], sources: dict[str, Any], bundle_rel: str) -> None:
     """Verify the local non-redistributable bundle when it is available."""
     bundle = repo_root / bundle_rel
@@ -112,6 +122,27 @@ def generate(repo_root: Path, output_dir: Path) -> tuple[Path, Path]:
         "ReplayRows": _tex_int(replay["comparison"]["rows_compared"]),
         "ReplayExactRows": _tex_int(replay["comparison"]["exact_rows"]),
         "ReplayMismatchRows": _tex_int(replay["comparison"]["mismatch_rows"]),
+        "ReplayExactPercent": _tex_percent(
+            replay["comparison"]["exact_rows"], replay["comparison"]["rows_compared"]
+        ),
+        "ReplayMismatchPercent": _tex_percent(
+            replay["comparison"]["mismatch_rows"], replay["comparison"]["rows_compared"]
+        ),
+        "ReplayOutcomeAgreeMismatches": _tex_int(
+            replay["comparison"]["field_mismatch_counts"]["outcome_agree_count"]
+        ),
+        "ReplayOutcomeDisagreeMismatches": _tex_int(
+            replay["comparison"]["field_mismatch_counts"]["outcome_disagree_count"]
+        ),
+        "ReplayOutcomeAgreementMismatches": _tex_int(
+            replay["comparison"]["field_mismatch_counts"]["outcome_agreement"]
+        ),
+        "ReplayOutcomeTestsMismatches": _tex_int(
+            replay["comparison"]["field_mismatch_counts"]["outcome_num_tests"]
+        ),
+        "ReplayOutcomeTestableMismatches": _tex_int(
+            replay["comparison"]["field_mismatch_counts"]["outcome_testable"]
+        ),
         "ReplayStatus": _tex_status(replay["status"]),
         "GThreeStatus": _tex_status(g3["status"]),
         "MutationCases": _tex_int(mutation["case_count"]),
@@ -125,6 +156,12 @@ def generate(repo_root: Path, output_dir: Path) -> tuple[Path, Path]:
         "PrivacyReview": _tex_int(observation["rules_review"]),
         "PrivacyCertified": _tex_int(observation["grounding_certified"]),
         "PrivacyFailed": _tex_int(observation["grounding_failed"]),
+        "PrivacyReadyPercent": _tex_percent(observation["rules_ready"], observation["rules"]),
+        "PrivacyReviewPercent": _tex_percent(observation["rules_review"], observation["rules"]),
+        "PrivacyCertifiedPercent": _tex_percent(
+            observation["grounding_certified"], observation["rules"]
+        ),
+        "PrivacyFailedPercent": _tex_percent(observation["grounding_failed"], observation["rules"]),
         "PrivacyDags": _tex_int(observation["dags"]),
         "PrivacyMultiRuleDags": _tex_int(observation["multi_rule_dags"]),
         "PrivacyCycleGroups": _tex_int(observation["cycle_groups"]),

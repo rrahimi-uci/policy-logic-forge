@@ -1,17 +1,18 @@
 \begin{table}[t]
 \centering
-\caption{Scientific evidence status; missing observations are not imputed.}
+\caption{Claim ledger at this snapshot. Missing observations are not imputed.}
 \label{tab:evidence-status}
-\begin{tabular}{p{0.36\linewidth}p{0.20\linewidth}p{0.32\linewidth}}
+\small
+\begin{tabularx}{\linewidth}{@{}p{.28\linewidth}p{.22\linewidth}X@{}}
 \toprule
-Measurement & State & Required next gate \\
+Evidence surface & State & Permitted conclusion \\
 \midrule
-Rule and dependency recall & fixture-only & Licensed frame, two annotators, adjudication \\
-IR-2 construct prevalence & exploratory & Full-corpus census with refusal accounting \\
-Dutch A1 replay & mismatch-reported & Root-cause 792/1,900 disagreements \\
-Independent DMN agreement & unrun & Pin engine and retain paired traces \\
-Reviewer agreement/efficiency & unrun & Preregister G3 instrument and collect observations \\
-CEGIR and reward training & blocked & Optional after core gates; separate claims \\
+Dutch aggregate replay & \state{evidencered}{MISMATCH} & Anchor is not reproducible under the retained replay contract \\
+Privacy operational run & \state{evidenceamber}{EXPLORATORY} & Coverage and review workload for one restricted run \\
+Recall/dependency/lowering fixtures & \state{evidencegray}{FIXTURE ONLY} & Evaluator and failure-contract behavior only \\
+Independent AFS frame & \state{evidencegray}{UNRUN} & No population source-fidelity estimate \\
+Independent-engine OE & \state{evidencegray}{UNRUN} & No cross-engine or outcome-quality estimate \\
+Human review instrument & \state{evidencegray}{UNRUN} & No reviewer agreement or efficiency estimate \\
 \bottomrule
-\end{tabular}
+\end{tabularx}
 \end{table}

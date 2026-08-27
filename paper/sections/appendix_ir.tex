@@ -9,7 +9,8 @@ are decidable.
 \centering
 \caption{The executable boundary is explicit.}
 \label{tab:ir-subset}
-\begin{tabular}{p{0.24\linewidth}p{0.27\linewidth}p{0.38\linewidth}}
+\small
+\begin{tabularx}{\linewidth}{@{}p{0.24\linewidth}p{0.27\linewidth}X@{}}
 \toprule
 Construct & Status & Typical refusal or validation condition \\
 \midrule
@@ -20,7 +21,7 @@ References and dependencies & Supported with checks & Unresolved or cyclic refer
 Quantification and open-world context & Refused & \texttt{UNSUPPORTED\_SEMANTICS} with source span \\
 Unbounded recursion or external side effects & Refused & \texttt{NON\_TERMINATING} or \texttt{EXTERNAL\_CONTEXT} \\
 \bottomrule
-\end{tabular}
+\end{tabularx}
 \end{table}
 
 Refusal records contain a stable code, human-readable explanation, source
