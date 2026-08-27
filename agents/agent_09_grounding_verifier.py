@@ -274,6 +274,12 @@ class OpenAIGroundingResolver:
                             flush=True,
                         )
                         return self.verify(split[0]) + self.verify(split[1])
+                    # A single-claim response with the wrong identifier cannot
+                    # be repaired by splitting. Return no usable result so the
+                    # verifier finalizer records the claim as missing/review
+                    # required instead of aborting the whole dataset run.
+                    if sum(expected.values()) <= 1 and returned:
+                        return []
                     raise ValueError(
                         f"verifier response coverage mismatch: expected {sum(expected.values())}, "
                         f"received {sum(returned.values())}"
@@ -516,6 +522,7 @@ class GroundingVerifier:
         packets: list[dict[str, Any]],
         max_rules: int,
         max_claims: int,
+        max_batch_chars: int = 80000,
     ) -> list[list[dict[str, Any]]]:
         # A single unusually rich rule may exceed the claim ceiling. Split its
         # claim list into independently checkpointed fragments while repeating
@@ -533,13 +540,20 @@ class GroundingVerifier:
         batches: list[list[dict[str, Any]]] = []
         current: list[dict[str, Any]] = []
         claim_count = 0
+        serialized_chars = 0
         for packet in fragments:
             packet_claims = len(packet.get("claims", []))
-            if current and (len(current) >= max_rules or claim_count + packet_claims > max_claims):
+            packet_chars = len(json.dumps(packet, ensure_ascii=False, separators=(",", ":")))
+            if current and (
+                len(current) >= max_rules
+                or claim_count + packet_claims > max_claims
+                or serialized_chars + packet_chars > max_batch_chars
+            ):
                 batches.append(current)
-                current, claim_count = [], 0
+                current, claim_count, serialized_chars = [], 0, 0
             current.append(packet)
             claim_count += packet_claims
+            serialized_chars += packet_chars
         if current:
             batches.append(current)
         return batches
@@ -707,6 +721,7 @@ class GroundingVerifier:
         max_rules = max(1, int(os.getenv("KG_GROUNDING_RULES_PER_REQUEST", "4")))
         max_claims = max(1, int(os.getenv("KG_GROUNDING_CLAIMS_PER_REQUEST", "48")))
         max_chars = max(4000, int(os.getenv("KG_GROUNDING_EVIDENCE_CHARS_PER_RULE", "8000")))
+        max_batch_chars = max(20000, int(os.getenv("KG_GROUNDING_MAX_BATCH_CHARS", "80000")))
         max_relationships = max(1, int(os.getenv("KG_GROUNDING_RELATIONSHIPS_PER_REQUEST", "12")))
         working["business_rules"] = rules
         rule_packets = [self.build_packet(rule, corpus, max_chars) for rule in rules]
@@ -714,8 +729,8 @@ class GroundingVerifier:
             working, corpus, max_chars
         )
         packets = rule_packets + relationship_packets
-        batches = self.make_batches(rule_packets, max_rules, max_claims)
-        batches.extend(self.make_batches(relationship_packets, max_relationships, max_claims))
+        batches = self.make_batches(rule_packets, max_rules, max_claims, max_batch_chars)
+        batches.extend(self.make_batches(relationship_packets, max_relationships, max_claims, max_batch_chars))
         checkpoint = JsonlCheckpoint(output_dir / "agent_09_grounding_checkpoint.jsonl")
         raw_by_rule: dict[str, list[dict[str, Any]]] = {}
         unexpected_responses: list[dict[str, Any]] = []

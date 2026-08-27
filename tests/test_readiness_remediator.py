@@ -120,6 +120,38 @@ def test_multi_rule_unresolved_conflict_expands_to_every_pair():
     }
 
 
+def test_conflict_candidate_expansion_is_bounded_deterministically(monkeypatch):
+    graph = graph_with_two_rules()
+    graph["business_rules"] = [dict(graph["business_rules"][0], rule_id=f"BR-{i:03d}") for i in range(20)]
+    graph["dependency_details"]["conflicts"] = [{
+        "entity": "SELLER_SERVICER",
+        "rule_ids": [rule["rule_id"] for rule in graph["business_rules"]],
+        "status": "unresolved",
+        "resolution": "",
+    }]
+    monkeypatch.setenv("KG_REMEDIATION_MAX_CONFLICT_PAIRS", "7")
+
+    candidates = ReadinessRemediator._conflict_candidates(graph)
+
+    assert len(candidates) == 7
+    assert [tuple(candidate["rule_ids"]) for candidate in candidates] == sorted(
+        tuple(candidate["rule_ids"]) for candidate in candidates
+    )
+
+
+def test_failed_conflict_batch_is_preserved_as_review_items():
+    batch = [{"entity": "SELLER", "rule_ids": ["BR-1", "BR-2"]}]
+    fallback = ReadinessRemediator._unresolved_conflict_fallback(batch, RuntimeError("network"))
+
+    assert fallback == [{
+        "entity": "SELLER",
+        "rule_ids": ["BR-1", "BR-2"],
+        "status": "unresolved",
+        "reasoning": "Conflict remediation failed: network",
+        "resolution": "Manual review required.",
+    }]
+
+
 def test_agent_08_batches_list_shaped_source_reference():
     rule = graph_with_two_rules()["business_rules"][0]
     rule["requires_review"] = True

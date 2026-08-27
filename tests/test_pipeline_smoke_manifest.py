@@ -14,6 +14,8 @@ def test_smoke_manifest_is_metadata_only_and_passed() -> None:
     assert manifest["status"] == "smoke_pass"
     assert manifest["configuration"]["reasoning_model"] == "gpt-5.6-luna"
     assert manifest["configuration"]["reasoning_effort"] == "high"
+    # This retained artifact records the historical 32k-cap smoke protocol;
+    # current defaults are asserted by the client/configuration tests.
     assert manifest["configuration"]["reasoning_max_completion_tokens"] == 32768
     assert manifest["retained_artifacts"]["metadata_only"] is True
     assert manifest["retained_artifacts"]["source_and_pipeline_output"] == "local-only and not redistributed"

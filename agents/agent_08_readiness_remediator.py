@@ -19,6 +19,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from agents.agent_07_executable_readiness import (
     ExecutableReadinessCompleter,
     OpenAIEvidenceResolver,
+    _build_token_index,
+    _compact_readiness_rule,
     _normalise_rule_contract,
     _project_execution,
     _report_markdown,
@@ -155,6 +157,20 @@ class ReadinessRemediator:
     )
     CHECKPOINT_VERSION = 2
 
+    @staticmethod
+    def _unresolved_conflict_fallback(batch: list[dict[str, Any]], error: Exception) -> list[dict[str, Any]]:
+        """Convert a failed provider response into explicit review items."""
+        return [
+            {
+                "entity": candidate.get("entity", ""),
+                "rule_ids": candidate.get("rule_ids", []),
+                "status": "unresolved",
+                "reasoning": f"Conflict remediation failed: {error}",
+                "resolution": "Manual review required.",
+            }
+            for candidate in batch
+        ]
+
     def __init__(self, resolver: OpenAIRemediationResolver | None) -> None:
         self.resolver = resolver
 
@@ -213,7 +229,11 @@ class ReadinessRemediator:
             if failures.isdisjoint({"exceptions", "scope"}):
                 continue
             packets.append({
-                "rule": rule,
+                # Do not resend full extraction/grounding payloads.  Remediation
+                # may patch only readiness fields, while the compact projection
+                # keeps prompts bounded and preserves the original graph in the
+                # stage output.
+                "rule": _compact_readiness_rule(rule),
                 "failed_requirements": sorted(failures),
                 "evidence_packet": completer._evidence_packet(rule, corpus),
             })
@@ -225,6 +245,12 @@ class ReadinessRemediator:
 
     @staticmethod
     def _conflict_candidates(graph: Mapping[str, Any]) -> list[dict[str, Any]]:
+        # Dependency analysis can contain very large unresolved groups (for
+        # example, hundreds of rules sharing one output variable).  Expanding
+        # every group into a Cartesian product is both unbounded and redundant
+        # because the model can only remediate a bounded request set.  Keep a
+        # deterministic prefix and leave the remainder fail-closed for review.
+        max_candidates = max(1, int(os.getenv("KG_REMEDIATION_MAX_CONFLICT_PAIRS", "5000")))
         rules = {str(rule.get("rule_id")): rule for rule in graph.get("business_rules", []) if isinstance(rule, Mapping)}
         unique: dict[tuple[str, tuple[str, ...]], dict[str, Any]] = {}
         conflicts = (graph.get("dependency_details") or {}).get("conflicts", [])
@@ -253,6 +279,8 @@ class ReadinessRemediator:
                         )
                     } for rule_id in pair],
                 }
+                if len(unique) >= max_candidates:
+                    return [unique[key] for key in sorted(unique)]
         return [unique[key] for key in sorted(unique)]
 
     @staticmethod
@@ -342,8 +370,32 @@ class ReadinessRemediator:
         organized_dir: Path,
         output_dir: Path,
     ) -> tuple[dict[str, Any], dict[str, Any]]:
-        working = deepcopy(dict(graph))
+        # The optimized graph can contain hundreds of megabytes of evidence
+        # payloads.  A full deepcopy here needlessly blocks the stage before
+        # its first request.  Only the rule/conflict structures are mutated;
+        # retain immutable evidence arrays by reference.
+        working = dict(graph)
+        working["business_rules"] = [
+            # Rule payloads already belong exclusively to this stage's loaded
+            # graph; a shallow record copy avoids duplicating large evidence
+            # arrays while still isolating top-level field assignments.
+            dict(rule) for rule in graph.get("business_rules", []) if isinstance(rule, Mapping)
+        ]
+        dependency_details = dict(graph.get("dependency_details") or {})
+        dependency_details["conflicts"] = [
+            deepcopy(entry) for entry in dependency_details.get("conflicts", []) if isinstance(entry, Mapping)
+        ]
+        working["dependency_details"] = dependency_details
         corpus = source_document_index(str(organized_dir))
+        # Reuse the same normalized retrieval index as Agent 07.  Without it,
+        # each review rule repeatedly lowercases and scans every chunk before
+        # remediation requests are submitted, making large corpora CPU-bound.
+        corpus["_search_index"] = [
+            (chunk, str(chunk.get("text", "")).lower(), str(chunk.get("chunk_path", "")).lower())
+            for chunk in corpus.get("chunks", [])
+            if isinstance(chunk, Mapping)
+        ]
+        corpus["_token_index"] = _build_token_index(corpus["_search_index"])
         rules = [dict(rule) for rule in working.get("business_rules", []) if isinstance(rule, Mapping)]
         initial_review = sum(bool(rule.get("requires_review")) for rule in rules)
         workers = max(1, int(os.getenv("KG_REMEDIATION_WORKERS", "16")))
@@ -423,9 +475,25 @@ class ReadinessRemediator:
                 return result
 
             with ThreadPoolExecutor(max_workers=min(workers, max(1, len(conflict_batches))), thread_name_prefix="kg-remediate-conflict") as executor:
-                futures = [executor.submit(resolve_conflict_batch, batch) for batch in conflict_batches]
+                futures = []
+                for batch in conflict_batches:
+                    future = executor.submit(resolve_conflict_batch, batch)
+                    # Keep the input attached for fail-closed fallback handling
+                    # if the provider raises before returning a result.
+                    future._c2c_conflict_batch = batch
+                    futures.append(future)
                 for future in as_completed(futures):
-                    for analysis in future.result():
+                    try:
+                        analyses = future.result()
+                    except Exception as exc:
+                        # A transient provider/network failure must not abort the
+                        # complete remediation run. Preserve every affected pair
+                        # as explicitly unresolved so the fail-closed report and
+                        # a subsequent checkpointed rerun can address it.
+                        batch = getattr(future, "_c2c_conflict_batch", [])
+                        print(f"⚠️ conflict remediation batch failed; retaining review items: {exc}", flush=True)
+                        analyses = self._unresolved_conflict_fallback(batch, exc)
+                    for analysis in analyses:
                         ids = tuple(sorted({str(value) for value in analysis.get("rule_ids", [])}))
                         if len(ids) == 2:
                             resolved_pairs[(str(analysis.get("entity", "")), ids)] = analysis

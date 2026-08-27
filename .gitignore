@@ -49,6 +49,7 @@ compliance-files/nda_confidentiality/
 compliance-files/privacy_policy/
 compliance-files/mobile_app_privacy/
 compliance-files/deonticbench/
+compliance-files/mortgage/
 
 # OS / editor
 .DS_Store

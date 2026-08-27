@@ -73,6 +73,27 @@ def test_all_documents_are_processed_and_aggregated_correctly(tmp_path):
     assert {entry["file"] for entry in results["files"]} == {d.name for d in docs}
 
 
+def test_recursive_discovery_excludes_metadata_directories(tmp_path):
+    (tmp_path / "official").mkdir()
+    (tmp_path / "_smoke_fixture").mkdir()
+    (tmp_path / "official" / "case.txt").write_text("official case")
+    (tmp_path / "_smoke_fixture" / "case.txt").write_text("smoke case")
+    (tmp_path / "_manifest.json").write_text("{}")
+    out_dir = tmp_path / "organized"
+    agent = _agent()
+
+    with patch.object(
+        agent,
+        "chunk_document_with_reasoning",
+        side_effect=lambda p: _fake_chunks(p, count=1),
+    ):
+        results = agent.process_knowledge_folder(str(tmp_path), output_folder=str(out_dir))
+
+    assert results["total_files"] == 1
+    assert results["processed"] == 1
+    assert results["files"][0]["file"] == "case.txt"
+
+
 def test_each_document_gets_its_own_isolated_output_folder(tmp_path):
     _write_docs(tmp_path, 4)
     out_dir = tmp_path / "organized"
@@ -204,6 +225,81 @@ def test_organizer_workers_env_var_is_respected(tmp_path, monkeypatch):
 
     assert results["processed"] == 4
     assert peak_active == 1, "KG_ORGANIZER_WORKERS=1 must serialize processing"
+
+
+def test_resume_reuses_only_matching_completed_document(tmp_path, monkeypatch):
+    docs = _write_docs(tmp_path, 2)
+    # Keep generated chunks outside the input tree so the second discovery
+    # pass sees only the original source documents.
+    out_dir = tmp_path.parent / f"{tmp_path.name}-organized"
+    agent = _agent()
+
+    with patch.object(agent, "chunk_document_with_reasoning", side_effect=lambda p: _fake_chunks(p, count=2)):
+        first = agent.process_knowledge_folder(str(tmp_path), output_folder=str(out_dir))
+    assert first["processed"] == 2
+
+    monkeypatch.setenv("KG_ORGANIZER_RESUME", "true")
+    with patch.object(agent, "chunk_document_with_reasoning", side_effect=AssertionError("must not re-chunk")):
+        resumed = agent.process_knowledge_folder(str(tmp_path), output_folder=str(out_dir))
+
+    assert resumed["processed"] == 2
+    assert resumed["total_chunks"] == 4
+    assert len(resumed["chunk_word_counts"]) == 4
+    assert all(entry["method"] == "resume" for entry in resumed["files"])
+
+
+def test_resume_counts_nested_section_chunks(tmp_path, monkeypatch):
+    source = tmp_path / "nested.txt"
+    source.write_text("source text")
+    out_dir = tmp_path.parent / f"{tmp_path.name}-organized"
+    agent = _agent()
+    chunks = [
+        DocumentChunk(
+            chunk_id=f"nested-{index}",
+            title=f"Section {index}",
+            content=f"content {index}",
+            section_path=["Part", f"Section {index}"],
+            metadata={"source_file": source.name, "word_count": 100},
+        )
+        for index in range(2)
+    ]
+    with patch.object(agent, "chunk_document_with_reasoning", return_value=chunks), patch.object(
+        agent, "_normalize_chunk_sizes", side_effect=lambda values, _source: values
+    ):
+        first = agent.process_knowledge_folder(str(tmp_path), output_folder=str(out_dir))
+    assert first["total_chunks"] == 2
+    assert len(list((out_dir / "nested").rglob("*.txt"))) == 2
+
+    monkeypatch.setenv("KG_ORGANIZER_RESUME", "true")
+    with patch.object(agent, "chunk_document_with_reasoning", side_effect=AssertionError("must not re-chunk")):
+        resumed = agent.process_knowledge_folder(str(tmp_path), output_folder=str(out_dir))
+    assert resumed["total_chunks"] == 2
+    assert len(resumed["chunk_word_counts"]) == 2
+
+
+def test_duplicate_chunk_titles_are_written_to_distinct_paths(tmp_path):
+    source = tmp_path / "source.txt"
+    source.write_text("source text")
+    out_dir = tmp_path / "organized"
+    agent = _agent()
+    duplicate_chunks = [
+        DocumentChunk(
+            chunk_id=f"source-{index}",
+            title="Repeated heading",
+            content=f"content {index}",
+            section_path=["Section"],
+            metadata={"source_file": source.name, "word_count": 100},
+        )
+        for index in range(3)
+    ]
+
+    agent.organize_chunks(duplicate_chunks, source, out_dir)
+
+    document_dir = out_dir / "source"
+    paths = [path for path in document_dir.rglob("*.txt") if path.is_file()]
+    metadata = json.loads((document_dir / "_metadata.json").read_text())
+    assert len(paths) == 3
+    assert len({item["path"] for item in metadata["structure"]}) == 3
 
 
 class _FakeMessage:

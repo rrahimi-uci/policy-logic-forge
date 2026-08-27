@@ -112,6 +112,18 @@ class TestChatCompletionParams:
         kwargs = mock.chat.completions.create.call_args.kwargs
         assert kwargs["max_completion_tokens"] == 4096
 
+    @allure.title("Default pipeline cap bounds high-reasoning completions")
+    def test_reasoning_completion_budget_default_pipeline_cap(self, monkeypatch):
+        client, mock = self._client_with_mock("gpt-5.6-luna")
+        monkeypatch.setenv("KG_REASONING_MAX_COMPLETION_TOKENS", "24576")
+        client.chat_completion(
+            [{"role": "user", "content": "extract compact JSON"}],
+            max_tokens=32768,
+            reasoning_effort="high",
+        )
+        kwargs = mock.chat.completions.create.call_args.kwargs
+        assert kwargs["max_completion_tokens"] == 24576
+
     @allure.title("get_text_response returns the message content")
     def test_get_text_response(self):
         client, _ = self._client_with_mock("gpt-4o-mini")
