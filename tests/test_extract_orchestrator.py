@@ -1,4 +1,4 @@
-from cli.extract import ExtractionPipeline
+from cli.extract import ExtractionPipeline, _PERFORMANCE_ENV
 
 
 def test_review_only_readiness_is_non_blocking_but_fail_closed(tmp_path):
@@ -20,6 +20,31 @@ def test_failed_readiness_invariant_remains_blocking(tmp_path):
         '"rules_requiring_review": 2}'
     )
     assert pipeline._review_only_readiness() is False
+
+
+def test_complete_fail_closed_grounding_is_allowed_to_reach_dag(tmp_path):
+    pipeline = object.__new__(ExtractionPipeline)
+    pipeline.optimized_dir = tmp_path
+    (tmp_path / "kg_grounding_report.json").write_text(
+        '{"pass": false, "total_rules": 10, "model_claims": 20, '
+        '"response_claims_returned": 20, "claim_coverage_percent": 100.0, '
+        '"missing_claim_responses": 0, "duplicate_claim_responses": 0, '
+        '"unexpected_claim_responses": 0}'
+    )
+    pipeline._last_exit_codes = {"agent_09": 3}
+    assert pipeline._review_only_grounding() is True
+
+
+def test_incomplete_grounding_response_remains_blocking(tmp_path):
+    pipeline = object.__new__(ExtractionPipeline)
+    pipeline.optimized_dir = tmp_path
+    (tmp_path / "kg_grounding_report.json").write_text(
+        '{"pass": false, "total_rules": 10, "model_claims": 20, '
+        '"response_claims_returned": 19, "claim_coverage_percent": 99.0, '
+        '"missing_claim_responses": 1, "duplicate_claim_responses": 0, '
+        '"unexpected_claim_responses": 0}'
+    )
+    assert pipeline._review_only_grounding() is False
 
 
 def test_run_all_continues_to_grounding_and_dag_for_review_only_readiness(tmp_path, monkeypatch):
@@ -62,6 +87,29 @@ def test_run_all_continues_to_grounding_and_dag_for_review_only_readiness(tmp_pa
     assert calls[-2:] == ["run_agent_09", "run_agent_10"]
 
 
+def test_run_all_continues_to_dag_for_complete_review_only_grounding(tmp_path, monkeypatch):
+    pipeline = object.__new__(ExtractionPipeline)
+    pipeline.skip_optimize = True
+    pipeline.optimized_dir = tmp_path
+    pipeline.dag_dir = tmp_path / "dag"
+    pipeline._last_exit_codes = {}
+    calls = []
+
+    for name in ("run_agent_01", "run_agent_02", "run_agent_03", "run_agent_04",
+                 "run_agent_05", "run_agent_06", "run_agent_10"):
+        monkeypatch.setattr(pipeline, name, lambda name=name: calls.append(name) or True)
+
+    def grounding():
+        calls.append("run_agent_09")
+        pipeline._last_exit_codes["agent_09"] = 3
+        return False
+
+    monkeypatch.setattr(pipeline, "run_agent_09", grounding)
+    monkeypatch.setattr(pipeline, "_review_only_grounding", lambda: True)
+    assert pipeline.run_all() is True
+    assert calls[-2:] == ["run_agent_09", "run_agent_10"]
+
+
 def test_readiness_verification_reuses_remediated_conflicts(monkeypatch):
     pipeline = object.__new__(ExtractionPipeline)
     observed = {}
@@ -89,3 +137,77 @@ def test_initial_readiness_analysis_does_not_reuse_conflicts(monkeypatch):
 
     assert pipeline.run_agent_07()
     assert observed["extra_env"] is None
+
+
+def test_agent_01_recursively_discovers_nested_sources(tmp_path, monkeypatch):
+    source = tmp_path / "source"
+    (source / "split" / "hard").mkdir(parents=True)
+    (source / "split" / "hard" / "case.txt").write_text("source", encoding="utf-8")
+    pipeline = ExtractionPipeline(
+        source_dir=source,
+        domain="deonticbench",
+        target_rules=30,
+        max_workers=40,
+        skip_optimize=False,
+        batch_name="nested-source-test",
+    )
+    calls = []
+
+    def fake_run(agent_id, args, extra_env=None):
+        calls.append((agent_id, args))
+        return True
+
+    monkeypatch.setattr(pipeline, "_run", fake_run)
+    assert pipeline.run_agent_01() is True
+    assert calls == [("agent_01", [str(source), str(pipeline.organized_dir)])]
+
+
+def test_agent_01_ignores_top_level_metadata_manifest(tmp_path, monkeypatch):
+    """A corpus manifest must not suppress recursively discovered documents."""
+    source = tmp_path / "benchmark"
+    source.mkdir()
+    (source / "_manifest.json").write_text("{}", encoding="utf-8")
+    (source / "split" / "whole").mkdir(parents=True)
+    (source / "split" / "whole" / "case.txt").write_text("source", encoding="utf-8")
+    pipeline = ExtractionPipeline(
+        source_dir=source,
+        domain="deonticbench",
+        target_rules=30,
+        max_workers=40,
+        skip_optimize=False,
+        batch_name="manifest-source-test",
+    )
+    calls = []
+
+    def fake_run(agent_id, args, extra_env=None):
+        calls.append((agent_id, args))
+        return True
+
+    monkeypatch.setattr(pipeline, "_run", fake_run)
+    assert pipeline.run_agent_01() is True
+    assert calls == [("agent_01", [str(source), str(pipeline.organized_dir)])]
+
+
+def test_orchestrator_propagates_document_worker_profile():
+    assert _PERFORMANCE_ENV["KG_ORGANIZER_WORKERS"] == ("document_workers", 6)
+
+
+def test_mortgage_domain_is_supported_for_pdf_runs(tmp_path, monkeypatch):
+    """The local Fannie Mae PDF is accepted by the normal CLI contract."""
+    source = tmp_path / "mortgage"
+    source.mkdir()
+    (source / "guide.pdf").write_bytes(b"%PDF-1.4\n")
+    (source / ".DS_Store").write_bytes(b"metadata")
+    pipeline = ExtractionPipeline(
+        source_dir=source,
+        domain="mortgage",
+        target_rules=30,
+        max_workers=40,
+        skip_optimize=True,
+        batch_name="mortgage-test",
+    )
+    calls = []
+    monkeypatch.setattr(pipeline, "_run", lambda agent_id, args, extra_env=None: calls.append((agent_id, args)) or True)
+    assert pipeline.domain == "mortgage"
+    assert pipeline.run_agent_01() is True
+    assert calls == [("agent_01", [str(source), str(pipeline.organized_dir), "--files", "guide.pdf"])]

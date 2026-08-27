@@ -13,6 +13,8 @@ ExecutableReadinessCompleter = readiness_module.ExecutableReadinessCompleter
 normalise_graph_entity_names = readiness_module._normalise_graph_entity_names
 normalise_rule_contract = readiness_module._normalise_rule_contract
 evidence_pointer = readiness_module._evidence_pointer
+conflict_batch_groups = readiness_module._conflict_batch_groups
+compact_readiness_rule = readiness_module._compact_readiness_rule
 
 
 class Resolver:
@@ -267,6 +269,93 @@ def test_off_schema_scope_basis_is_coerced_to_unresolved_after_source_review():
 
     assert rule["scope_basis"] == "unresolved_after_source_review"
     assert rule["scope_derivation"]["unresolved_reason"] == "unresolved_insufficient_evidence"
+
+
+def test_non_string_scope_basis_is_coerced_without_validator_crash():
+    """A malformed object from the model must remain reviewable, not crash readiness."""
+    rule = valid_rule()
+    rule["scope_basis"] = {"state": "inferred", "reason": "model payload"}
+
+    normalise_rule_contract(rule)
+    issues = validate_rule_v2(rule, {"SELLER_SERVICER", "FANNIE_MAE"})
+
+    assert rule["scope_basis"] == "unresolved_after_source_review"
+    assert "model payload" in rule["scope_derivation"]["unresolved_reason"]
+    assert not any(issue.code == "invalid_scope_basis" for issue in issues)
+
+
+def test_resumed_rule_normalization_handles_malformed_scope_basis():
+    """The coercion used for fresh responses also protects resumed checkpoints."""
+    rule = valid_rule()
+    rule["scope_basis"] = {"state": "inferred"}
+    normalise_rule_contract(rule)
+    assert rule["scope_basis"] == "unresolved_after_source_review"
+
+
+def test_conflict_batches_deduplicate_rules_shared_by_multiple_outcomes():
+    variables = {
+        "r1": {"legal_basis", "purpose"},
+        "r2": {"legal_basis"},
+        "r3": {"purpose"},
+        "r4": {"unrelated"},
+    }
+
+    batches = conflict_batch_groups(list(variables), variables.__getitem__, 2)
+
+    assert batches == [["r1", "r2"], ["r3"]]
+    assert sorted({rule_id for batch in batches for rule_id in batch}) == ["r1", "r2", "r3"]
+    assert "r4" not in {rule_id for batch in batches for rule_id in batch}
+
+
+def test_checkpoint_loader_rejects_rule_ids_from_another_corpus(tmp_path):
+    completer = ExecutableReadinessCompleter(resolver=None)
+    completer.checkpoint_path = tmp_path / "checkpoint.jsonl"
+    completer.checkpoint_path.write_text(
+        '{"key":"old","rule":{"rule_id":"old-corpus-rule"}}\n'
+        '{"key":"current","rule":{"rule_id":"current-rule"}}\n',
+        encoding="utf-8",
+    )
+
+    completer._load_checkpoint({"current-rule"})
+
+    assert set(completer._checkpoint) == {"current"}
+
+
+def test_checkpoint_loader_rejects_matching_ids_from_a_different_corpus(tmp_path):
+    completer = ExecutableReadinessCompleter(resolver=None)
+    completer.checkpoint_path = tmp_path / "checkpoint.jsonl"
+    completer.checkpoint_path.write_text(
+        '{"key":"old","rule":{"rule_id":"same","exception_verification":{"corpus_sha256":"old"}}}\n'
+        '{"key":"current","rule":{"rule_id":"same","scope_derivation":{"corpus_sha256":"new"}}}\n',
+        encoding="utf-8",
+    )
+
+    completer._load_checkpoint({"same"}, "new")
+
+    assert set(completer._checkpoint) == {"current"}
+
+
+def test_readiness_request_projection_excludes_optimizer_payloads():
+    rule = valid_rule()
+    rule["dependencies"] = [{"large": "optimizer-only"}]
+    rule["readiness"] = {"checks": {"large": "prior-run"}}
+
+    projected = compact_readiness_rule(rule)
+
+    assert projected["rule_id"] == rule["rule_id"]
+    assert "dependencies" not in projected
+    assert "readiness" not in projected
+
+
+def test_evidence_packet_can_use_precomputed_search_index():
+    rule = valid_rule()
+    chunk = {"chunk_path": "source.txt", "section_id": "S1", "text": "A seller servicer must limit the number of pools to three."}
+    corpus = {"chunks": [chunk], "_search_index": [(chunk, chunk["text"], chunk["chunk_path"])]}
+
+    packet = readiness_module.ExecutableReadinessCompleter._evidence_packet(rule, corpus)
+
+    assert packet["searched_chunk_count"] == 0
+    assert packet["candidate_passages"]
 
 
 def test_valid_exception_basis_values_are_left_untouched():

@@ -181,6 +181,24 @@ class RulesExtractionConfig:
 
 class BusinessRulesExtractor:
     """Extract detailed business rules using entity-relationship definitions and GPT-5 reasoning."""
+
+    @staticmethod
+    def _checkpoint_fingerprint(batches: List[List[Dict[str, str]]]) -> str:
+        """Return a stable identity for the exact source batches.
+
+        Checkpoint reuse must be invalidated when chunk content or boundaries
+        change; ordinal batch numbers are not sufficient for that purpose.
+        """
+        digest = hashlib.sha256()
+        for batch in batches:
+            for file_info in batch:
+                digest.update(str(file_info.get("path", "")).encode("utf-8"))
+                digest.update(b"\0")
+                digest.update(str(file_info.get("chunk_index", "")).encode("utf-8"))
+                digest.update(b"\0")
+                digest.update(str(file_info.get("content", "")).encode("utf-8"))
+                digest.update(b"\0")
+        return digest.hexdigest()
     
     def __init__(
         self, 
@@ -486,6 +504,43 @@ class BusinessRulesExtractor:
         """Retain each candidate while recording v2 contract/readiness findings."""
         annotated = annotate_rule_contract(rule, self._entity_catalog())
         return annotate_rule_readiness(annotated, self._entity_catalog())
+
+    @staticmethod
+    def _normalize_rule_list(
+        rules: Any,
+        *,
+        batch_num: int | str,
+        bucket: str,
+    ) -> list[Dict[str, Any]]:
+        """Return merge-safe rule objects while preserving malformed candidates.
+
+        Reasoning models occasionally emit a rule identifier string in a
+        ``business_rules`` array instead of the required object.  Dropping it
+        would silently lose a source candidate, while passing it downstream
+        crashes the merge and blocks the whole corpus.  Convert such values to
+        explicit review-required records so provenance remains visible and
+        later contract/grounding checks fail closed.
+        """
+        if not isinstance(rules, list):
+            return []
+        normalized: list[Dict[str, Any]] = []
+        for index, candidate in enumerate(rules):
+            if isinstance(candidate, dict):
+                normalized.append(candidate)
+                continue
+            raw = str(candidate)
+            rule_id = raw.strip() or f"malformed_batch_{batch_num}_{bucket}_{index}"
+            normalized.append({
+                "rule_id": rule_id,
+                "rule_name": rule_id,
+                "rule_type": "exception",
+                "description": raw,
+                "source_reference": {},
+                "requires_review": True,
+                "review_reason": "agent_03 returned a non-object rule candidate",
+                "raw_model_rule": candidate,
+            })
+        return normalized
     
     def extract_batch(
         self,
@@ -568,6 +623,13 @@ class BusinessRulesExtractor:
                     "but omit prose, markdown, explanations, and optional examples."
                 )
                 recovery_attempts = max(1, int(os.getenv("KG_BATCH_EMPTY_RESPONSE_ATTEMPTS", "2")))
+                # Give compact retries a larger output ceiling: the initial
+                # high-reasoning response may exhaust the normal budget before
+                # emitting JSON, while the retry explicitly suppresses prose.
+                retry_completion_limit = max(
+                    completion_limit,
+                    int(os.getenv("KG_RULES_COMPACT_RETRY_MAX_TOKENS", "32768")),
+                )
                 for recovery_attempt in range(1, recovery_attempts + 1):
                     print(
                         f"  DEBUG Batch {batch_num}: empty/truncated response; "
@@ -579,7 +641,7 @@ class BusinessRulesExtractor:
                             response = self.client.chat_completion(
                                 messages=[{"role": "user", "content": compact_prompt}],
                                 temperature=self.global_config.get_rules_temperature(),
-                                max_tokens=completion_limit,
+                                max_tokens=retry_completion_limit,
                                 response_format={"type": "json_object"},
                                 reasoning_effort=self.reasoning_effort,
                             )
@@ -588,7 +650,7 @@ class BusinessRulesExtractor:
                                 response = self.client.chat_completion(
                                     messages=[{"role": "user", "content": compact_prompt}],
                                     temperature=self.global_config.get_rules_temperature(),
-                                    max_tokens=completion_limit,
+                                    max_tokens=retry_completion_limit,
                                     response_format={"type": "json_object"},
                                     reasoning_effort=self.reasoning_effort,
                                 )
@@ -743,9 +805,22 @@ class BusinessRulesExtractor:
         with self._merge_lock:
             # Merge entity types
             for entity_name, entity_info in batch_result.get('entity_types', {}).items():
+                if not isinstance(entity_info, dict):
+                    continue
+                new_rules = self._normalize_rule_list(
+                    entity_info.get('business_rules', []),
+                    batch_num=batch_result.get('batch_num', 'unknown'),
+                    bucket=f"entity_{entity_name}",
+                )
                 if entity_name in self.all_entity_types:
-                    existing_rules = self.all_entity_types[entity_name].get('business_rules', [])
-                    new_rules = entity_info.get('business_rules', [])
+                    existing_info = self.all_entity_types[entity_name]
+                    if not isinstance(existing_info, dict):
+                        existing_info = {}
+                    existing_rules = self._normalize_rule_list(
+                        existing_info.get('business_rules', []),
+                        batch_num=batch_result.get('batch_num', 'unknown'),
+                        bucket=f"entity_{entity_name}",
+                    )
                     existing_ids = {r.get('rule_id') for r in existing_rules}
                     existing_names = {r.get('rule_name', '').lower() for r in existing_rules}
                     for rule in new_rules:
@@ -753,13 +828,29 @@ class BusinessRulesExtractor:
                             existing_rules.append(rule)
                     self.all_entity_types[entity_name]['business_rules'] = existing_rules
                 else:
-                    self.all_entity_types[entity_name] = entity_info
+                    self.all_entity_types[entity_name] = {
+                        **entity_info,
+                        'business_rules': new_rules,
+                    }
 
             # Merge relationships
             for rel_name, rel_info in batch_result.get('relationships', {}).items():
+                if not isinstance(rel_info, dict):
+                    continue
+                new_rules = self._normalize_rule_list(
+                    rel_info.get('business_rules', []),
+                    batch_num=batch_result.get('batch_num', 'unknown'),
+                    bucket=f"relationship_{rel_name}",
+                )
                 if rel_name in self.all_relationships:
-                    existing_rules = self.all_relationships[rel_name].get('business_rules', [])
-                    new_rules = rel_info.get('business_rules', [])
+                    existing_info = self.all_relationships[rel_name]
+                    if not isinstance(existing_info, dict):
+                        existing_info = {}
+                    existing_rules = self._normalize_rule_list(
+                        existing_info.get('business_rules', []),
+                        batch_num=batch_result.get('batch_num', 'unknown'),
+                        bucket=f"relationship_{rel_name}",
+                    )
                     existing_ids = {r.get('rule_id') for r in existing_rules}
                     existing_names = {r.get('rule_name', '').lower() for r in existing_rules}
                     for rule in new_rules:
@@ -767,7 +858,10 @@ class BusinessRulesExtractor:
                             existing_rules.append(rule)
                     self.all_relationships[rel_name]['business_rules'] = existing_rules
                 else:
-                    self.all_relationships[rel_name] = rel_info
+                    self.all_relationships[rel_name] = {
+                        **rel_info,
+                        'business_rules': new_rules,
+                    }
     
     def _calculate_confidence_score(self, rule: Dict[str, Any]) -> Dict[str, Any]:
         """Calculate overall confidence score from breakdown if present."""
@@ -814,8 +908,12 @@ class BusinessRulesExtractor:
         # Persist successful batch responses so an interrupted or provider-
         # limited run can resume without re-paying for completed work. Errors
         # are intentionally not checkpointed; they must be retried next run.
+        # Batch numbers alone are unsafe when a corrected organizer run changes
+        # chunk boundaries, so bind every checkpoint to the current corpus.
+        checkpoint_fingerprint = self._checkpoint_fingerprint(batches)
         checkpoint_file = os.getenv("KG_BATCH_CHECKPOINT_FILE")
         cached_results: Dict[int, Dict[str, Any]] = {}
+        stale_checkpoints = 0
         if checkpoint_file:
             checkpoint_path = Path(checkpoint_file)
             if checkpoint_path.exists():
@@ -823,13 +921,24 @@ class BusinessRulesExtractor:
                     for line in checkpoint_path.read_text(encoding="utf-8").splitlines():
                         payload = json.loads(line)
                         batch_num = int(payload.get("batch_num"))
-                        if not payload.get("error"):
+                        if (
+                            not payload.get("error")
+                            and payload.get("checkpoint_fingerprint") == checkpoint_fingerprint
+                        ):
                             cached_results[batch_num] = payload
+                        elif not payload.get("error"):
+                            stale_checkpoints += 1
                     print(
                         f"   ✓ Loaded {len(cached_results)} successful batch checkpoints from "
                         f"{checkpoint_path}",
                         flush=True,
                     )
+                    if stale_checkpoints:
+                        print(
+                            f"   ⚠️ Ignored {stale_checkpoints} stale batch checkpoint(s); "
+                            "source corpus fingerprint changed",
+                            flush=True,
+                        )
                 except (OSError, ValueError, json.JSONDecodeError) as exc:
                     print(f"   ⚠️  Ignoring unreadable batch checkpoint: {exc}", flush=True)
 
@@ -891,7 +1000,9 @@ class BusinessRulesExtractor:
                         checkpoint_path = Path(checkpoint_file)
                         checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
                         with checkpoint_path.open("a", encoding="utf-8") as handle:
-                            handle.write(json.dumps(result, ensure_ascii=False) + "\n")
+                            checkpoint_payload = dict(result)
+                            checkpoint_payload["checkpoint_fingerprint"] = checkpoint_fingerprint
+                            handle.write(json.dumps(checkpoint_payload, ensure_ascii=False) + "\n")
                             handle.flush()
                     
                 except Exception as e:
@@ -959,7 +1070,9 @@ class BusinessRulesExtractor:
                             checkpoint_path = Path(checkpoint_file)
                             checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
                             with checkpoint_path.open("a", encoding="utf-8") as handle:
-                                handle.write(json.dumps(retry_result, ensure_ascii=False) + "\n")
+                                checkpoint_payload = dict(retry_result)
+                                checkpoint_payload["checkpoint_fingerprint"] = checkpoint_fingerprint
+                                handle.write(json.dumps(checkpoint_payload, ensure_ascii=False) + "\n")
                                 handle.flush()
                         if retry_result.get("error"):
                             print(

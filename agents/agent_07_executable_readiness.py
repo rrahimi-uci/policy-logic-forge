@@ -44,6 +44,71 @@ from utils.rule_contract import EXCEPTION_BASES, SCOPE_BASES, validate_rule_v2
 _DICT_SHAPED_COMPLETION_FIELDS = {"exception_verification", "scope_derivation", "applicability_scope"}
 
 
+def _build_token_index(search_chunks: list[tuple[Mapping[str, Any], str, str]]) -> dict[str, list[int]]:
+    """Build an inverted token/marker index for bounded evidence retrieval."""
+    index: dict[str, list[int]] = {}
+    for position, (_chunk, lower, path_lower) in enumerate(search_chunks):
+        tokens = set(re.findall(r"[a-z][a-z0-9_-]{3,}", lower))
+        tokens.update(re.findall(r"[a-z][a-z0-9_-]{3,}", path_lower))
+        normalized_path = re.sub(r"[^a-z0-9]", "", path_lower)
+        if normalized_path:
+            tokens.add("__pathnorm__:" + normalized_path)
+        for marker in ("except", "unless", "notwithstanding", "however", "waiver", "exempt"):
+            if marker in lower:
+                tokens.add("__marker__:" + marker)
+        for token in tokens:
+            index.setdefault(token, []).append(position)
+    return index
+
+
+def _conflict_batch_groups(
+    member_ids: list[str],
+    outcome_variables,
+    max_rules_per_call: int,
+) -> list[list[str]]:
+    """Partition overlapping-rule components without duplicate model work.
+
+    A rule can assign several output variables, so independently batching each
+    variable sends the same rule repeatedly (and scales badly for generic
+    entities such as ``DATA_CONTROLLER``). Build connected components of the
+    output-variable overlap graph, then split each component into bounded
+    deterministic batches. Pairs crossing a batch boundary remain covered by
+    the caller's fail-closed unresolved fallback.
+    """
+    limit = max(2, int(max_rules_per_call))
+    ids = sorted({str(rule_id) for rule_id in member_ids})
+    buckets: dict[str, set[str]] = {}
+    for rule_id in ids:
+        for variable in outcome_variables(rule_id):
+            buckets.setdefault(str(variable), set()).add(rule_id)
+
+    adjacency = {rule_id: set() for rule_id in ids}
+    for bucket in buckets.values():
+        if len(bucket) < 2:
+            continue
+        for rule_id in bucket:
+            adjacency[rule_id].update(bucket - {rule_id})
+
+    components: list[list[str]] = []
+    unvisited = set(ids)
+    while unvisited:
+        root = min(unvisited)
+        stack = [root]
+        unvisited.remove(root)
+        component: list[str] = []
+        while stack:
+            current = stack.pop()
+            component.append(current)
+            for neighbour in sorted(adjacency[current] & unvisited, reverse=True):
+                unvisited.remove(neighbour)
+                stack.append(neighbour)
+        component.sort()
+        if len(component) >= 2:
+            components.append(component)
+
+    return [component[start:start + limit] for component in components for start in range(0, len(component), limit)]
+
+
 class EvidenceResolver(Protocol):
     def complete_rule(self, rule: Mapping[str, Any], corpus: Mapping[str, Any]) -> Mapping[str, Any]: ...
     def complete_rules(self, rules: list[Mapping[str, Any]]) -> list[Mapping[str, Any]]: ...
@@ -142,6 +207,31 @@ class OpenAIEvidenceResolver:
         value = self._json_completion(prompt, int(os.getenv("KG_CONFLICT_MAX_TOKENS", "6000")))
         analyses = value.get("analyses", [])
         return analyses if isinstance(analyses, list) else []
+
+
+_READINESS_RULE_FIELDS = (
+    "rule_id", "rule_name", "rule_type", "description", "condition_predicates",
+    "condition_logic", "outcomes", "variables", "recommended_hit_policy",
+    "versioning_status", "applicability_scope", "scope_basis", "inference_reasoning",
+    "responsible_party", "counterparties", "exceptions", "exception_basis",
+    "exception_verification", "scope_derivation", "source_reference", "test_vectors",
+)
+
+
+def _compact_readiness_rule(rule: Mapping[str, Any]) -> dict[str, Any]:
+    """Keep resolver requests bounded without changing the persisted rule.
+
+    Optimizer annotations (dependency arrays, entity definitions, prior
+    readiness reports, and field-evidence duplicates) can dominate a request
+    while adding no information to the evidence completion task. The complete
+    rule remains the fingerprint/output source; only this transport projection
+    is compacted.
+    """
+    return {
+        field: deepcopy(rule[field])
+        for field in _READINESS_RULE_FIELDS
+        if field in rule
+    }
 
 
 def _project_execution(rule: Mapping[str, Any]) -> dict[str, Any]:
@@ -437,12 +527,19 @@ def _coerce_unresolved_basis(rule: dict[str, Any], basis_field: str, valid_value
     schema violation with no actionable path.
     """
     value = rule.get(basis_field)
-    if not isinstance(value, str) or value in valid_values:
+    if isinstance(value, str) and value in valid_values:
+        return
+    if value is None:
         return
     verification = rule.get(verification_field)
     verification_map = dict(verification) if isinstance(verification, Mapping) else {}
     if not str(verification_map.get("unresolved_reason", "")).strip():
-        verification_map["unresolved_reason"] = value
+        # Models occasionally return an object/list in place of the enum. Keep
+        # the complete value as a reviewable, JSON-safe string and move the
+        # field to the documented unresolved state. This prevents contract
+        # validation from attempting an unhashable set lookup while retaining
+        # the evidence needed for human review.
+        verification_map["unresolved_reason"] = value if isinstance(value, str) else repr(value)
     rule[verification_field] = verification_map
     rule[basis_field] = unresolved_value
 
@@ -748,7 +845,11 @@ class ExecutableReadinessCompleter:
         )
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
-    def _load_checkpoint(self) -> None:
+    def _load_checkpoint(
+        self,
+        valid_rule_ids: set[str] | None = None,
+        corpus_sha256: str | None = None,
+    ) -> None:
         self._checkpoint = {}
         if self.checkpoint_path is None or not self.checkpoint_path.exists():
             return
@@ -758,7 +859,28 @@ class ExecutableReadinessCompleter:
             except json.JSONDecodeError:
                 continue
             if isinstance(row, Mapping) and row.get("key") and isinstance(row.get("rule"), Mapping):
-                self._checkpoint[str(row["key"])] = dict(row["rule"])
+                rule = row["rule"]
+                # Checkpoint keys are content fingerprints, but old runs can
+                # still contain a completely different corpus. Reject those
+                # rows before any model request so a resumed run cannot spend
+                # work on stale rule IDs or accidentally mix datasets.
+                if valid_rule_ids is not None and str(rule.get("rule_id")) not in valid_rule_ids:
+                    continue
+                if corpus_sha256:
+                    observed_hashes = {
+                        value
+                        for container_name in ("exception_verification", "scope_derivation")
+                        for value in [
+                            (rule.get(container_name) or {}).get("corpus_sha256")
+                            if isinstance(rule.get(container_name), Mapping) else None
+                        ]
+                        if value
+                    }
+                    # A checkpoint without a corpus fingerprint is legacy and
+                    # cannot be proven safe to reuse after chunk repair.
+                    if observed_hashes != {corpus_sha256}:
+                        continue
+                self._checkpoint[str(row["key"])] = dict(rule)
 
     def _save_checkpoint(self, key: str, rule: Mapping[str, Any]) -> None:
         if self.checkpoint_path is None:
@@ -796,14 +918,43 @@ class ExecutableReadinessCompleter:
         anchors = {token.lower() for token in re.findall(r"[A-Za-z][A-Za-z0-9_-]{3,}", text)}
         markers = {"except", "unless", "notwithstanding", "however", "waiver", "exempt"}
         matches = []
-        for chunk in corpus.get("chunks", []):
-            lower = str(chunk.get("text", "")).lower()
-            path_lower = str(chunk.get("chunk_path", "")).lower()
+        search_chunks = corpus.get("_search_index")
+        if not isinstance(search_chunks, list):
+            search_chunks = [
+                (chunk, str(chunk.get("text", "")).lower(), str(chunk.get("chunk_path", "")).lower())
+                for chunk in corpus.get("chunks", [])
+                if isinstance(chunk, Mapping)
+            ]
+        token_index = corpus.get("_token_index")
+        if isinstance(token_index, Mapping):
+            # Common prose terms occur in nearly every chunk and provide no
+            # retrieval signal.  Prefer the rarest anchors and cap the set so
+            # one rule cannot trigger millions of inverted-index operations.
+            anchors = set(sorted(
+                anchors,
+                key=lambda anchor: (len(token_index.get(anchor, ())), -len(anchor), anchor),
+            )[:32])
+            # Score by inverted-index hits rather than rechecking every anchor
+            # against every candidate chunk (which is quadratic for large
+            # remediation cohorts).
+            scores: dict[int, int] = {}
+            for anchor in anchors:
+                for index in token_index.get(anchor, ()):
+                    scores[index] = scores.get(index, 0) + 1
+                normalized_anchor = re.sub(r"[^a-z0-9]", "", anchor)
+                for index in token_index.get("__pathnorm__:" + normalized_anchor, ()):
+                    scores[index] = scores.get(index, 0) + 1
+            candidate_indexes = set(scores)
+            for marker in markers:
+                candidate_indexes.update(token_index.get("__marker__:" + marker, ()))
+            iterable = ((search_chunks[index], scores.get(index, 0)) for index in sorted(candidate_indexes) if index < len(search_chunks))
+        else:
+            iterable = ((item, None) for item in search_chunks)
+        for item, indexed_score in iterable:
+            chunk, lower, path_lower = item
             normalized_path = re.sub(r"[^a-z0-9]", "", path_lower)
-            score = sum(
-                anchor in lower
-                or anchor in path_lower
-                or re.sub(r"[^a-z0-9]", "", anchor) in normalized_path
+            score = indexed_score if indexed_score is not None else sum(
+                anchor in lower or anchor in path_lower or re.sub(r"[^a-z0-9]", "", anchor) in normalized_path
                 for anchor in anchors
             )
             if score or any(marker in lower for marker in markers):
@@ -816,7 +967,7 @@ class ExecutableReadinessCompleter:
         # whenever available, followed by the strongest anchor/exception hits.
         try:
             max_candidates = max(1, int(os.getenv("KG_READINESS_MAX_CANDIDATES", "12")))
-            max_chars = max(4000, int(os.getenv("KG_READINESS_MAX_EVIDENCE_CHARS", "24000")))
+            max_chars = max(4000, int(os.getenv("KG_READINESS_MAX_EVIDENCE_CHARS", "12000")))
         except (TypeError, ValueError):
             max_candidates, max_chars = 12, 24000
         cited_path = str(source.get("chunk_path", "")) if isinstance(source, Mapping) else ""
@@ -893,6 +1044,15 @@ class ExecutableReadinessCompleter:
         final_graph = _normalise_graph_entity_names(deepcopy(dict(graph)))
         _restore_legacy_outcome_operators(final_graph, baseline)
         corpus = source_document_index(organized_dir)
+        # Build retrieval-normalization data once. Without this index every
+        # rule lowercased and regex-normalized the entire corpus independently,
+        # making large runs CPU-bound before their first LLM request.
+        corpus["_search_index"] = [
+            (chunk, str(chunk.get("text", "")).lower(), str(chunk.get("chunk_path", "")).lower())
+            for chunk in corpus.get("chunks", [])
+            if isinstance(chunk, Mapping)
+        ]
+        corpus["_token_index"] = _build_token_index(corpus["_search_index"])
         rules = [deepcopy(dict(rule)) for rule in final_graph.get("business_rules", []) if isinstance(rule, Mapping)]
         baseline_rules = [rule for rule in baseline.get("business_rules", []) if isinstance(rule, Mapping)]
         initial_chunk_rechecks = sum(rule.get("exception_basis") == "not_found_in_chunk_recheck_needed" for rule in baseline_rules)
@@ -902,7 +1062,10 @@ class ExecutableReadinessCompleter:
         except (TypeError, ValueError):
             readiness_workers = 8
 
-        self._load_checkpoint()
+        self._load_checkpoint(
+            {str(rule.get("rule_id")) for rule in rules if rule.get("rule_id")},
+            str(corpus.get("corpus_sha256") or "") or None,
+        )
 
         def finish_rule(index: int, original: Mapping[str, Any], completion: Mapping[str, Any] | None = None) -> tuple[int, dict[str, Any]]:
             rule = deepcopy(dict(original))
@@ -965,9 +1128,17 @@ class ExecutableReadinessCompleter:
                 packet = self._evidence_packet(original, corpus)
                 cache_key = self._fingerprint(original, packet)
                 if cache_key in self._checkpoint:
-                    completed.append((index, deepcopy(self._checkpoint[cache_key])))
+                    # Checkpoints may have been produced by an older contract
+                    # normalizer. Re-run the non-destructive normalization and
+                    # annotation on cache hits so validator fixes take effect
+                    # on resumed runs and stale review metadata is not carried
+                    # into the final readiness report.
+                    cached_rule = _normalise_rule_contract(deepcopy(self._checkpoint[cache_key]))
+                    cached_rule = annotate_rule_contract(cached_rule)
+                    cached_rule["execution"] = _project_execution(cached_rule)
+                    completed.append((index, cached_rule))
                 else:
-                    requests.append({"rule": original, "evidence_packet": packet})
+                    requests.append({"rule": _compact_readiness_rule(original), "evidence_packet": packet})
                     pending.append((index, original))
             if not pending:
                 return completed
@@ -1052,14 +1223,9 @@ class ExecutableReadinessCompleter:
                 # running at an effective concurrency of 1 even though the
                 # outer per-entity ThreadPoolExecutor (and the shared LLM
                 # concurrency gate) had far more room to give it.
-                batch_id_groups = [
-                    bucket_ids[start:start + max_rules_per_call]
-                    for _variable, bucket in sorted(output_buckets.items())
-                    if len(bucket) >= 2
-                    for bucket_ids in [sorted(set(bucket))]
-                    for start in range(0, len(bucket_ids), max_rules_per_call)
-                    if len(bucket_ids[start:start + max_rules_per_call]) >= 2
-                ]
+                batch_id_groups = _conflict_batch_groups(
+                    member_ids, outcome_variables, max_rules_per_call,
+                )
 
                 def _call_bucket(batch_ids: list[str]) -> list[dict[str, Any]]:
                     analyses = self.resolver.analyse_entity(

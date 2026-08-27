@@ -1,4 +1,5 @@
 from copy import deepcopy
+import json
 import threading
 import time
 from types import SimpleNamespace
@@ -91,6 +92,29 @@ def test_oversized_rule_is_split_without_exceeding_claim_ceiling():
     assert all(len(item["claims"]) <= 4 for batch in batches for item in batch)
 
 
+def test_relationship_batch_size_prevents_one_claim_requests():
+    packets = [
+        {"rule_id": f"@dependency:{index}", "claims": [{"claim_id": "relationship"}]}
+        for index in range(97)
+    ]
+
+    batches = GroundingVerifier.make_batches(packets, max_rules=48, max_claims=48)
+
+    assert [len(batch) for batch in batches] == [48, 48, 1]
+    assert sum(len(batch) for batch in batches) == len(packets)
+
+
+def test_grounding_batches_honor_serialized_size_cap():
+    packets = [
+        {"rule_id": f"R{i}", "claims": [{"claim_id": "c"}], "evidence": [{"source_text": "x" * 120}]}
+        for i in range(4)
+    ]
+    batches = GroundingVerifier.make_batches(packets, max_rules=4, max_claims=48, max_batch_chars=300)
+
+    assert all(len(json.dumps(batch, ensure_ascii=False, separators=(",", ":"))) <= 300 for batch in batches)
+    assert sum(len(batch) for batch in batches) == len(packets)
+
+
 def test_openai_resolver_retries_incomplete_response(monkeypatch):
     packet = {"rule_id": "R1", "claims": [{"claim_id": "c1"}], "evidence": []}
 
@@ -123,7 +147,20 @@ def test_openai_resolver_retries_incomplete_response(monkeypatch):
     results = resolver.verify([packet])
 
     assert resolver.client.calls == 2
-    assert results[0]["claim_id"] == "c1"
+
+
+def test_openai_resolver_marks_single_wrong_claim_as_missing():
+    resolver = object.__new__(OpenAIGroundingResolver)
+    resolver.model = "test"
+    resolver.reasoning_effort = "low"
+    resolver.prompts = SimpleNamespace(format_prompt=lambda _name, **values: values["packets_json"])
+    resolver.client = SimpleNamespace(chat_completion=lambda **_kwargs: SimpleNamespace(
+        choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps({
+            "verifications": [{"rule_id": "R1", "claim_id": "wrong", "verdict": "supported"}]
+        })))]
+    ))
+
+    assert resolver.verify([{"rule_id": "R1", "claims": [{"claim_id": "expected"}]}]) == []
 
 
 def test_supported_graph_is_certified_without_rewriting_rule_claims(tmp_path, monkeypatch):

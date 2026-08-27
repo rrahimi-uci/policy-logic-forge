@@ -38,7 +38,7 @@ from utils.config import get_config  # noqa: E402
 
 DOMAINS = [
     "nda_confidentiality", "privacy_policy", "mobile_app_privacy", "commercial_contracts",
-    "deonticbench",
+    "deonticbench", "mortgage",
 ]
 
 # Env vars every agent subprocess inherits, mapped from pipeline.performance in
@@ -46,9 +46,13 @@ DOMAINS = [
 # knob only needs one line here, matching the source pipeline's convention.
 _PERFORMANCE_ENV = {
     "KG_LLM_CONCURRENCY": ("llm_concurrency", 16),
-    "KG_REASONING_MAX_COMPLETION_TOKENS": ("reasoning_max_completion_tokens", 32768),
-    "KG_GLOBAL_LLM_CONCURRENCY_INITIAL": ("global_llm_concurrency_initial", 12),
-    "KG_GLOBAL_LLM_CONCURRENCY_MAX": ("global_llm_concurrency_max", 32),
+    # Agent 01 has a separate document-level worker pool.  Propagate the
+    # configured value instead of accidentally using the request concurrency
+    # (which can overload the provider on large corpora).
+    "KG_ORGANIZER_WORKERS": ("document_workers", 6),
+    "KG_REASONING_MAX_COMPLETION_TOKENS": ("reasoning_max_completion_tokens", 24576),
+    "KG_GLOBAL_LLM_CONCURRENCY_INITIAL": ("global_llm_concurrency_initial", 8),
+    "KG_GLOBAL_LLM_CONCURRENCY_MAX": ("global_llm_concurrency_max", 16),
     "KG_GLOBAL_LLM_CONCURRENCY_MIN": ("global_llm_concurrency_min", 1),
     "KG_GLOBAL_LLM_SUCCESS_WINDOW": ("global_llm_success_window", 3),
     "KG_GLOBAL_LLM_LEASE_SECONDS": ("global_llm_lease_seconds", 300),
@@ -57,17 +61,19 @@ _PERFORMANCE_ENV = {
     "KG_BATCH_CONNECTION_BACKOFF_SECONDS": ("batch_connection_backoff_seconds", 10),
     "KG_READINESS_WORKERS": ("readiness_workers", 40),
     "KG_READINESS_LLM_CONCURRENCY": ("readiness_llm_concurrency", 16),
-    "KG_READINESS_RULES_PER_REQUEST": ("readiness_rules_per_request", 4),
+    "KG_READINESS_RULES_PER_REQUEST": ("readiness_rules_per_request", 8),
+    "KG_READINESS_MAX_EVIDENCE_CHARS": ("readiness_max_evidence_chars", 12000),
     "KG_REMEDIATION_WORKERS": ("remediation_workers", 40),
-    "KG_REMEDIATION_LLM_CONCURRENCY": ("remediation_llm_concurrency", 32),
-    "KG_REMEDIATION_RULES_PER_REQUEST": ("remediation_rules_per_request", 4),
+    "KG_REMEDIATION_LLM_CONCURRENCY": ("remediation_llm_concurrency", 4),
+    "KG_REMEDIATION_RULES_PER_REQUEST": ("remediation_rules_per_request", 8),
     "KG_REMEDIATION_PAIRS_PER_REQUEST": ("remediation_pairs_per_request", 12),
+    "KG_REMEDIATION_MAX_CONFLICT_PAIRS": ("remediation_max_conflict_pairs", 5000),
     "KG_REMEDIATION_MAX_PASSES": ("remediation_max_passes", 3),
     "KG_GROUNDING_WORKERS": ("grounding_workers", 40),
-    "KG_GROUNDING_LLM_CONCURRENCY": ("grounding_llm_concurrency", 32),
+    "KG_GROUNDING_LLM_CONCURRENCY": ("grounding_llm_concurrency", 8),
     "KG_GROUNDING_RULES_PER_REQUEST": ("grounding_rules_per_request", 4),
     "KG_GROUNDING_CLAIMS_PER_REQUEST": ("grounding_claims_per_request", 48),
-    "KG_GROUNDING_RELATIONSHIPS_PER_REQUEST": ("grounding_relationships_per_request", 12),
+    "KG_GROUNDING_RELATIONSHIPS_PER_REQUEST": ("grounding_relationships_per_request", 48),
     "KG_ENTITY_EARLY_STOP": ("entity_early_stop", True),
     "KG_ENTITY_MIN_ITERATIONS": ("entity_min_iterations", 2),
 }
@@ -176,10 +182,34 @@ class ExtractionPipeline:
         return ok
 
     def run_agent_01(self) -> bool:
-        files = [str(p) for p in sorted(self.source_dir.iterdir()) if p.is_file()]
+        # ``--files`` filters by basename and is therefore only safe for a
+        # flat source directory. Benchmark corpora preserve nested split
+        # directories; let Agent 01 recursively discover those files instead
+        # of passing an empty flat-file selection.
+        # Ignore hidden filesystem metadata (notably macOS ``.DS_Store``),
+        # which is not a supported document and can otherwise be handed to
+        # the single-file filter as if it were source content.
+        # Only pass supported top-level documents to the organizer's basename
+        # filter.  Benchmark roots commonly contain metadata manifests (for
+        # example ``_manifest.json``) alongside nested ``.txt`` documents;
+        # treating metadata as a selected source file makes Agent 01 skip the
+        # actual recursive corpus entirely.
+        supported_suffixes = {
+            ".csv", ".docx", ".markdown", ".md", ".pdf", ".text",
+            ".tsv", ".txt", ".xls", ".xlsm", ".xlsx",
+        }
+        files = [
+            str(p) for p in sorted(self.source_dir.iterdir())
+            if p.is_file()
+            and not p.name.startswith(".")
+            and p.suffix.lower() in supported_suffixes
+        ]
         if not files:
-            print(f"No files found in {self.source_dir}")
-            return False
+            nested_files = [p for p in self.source_dir.rglob("*") if p.is_file()]
+            if not nested_files:
+                print(f"No files found in {self.source_dir}")
+                return False
+            return self._run("agent_01", [str(self.source_dir), str(self.organized_dir)])
         return self._run(
             "agent_01",
             [str(self.source_dir), str(self.organized_dir), "--files"]
@@ -245,6 +275,30 @@ class ExtractionPipeline:
             for value in invariants.values()
         ) and bool(report.get("rules_requiring_review"))
 
+    def _review_only_grounding(self) -> bool:
+        """Return true for a complete, fail-closed grounding review.
+
+        Agent 09 uses exit code 3 when claims are contradicted or lack
+        evidence. That is a data-quality signal, not an orchestration crash,
+        when every requested response was returned exactly once. In that
+        state the final DAG stage can still generate a fully covered DAG while retaining
+        the grounding failures on each rule.
+        """
+        report_path = self.optimized_dir / "kg_grounding_report.json"
+        try:
+            report = json.loads(report_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return False
+        return (
+            report.get("pass") is False
+            and report.get("total_rules", 0) > 0
+            and report.get("claim_coverage_percent") == 100.0
+            and report.get("response_claims_returned") == report.get("model_claims")
+            and report.get("missing_claim_responses") == 0
+            and report.get("duplicate_claim_responses") == 0
+            and report.get("unexpected_claim_responses") == 0
+        )
+
     def run_all(self) -> bool:
         start = datetime.now()
         if not self.run_agent_01():
@@ -285,9 +339,11 @@ class ExtractionPipeline:
                         return False
                     print("readiness remains review-gated; preserving review flags and continuing")
 
-            if not self.run_agent_09():
+        if not self.run_agent_09():
+            if self._last_exit_codes.get("agent_09") != 3 or not self._review_only_grounding():
                 print("\nSTOPPED: agent_09 grounding certification failed.")
                 return False
+            print("grounding remains review-gated with complete response coverage; continuing fail-closed")
 
         if not self.run_agent_10():
             return False

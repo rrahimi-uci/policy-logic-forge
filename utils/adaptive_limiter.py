@@ -60,6 +60,10 @@ class AdaptiveRequestLimiter:
 
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.state_file, timeout=30, isolation_level=None)
+        # Multiple worker processes can briefly contend on BEGIN IMMEDIATE;
+        # let SQLite wait inside the connection before surfacing a transient
+        # lock instead of failing an otherwise healthy pipeline stage.
+        connection.execute("PRAGMA busy_timeout=120000")
         connection.execute("PRAGMA journal_mode=WAL")
         connection.execute("PRAGMA synchronous=NORMAL")
         return connection

@@ -940,7 +940,20 @@ class DocumentChunkingAgent:
         else:
             # It's a directory - explore recursively
             for file_path in path.rglob("*"):
-                if file_path.is_file() and file_path.suffix.lower() in self.supported_extensions:
+                # Underscore/hidden directories are repository metadata or
+                # smoke fixtures, not part of a benchmark's official corpus.
+                # Exclude them during recursive discovery while retaining
+                # ordinary nested split directories.
+                relative_parts = file_path.relative_to(path).parts
+                in_metadata_dir = any(
+                    part.startswith((".", "_"))
+                    for part in relative_parts[:-1]
+                )
+                if (
+                    file_path.is_file()
+                    and not in_metadata_dir
+                    and file_path.suffix.lower() in self.supported_extensions
+                ):
                     files.append(file_path)
             
             # Filter to only selected files if specified
@@ -1786,8 +1799,11 @@ If no TOC is found, return {{"has_toc": false, "toc_entries": []}}
             "structure": []
         }
         
-        # Organize chunks
-        for chunk in chunks:
+        # Organize chunks.  Titles are model-generated and may repeat within
+        # the same section; keep every chunk by making the on-disk path
+        # unique instead of silently overwriting an earlier chunk.
+        used_chunk_paths: set[Path] = set()
+        for chunk_index, chunk in enumerate(chunks, 1):
             # Create subfolder based on section path
             chunk_folder = doc_folder
             for section in chunk.section_path[:-1]:  # All but last item in path
@@ -1796,8 +1812,17 @@ If no TOC is found, return {{"has_toc": false, "toc_entries": []}}
                 chunk_folder.mkdir(parents=True, exist_ok=True)
             
             # Save chunk content
-            chunk_filename = self._sanitize_folder_name(chunk.title) + ".txt"
+            base_name = self._sanitize_folder_name(chunk.title)
+            chunk_filename = base_name + ".txt"
             chunk_file = chunk_folder / chunk_filename
+            if chunk_file in used_chunk_paths:
+                suffix = self._sanitize_folder_name(chunk.chunk_id) or str(chunk_index)
+                chunk_file = chunk_folder / f"{base_name}__{suffix}.txt"
+                collision_index = 2
+                while chunk_file in used_chunk_paths:
+                    chunk_file = chunk_folder / f"{base_name}__{suffix}_{collision_index}.txt"
+                    collision_index += 1
+            used_chunk_paths.add(chunk_file)
             
             with open(chunk_file, 'w', encoding='utf-8') as f:
                 # Write header with metadata
@@ -1933,6 +1958,50 @@ If no TOC is found, return {{"has_toc": false, "toc_entries": []}}
                 "file_entry": None,
             }
             try:
+                # An interrupted corpus run can safely resume when the
+                # caller opts in.  The metadata and at least one chunk are
+                # the atomic completion marker written by organize_chunks;
+                # normal runs keep the historical reprocess-and-clear
+                # behavior so stale chunks are never silently retained.
+                if os.getenv("KG_ORGANIZER_RESUME", "false").lower() == "true":
+                    resume_dir = output_path / self._sanitize_folder_name(file_path.stem)
+                    metadata_path = resume_dir / "_metadata.json"
+                    if metadata_path.exists():
+                        try:
+                            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+                        except (OSError, json.JSONDecodeError):
+                            metadata = None
+                        # Chunks may be nested under section folders; count
+                        # the complete document tree when deciding whether a
+                        # resumable result is complete.
+                        chunks_on_disk = [
+                            path for path in resume_dir.rglob("*.txt") if path.is_file()
+                        ]
+                        if (
+                            isinstance(metadata, dict)
+                            and metadata.get("source_file") == file_path.name
+                            and chunks_on_disk
+                        ):
+                            resumed_word_counts = [
+                                int(item.get("metadata", {}).get("word_count"))
+                                for item in metadata.get("structure", [])
+                                if isinstance(item, dict)
+                                and isinstance(item.get("metadata"), dict)
+                                and isinstance(item.get("metadata", {}).get("word_count"), (int, float))
+                            ]
+                            print(f"  ↪ Resuming completed document ({len(chunks_on_disk)} chunks)")
+                            outcome["processed"] = 1
+                            outcome["total_chunks"] = len(chunks_on_disk)
+                            outcome["chunk_word_counts"] = resumed_word_counts
+                            outcome["file_entry"] = {
+                                "file": file_path.name,
+                                "status": "success",
+                                "chunks": len(chunks_on_disk),
+                                "method": "resume",
+                                "chunker_tool": "resume",
+                            }
+                            return outcome
+
                 chunks = []
                 chunker_used = None
 

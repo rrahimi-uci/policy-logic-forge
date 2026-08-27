@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+import threading
 
 from agents.agent_03_rules_extractor import BusinessRulesExtractor
 from tests.test_rule_contract import valid_rule
@@ -119,3 +120,35 @@ def test_agent_three_strictly_repairs_single_malformed_json_object():
     assert "error" not in result
     assert result["total_rules"] == 0
     assert len(extractor.client.calls) == 1
+
+
+def test_agent_three_coerces_non_object_rule_candidates_for_fail_closed_review():
+    extractor = _extractor()
+    extractor._merge_lock = threading.Lock()
+    extractor.all_entity_types = {}
+    extractor.all_relationships = {}
+
+    extractor.merge_results({
+        "batch_num": 88,
+        "entity_types": {},
+        "relationships": {
+            "INFORMATION_USED_FOR_PURPOSE": {
+                "business_rules": ["rule_88_stlouis_contact_purpose_limitation"]
+            }
+        },
+    })
+
+    rules = extractor.all_relationships["INFORMATION_USED_FOR_PURPOSE"]["business_rules"]
+    assert len(rules) == 1
+    assert isinstance(rules[0], dict)
+    assert rules[0]["rule_id"] == "rule_88_stlouis_contact_purpose_limitation"
+    assert rules[0]["requires_review"] is True
+    assert rules[0]["source_reference"] == {}
+    assert rules[0]["raw_model_rule"] == "rule_88_stlouis_contact_purpose_limitation"
+
+
+def test_agent_three_checkpoint_fingerprint_changes_with_source_content():
+    batches = [[{"path": "chunk.txt", "chunk_index": 0, "content": "old source"}]]
+    original = BusinessRulesExtractor._checkpoint_fingerprint(batches)
+    batches[0][0]["content"] = "corrected source"
+    assert BusinessRulesExtractor._checkpoint_fingerprint(batches) != original
