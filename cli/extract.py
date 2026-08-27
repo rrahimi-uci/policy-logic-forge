@@ -4,7 +4,7 @@ Extraction orchestrator: compliance documents -> a grounding-certified,
 DMN/BPMN-ready knowledge graph.
 
 This is a lean, single-batch orchestrator by design (see README.md "Scope").
-It runs the ten canonical agents in order, streaming each subprocess's output:
+It runs the eleven canonical agents in order, streaming each subprocess's output:
 
   agent_01  Document Organizer       chunk raw documents
   agent_02  Entity Extractor         entities & relationships
@@ -16,6 +16,7 @@ It runs the ten canonical agents in order, streaming each subprocess's output:
   agent_08  Readiness Remediator       focused fix-up (only if agent_07 requests it)
   agent_09  Grounding Verifier         independent claim-level certification
   agent_10  Dependency DAG Generator   100%-coverage DAG partition of the graph
+  agent_11  Executable Model Generator  DMN 1.3 and BPMN 2.0 projection
 
 Each agent subprocess shares an adaptive API-concurrency limiter (see
 utils/adaptive_limiter.py) via KG_GLOBAL_LLM_STATE_FILE, so running multiple
@@ -110,6 +111,7 @@ class ExtractionPipeline:
         self.merged_dir = self.config.get_rules_with_entities_dir()
         self.optimized_dir = self.config.get_optimized_dir()
         self.dag_dir = self.config.get_dag_dir()
+        self.executable_models_dir = self.config.get_executable_models_dir()
 
         self._limiter_state_file = os.getenv(
             "KG_GLOBAL_LLM_STATE_FILE",
@@ -256,6 +258,9 @@ class ExtractionPipeline:
     def run_agent_10(self) -> bool:
         return self._run("agent_10", [])
 
+    def run_agent_11(self) -> bool:
+        return self._run("agent_11", [])
+
     def _review_only_readiness(self) -> bool:
         """Return true when readiness is structurally sound but still review-gated.
 
@@ -347,12 +352,15 @@ class ExtractionPipeline:
 
         if not self.run_agent_10():
             return False
+        if not self.run_agent_11():
+            return False
 
         elapsed = datetime.now() - start
         print("\n" + "=" * 80)
         print(f"COMPLETE in {elapsed}")
         print(f"  optimized graph: {self.optimized_dir / 'optimized_compliance_knowledge_graph.json'}")
         print(f"  dependency DAGs: {self.dag_dir / 'dependency_dags.json'}")
+        print(f"  executable models: {getattr(self, 'executable_models_dir', self.dag_dir)}")
         print("=" * 80)
         return True
 
@@ -363,6 +371,7 @@ class ExtractionPipeline:
             "agent_05": self.run_agent_05, "agent_06": self.run_agent_06,
             "agent_07": self.run_agent_07, "agent_08": self.run_agent_08,
             "agent_09": self.run_agent_09, "agent_10": self.run_agent_10,
+            "agent_11": self.run_agent_11,
         }
         if agent_id not in dispatch:
             print(f"Invalid agent: {agent_id}. Valid: {', '.join(AGENT_IDS)}")

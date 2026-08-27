@@ -66,7 +66,7 @@ def test_run_all_continues_to_grounding_and_dag_for_review_only_readiness(tmp_pa
         return run
 
     for name in ("run_agent_01", "run_agent_02", "run_agent_03", "run_agent_04",
-                 "run_agent_05", "run_agent_06", "run_agent_09", "run_agent_10"):
+                 "run_agent_05", "run_agent_06", "run_agent_09", "run_agent_10", "run_agent_11"):
         monkeypatch.setattr(pipeline, name, ok(name))
 
     readiness_calls = iter((False, False))
@@ -84,7 +84,7 @@ def test_run_all_continues_to_grounding_and_dag_for_review_only_readiness(tmp_pa
     monkeypatch.setattr(pipeline, "run_agent_07", readiness)
     monkeypatch.setattr(pipeline, "run_agent_08", remediation)
     assert pipeline.run_all() is True
-    assert calls[-2:] == ["run_agent_09", "run_agent_10"]
+    assert calls[-3:] == ["run_agent_09", "run_agent_10", "run_agent_11"]
 
 
 def test_run_all_continues_to_dag_for_complete_review_only_grounding(tmp_path, monkeypatch):
@@ -96,7 +96,7 @@ def test_run_all_continues_to_dag_for_complete_review_only_grounding(tmp_path, m
     calls = []
 
     for name in ("run_agent_01", "run_agent_02", "run_agent_03", "run_agent_04",
-                 "run_agent_05", "run_agent_06", "run_agent_10"):
+                 "run_agent_05", "run_agent_06", "run_agent_10", "run_agent_11"):
         monkeypatch.setattr(pipeline, name, lambda name=name: calls.append(name) or True)
 
     def grounding():
@@ -107,7 +107,7 @@ def test_run_all_continues_to_dag_for_complete_review_only_grounding(tmp_path, m
     monkeypatch.setattr(pipeline, "run_agent_09", grounding)
     monkeypatch.setattr(pipeline, "_review_only_grounding", lambda: True)
     assert pipeline.run_all() is True
-    assert calls[-2:] == ["run_agent_09", "run_agent_10"]
+    assert calls[-3:] == ["run_agent_09", "run_agent_10", "run_agent_11"]
 
 
 def test_readiness_verification_reuses_remediated_conflicts(monkeypatch):

@@ -21,7 +21,7 @@ real, citable dataset.
 
 ## Scope
 
-**Kept**: the ten canonical agents `agent_01` through `agent_10` (document
+**Kept**: the eleven canonical agents `agent_01` through `agent_11` (document
 organization → entity/relationship extraction → business-rule extraction →
 validation → merge → deduplication + dependency analysis → four-invariant
 executable-readiness gate → focused remediation → independent grounding
@@ -156,7 +156,7 @@ then points at whichever domain folder you built.
 ## Structure
 
 ```
-cli/extract.py              `agent_01`–`agent_10` orchestrator
+cli/extract.py              `agent_01`–`agent_11` orchestrator
 agents/                     one zero-padded module per agent
 utils/                      config, LLM client, adaptive rate limiter,
                             rule contract + validator, readiness/grounding

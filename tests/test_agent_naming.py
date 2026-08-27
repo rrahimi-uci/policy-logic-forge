@@ -1,4 +1,4 @@
-"""Contracts for the repository-wide ``agent_01``–``agent_10`` naming scheme."""
+"""Contracts for the repository-wide ``agent_01``–``agent_11`` naming scheme."""
 
 from pathlib import Path
 
@@ -9,7 +9,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
 def test_agent_ids_are_sequential_and_zero_padded():
-    assert AGENT_IDS == tuple(f"agent_{index:02d}" for index in range(1, 11))
+    assert AGENT_IDS == tuple(f"agent_{index:02d}" for index in range(1, 12))
 
 
 def test_every_agent_identifier_resolves_to_its_current_module():
@@ -29,6 +29,7 @@ def test_pipeline_output_directories_use_current_agent_identifiers():
     assert output_dir_name("agent_08") == "agent_06-optimized"
     assert output_dir_name("agent_09") == "agent_06-optimized"
     assert output_dir_name("agent_10") == "agent_10-dag-generation"
+    assert output_dir_name("agent_11") == "agent_11-executable-models"
 
 
 def test_cli_advertises_canonical_agent_selector():

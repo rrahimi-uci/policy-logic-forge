@@ -259,7 +259,7 @@ census required for the G0 exit gate.
   six rules requiring review, including invalid predicate operators, and the
   privacy diagnostic covers 3/4 rules under boolean/number/enum while refusing
   one string rule; neither result authorizes freezing a subset. A subsequent
-  retained smallest privacy-policy run using the current `agent_01`–`agent_10`
+  retained smallest privacy-policy run using the current `agent_01`–`agent_11`
   naming is recorded with its reports and content-addressed manifest under
   `results/aggregates/ir2_agent_naming_smallest/`; it independently covers
   3/4 rules under boolean/number/enum and refuses the same string rule, so it
