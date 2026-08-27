@@ -9,7 +9,7 @@ review result without reading the raw bundle itself.
 
 - `run_summary.json`: run status, stage counts, rule/readiness/grounding counts,
   queue counts, corpus and graph hashes, model metadata.
-- `stage_index.json` / `stage_status.json`: one record per agent 01–10 with
+- `stage_index.json` / `stage_status.json`: one record per agent 01–11 with
   status, embedded checkpoint count, artifact inventory, timestamps, input/output
   counts, and scoped warning/failure counts.
 - `rule_index.jsonl`: canonical rule fields plus machine status, structural and

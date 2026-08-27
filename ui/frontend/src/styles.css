@@ -518,3 +518,71 @@ td small { display: block; margin-top: 4px; color: var(--muted); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
+
+/* Layered rule topology and executable drill-down */
+.graph-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; color: var(--muted); font-size: 11px; }
+.graph-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: #a6b3c5; }
+.legend-dot.source { background: #6c88bd; }
+.legend-dot.selected { background: var(--blue); box-shadow: 0 0 0 3px var(--blue-soft); }
+.legend-dot.downstream { background: #45a98d; }
+.layered-graph-scroll { min-height: 390px; overflow: auto; border: 1px solid #e5ebf3; border-radius: 12px; background: linear-gradient(180deg, #fbfcff, #f7faff); }
+.layered-graph { display: block; min-width: 930px; }
+.layer-label { fill: #7184a2; font-size: 10px; font-weight: 850; letter-spacing: .14em; }
+.rule-edge { fill: none; stroke: #b3bfd0; stroke-width: 1.5; opacity: .8; transition: stroke .16s ease, stroke-width .16s ease, opacity .16s ease; }
+.rule-edge.connected { stroke: var(--blue); stroke-width: 2.5; opacity: 1; }
+.rule-node { cursor: pointer; outline: none; }
+.rule-node rect { fill: #fff; stroke: #d4deeb; stroke-width: 1.2; filter: drop-shadow(0 3px 5px rgba(18, 37, 68, .05)); transition: fill .16s ease, stroke .16s ease, opacity .16s ease; }
+.rule-node:hover rect, .rule-node:focus rect { stroke: #8ca8e5; fill: #fbfdff; }
+.rule-node.selected rect { stroke: var(--blue); stroke-width: 2.2; fill: #f1f5ff; }
+.rule-node.upstream rect { stroke: #6c88bd; fill: #f2f6ff; }
+.rule-node.downstream rect { stroke: #53a98d; fill: #f0fbf7; }
+.rule-node.dim { opacity: .28; }
+.rule-node-name { fill: var(--ink); font-size: 11px; font-weight: 760; }
+.rule-node-id { fill: var(--muted); font-family: "SFMono-Regular", Consolas, ui-monospace, monospace; font-size: 8px; }
+.rule-node-layer { fill: #7d90ad; font-size: 9px; font-weight: 850; }
+.graph-help p { max-width: 840px; color: var(--ink-soft); font-size: 13px; }
+.graph-help-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 18px; }
+.graph-help-grid div { display: grid; gap: 4px; padding: 13px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface-soft); }
+.graph-help-grid strong { font-size: 12px; }
+.graph-help-grid span { color: var(--muted); font-size: 11px; }
+.graph-detail { border-color: #cbd9f3; box-shadow: 0 8px 28px rgba(49, 95, 213, .08); }
+.graph-status { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin: -2px 0 20px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-soft); }
+.graph-detail-grid { display: grid; grid-template-columns: minmax(0, 1.08fr) minmax(0, .92fr); gap: 24px; }
+.graph-detail h3 { margin-top: 0; }
+.graph-detail h4 { margin: 17px 0 8px; color: var(--muted-strong); font-size: 10px; letter-spacing: .09em; text-transform: uppercase; }
+.logic-list { display: grid; gap: 6px; }
+.logic-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-height: 34px; padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; color: var(--ink-soft); background: #fff; font-size: 11px; }
+.logic-row strong { color: var(--blue); font-family: "SFMono-Regular", Consolas, ui-monospace, monospace; font-size: 10px; }
+.graph-quote { margin: 0 0 8px; padding: 13px 15px; border-left: 3px solid #9fb5e8; border-radius: 0 8px 8px 0; color: var(--ink-soft); background: #f8faff; font-size: 12px; line-height: 1.65; }
+.executable-representations { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--line); }
+.executable-representations h3 { margin: 0; }
+.executable-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
+.executable-card { min-width: 0; padding: 15px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-soft); }
+.executable-card-heading { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.executable-card-heading strong, .executable-card-heading small { display: block; }
+.executable-card-heading strong { font-size: 12px; }
+.executable-card-heading small { margin-top: 2px; color: var(--muted); font-size: 10px; }
+.dmn-table { overflow: auto; border: 1px solid #d8e2ef; border-radius: 8px; background: #fff; }
+.dmn-row { display: grid; grid-template-columns: 30px repeat(auto-fit, minmax(105px, 1fr)); min-width: 350px; border-top: 1px solid #e5ebf3; }
+.dmn-row:first-child { border-top: 0; }
+.dmn-row > span { min-width: 0; padding: 8px 7px; border-left: 1px solid #e5ebf3; overflow: hidden; color: var(--ink-soft); font-family: "SFMono-Regular", Consolas, ui-monospace, monospace; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.dmn-row > span:first-child { border-left: 0; color: var(--muted); text-align: center; }
+.dmn-head { background: #eef3ff; }
+.dmn-head > span { color: #385791; font-family: inherit; font-size: 9px; font-weight: 800; }
+.dmn-row b { color: var(--blue); font-size: 9px; }
+.connection-note { margin-top: 9px; color: var(--muted); font-size: 10px; }
+.bpmn-diagram { display: block; width: 100%; min-width: 440px; height: auto; overflow: visible; color: #6f83a4; }
+.bpmn-event { fill: #fff; stroke: var(--green); stroke-width: 3; }
+.bpmn-end { fill: #e7f6f0; stroke: var(--green); stroke-width: 2; }
+.bpmn-task { fill: #edf2ff; stroke: var(--blue); stroke-width: 1.5; }
+.bpmn-gateway { fill: #fff4d8; stroke: var(--amber); stroke-width: 1.5; }
+.bpmn-flow { fill: none; stroke: #8c9bb1; stroke-width: 1.5; }
+.bpmn-diagram text { fill: var(--ink-soft); font-size: 11px; font-weight: 700; }
+.bpmn-diagram .bpmn-subtext, .bpmn-diagram .bpmn-condition { fill: var(--muted); font-size: 9px; font-weight: 500; }
+
+@media (max-width: 900px) {
+  .graph-detail-grid, .executable-grid { grid-template-columns: 1fr; }
+  .graph-status { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .graph-help-grid { grid-template-columns: 1fr; }
+}

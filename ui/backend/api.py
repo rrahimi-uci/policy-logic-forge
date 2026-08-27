@@ -262,8 +262,9 @@ def _route_get(service: ReviewService, path: str, params: dict[str, list[str]]) 
                 rows = [row for row in rows if row.get("status") == status]
             if query:
                 rows = [row for row in rows if query in json.dumps(row, ensure_ascii=False).lower()]
+            offset = max(0, _int(_first(params, "offset"), 0))
             limit = min(5000, max(1, _int(_first(params, "limit"), 5000)))
-            return {"items": rows[:limit], "total": len(rows), "limit": limit}
+            return {"items": rows[offset : offset + limit], "total": len(rows), "offset": offset, "limit": limit}
         if resource == "documents":
             return {"items": index.documents, "total": len(index.documents)} if len(segments) == 4 else _require(index.get_document(segments[4]), "document")
         if resource == "evidence":

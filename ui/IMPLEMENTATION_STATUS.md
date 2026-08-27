@@ -14,7 +14,7 @@ separate human-review overlay.
 | Stage observability | Stage status snapshots, checkpoint counts, artifact inventory, timestamps, scoped warning/failure counts, raw read-only artifact viewer, five-second checkpoint polling. | API and component tests; live artifact retrieval smoke check. |
 | Rule review | Filterable, sortable, groupable, selectable/exportable rule table and review queues. | Component tests plus API queue/filter tests. |
 | Traceability | Rule workbench, source split view, field evidence, evidence register, stable evidence IDs, source hashes. | Fixture/retained-run tests and component tests. |
-| Graph and executable review | Cytoscape relationship/conflict/dependency/DAG modes and DMN/BPMN projection cards. | Graph component tests and retained relationship assertions. |
+| Graph and executable review | Rule-only layered SVG dependency DAG (deterministic Layer 0+ topology, arrow direction, direct-neighborhood highlighting) with selected-rule evidence, relationships, interactive DMN decision table, and BPMN workflow drill-down. Complete rule/relationship pagination keeps large runs intact. | Layering/entity-exclusion component tests, API pagination tests, backend offset route test, mortgage API smoke checks, frontend build and coverage. |
 | Human overlay | SQLite comments, decisions, labels, saved views, audit history, artifact-hash stale detection. | Store/API tests and rule-workbench interaction tests. |
 | Search and comparison | Rules, source chunks, evidence, relationships, diagnostics search; exact-ID/hash-bound rule and relationship comparison. | API/index tests and UI comparison/search tests. |
 | Delivery boundary | Stdlib HTTP API with safe artifact traversal and static SPA serving; no pipeline imports or canonical writes. | HTTP integration tests, full repository pytest, TypeScript/lint/build. |
@@ -22,10 +22,10 @@ separate human-review overlay.
 
 ## Explicit limitations and next increments
 
-- The current retained pipeline emits rule-level DMN/BPMN projections, not
-  compiler-produced DMN XML or BPMN XML. The UI shows those projections and
-  clearly preserves the missing-asset state; a full document viewer and
-  third-party engine discrepancy view belong when those artifacts are emitted.
+- The UI renders the normalized rule execution contract and Agent 11's DMN/BPMN
+  metadata as a review projection. It is not a DMN/BPMN execution engine and
+  does not replace a standards-compliant modeler or third-party engine
+  discrepancy view.
 - Comparison is conservative: exact IDs are compared first, then structural
   and evidence hashes. Semantic matching, review-delta export, and multi-user
   assignment are intentionally follow-on work.

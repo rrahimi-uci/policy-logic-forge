@@ -6,7 +6,7 @@ maps the delivered surfaces to `ui-c2c.md` and records explicit follow-up
 limits.
 
 The review workbench turns an existing `pipeline-output/<run>/` bundle into a
-provenance-first workspace for triage, source validation, graph inspection,
+provenance-first workspace for triage, source validation, layered rule-graph inspection,
 run comparison, and human review decisions. The pipeline remains the source of
 truth; generated indexes are disposable and reviewer state is stored separately.
 
@@ -35,8 +35,9 @@ For frontend-only development, run `npm run dev` in `ui/frontend`. Set
 
 ## Read model
 
-`ui/backend/review_index.py` consumes the current agent 01–10 folder layout,
-including embedded agent 07–09 checkpoints. It writes `run_summary.json`,
+`ui/backend/review_index.py` consumes the current agent 01–11 folder layout,
+including embedded agent 07–09 checkpoints and executable DMN/BPMN outputs
+from agent 11. It writes `run_summary.json`,
 `stage_index.json`, JSONL indexes for rules, relationships, documents and
 evidence, comparison hashes, and a SQLite FTS5 search database. Missing or
 malformed artifacts become explicit diagnostics.
