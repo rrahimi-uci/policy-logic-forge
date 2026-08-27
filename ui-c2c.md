@@ -52,6 +52,66 @@ source chunks, so the reviewer has to reconstruct the story manually.
 - Comments, decisions, and annotations must live in a separate overlay store so
   the line between machine output and human review stays clear.
 
+## Current Implementation and UX Audit (2026-08-26)
+
+The original plan has now been implemented under `ui/`: the repository has a
+normalized indexer, local artifact API, immutable review overlay, React
+frontend, retained-run tests, and the planned review surfaces. The next problem
+is no longer feature availability. It is whether a reviewer can use those
+features comfortably and confidently for hours at a time.
+
+### What is professionally sound today
+
+- The pipeline/UI boundary is correct: the frontend never rewrites canonical
+  run artifacts, and review decisions remain in a separate hash-bound overlay.
+- Failure states remain visible. Readiness, grounding, conflict, and index
+  diagnostics are not collapsed into false-success empty states.
+- The navigation covers the real review jobs: orient to a run, triage rules,
+  inspect evidence, review relationships, compare runs, and diagnose failures.
+- The read model and API are sufficiently complete for a UX-focused increment;
+  redesigning the backend is not a prerequisite for improving the workbench.
+
+### UX defects found in the implemented frontend
+
+| Area | Current behavior | Reviewer impact | Required correction |
+| --- | --- | --- | --- |
+| Responsive shell | `body` has a 1,100 px minimum width and the sidebar is always expanded | Narrow laptop windows and mobile/tablet use overflow instead of adapting | Add a compact desktop rail and a real mobile drawer/top bar; remove fixed page minimums. |
+| Information hierarchy | Run ID, absolute source path, status, timestamp, four metrics, flow graph, and two large panels compete at once | The first screen is technically complete but cognitively heavy | Use a concise run header, breadcrumb/context line, priority summary, and progressive disclosure for provenance. |
+| Navigation | Navigation uses cryptic text glyphs and has no compact or mobile state | Icons are visually inconsistent and labels disappear poorly at reduced widths | Use a small internal SVG icon system, visible labels/tooltips, clear active state, and a menu control. |
+| Stage flow | Ten nodes are compressed into tiny labels inside a generic graph canvas with a large minimap | The core pipeline is effectively unreadable at a normal zoom | Replace the overview with a semantic, horizontally scrollable stage stepper; reserve React Flow for detailed structural diagrams. |
+| Search | Search opens only on submit, has no keyboard hint, no explicit loading state, and no escape/overlay semantics | Search feels abrupt and keyboard users cannot predict or dismiss it reliably | Add command-style search affordance, loading/results states, Escape handling, modal semantics, and background dismissal. |
+| Tables and filters | Five filters and saved-view controls form a dense ungrouped strip; rows are optimized for data density only | Reviewers spend effort parsing controls before reviewing rules | Group primary filters, move secondary controls into a disclosure panel, add active-filter feedback, sticky headers, and responsive cards. |
+| Interaction feedback | Refresh, polling, filter requests, and overlay writes have minimal or local-only feedback | Users cannot tell whether data is current, loading, saved, or stale | Add non-blocking progress, `aria-live` status, success/error notices, disabled states, and a visible last-refresh indicator. |
+| Accessibility | Focus visibility is inconsistent, icon-only controls are small, modal focus is unmanaged, and table rows mimic buttons | Keyboard and assistive-technology behavior is unreliable | Establish focus-visible tokens, 44 px targets, real button/link semantics, dialog roles, labels, and reduced-motion support. |
+| Visual system | Typography is undersized in evidence-heavy views; spacing and surface treatment are nearly uniform | Important warnings and decision actions do not stand out from supporting metadata | Define type, spacing, elevation, color, and motion tokens; strengthen hierarchy without hiding negative states. |
+| Empty and error states | Most states are terse single lines and global errors persist above unrelated content | Recovery paths are unclear and errors can dominate the shell | Use contextual empty states with next actions and view-scoped, dismissible error notices. |
+
+### UX outcome for this increment
+
+The workbench should feel like a calm evidence-review product: clear at first
+glance, dense only when the reviewer asks for detail, responsive from phone to
+large desktop, keyboard navigable, and explicit about status without becoming
+alarm-heavy. Smoothness means predictable transitions and preserved context,
+not decorative animation.
+
+### Acceptance criteria for the professional UI pass
+
+- At 1440 px, the overview communicates run state, review burden, and the next
+  action without exposing a full filesystem path as the dominant subtitle.
+- At 1024 px, the app remains usable with a compact navigation rail and no page
+  level horizontal overflow.
+- At 390 px, navigation is available through a drawer, metric cards stack, and
+  tables become readable review cards rather than clipped desktop tables.
+- Pipeline stages are readable without zooming and remain individually
+  actionable.
+- Search behaves as an accessible dialog, supports Escape, and distinguishes
+  loading, no-results, and result states.
+- Every interactive element has a visible keyboard focus state and a usable
+  target size; reduced-motion preferences are honored.
+- Machine failure and `requires_review` states remain at least as prominent as
+  they are in the current implementation.
+- Existing API contracts and review-overlay semantics remain unchanged.
+
 ## Product Principles
 
 1. Provenance first. Every rendered claim, warning, edge, and approval state
@@ -149,26 +209,31 @@ it needs, and how to implement it.
 
 Recommended shape:
 
-- `apps/review-workbench/`
+- `ui/frontend/` (implemented repository location)
 - React + TypeScript
 - Vite for local-first development and static bundle output
-- React Router for navigation
-- TanStack Query for API/data cache
-- TanStack Table for interactive review tables
+- Local state for the current single-page shell; add React Router only when
+  shareable/deep-linked views become a committed requirement
+- The existing typed API layer and explicit loading/error state; add TanStack
+  Query only when cache invalidation complexity justifies it
+- Semantic HTML table/card views for the current bounded local workload; add
+  TanStack Table when column virtualization or server pagination is needed
 - Cytoscape.js for graph/network views
-- React Flow for stage flow, DAG partitions, and DMN/BPMN-like diagrams
-- ELK.js for deterministic layered layout where DAG or flow readability matters
+- React Flow for DAG partitions and DMN/BPMN-like diagrams, not for the compact
+  ten-stage overview
+- A semantic stage stepper for primary pipeline orientation
 
 Why this stack:
 
-- The repo currently has no UI/backend runtime, so a decoupled SPA is cleaner
-  than reintroducing a large product shell.
-- TanStack Table is headless and supports the exact review interactions needed:
-  sorting, filtering, grouping, selection, expansion, and controlled state.
+- The implemented UI/backend runtime is deliberately self-contained under
+  `ui/`, so the SPA remains decoupled from the extraction pipeline.
+- The current semantic table implementation supports the bounded local review
+  workload without another abstraction layer; the interaction contract matters
+  more than adopting a particular table library.
 - Cytoscape.js is a mature graph visualization and analysis library that
   handles dense relationship views better than general-purpose flow libraries.
-- React Flow is better suited to curated flow diagrams such as pipeline stages,
-  dependency DAG partitions, and DMN/BPMN-like projection views. Its current
+- React Flow is better suited to curated detail diagrams such as dependency DAG
+  partitions and DMN/BPMN-like projection views. Its current
   docs explicitly point to `elkjs` as a viable layout option for these graphs.
 
 ## 2. Read-model indexer
@@ -496,9 +561,39 @@ This is the most important design choice in the whole proposal. It gives the
 UI a clean, queryable model without turning the extraction pipeline into a web
 application.
 
-## Phased Implementation Plan
+## Delivery Status and Revised Implementation Plan
 
-## Phase 0: Formalize the read model
+The current `ui/` implementation delivers Phases 0–1, most of Phase 2, and
+bounded slices of Phases 3–4. Stalled-run detection, full executable-asset
+viewers, semantic comparison, report export, and multi-reviewer assignment are
+still follow-ups. Phase 5 remains artifact-gated because full compiler-produced
+DMN/BPMN assets are not normal retained-run outputs. The active increment is
+the UX professionalization phase defined here.
+
+## Active increment: UX professionalization
+
+Implementation order:
+
+1. Establish design tokens, typography, focus, motion, and responsive shell.
+2. Replace glyph navigation with accessible SVG icons and add compact/mobile
+   navigation behavior.
+3. Rebuild the overview hierarchy and replace its compressed graph with a
+   semantic stage stepper.
+4. Smooth search, loading, refresh, notification, and error interactions.
+5. Make filters, review tables, detail layouts, graph controls, diagnostics,
+   and compare views adapt cleanly across breakpoints.
+6. Extend component tests for keyboard/dialog/navigation behavior, then verify
+   production builds and representative retained-run screens at desktop,
+   tablet, and mobile widths.
+
+Out of scope for this increment:
+
+- changing canonical pipeline artifacts or scientific status semantics
+- introducing authentication or multi-user deployment infrastructure
+- semantic rule matching or new compiler claims
+- adding a large component framework solely for visual styling
+
+## Delivered foundation: Phase 0 — Formalize the read model
 
 Goal:
 
@@ -524,7 +619,7 @@ Acceptance criteria:
 - Index generation fails clearly on missing or incompatible artifacts.
 - At least one test fixture verifies hash stability and queue derivation.
 
-## Phase 1: Highest-value review workspace
+## Delivered foundation: Phase 1 — Highest-value review workspace
 
 Goal:
 
@@ -553,7 +648,7 @@ Acceptance criteria:
   a rule, inspect evidence, add a comment, and record a disposition.
 - A reviewer can navigate from a grounding failure to the cited source text.
 
-## Phase 2: Observability and live-run monitoring
+## Partially delivered foundation: Phase 2 — Observability and live-run monitoring
 
 Goal:
 
@@ -577,7 +672,7 @@ Acceptance criteria:
 - An in-flight run shows visible progress and stalled-stage detection.
 - Missing artifact or schema errors show as explicit health failures.
 
-## Phase 3: Graph, DAG, and executable projection views
+## Partially delivered foundation: Phase 3 — Graph, DAG, and executable projection views
 
 Goal:
 
@@ -599,7 +694,7 @@ Acceptance criteria:
 - A reviewer can inspect execution projections for a rule and see unsupported
   or review-blocked constructs clearly.
 
-## Phase 4: Cross-run regression and multi-reviewer workflows
+## Partially delivered foundation: Phase 4 — Cross-run regression and multi-reviewer workflows
 
 Goal:
 
@@ -620,7 +715,7 @@ Acceptance criteria:
   changed after a prompt or validation change.
 - A reviewer can export unresolved items and review decisions as a report.
 
-## Phase 5: Compiler and external-backend integration
+## Artifact-gated follow-up: Phase 5 — Compiler and external-backend integration
 
 Goal:
 
