@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { CompareView, DiagnosticsView, DocumentsView, ErrorNotice, GraphView, layeredRuleLayout, Loading, MetricCard, Overview, RuleTableView, RuleWorkbench, SearchOverlay, StageFlow } from "./components";
+import { CompareView, connectedRuleIds, DiagnosticsView, DocumentsView, ErrorNotice, GraphView, layeredRuleLayout, Loading, MetricCard, Overview, RuleTableView, RuleWorkbench, SearchOverlay, StageFlow, wrapNodeText } from "./components";
 import type { RuleDetail, RunSummary, Stage } from "./types";
 import * as api from "./api";
 
@@ -39,6 +39,21 @@ describe("review workbench components", () => {
     const layout = layeredRuleLayout(rows, relationships);
     expect(layout.nodes.map((node) => [node.id, node.depth])).toEqual([["r1", 0], ["r2", 1], ["r3", 2]]);
     expect(layout.edges.map((edge) => [edge.source, edge.target])).toEqual([["r1", "r2"], ["r2", "r3"]]);
+  });
+
+  it("wraps long graph labels without overflowing their cards", () => {
+    const lines = wrapNodeText("A very long rule title with a deliberately lengthy description", 18);
+    expect(lines).toHaveLength(2);
+    expect(lines[1]).toMatch(/…$/);
+    expect(wrapNodeText("", 18)).toEqual(["—"]);
+  });
+
+  it("keeps grouped conflict candidates out of direct rule links", () => {
+    const links = connectedRuleIds("r1", [
+      { relationship_id: "direct", kind: "dependency", source_rule_id: "r1", target_rule_id: "r2", rule_ids: ["r1", "r2"] },
+      { relationship_id: "grouped", kind: "conflict_candidate", source_rule_id: "r3", target_rule_id: "r4", rule_ids: ["r1", "r3", "r4", "r5", "r6"] },
+    ] as any);
+    expect(links).toEqual(["r2"]);
   });
 
   it("renders stage flow and overview actions", () => {
