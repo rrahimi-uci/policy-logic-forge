@@ -14,14 +14,13 @@ from pathlib import Path
 
 REQUIRED_SECTIONS = {
     "Introduction",
-    "Problem formulation and evidence boundary",
-    "LEXEC: a provenance-preserving bounded compiler",
+    "Evidence-gated evaluation",
+    "LEXEC: a bounded compiler instrument",
     "Evaluation protocol",
-    "Implementation evidence",
-    "Results available in the snapshot",
-    "From implementation to a defensible result",
+    "Artifact implementation",
+    "Retained audit results",
     "Related work",
-    "Ethics, data governance, and limitations",
+    "Limitations and societal impact",
     "Conclusion",
 }
 FORBIDDEN_SOURCE_PATTERNS = (
@@ -153,6 +152,17 @@ def check_build(build_dir: Path) -> list[str]:
             errors.append("compiled PDF exceeds the 20-page development guard")
     except (FileNotFoundError, subprocess.CalledProcessError):
         # pdfinfo is a convenience check; LaTeX compilation remains authoritative.
+        pass
+    try:
+        extracted = subprocess.run(
+            ["pdftotext", "-layout", str(pdf), "-"], check=True, capture_output=True, text=True
+        ).stdout
+        pages = extracted.split("\f")
+        reference_pages = [index + 1 for index, page in enumerate(pages) if re.search(r"^References\s*$", page, flags=re.MULTILINE)]
+        if reference_pages and min(reference_pages) > 10:
+            errors.append("references begin after page 10; main content may exceed the nine-page limit")
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        # pdftotext is a convenience check; source and compilation checks still run.
         pass
     return errors
 

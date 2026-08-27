@@ -1,22 +1,31 @@
-\section{Ethics, data governance, and limitations}
+\section{Limitations and societal impact}
 
-Compliance documents can contain personal, contractual, or commercially
-sensitive information. The pipeline retains hashes and source-span references,
-but redistribution is governed by the license of each corpus. Restricted
-documents are never committed to this repository; manifests record access and
-deletion obligations. Human annotators require consent, compensation, secure
-handling, and a path to report harmful or ambiguous examples.
+\textbf{Scientific limitations.}
+The present snapshot does not estimate population-level AFS or OE. The Dutch
+anchor replay is unresolved, the privacy run lacks independent labels, the
+fixtures are synthetic, and the cross-engine and human-review studies are
+unrun. A typed, satisfiable encoding can still mistranslate its source; two
+engines can agree on the same error; and reviewers can miss an omitted
+exception. The protocol exposes these limitations but cannot remove them.
 
-The system can make an unsupported interpretation look authoritative if its
-refusal and confidence states are hidden. We therefore require visible
-evidence, refusal codes, validation errors, and reviewer decisions. A compiled
-decision must not be used as legal advice or as the sole basis for an adverse
-decision. Model/provider changes can alter extraction and grounding, so model
-identity, reasoning setting, and retry policy are retained in every run.
+\textbf{Scope and generalization.}
+\lexir{} covers a bounded subset of normative constructs. Quantification,
+open-world context, jurisdiction-specific interpretation, and some temporal
+semantics are refused. Results from Dutch regulatory models, contracts, or
+privacy policies should not be pooled without domain- and language-specific
+analysis. Model/provider changes can alter extraction, so configuration and
+retry policy are part of each run identity.
 
-The main limitation is semantic scope. A typed, satisfiable encoding can still
-misread a statute; an independent engine can agree on the same wrong model;
-and a reviewer can miss an omitted exception. Our protocol makes these risks
-measurable and recoverable, but does not eliminate them. Resource and licensing
-constraints also mean that the present snapshot cannot support a population
-claim.
+\textbf{Data governance.}
+Compliance documents may contain personal, contractual, or commercially
+sensitive information. Restricted documents remain outside the repository;
+manifests retain hashes, access terms, and deletion obligations. Human studies
+require consent or an appropriate ethics determination, fair compensation,
+secure handling, and a channel for ambiguous or harmful examples.
+
+\textbf{Misuse.}
+Executable output can acquire unwarranted authority. Refusal codes, evidence,
+validation errors, and reviewer dispositions must remain visible in downstream
+interfaces. A compiled decision is not legal advice and must not be the sole
+basis for an adverse decision. The system is intended for auditable analysis
+and review, not automated adjudication.

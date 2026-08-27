@@ -1,18 +1,17 @@
 \begin{table}[t]
 \centering
-\caption{Locally checkable implementation evidence at the paper freeze.}
+\caption{Artifact surfaces and the strongest locally checkable guarantee.}
 \label{tab:implementation}
-\begin{tabular}{p{0.34\linewidth}p{0.18\linewidth}p{0.36\linewidth}}
+\small
+\begin{tabularx}{\linewidth}{@{}p{.28\linewidth}p{.19\linewidth}X@{}}
 \toprule
-Surface & State & Evidence \\
+Surface & State & Local guarantee (not semantic accuracy) \\
 \midrule
-Ten-stage extraction pipeline & implemented & 1,051 core tests; full local suite passes \\
-Versioned extraction and \lexir{} contracts & implemented & schema and fail-closed validators pass \\
-DMN/reference/FEEL and solver adapters & implemented & bounded execution and proof-record tests pass \\
-Run retention, statistics, perturbation & implemented & artifact-contract validators pass \\
-Review workbench & implemented & UI build, unit, integration, and interaction checks pass \\
-Privacy operational run & exploratory & \PrivacyFiles{} files; \PrivacyChunks{} chunks; \PrivacyRules{} final rules \\
-Fixture recall/dependency artifacts & fixture-only & \RuleRecallMatched{}/\RuleRecallGold{} and \DependencyMatched{}/\DependencyGold{} labeled fixture units \\
+Extraction and \lexir{} contracts & \state{evidenceblue}{IMPLEMENTED} & Version, provenance, type, and review-required invariants \\
+FEEL/DMN/solver adapters & \state{evidenceblue}{IMPLEMENTED} & Bounded execution, serialization, witnesses, and explicit unknown/refusal \\
+Run and evidence bundles & \state{evidenceblue}{IMPLEMENTED} & Path safety, hashes, manifests, failed-attempt retention, release allowlist \\
+Review workbench & \state{evidenceblue}{IMPLEMENTED} & Provenance-first read model and hash-bound immutable review records \\
+Paper artifact & \state{evidenceteal}{VALIDATED} & Generated counts, bibliography/source checks, official-template hashes, PDF build \\
 \bottomrule
-\end{tabular}
+\end{tabularx}
 \end{table}

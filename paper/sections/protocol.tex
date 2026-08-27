@@ -1,58 +1,52 @@
 \section{Evaluation protocol}
 
-The protocol is designed to turn the compiler into a measuring instrument, not
-to imply that implementation completeness is a scientific result.
+We define three research questions. \textbf{RQ1} asks which source-bearing rules
+execute, refuse, or fail, and why. \textbf{RQ2} asks how faithfully the supported
+subset preserves independently annotated source semantics. \textbf{RQ3} asks
+whether compiled outcomes agree with gold artifacts and a pinned independent
+engine, and whether AFS predicts OE after conditioning on document, model, and
+run. A null association, low executable yield, or failed replay is a valid
+outcome.
 
-We preregister three questions. RQ1 asks how often source-grounded candidates
-survive the bounded compiler and which constructs are refused. RQ2 asks whether
-machine checks and independent execution agree on the supported subset. RQ3
-asks whether an artifact-free source signal predicts outcome equivalence after
-conditioning on model, system, and run. The corresponding hypotheses are
-directional but not assumed to hold: H1 predicts that unsupported and malformed
-constructs are concentrated in explicit refusal/error classes; H2 predicts that
-independent-engine disagreements are explainable by a finite set of lowering
-or semantic-boundary causes; and H3 predicts positive association between AFS
-and OE under the preregistered controls. A null, weak, underpowered, or invalid
-outcome is a valid result and triggers the stop rules in Section 7.
+\subsection{Units, anchors, and estimands}
 
-\subsection{Corpora and units}
+The primary unit is a source-bearing rule, not a model call or generated
+sentence. The AFS frame is stratified by document and construct and contains
+explicit negatives, exceptions, thresholds, dependencies, and two independent
+annotations followed by adjudication. OE uses a frozen input universe and
+paired traces from gold, generated, and independently executed models. OPS uses
+a complete run manifest; retry attempts and refused cases are retained.
 
-The primary unit is a source-bearing rule, not a generated sentence or model
-call. A licensed, stratified frame must contain document spans, rule labels,
-exception and threshold annotations, and dependency edges. Dutch regulatory
-text is the planned natural-language anchor; ContractNLI is a planned
-cross-domain adapter. Privacy-policy runs are useful operational stress tests
-but cannot stand in for the licensed annotation frame.
+\input{tables/evaluation-matrix}
 
-\subsection{Measurements and controls}
+The Dutch decision-model resource is the primary executable anchor because it
+pairs source text with production DMN models \citep{graus2026legaltext}.
+ContractNLI is a transfer setting for evidence identification rather than an
+assumed formal oracle: its labels include pragmatic legal judgments and its
+task is document-level inference with cited spans
+\citep{koreeda2021contractnli,wang2026limits}. Privacy-policy data is an OPS
+stress setting only unless independently annotated.
 
-AFS is measured with two independent annotators, adjudication, weighted
-precision/recall, and agreement on presence, value, exception, and evidence
-span. OE uses frozen source models, generated models, and a pinned independent
-DMN engine; exact outcomes and disagreement classes are retained. Controls
-include source-only, generated-only, and executable-oracle conditions. Prompt,
-model, temperature, retry, and batch settings are pinned. Exploratory pilots
-are labeled and excluded from headline intervals.
+\subsection{Controls and uncertainty}
 
-For a binomial proportion, we report Wilson intervals and the realized
-denominator. Bootstrap intervals are paired by document for agreement and
-latency summaries. We preregister handling of refusals, missing evidence,
-unresolved references, and ties before unsealing labels. Multiple comparisons
-are controlled within a declared family; a stopped or underpowered study is
-reported as such.
+Prompts, models, temperature, retry limits, corpus version, and schema are
+frozen before evaluation. Source-only, generated-only, gold-artifact, and
+independent-engine conditions isolate extraction from execution. Artifact-free
+signals are computed without access to gold outputs; leakage canaries and
+permuted controls test this isolation. A changed schema or evidence-packet
+semantics creates a new run rather than overwriting a checkpoint.
 
-We report executable yield and conditional quality separately. If $U$ is the
-retained rule universe and $E$ the rules that lower and execute, executable
-yield is $EY=|E|/|U|$. Quality is reported conditional on $E$ (for example,
-outcome agreement or source recall); refusals and invalid cases remain in the
-yield denominator. This avoids turning a selective compiler into an apparently
-accurate system by silently dropping hard cases.
+For proportions we report realized numerators and denominators with Wilson
+intervals. Document-level comparisons use paired bootstrap intervals;
+annotator agreement is reported before and after adjudication. Multiple
+comparisons are controlled within preregistered families. We report both micro
+and document-macro summaries where unit size varies, and never compute a
+headline interval from fixture-only data.
 
-\subsection{Reproducibility contract}
+\subsection{Promotion and stop rules}
 
-Each result ships a manifest containing source and artifact hashes, code commit,
-environment lock, model/provider configuration, random seeds, exclusion log,
-and validator output. A replay is valid only if schema versions and evidence
-packet semantics match. The release artifact distinguishes code that is
-executable locally from observations that require licensed data, provider
-access, GPU time, or human adjudication.
+A result is promotable only when its manifest, hashes, denominator, exclusion
+log, protocol version, and required anchor are present. Missing provenance,
+gold leakage, an unresolved replay mismatch, or independent-engine drift marks
+the affected result \emph{invalid} or \emph{blocked}. The artifact retains the
+observation and reason; it does not silently repair or drop the row.

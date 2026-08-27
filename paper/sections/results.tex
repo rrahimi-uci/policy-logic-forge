@@ -1,38 +1,69 @@
-\section{Results available in the snapshot}
+\section{Retained audit results}
 
-\subsection{What is measured}
+\subsection{Reproducibility audit of the Dutch anchor}
 
-The retained fixture evaluator reports \RuleRecallMatched{} of \RuleRecallGold{}
-rules matched for rule recall and \DependencyMatched{} of \DependencyGold{}
-dependency edges for the dependency audit. Both artifacts are explicitly
-`fixture-only' and use descriptive Wilson intervals with no
-population claim. They validate schema, denominator, and refusal behavior;
-they are too small to support a benchmark result.
+The retained anchor audit compares \ReplayRows{} released aggregate rows with a
+replay from the declared source. Only \ReplayExactRows{}
+(\ReplayExactPercent{}\%) are exact; \ReplayMismatchRows{}
+(\ReplayMismatchPercent{}\%) differ. The disagreement is systematic rather than
+a single formatting discrepancy: outcome-agree, outcome-disagree, and
+outcome-agreement fields each differ on \ReplayOutcomeAgreementMismatches{}
+rows, while the declared test count and testability fields each differ on
+\ReplayOutcomeTestsMismatches{} rows. Released and replayed files have different
+retained hashes.
 
-The bounded lowering fixture kills \MutationKilled{} of \MutationTotal{} seeded
-mutations across \MutationCases{} cases. Its status is also `fixture-only': it
-tests that expected projections and mutations are detected, not that a corpus
-of natural-language rules is lowered correctly. The instrument bundle remains
-\GThreeStatus{}, so RQ3 has no observed correlation in this snapshot.
+\begin{figure}[t]
+  \centering
+  \input{figures/audit-results}
+  \caption{Retained audit evidence. (a) Row equality in the 1,900-row Dutch
+  benchmark replay. (b) Two different operational partitions of the 879
+  privacy-policy rules: readiness before grounding and grounding outcome.
+  Percentages are generated from retained artifacts. Neither panel is a
+  population-level semantic-accuracy estimate.}
+  \label{fig:audit-results}
+\end{figure}
 
-The Dutch replay artifact compares \ReplayRows{} rows: \ReplayExactRows{} are exact
-and \ReplayMismatchRows{} differ. The mismatch is retained as
-`mismatch-reported'. Until it is root-caused and
-replayed from pinned inputs, no headline OE anchor is reported. This is a
-positive result about observability---the system exposed a disagreement that a
-single aggregate score would hide---and a negative result about readiness.
+The audit status is therefore \state{evidencered}{MISMATCH REPORTED}. We do not
+choose either aggregate as the OE score, average them, or treat their difference
+as model variance. The claimable result is narrower: the released anchor is not
+reproducible under the retained replay contract and cannot support downstream
+instrument calibration until the discrepancy is root-caused. This is negative
+evidence about the anchor and positive evidence that the protocol detects
+metric drift.
 
-\subsection{What is not measured}
+\subsection{Operational stress run}
 
-The IR-2 construct census, independent-engine comparison, human AFS frame,
-reviewer agreement, and preregistered G3 instrument study are unrun or blocked.
-The CEGIR and reward-training extensions are optional and do not support a
-claim in this paper. Table \ref{tab:evidence-status} keeps these boundaries
-visible.
+The privacy-policy run processed \PrivacyFiles{} files in \PrivacyChunks{}
+chunks, completed \PrivacyBatches{} batches, dropped no input bytes, and
+retained \PrivacyRules{} rules. Before grounding, \PrivacyReady{}
+(\PrivacyReadyPercent{}\%) were marked ready and \PrivacyReview{}
+(\PrivacyReviewPercent{}\%) required review. Grounding certified
+\PrivacyCertified{} (\PrivacyCertifiedPercent{}\%) and failed \PrivacyFailed{}
+(\PrivacyFailedPercent{}\%), with all claimed spans receiving a response. The
+retained graph output contains \PrivacyDags{} DAGs, \PrivacyMultiRuleDags{} of
+them multi-rule, and one condensed cycle group.
+
+These counts demonstrate complete operational accounting and a substantial
+review queue. They do not reveal whether failed grounding is caused by the
+source, extraction, evidence threshold, or model behavior, and they are not
+precision, recall, or legal-correctness estimates. The run remains
+\state{evidenceamber}{EXPLORATORY} because its source bundle is restricted and
+it has no independent labels.
+
+\subsection{Contract fixtures and missing scientific anchors}
+
+The rule-recall fixture matches \RuleRecallMatched{}/\RuleRecallGold{} rules;
+the dependency fixture matches \DependencyMatched{}/\DependencyGold{} edges;
+and the lowering fixture kills \MutationKilled{}/\MutationTotal{} seeded
+mutations across \MutationCases{} cases. These provider-free checks validate
+schemas, denominators, and expected failure behavior. Their status is
+\state{evidencegray}{FIXTURE ONLY}; sample size and construction preclude a
+benchmark claim.
 
 \input{tables/evidence-status}
 
-Accordingly, the strongest current conclusion is methodological: a pipeline
-can preserve provenance, reject unsupported constructs, and expose incomplete
-evidence as first-class state. Whether this instrument improves fidelity,
-behavioral agreement, or reviewer efficiency remains an empirical question.
+Thus the current artifact supports three conclusions: the bounded compiler and
+evidence ledger are implemented; the replay anchor presently fails its
+reproducibility gate; and the operational run exposes coverage and review
+workload without establishing semantic quality. A population claim remains
+gated on independent source labels and execution.

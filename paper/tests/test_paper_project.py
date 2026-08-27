@@ -43,7 +43,9 @@ def test_evidence_generator_projects_retained_artifacts(tmp_path):
     manifest = manifest_path.read_text(encoding="utf-8")
     assert r"\newcommand{\RuleRecallMatched}{2}" in macros
     assert r"\newcommand{\ReplayMismatchRows}{792}" in macros
+    assert r"\newcommand{\ReplayMismatchPercent}{41.7}" in macros
     assert r"\newcommand{\PrivacyRules}{879}" in macros
+    assert r"\newcommand{\PrivacyCertifiedPercent}{12.3}" in macros
     assert "paper-evidence-manifest/1.0" in manifest
 
 

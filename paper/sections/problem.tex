@@ -1,30 +1,61 @@
-\section{Problem formulation and evidence boundary}
+\section{Evidence-gated evaluation}
 
-Let $D$ be a source document, $S(D)$ its segmented spans, and $R$ the set of
-candidate rules extracted from those spans. A rule is retained only with a
-provenance packet $P(r)=(d, s, q)$ containing document identity $d$, character
-or page span $s$, and an evidence quote $q$. A compiler maps a retained rule to
-an intermediate representation $I(r)$ or to an explicit refusal $F(r)$:
-\[
-  C: (r,P(r)) \longrightarrow I(r) \;\cup\; F(r).
-\]
-Lowering $L$ is total over the declared IR: it returns an executable decision,
-a structured validation error, or a refusal; it never guesses a missing
-branch. For an input $x$, execution $E(L(I(r)),x)$ is therefore a statement
-about the lowered artifact, not a claim that $I(r)$ is the only valid legal
-interpretation.
+\subsection{Objects and claim boundary}
 
-We use three evidence planes. Source-evidence fidelity (AFS) asks whether a
-candidate is supported by the cited span and whether exceptions, thresholds,
-and modalities survived extraction. Executable behavior (OE) asks whether a
-compiled artifact produces the expected outcome for a declared input and
-whether independent engines agree. Operational evidence (OPS) records
-coverage, failures, latency, and resource use for a run. AFS and OE require
-human or independent-engine anchors; OPS is useful for engineering decisions
-but cannot substitute for either.
+Let $D$ be a normative document, $S(D)$ its addressable spans, and $R$ the
+candidate rules extracted from those spans. Each retained rule $r$ carries a
+provenance packet $P(r)=(d,s,q,h)$: document identity $d$, source span $s$,
+evidence text $q$, and content hash $h$. A bounded compiler maps a rule to an
+intermediate representation or to an explicit refusal:
+\begin{equation}
+  C(r,P(r)) \rightarrow I(r) \;\cup\; F(r).
+  \label{eq:compiler}
+\end{equation}
+Lowering is total over the declared IR. It returns an executable decision, a
+structured validation error, or a refusal; it never invents a missing operand
+or branch. For input $x$, execution $E(C(r),x)$ describes the compiled
+artifact. It does not establish that $r$ is a faithful or unique interpretation
+of $D$.
 
-Every artifact also carries an epistemic state: `measured', `exploratory',
-`fixture-only', `unrun', `blocked', or `invalid'. The state is part of the
-schema and is surfaced by the review UI. This prevents a failed or incomplete
-experiment from being silently promoted to a result and makes the paper
-reproducible even when a planned measurement is unavailable.
+\subsection{Three evidence planes}
+
+\textbf{Attributable source fidelity (AFS)} asks whether the cited source
+supports the rule and whether modality, scope, exceptions, thresholds, and
+dependencies survive extraction. Its anchor is independently annotated source
+evidence. \textbf{Outcome equivalence (OE)} asks whether two declared artifacts
+return the same result on a defined input universe and whether a pinned
+independent engine reproduces the trace. \textbf{Operational evidence (OPS)}
+records pipeline coverage, refusals, failures, latency, and resource use. OPS
+can diagnose a system, but cannot substitute for AFS or OE.
+
+\begin{figure}[t]
+  \centering
+  \input{figures/measurement-chain}
+  \caption{Evidence-gated compilation. Source fidelity and executable behavior
+  have different anchors. Operational records connect the stages, while
+  refusals remain counted outputs. A claim is promoted only from a retained
+  observation with the required anchor and denominator.}
+  \label{fig:measurement-chain}
+\end{figure}
+
+\subsection{Coverage before conditional quality}
+
+Let $U$ be the complete retained rule universe, $X\subseteq U$ the rules that
+lower and execute, and $A\subseteq X$ the executable rules that agree with a
+declared oracle. We report
+\begin{equation}
+  \mathrm{yield}=\frac{|X|}{|U|}, \qquad
+  \mathrm{quality}_{\mid X}=\frac{|A|}{|X|}.
+  \label{eq:yield-quality}
+\end{equation}
+Reporting only the second term rewards selective omission. Refusals and invalid
+artifacts therefore stay in the yield denominator and are stratified by stable
+reason code. This resembles selective prediction's coverage--risk separation
+\citep{geifman2017selective}, but the abstention here is produced by a language
+boundary or failed proof obligation rather than a confidence threshold.
+
+Each artifact has one state: \emph{measured}, \emph{exploratory},
+\emph{fixture-only}, \emph{unrun}, \emph{blocked}, or \emph{invalid}. State is
+not a quality score. It states what evidence exists and therefore what wording
+is permissible. In particular, implementation and test coverage do not promote
+an exploratory quantity to a scientific result.

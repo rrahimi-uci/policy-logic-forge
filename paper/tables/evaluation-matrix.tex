@@ -1,0 +1,15 @@
+\begin{table}[t]
+\centering
+\caption{Each evidence plane has a distinct unit, anchor, and estimand.}
+\label{tab:evaluation-matrix}
+\small
+\begin{tabularx}{\linewidth}{@{}p{.10\linewidth}p{.22\linewidth}X p{.25\linewidth}@{}}
+\toprule
+Plane & Observation unit & Required anchor & Reported quantities \\
+\midrule
+AFS & Source-bearing rule & Two independent source annotations + adjudication & Precision/recall by construct; evidence-span and exception agreement \\
+OE & Artifact--input pair & Gold artifact + pinned independent engine & Executable yield; paired outcome agreement; disagreement taxonomy \\
+OPS & Attempt and retained rule & Complete run manifest + artifact hashes & Coverage, refusal/failure rate, latency, cost, review workload \\
+\bottomrule
+\end{tabularx}
+\end{table}

@@ -8,10 +8,13 @@ and template are not yet published; refresh the files in
 `template/official/` and the manifest when they become available.  The
 official style file is not modified.
 
-The manuscript is deliberately evidence-gated.  Engineering capabilities are
-reported as implemented, while exploratory, fixture-only, unrun, and blocked
-experiments remain visibly distinct.  No legal-correctness or benchmark-quality
-claim is made from the current repository snapshot.
+The manuscript is deliberately evidence-gated. Engineering capabilities are
+reported as implemented, while exploratory, fixture-only, unrun, blocked, and
+mismatch-reported observations remain visibly distinct. The headline empirical
+observation is a reproducibility audit of a retained Dutch anchor; it is not a
+legal-correctness or benchmark-quality claim. The paper is a NeurIPS-style
+2027-next-cycle draft because the official 2026 deadlines have passed; replace
+the official template archive when the 2027 call is published.
 
 ## Layout
 
@@ -42,10 +45,10 @@ this repository.  `validate_paper.py --check-source` performs the deterministic
 checks without a local TeX installation.  The full repository test command is
 `.venv/bin/python -m pytest -q`.
 
-The latest NeurIPS instructions allow up to nine pages of content for the
-Evaluations & Datasets track; references, checklist, and appendices are kept
-outside that content budget according to the official style.  Always re-check
-the current call before submission.
+The latest verified NeurIPS 2026 instructions allow up to nine pages of content
+for the Evaluations & Datasets track; references, checklist, and appendices are
+kept outside that content budget according to the official style. Always
+re-check the current call before submission.
 
 Evidence macros and `evidence_manifest.json` are generated from the tracked
 aggregate artifacts and `data/privacy_operational_run.json`; when the local
