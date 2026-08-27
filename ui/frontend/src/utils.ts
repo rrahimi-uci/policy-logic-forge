@@ -1,14 +1,14 @@
 import type { RuleRow, RunSummary, Stage } from "./types";
 
 export const navItems = [
-  ["runs", "Runs", "▦"],
-  ["overview", "Run overview", "⌂"],
-  ["queue", "Review queue", "!"],
-  ["rules", "Rule workbench", "◇"],
-  ["evidence", "Documents & evidence", "▤"],
-  ["graph", "Graph explorer", "◎"],
-  ["compare", "Compare runs", "⇄"],
-  ["diagnostics", "Diagnostics", "⚠"],
+  ["runs", "Runs", "runs"],
+  ["overview", "Run overview", "overview"],
+  ["queue", "Review queue", "queue"],
+  ["rules", "Rule workbench", "rules"],
+  ["evidence", "Documents & evidence", "evidence"],
+  ["graph", "Graph explorer", "graph"],
+  ["compare", "Compare runs", "compare"],
+  ["diagnostics", "Diagnostics", "diagnostics"],
 ] as const;
 
 export function formatNumber(value: number | undefined): string {
