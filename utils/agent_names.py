@@ -1,8 +1,8 @@
-"""Canonical identifiers for the ten agents in this repository.
+"""Canonical identifiers for the eleven agents in this repository.
 
 The numeric stage labels used by the original pipeline included fractional
 stages (3.5, 5.5, 5.6, and 5.7).  The repository now uses one stable,
-zero-padded identifier everywhere instead: ``agent_01`` through ``agent_10``.
+zero-padded identifier everywhere instead: ``agent_01`` through ``agent_11``.
 Keeping the mapping here prevents subprocess dispatch, output directories,
 checkpoints, and documentation from drifting apart again.
 """
@@ -32,6 +32,7 @@ PIPELINE_AGENTS: tuple[AgentSpec, ...] = (
     AgentSpec("agent_08", "agent_08_readiness_remediator.py", "Readiness Remediator"),
     AgentSpec("agent_09", "agent_09_grounding_verifier.py", "Grounding Verifier"),
     AgentSpec("agent_10", "agent_10_dag_generator.py", "Dependency DAG Generator"),
+    AgentSpec("agent_11", "agent_11_executable_model_generator.py", "Executable DMN/BPMN Model Generator"),
 )
 
 AGENT_BY_ID = {spec.identifier: spec for spec in PIPELINE_AGENTS}
@@ -51,6 +52,7 @@ PIPELINE_OUTPUT_DIRS = {
     "agent_08": "agent_06-optimized",
     "agent_09": "agent_06-optimized",
     "agent_10": "agent_10-dag-generation",
+    "agent_11": "agent_11-executable-models",
 }
 
 
