@@ -1,12 +1,12 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { CompareView, DiagnosticsView, DocumentsView, ErrorNotice, GraphView, Loading, MetricCard, Overview, RuleTableView, RuleWorkbench, SearchOverlay, StageFlow } from "./components";
+import { CompareView, DiagnosticsView, DocumentsView, ErrorNotice, GraphView, layeredRuleLayout, Loading, MetricCard, Overview, RuleTableView, RuleWorkbench, SearchOverlay, StageFlow } from "./components";
 import type { RuleDetail, RunSummary, Stage } from "./types";
 import * as api from "./api";
 
 vi.mock("./api", async () => {
   const actual = await vi.importActual<typeof import("./api")>("./api");
-  return { ...actual, fetchRules: vi.fn(), fetchRule: vi.fn(), fetchDocuments: vi.fn(), fetchEvidenceList: vi.fn(), fetchSavedViews: vi.fn(), saveView: vi.fn(), fetchRelationships: vi.fn(), fetchDiagnostics: vi.fn(), search: vi.fn(), compare: vi.fn(), addComment: vi.fn(), addDecision: vi.fn(), addLabel: vi.fn() };
+  return { ...actual, fetchRules: vi.fn(), fetchAllRules: vi.fn(), fetchAllRelationships: vi.fn(), fetchRule: vi.fn(), fetchDocuments: vi.fn(), fetchEvidenceList: vi.fn(), fetchSavedViews: vi.fn(), saveView: vi.fn(), fetchRelationships: vi.fn(), fetchDiagnostics: vi.fn(), search: vi.fn(), compare: vi.fn(), addComment: vi.fn(), addDecision: vi.fn(), addLabel: vi.fn() };
 });
 
 const run: RunSummary = { run_id: "privacy-run", source_dir: "/tmp/run", status: "requires_review", stage_count: 2, completed_stage_count: 1, rule_count: 2, document_count: 1, evidence_count: 2, relationship_count: 1, diagnostic_count: 1, error_count: 1, warning_count: 0, review_queue_count: 1, unresolved_conflict_count: 0, rule_status_counts: { certified: 1, requires_review: 1 }, readiness_counts: {}, grounding_counts: {}, metadata: {}, queues: { requires_review: 1, grounding_failed: 1, readiness_failed: 1, unresolved_conflicts: 0 } };
@@ -15,6 +15,8 @@ const detail: RuleDetail = { rule_id: "r1", rule_name: "Retention rule", rule_ty
 
 beforeEach(() => {
   vi.mocked(api.fetchRules).mockResolvedValue({ items: [{ ...detail }], total: 1, facets: {} } as any);
+  vi.mocked(api.fetchAllRules).mockResolvedValue([{ ...detail }, { ...detail, rule_id: "r2", rule_name: "Follow-on rule" }] as any);
+  vi.mocked(api.fetchAllRelationships).mockResolvedValue([{ relationship_id: "rel", kind: "dependency", source_rule_id: "r1", target_rule_id: "r2", rule_ids: ["r1", "r2"], status: "inferred", rationale: "r1 before r2" }]);
   vi.mocked(api.fetchRule).mockResolvedValue(detail);
   vi.mocked(api.fetchDocuments).mockResolvedValue({ items: [{ document_id: "d1", path: "doc/chunk.txt", section_id: "Privacy", text: "Keep data for 30 days.", word_count: 5, source_hash: "hash" }], total: 1 });
   vi.mocked(api.fetchEvidenceList).mockResolvedValue({ items: [detail.evidence[0]], total: 1 });
@@ -27,6 +29,18 @@ beforeEach(() => {
 });
 
 describe("review workbench components", () => {
+  it("assigns deterministic dependency layers and excludes non-rule relationships", () => {
+    const rows = [{ rule_id: "r3", rule_name: "Third", }, { rule_id: "r1", rule_name: "First" }, { rule_id: "r2", rule_name: "Second" }] as any;
+    const relationships = [
+      { relationship_id: "entity", kind: "entity_relationship", source_entity: "customer", target_entity: "account", rule_ids: [], status: "defined" },
+      { relationship_id: "r1-r2", kind: "dependency", source_rule_id: "r1", target_rule_id: "r2", rule_ids: ["r1", "r2"], status: "supported" },
+      { relationship_id: "r2-r3", kind: "dag_edge", source_rule_id: "r2", target_rule_id: "r3", rule_ids: ["r2", "r3"], status: "acyclic" },
+    ] as any;
+    const layout = layeredRuleLayout(rows, relationships);
+    expect(layout.nodes.map((node) => [node.id, node.depth])).toEqual([["r1", 0], ["r2", 1], ["r3", 2]]);
+    expect(layout.edges.map((edge) => [edge.source, edge.target])).toEqual([["r1", "r2"], ["r2", "r3"]]);
+  });
+
   it("renders stage flow and overview actions", () => {
     const onView = vi.fn();
     render(<Overview run={run} stages={stages} onStage={vi.fn()} onView={onView} />);
@@ -60,7 +74,11 @@ describe("review workbench components", () => {
 
   it("renders documents, graph, and diagnostics", async () => {
     render(<DocumentsView runId="r" onError={vi.fn()} />); await waitFor(() => expect(screen.getByText("doc/chunk.txt")).toBeInTheDocument()); fireEvent.click(screen.getByRole("tab", { name: "Evidence links" })); await waitFor(() => expect(screen.getByText("r1 · outcomes")).toBeInTheDocument());
-    render(<GraphView runId="r" onError={vi.fn()} />); await waitFor(() => expect(screen.getByLabelText("Relationship graph")).toBeInTheDocument());
+    render(<GraphView runId="r" onError={vi.fn()} />); await waitFor(() => expect(screen.getByTestId("layered-rule-graph")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "Select rule r1" }));
+    await waitFor(() => expect(screen.getByText("DMN decision table · BPMN workflow")).toBeInTheDocument());
+    expect(document.querySelector(".rule-node.selected")).toBeTruthy();
+    expect(document.querySelector(".rule-node.downstream")).toBeTruthy();
     render(<DiagnosticsView runId="r" onError={vi.fn()} />); await waitFor(() => expect(screen.getByText("Missing source")).toBeInTheDocument());
   });
 
@@ -80,7 +98,7 @@ describe("review workbench components", () => {
 
   it("covers empty source, graph, and diagnostic results", async () => {
     vi.mocked(api.fetchDocuments).mockResolvedValueOnce({ items: [], total: 0 }); render(<DocumentsView runId="r" onError={vi.fn()} />); await waitFor(() => expect(screen.getByText("No source chunks match the search.")).toBeInTheDocument());
-    vi.mocked(api.fetchRelationships).mockResolvedValueOnce({ items: [], total: 0 }); render(<GraphView runId="r" mode="conflicts" onError={vi.fn()} />); await waitFor(() => expect(screen.getByText("No relationships are available for this mode.")).toBeInTheDocument());
+    vi.mocked(api.fetchAllRules).mockResolvedValueOnce([]); vi.mocked(api.fetchAllRelationships).mockResolvedValueOnce([]); render(<GraphView runId="r" mode="conflicts" onError={vi.fn()} />); await waitFor(() => expect(screen.getAllByText("Layered dependency view").length).toBeGreaterThan(0));
     vi.mocked(api.fetchDiagnostics).mockResolvedValueOnce({ items: [], total: 0 }); render(<DiagnosticsView runId="r" onError={vi.fn()} />); await waitFor(() => expect(screen.getByText("No diagnostics match this filter.")).toBeInTheDocument());
   });
 

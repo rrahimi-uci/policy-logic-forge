@@ -31,6 +31,7 @@ STAGES: tuple[dict[str, Any], ...] = (
     {"id": "agent_08", "name": "Readiness remediation", "directory": "agent_06-optimized", "artifacts": ["agent_08_checkpoint.jsonl", "agent_08_remediation_report.json"], "embedded": True},
     {"id": "agent_09", "name": "Grounding verifier", "directory": "agent_06-optimized", "artifacts": ["agent_09_grounding_checkpoint.jsonl", "kg_grounding_report.json"], "embedded": True},
     {"id": "agent_10", "name": "DAG generator", "directory": "agent_10-dag-generation", "artifacts": ["dependency_dags.json"]},
+    {"id": "agent_11", "name": "Executable model generator", "directory": "agent_11-executable-models", "artifacts": ["compliance_decisions.dmn", "compliance_workflows.bpmn", "executable_model_report.json"]},
 )
 
 
@@ -397,8 +398,8 @@ def _build_relationships(optimized: Mapping[str, Any], source_dir: Path, run_id:
     details = _safe_dict(optimized.get("dependency_details"))
     relationships: list[dict[str, Any]] = []
     # The optimized graph also carries entity-type relationship definitions.
-    # Preserve these as first-class edges so the graph explorer can switch from
-    # rule topology to the domain ontology without reparsing the raw graph.
+    # Keep them in the read model for evidence/search, while the layered rule
+    # topology explicitly excludes them and only admits rule-to-rule edges.
     for name, raw in _safe_dict(optimized.get("relationships")).items():
         if not isinstance(raw, dict):
             continue

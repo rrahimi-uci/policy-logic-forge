@@ -24,12 +24,45 @@ export async function fetchRules(runId: string, params: Record<string, string> =
   return request(`/runs/${encodeURIComponent(runId)}/rules${query ? `?${query}` : ""}`);
 }
 
+/** Fetch the complete rule set for topology views, paging past the API cap. */
+export async function fetchAllRules(runId: string): Promise<RuleRow[]> {
+  const pageSize = 500;
+  const items: RuleRow[] = [];
+  let offset = 0;
+  let total = Infinity;
+  while (items.length < total) {
+    const page = await fetchRules(runId, { limit: String(pageSize), offset: String(offset), sort: "rule_id" });
+    items.push(...page.items);
+    total = page.total;
+    if (!page.items.length) break;
+    offset += page.items.length;
+  }
+  return items;
+}
+
 export function fetchRule(runId: string, ruleId: string): Promise<RuleDetail> {
   return request(`/runs/${encodeURIComponent(runId)}/rules/${encodeURIComponent(ruleId)}`);
 }
 
-export function fetchRelationships(runId: string): Promise<{ items: Relationship[]; total: number }> {
-  return request(`/runs/${encodeURIComponent(runId)}/relationships`);
+export function fetchRelationships(runId: string, params: Record<string, string> = {}): Promise<{ items: Relationship[]; total: number; offset?: number; limit?: number }> {
+  const query = new URLSearchParams(params).toString();
+  return request(`/runs/${encodeURIComponent(runId)}/relationships${query ? `?${query}` : ""}`);
+}
+
+/** Fetch the complete relationship set for topology views, paging past the API cap. */
+export async function fetchAllRelationships(runId: string): Promise<Relationship[]> {
+  const pageSize = 5000;
+  const items: Relationship[] = [];
+  let offset = 0;
+  let total = Infinity;
+  while (items.length < total) {
+    const page = await fetchRelationships(runId, { limit: String(pageSize), offset: String(offset) });
+    items.push(...page.items);
+    total = page.total;
+    if (!page.items.length) break;
+    offset += page.items.length;
+  }
+  return items;
 }
 
 export function fetchDocuments(runId: string): Promise<{ items: DocumentRecord[]; total: number }> {

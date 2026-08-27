@@ -87,6 +87,8 @@ def test_http_routes_and_overlay(service: ReviewService, tmp_path: Path) -> None
         assert _get(base + "/api/runs/fixture-run/stages/agent_01")[0] == 200
         assert _get(base + "/api/runs/fixture-run/documents")[0] == 200
         assert _get(base + "/api/runs/fixture-run/relationships?kind=conflict")[0] == 200
+        status, payload = _get(base + "/api/runs/fixture-run/relationships?limit=1&offset=1")
+        assert status == 200 and payload["offset"] == 1 and len(payload["items"]) == 1
         assert _get(base + "/api/runs/fixture-run/evidence?q=email&limit=2")[0] == 200
         assert _get(base + "/api/runs/fixture-run/evidence/unknown")[0] == 404
         assert _get(base + "/api/runs/fixture-run/diagnostics")[0] == 200

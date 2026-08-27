@@ -98,6 +98,17 @@ def test_index_writes_contract_and_search_database(tmp_path: Path) -> None:
     assert index.to_dict()["run_id"] == "fixture-run"
 
 
+def test_index_surfaces_executable_model_stage(tmp_path: Path) -> None:
+    run = make_run(tmp_path)
+    for filename, body in (("compliance_decisions.dmn", "<definitions />"), ("compliance_workflows.bpmn", "<definitions />"), ("executable_model_report.json", "{}")):
+        (run / "agent_11-executable-models" / filename).parent.mkdir(parents=True, exist_ok=True)
+        (run / "agent_11-executable-models" / filename).write_text(body, encoding="utf-8")
+    index = ReviewIndex.from_directory(run)
+    stage = next(item for item in index.stages if item["stage_id"] == "agent_11")
+    assert stage["status"] == "completed"
+    assert {item["name"] for item in stage["artifacts"]} == {"compliance_decisions.dmn", "compliance_workflows.bpmn", "executable_model_report.json"}
+
+
 def test_missing_run_is_rejected(tmp_path: Path) -> None:
     with pytest.raises(FileNotFoundError):
         ReviewIndex.from_directory(tmp_path / "missing")
