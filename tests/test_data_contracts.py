@@ -604,7 +604,7 @@ class TestAgent06ToAgent10Contract:
 
 
 # NOTE: the upstream source pipeline has additional contracts for its
-# cross-graph comparison modules. This repository ships only the ten canonical
+# cross-graph comparison modules. This repository ships the canonical
 # extraction/readiness/grounding/DAG agents; comparing two already-extracted
 # graphs is a different task, out of scope (see README.md "Scope").
 
