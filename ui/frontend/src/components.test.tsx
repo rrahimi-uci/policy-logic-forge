@@ -86,7 +86,7 @@ describe("review workbench components", () => {
 
   it("covers comparison and search empty/error branches", async () => {
     vi.mocked(api.compare).mockRejectedValueOnce(new Error("compare down")); const onError = vi.fn(); render(<CompareView runs={[]} onError={onError} />); fireEvent.click(screen.getAllByText("Refresh comparison")[0]); expect(onError).not.toHaveBeenCalled();
-    render(<SearchOverlay runId="r" query="" onClose={vi.fn()} onRule={vi.fn()} />); expect(screen.getByText("No results.")).toBeInTheDocument();
-    vi.mocked(api.search).mockRejectedValueOnce(new Error("search down")); render(<SearchOverlay runId="r" query="q" onClose={vi.fn()} onRule={vi.fn()} />); await waitFor(() => expect(screen.getAllByText("No results.").length).toBeGreaterThan(0));
+    render(<SearchOverlay runId="r" query="" onClose={vi.fn()} onRule={vi.fn()} />); expect(screen.getByText("No matching evidence found")).toBeInTheDocument();
+    vi.mocked(api.search).mockRejectedValueOnce(new Error("search down")); render(<SearchOverlay runId="r" query="q" onClose={vi.fn()} onRule={vi.fn()} />); await waitFor(() => expect(screen.getByText("Search is temporarily unavailable")).toBeInTheDocument());
   });
 });

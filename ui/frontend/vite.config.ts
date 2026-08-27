@@ -10,7 +10,6 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: {
-          flow: ["@xyflow/react"],
           graph: ["cytoscape"],
         },
       },

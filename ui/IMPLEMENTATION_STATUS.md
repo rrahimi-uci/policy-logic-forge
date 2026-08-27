@@ -18,6 +18,7 @@ separate human-review overlay.
 | Human overlay | SQLite comments, decisions, labels, saved views, audit history, artifact-hash stale detection. | Store/API tests and rule-workbench interaction tests. |
 | Search and comparison | Rules, source chunks, evidence, relationships, diagnostics search; exact-ID/hash-bound rule and relationship comparison. | API/index tests and UI comparison/search tests. |
 | Delivery boundary | Stdlib HTTP API with safe artifact traversal and static SPA serving; no pipeline imports or canonical writes. | HTTP integration tests, full repository pytest, TypeScript/lint/build. |
+| Professional UX pass | Responsive desktop rail and mobile drawer, SVG navigation, semantic stage stepper, command-style search dialog, explicit refresh/error feedback, adaptive tables and evidence layouts, focus and reduced-motion support. | Component coverage, production build, and retained-run rendering at 1440×1000 and 390×844. |
 
 ## Explicit limitations and next increments
 
@@ -31,10 +32,10 @@ separate human-review overlay.
 - Local mode uses SQLite and in-memory API filtering over a normalized index.
   PostgreSQL/OpenSearch and server-side pagination are appropriate only when a
   multi-user deployment requires them.
-- Browser automation was not available in the execution environment. The
-  browser-facing flows are covered by jsdom integration tests, a production
-  Vite build, and a live HTTP smoke test; a real-browser screenshot pass should
-  be added in CI or a workstation with the browser connector enabled.
+- The professional UX pass was rendered against the retained privacy-policy run
+  in local Chrome at desktop and mobile viewport sizes. Automated browser
+  screenshots are still not a CI gate; jsdom integration coverage and the
+  production build remain the deterministic repository checks.
 
 The limitations above are visible in the UI as review/health state rather than
 being represented as successful empty results.
