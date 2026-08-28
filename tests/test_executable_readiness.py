@@ -227,6 +227,98 @@ def test_free_text_outcome_value_type_normalises_to_string():
 
 
 # ─────────────────────────────────────────────────────────────────────────
+# enum_set/enum_value/number_range/number_array: four more real-world
+# LEGACY_VALUE_TYPES aliases, found the same way as enum_array/contains_any
+# above -- a real mortgage run had 39 rules using one of these. Each is an
+# unambiguous rename of an already-accepted value_type, confirmed against
+# the real data before mapping: enum_set/number_array are a set-of-values
+# checked with "in" (same shape as the already-mapped enum_array/
+# string_array), enum_value is a single categorical value, number_range is
+# a [min, max] pair. This single missing alias was often the *only* v2
+# contract violation on an otherwise well-formed rule, and because
+# deterministic_rule_claims (agent_09) reuses validate_rule_v2 as its
+# structural check for variable/execution/classification/entity_attachment
+# claims, one invalid value_type was fanning out into multiple unrelated
+# false grounding-claim failures on the same rule, on top of the
+# schema_consistency invariant failure and the rule's own requires_review
+# flag.
+# ─────────────────────────────────────────────────────────────────────────
+
+def test_enum_set_and_number_array_predicate_value_types_normalise_to_list():
+    rule = valid_rule()
+    rule["condition_predicates"].append({
+        "predicate_id": "p2", "variable": "property_type", "operator": "in",
+        "value": ["detached dwelling", "condo unit", "manufactured home"], "value_type": "enum_set",
+    })
+    rule["condition_predicates"].append({
+        "predicate_id": "p3", "variable": "monthly_payment_sequence_number", "operator": "in",
+        "value": [1, 2, 3], "value_type": "number_array",
+    })
+
+    normalise_rule_contract(rule)
+
+    assert rule["condition_predicates"][-2]["value_type"] == "list"
+    assert rule["condition_predicates"][-1]["value_type"] == "list"
+
+
+def test_enum_value_predicate_value_type_normalises_to_enum():
+    rule = valid_rule()
+    rule["condition_predicates"].append({
+        "predicate_id": "p2", "variable": "transaction_type", "operator": "==",
+        "value": "not_assumed", "value_type": "enum_value",
+    })
+
+    normalise_rule_contract(rule)
+
+    assert rule["condition_predicates"][-1]["value_type"] == "enum"
+
+
+def test_number_range_predicate_value_type_normalises_to_range():
+    rule = valid_rule()
+    rule["condition_predicates"].append({
+        "predicate_id": "p2", "variable": "property_unit_count", "operator": "between",
+        "value": [1, 4], "value_type": "number_range",
+    })
+
+    normalise_rule_contract(rule)
+
+    assert rule["condition_predicates"][-1]["value_type"] == "range"
+
+
+def test_enum_set_predicate_no_longer_fails_v2_validation():
+    rule = valid_rule()
+    rule["condition_predicates"].append({
+        "predicate_id": "p2", "variable": "property_type", "operator": "in",
+        "value": ["detached dwelling", "condo unit"], "value_type": "enum_set",
+    })
+
+    normalise_rule_contract(rule)
+    issues = validate_rule_v2(rule, {"SELLER_SERVICER", "FANNIE_MAE"})
+
+    assert not any(issue.code == "invalid_predicate_value_type" for issue in issues)
+
+
+def test_unsupported_computed_outcome_value_types_are_deliberately_not_normalised():
+    """formula/expression/object are a genuinely different, unsupported
+    outcome shape (a computed expression or a structured lookup table, not a
+    literal constant) -- unlike the aliases above, coercing these to
+    "string" would pass validation but silently misrepresent them to any
+    downstream consumer that assumes value_type "string" means a literal
+    value. They must stay flagged for review, not be silently normalised."""
+    rule = valid_rule()
+    rule["outcomes"][0] = {
+        "variable": "maximum_reimbursement_cash_out_amount", "operator": "=",
+        "value": "min(0.10 * new_refinance_loan_balance, 15000)", "value_type": "expression",
+    }
+
+    normalise_rule_contract(rule)
+    issues = validate_rule_v2(rule, {"SELLER_SERVICER", "FANNIE_MAE"})
+
+    assert rule["outcomes"][0]["value_type"] == "expression"
+    assert any(issue.code == "invalid_outcome_value_type" for issue in issues)
+
+
+# ─────────────────────────────────────────────────────────────────────────
 # exception_basis / scope_basis: a free-text explanation instead of an enum
 # member must be coerced to the unresolved final state, not left as a raw v2
 # schema violation with no actionable path. Real values observed on one run:
