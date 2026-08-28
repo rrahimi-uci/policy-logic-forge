@@ -89,6 +89,102 @@ def test_completion_emits_ready_dmn_rules_and_required_report(tmp_path):
     assert all(rule["requires_review"] is False for rule in final_graph["business_rules"])
 
 
+# ─────────────────────────────────────────────────────────────────────────
+# Resilience to a provider rejecting one rule's/entity's request outright
+# (real case: OpenAI's content-policy filter flagged one rule's prompt
+# among ~2600 on a real NDA run, crashing the entire multi-hour run and
+# discarding every other rule's completed work). No further fallback
+# exists below an individual rule's own request, so the only sound options
+# are crash everything or flag that one rule/entity closed and continue --
+# these tests confirm the latter.
+# ─────────────────────────────────────────────────────────────────────────
+
+class BatchThenIndividualResolver(Resolver):
+    """complete_rules (the batch path) always fails; the individual
+    complete_rule fallback (inherited from Resolver) always succeeds --
+    simulates a batched prompt rejected as a whole even though every rule
+    in it is individually fine."""
+
+    def complete_rules(self, requests):
+        raise Exception("LLM completion failed: batch request rejected")
+
+
+def test_a_failed_batch_completion_falls_back_to_individual_requests(tmp_path):
+    organized = tmp_path / "organized" / "B2-1-01"
+    organized.mkdir(parents=True)
+    (organized / "001.txt").write_text("A seller servicer must limit pools to three.")
+    baseline = graph_with_two_rules()
+
+    final_graph, report = ExecutableReadinessCompleter(BatchThenIndividualResolver()).complete(
+        baseline, baseline, str(tmp_path / "organized")
+    )
+
+    assert report["rules_ready"] == 2
+    assert all(rule["requires_review"] is False for rule in final_graph["business_rules"])
+
+
+class OneBadRuleResolver(Resolver):
+    """complete_rules always fails (forcing the individual-retry fallback,
+    like BatchThenIndividualResolver above); complete_rule then ALSO fails,
+    but only for one specific rule_id -- simulating that rule's own content
+    being what the provider actually rejected, isolated once batching no
+    longer masks which rule it was."""
+
+    def complete_rules(self, requests):
+        raise Exception("LLM completion failed: batch request rejected")
+
+    def complete_rule(self, rule, corpus):
+        if rule.get("rule_id") == "BR-2":
+            raise Exception("LLM completion failed: Invalid prompt: flagged as potentially violating usage policy")
+        return super().complete_rule(rule, corpus)
+
+
+def test_a_persistently_rejected_rule_is_flagged_not_crashed(tmp_path):
+    organized = tmp_path / "organized" / "B2-1-01"
+    organized.mkdir(parents=True)
+    (organized / "001.txt").write_text("A seller servicer must limit pools to three.")
+    baseline = graph_with_two_rules()
+
+    final_graph, report = ExecutableReadinessCompleter(OneBadRuleResolver()).complete(
+        baseline, baseline, str(tmp_path / "organized")
+    )
+
+    by_id = {rule["rule_id"]: rule for rule in final_graph["business_rules"]}
+    assert by_id["BR-1"]["requires_review"] is False
+    assert by_id["BR-2"]["requires_review"] is True
+    reasons = [item["requirement"] for item in by_id["BR-2"]["readiness"]["failed_requirements"]]
+    assert "evidence_completion" in reasons
+    assert "flagged as potentially violating usage policy" in by_id["BR-2"]["readiness"]["review_reason"]
+    # The rejected rule's own graph fields (not just its readiness flag)
+    # must survive untouched -- a provider rejection must not corrupt or
+    # drop the rule, only block further evidence-completion on it.
+    assert by_id["BR-2"]["rule_id"] == "BR-2"
+    assert report["rules_ready"] == 1
+    assert report["rules_requiring_review"] == 1
+
+
+def test_a_rejected_conflict_analysis_marks_that_entity_unresolved_not_crashed(tmp_path):
+    organized = tmp_path / "organized" / "B2-1-01"
+    organized.mkdir(parents=True)
+    (organized / "001.txt").write_text("A seller servicer must limit pools to three.")
+    baseline = graph_with_two_rules()
+
+    class RejectedConflictResolver(Resolver):
+        def analyse_entity(self, entity, rules):
+            raise Exception("LLM completion failed: Invalid prompt: flagged as potentially violating usage policy")
+
+    final_graph, report = ExecutableReadinessCompleter(RejectedConflictResolver()).complete(
+        baseline, baseline, str(tmp_path / "organized")
+    )
+
+    # No crash; the rejected entity's conflict analysis degrades to the
+    # same "unresolved, manual review required" entry an empty response
+    # already produces, and the run completes for every other rule.
+    assert final_graph["business_rules"]
+    conflicts = final_graph["dependency_details"]["conflicts"]
+    assert any(entry["status"] == "unresolved" for entry in conflicts)
+
+
 def test_dangling_reference_fails_the_invariant_without_silent_removal():
     graph = graph_with_two_rules()
     graph["dependency_details"]["dependencies"].append({"source_rule_id": "BR-2", "target_rule_id": "BR-MISSING"})
