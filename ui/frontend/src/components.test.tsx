@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CompareView, connectedRuleIds, DiagnosticsView, DocumentsView, ErrorNotice, GraphView, layeredRuleLayout, Loading, MetricCard, Overview, RegDeltaView, RuleTableView, RuleWorkbench, SearchOverlay, StageFlow, wrapNodeText } from "./components";
 import type { RegDeltaReport, RuleDetail, RunSummary, Stage } from "./types";
@@ -96,6 +96,26 @@ describe("review workbench components", () => {
     expect(document.querySelector(".rule-node.selected")).toBeTruthy();
     expect(document.querySelector(".rule-node.downstream")).toBeTruthy();
     render(<DiagnosticsView runId="r" onError={vi.fn()} />); await waitFor(() => expect(screen.getByText("Missing source")).toBeInTheDocument());
+  });
+
+  it("bounds the graph panel's height and lets the user zoom the layered graph out and back to fit", async () => {
+    // Tests in this file don't unmount between `it`s (see other tests' use of
+    // getAllByText for the same reason), so scope every query to this
+    // render's own container rather than the shared `screen`.
+    const { container } = render(<GraphView runId="r" onError={vi.fn()} />);
+    const scope = within(container);
+    const svg = await scope.findByTestId("layered-rule-graph");
+    expect(svg.closest(".layered-graph-scroll")).toBeTruthy(); // CSS caps this container's height so it scrolls internally instead of growing the page
+    const initialWidth = Number(svg.getAttribute("width"));
+    const viewBox = svg.getAttribute("viewBox");
+    expect(scope.getByText("100%")).toBeInTheDocument();
+    fireEvent.click(scope.getByRole("button", { name: "Zoom out" }));
+    expect(scope.getByText("90%")).toBeInTheDocument();
+    expect(Number(svg.getAttribute("width"))).toBeCloseTo(initialWidth * 0.9);
+    expect(svg.getAttribute("viewBox")).toBe(viewBox); // viewBox (logical coordinate space) stays fixed while only the rendered size scales
+    fireEvent.click(scope.getByText("Fit"));
+    expect(scope.getByText("100%")).toBeInTheDocument();
+    expect(Number(svg.getAttribute("width"))).toBe(initialWidth);
   });
 
   it("supports search overlay and run comparison", async () => {
