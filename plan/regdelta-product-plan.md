@@ -8,10 +8,14 @@ resources (OpenExempt-CF, RegelRecht-Real) that are not yet present in this
 repository. This document is a separate **product-engineering track** for the
 same underlying capability. It is validated entirely against data and code
 this repository already has, with no external acquisition on the critical
-path. The two tracks share the same execution engine (Sections 6-7 below
-duplicate proposal.md's system design almost verbatim, because that design
-does not depend on which validation data feeds it) but diverge on what proves
-the engine works and in what order domains are tackled.
+path. The two tracks share the same execution engine: Section 6 below
+duplicates proposal.md's system design almost verbatim, and Section 7's
+Phases 1-2 point back to proposal.md's execution steps rather than
+duplicating them, because that design and that prerequisite engineering do
+not depend on which validation data feeds them. Section 7's Phases 3-7 are
+new — that's where the two tracks diverge on what proves the engine works,
+in what order domains are tackled, and what closes the gap to an actual
+product.
 
 Nothing here blocks or is blocked by `proposal.md`. DeonticBench, OpenExempt,
 and RegelRecht remain available later, exactly as described there, if an
@@ -37,14 +41,20 @@ Section 8 states the acceptance bar for each separately.
 
 ## 2. What already exists today
 
-This is a direct inventory of `pipeline-output/`, not an estimate.
+This is a direct inventory of the JSON actually on disk under
+`pipeline-output/`, re-read for this revision rather than taken from
+`docs/full_e2e_validation_2026-08-27.md`'s prose — that doc's NDA row is a
+stale mid-run snapshot ("Agent 03 ... in progress") that predates agent_06
+completing, and its own text elsewhere cites a pre-dedup, agent_05-stage
+count (2,741) rather than agent_06's final optimized count (2,631) used
+below.
 
 | Domain | Agent 06 (optimized rules) | Agent 10 (DAG) | Agent 11 (DMN/BPMN) | UI |
 | --- | --- | --- | --- | --- |
 | `mortgage` | 631 rules, 481 dependencies | 235 DAGs, 631/631 covered, 1 cycle group | generated (`compliance_decisions.dmn`, `compliance_workflows.bpmn`); 590/631 rules still `requires_review`, 41 clean | already smoke-tested (`ui/IMPLEMENTATION_STATUS.md`: "mortgage API smoke checks") |
 | `privacy_policy` | 802 rules | 757 DAGs, **802/802 covered, complete** | **not yet run** | validated against a retained privacy-policy run |
-| `mobile_app_privacy` | present (agents 01-06 complete per `docs/full_e2e_validation_2026-08-27.md`) | not yet run | not yet run | not yet exercised |
-| `nda_confidentiality` | 2,741 rules (per the same doc) | not yet run | not yet run | not yet exercised |
+| `mobile_app_privacy` | 1,904 rules | not yet run | not yet run | not yet exercised |
+| `nda_confidentiality` | 2,631 rules | not yet run | not yet run | not yet exercised |
 | `commercial_contracts` | not yet run in this checkout | — | — | — |
 | `deonticbench` | fully vendored (6,483 rows, reference Prolog, gold labels); pipeline extraction over it is a separate track | — | — | no old/new version pairs, so not directly usable for change-impact regardless of pipeline progress |
 
@@ -67,7 +77,11 @@ Two facts drive everything below:
      --output-dir pipeline-output/e2e-privacy-20260826/agent_10-dag-generation/executable-models
    ```
 
-   That makes `privacy_policy` the natural second domain (Section 9).
+   That makes `privacy_policy` the natural second domain (Phase 5). It is
+   also independently well-suited to it: 65 of its 802 rules are already
+   `requires_review: false`, comparable to mortgage's 41, including 5 with
+   numeric predicates — so the same Tier 1 approach applies without
+   modification.
 
 ## 3. The anchor example: `R-120-004` / `R-120-003`
 
@@ -101,6 +115,15 @@ downstream dependent, and pre-existing worked examples — everything Section
 6.5's `Direct`/`Potential`/`Recompute` propagation needs to be demonstrated
 without inventing anything beyond the edit itself.
 
+One property of this cluster is deliberate, not incidental: `R-120-003`
+itself is `requires_review: true`. It is not an exception — of the 41
+mortgage rules currently `requires_review: false`, 27 dependency edges
+originate from one of them, landing on 26 unique downstream targets, and 24
+of those 26 are themselves `requires_review: true` (only `B80-R05` and
+`B26-LENDER-ALTERNATIVE-DELIVERY-003` are already clean). Any realistic
+Tier 1 propagation example crosses the review boundary; Section 4.1 treats
+that as something to test, not something to avoid.
+
 ## 4. Validation data plan
 
 ### 4.1 Tier 1 — synthetic graph-level fixture (buildable immediately)
@@ -108,24 +131,43 @@ without inventing anything beyond the edit itself.
 No new pipeline run is required for Tier 1; it operates directly on
 artifacts already on disk.
 
-1. Take the 41 mortgage rules currently marked `requires_review: false` as
-   the fixture universe. Restricting to already-clean rules avoids
-   conflating "the diff engine has a bug" with "this rule is still pending
-   review" while the fixture is being built.
-2. Of those 41, 7 carry a numeric `condition_predicate`
+1. Define the fixture universe as two tiers, not one: the **41** mortgage
+   rules currently marked `requires_review: false` (the only ones eligible
+   to be hand-edited, so "the diff engine has a bug" is never conflated with
+   "this rule is still pending review"), **plus** the **24** additional rules
+   that are direct DAG dependents of one of those 41 and are themselves
+   still `requires_review: true` (found by walking `agent_10`'s DAG edges
+   outward from the 41 — `R-120-003` via `dag_0203` is one of them). The
+   second group is carried into the fixture at its real, unedited review
+   status; it exists so the fixture can test that propagation correctly
+   reaches a review-required rule and reports it honestly, which is the
+   overwhelmingly common case here: of the 41 clean rules' 27 outgoing
+   dependency edges, 24 of 26 unique targets are still `requires_review:
+   true`. A fixture that only ever propagates into already-clean rules would
+   not be representative.
+2. Of the 41, 7 carry a numeric `condition_predicate`
    (`R-120-004`, `batch5_mortgage_pool_fixed_rate_submission_minimum`,
    `B32-A2-2-06-001`, `B58-MORTGAGE_LOAN-MANUFACTURED_HOME-CASH_OUT_ELIGIBILITY`,
    `B16-R004-ADU-RENTAL-INCOME-CAP`, `B96-LOAN_APPLICATION-UNEMPLOYMENT_BENEFITS-QUALIFICATION`,
    `B125-BORROWER-GIFT-COHABITATION-003`). Fork
    `optimized_compliance_knowledge_graph.json` into `old_graph.json` and
-   `new_graph.json`, and hand-edit 3-5 of these numeric fields in the "new"
-   copy (for example, `R-120-004`'s LTV trigger `80 -> 78`). Each edit gets a
-   one-line rationale, written as if it were a real Selling Guide
-   announcement, and an updated `effective_date` so provenance stays
-   internally consistent.
+   `new_graph.json` (both containing all 65 fixture-universe rules), and
+   hand-edit 3-5 of the 7 numeric fields in the "new" copy (for example,
+   `R-120-004`'s LTV trigger `80 -> 78`). Each edit gets a one-line
+   rationale, written as if it were a real Selling Guide announcement, and
+   an updated `effective_date` so provenance stays internally consistent.
+   Only the 41 clean rules are ever edited; the 24 review-required
+   dependents are copied unchanged into both graphs.
 3. Hand-write 10-15 scenario cases exercising the edited rules plus their
    known dependents from `agent_10`'s DAGs (at minimum `R-120-003` via
-   `dag_0203`), and hand-label the expected old-vs-new outcome for each case.
+   `dag_0203`), and hand-label two different things per case: the expected
+   old-vs-new **outcome** for each of the 41 editable rules the case
+   exercises, and the expected **status** — `unresolved-review`, not an
+   outcome — for each of the 24 review-required downstream rules the case's
+   propagation should reach. (Phase 3's acceptance criteria fixes this
+   four-way status vocabulary — `changed` / `unchanged` /
+   `unresolved-review` / `refused-unsupported-construct` — and Phase 7.2
+   later extends it to the full rule population; it isn't redefined twice.)
    This hand-labeled set *is* the gold data — authored by us, over rules
    already extracted from the real source text, with no external oracle
    required.
@@ -219,6 +261,9 @@ New output:                primary_mortgage_insurance_policy_required = true
 Known downstream:          R-120-003 (insurance-in-place obligation; edge
                            already present in agent_10's dag_0203, strength
                            5/5, confidence 90.2, detection_method=explicit)
+Downstream status:         unresolved-review (R-120-003 is requires_review:
+                           true in the fixture; reported as present and
+                           unresolved, not silently changed/unchanged/dropped)
 Evidence status:           source and hand-authored gold label aligned
 Execution status:          observed by replay (Tier 1); to be confirmed by
                            real extraction (Tier 2)
@@ -247,9 +292,26 @@ structure instead.
 Unchanged from `proposal.md` Section 6.5 (`Direct`/`Potential`/`Recompute`
 over the dependency DAG, full replay as the correctness oracle). For the
 anchor example: `Direct` = `{R-120-004}`; `Potential` = `{R-120-004,
-R-120-003}` (via `dag_0203`); `Recompute` should equal `Potential` here,
-since `R-120-003`'s own predicate (`fannie_mae_required_insurance_or_loan_guaranty
-== true`) is downstream of the very outcome `R-120-004` changed.
+R-120-003}` (via `dag_0203`).
+
+`Recompute` is *not* automatically equal to `Potential` here, and this is a
+genuine open design question for Phase 2, not a solved fact: `dag_0203`'s
+edge is a narrative dependency agent_10's extraction judged from the source
+text (`detection_method: explicit`, confidence 90.2), but `R-120-003`'s own
+condition predicate references a *different* variable
+(`fannie_mae_required_insurance_or_loan_guaranty`) than the one `R-120-004`'s
+edit changes (`primary_mortgage_insurance_policy_required`) — the two rules
+were extracted independently and never assigned a shared symbol. An
+`Recompute` fingerprint that only compares variable-level inputs would miss
+this dependency entirely. Phase 2 must resolve this one of two ways: either
+canonicalize the two variables as the same fact during alignment (Section
+6.4), so a fingerprint comparison is meaningful, or treat every DAG neighbor
+in `Potential` as unconditionally requiring re-execution regardless of
+fingerprint match whenever no such canonical link exists — accepting fewer
+"exact incremental/full-replay agreement" savings claims in exchange for
+never silently missing a real dependency. Phase 3's fixture (Section 4.1)
+is exactly where this decision gets tested, using `R-120-004`/`R-120-003` as
+the concrete case.
 
 ## 7. Rollout phases
 
@@ -269,33 +331,43 @@ equivalent from Section 4.1 above.
 
 Execution steps:
 
-1. Add `fixtures/regdelta/mortgage_tier1/` containing `old_graph.json` (a
-   copy of `agent_06-optimized/optimized_compliance_knowledge_graph.json`
-   restricted to the 41 non-review-required rules), `new_graph.json` (the
-   same set with the hand-authored edits from Section 4.1 step 2 applied),
-   and `edit_manifest.json` recording each edit's rule ID, field, old/new
-   value, and rationale.
+1. Add `fixtures/regdelta/mortgage_tier1/` containing `old_graph.json` and
+   `new_graph.json` (each the full 65-rule fixture universe from Section
+   4.1 step 1: the 41 editable rules plus their 24 review-required direct
+   DAG dependents, the latter byte-identical across both graphs), and
+   `edit_manifest.json` recording each edit's rule ID, field, old/new value,
+   and rationale.
 2. Add `fixtures/regdelta/mortgage_tier1/scenarios.json` with the 10-15
    hand-labeled cases from Section 4.1 step 3, each carrying the expected
-   old output, new output, and expected downstream rule IDs.
+   old/new outcome for the editable rules it exercises and the expected
+   `unresolved-review` status for any of the 24 review-required rules its
+   propagation should reach.
 3. Add `scripts/validate_mortgage_tier1_fixture.py` checking that every
-   edited rule ID exists in both graphs, every non-edited rule is byte-
-   identical across the two graphs (so the fixture can't silently drift),
-   and every scenario's referenced rule IDs exist.
+   edited rule ID is one of the 41 editable rules, every one of the 24
+   review-required dependent rules is byte-identical across both graphs (so
+   the fixture can't silently drift, and can't silently un-flag a rule that
+   is supposed to stay `requires_review: true`), and every scenario's
+   referenced rule IDs exist in the fixture universe.
 4. Add `tests/test_mortgage_tier1_fixture.py` running Phase 1/2's compiler
    and differential engine over this fixture and asserting 100% agreement
-   with the hand-labeled outcomes and downstream sets.
-5. Record results — including the refusal count for the 590 still-
-   `requires_review` rules — under `results/aggregates/regdelta/mortgage_tier1.json`.
+   with the hand-labeled outcomes, downstream sets, and `unresolved-review`
+   statuses.
+5. Record results — including the refusal count for the 566 mortgage rules
+   outside the 65-rule fixture universe entirely (590 total
+   `requires_review: true` rules, less the 24 carried into the fixture) —
+   under `results/aggregates/regdelta/mortgage_tier1.json`.
 
 Acceptance criteria:
 
 - every hand-labeled Tier 1 case is classified changed/unchanged correctly;
-- every hand-labeled downstream rule is found by `Potential`/`Recompute`,
-  and nothing else is;
+- every hand-labeled downstream rule is found by `Potential`/`Recompute`;
+  a review-required one is reported as `unresolved-review` (present, not
+  silently dropped, and not resolved to changed/unchanged), and nothing
+  outside the hand-labeled set is reported;
 - incremental recomputation exactly matches full replay on this fixture;
-- the 590 `requires_review` mortgage rules are reported as explicit refusals,
-  never silently treated as unchanged or as executable `false`.
+- the 566 mortgage rules outside the 65-rule fixture universe are reported
+  as explicit refusals, never silently treated as unchanged or as
+  executable `false`.
 
 ### Phase 4: mortgage Tier 2 real text-to-pipeline validation
 
@@ -330,8 +402,11 @@ Acceptance criteria:
 
 ### Phase 5: expand to the remaining domains
 
-Ordered by actual pipeline distance to mortgage's depth (Section 2), not by
-any external priority:
+Replaces `proposal.md`'s "RegelRecht real-change evaluation" phase — there is
+no genuine-version-pair resource in scope here, so this phase is domain
+breadth instead: the same Tier 1/Tier 2 approach applied to each of this
+repository's other four domains, ordered by actual pipeline distance to
+mortgage's depth (Section 2), not by any external priority:
 
 1. **`privacy_policy`** — already has 802/802 DAG coverage; only needs an
    `agent_11` run (no LLM calls, purely structural) to match mortgage's
@@ -339,7 +414,7 @@ any external priority:
    its own Tier 2 pass.
 2. **`mobile_app_privacy`** — needs agent_09 (grounding) confirmed, then
    agent_10 and agent_11.
-3. **`nda_confidentiality`** — agent_06 already produced 2,741 rules; needs
+3. **`nda_confidentiality`** — agent_06 already produced 2,631 rules; needs
    agent_07 through agent_11.
 4. **`commercial_contracts`** — least progressed; needs the full pipeline
    run in this checkout before any RegDelta fixture work can start.
@@ -373,8 +448,8 @@ Execution steps:
 Phases 1-6 prove the engine is correct against controlled data. Phase 7 is
 what actually makes RegDelta a product: two real, full document versions,
 through the real pipeline, reached through a real entry point, with defined
-behavior for every rule — not just the 41 clean ones Tier 1 used to validate
-the engine in isolation.
+behavior for every rule — not just the 65-rule fixture universe Tier 1 used
+to validate the engine in isolation.
 
 **7.1 A real second full document.** This is the one deliberate exception to
 this plan's "no new external input" posture (Sections 0 and 9): you cannot
@@ -391,18 +466,19 @@ run), and record actual runtime/cost — the existing run processed 506 chunks
 into 640 extracted rules across many LLM calls, so a second full run is a
 comparable real spend, not a free rerun.
 
-**7.2 Defined behavior for the whole rule population, not just the clean
-subset.** Today 590/631 mortgage rules are `requires_review: true`. Phase 7
-must define what the differential engine reports when either aligned side of
-a rule pair is review-required: never silently skip it and never silently
-call it "unchanged." Add an explicit `unresolved-review` status alongside
-`changed`/`unchanged`/`refused-unsupported-construct`, and add a
-coverage-risk line to the impact report — of all aligned rule pairs, how many
-were actually diffable versus held for review versus refused for unsupported
-constructs — following the same "never absorb into the headline accuracy
-number" principle Section 8 already applies to the Tier 1/Tier 2 gap. This
-extends Phase 2's alignment/diff engine to a wider input population; it does
-not replace it.
+**7.2 Defined behavior for the whole rule population, not just the fixture
+subset.** Phase 3's fixture already had to introduce the `unresolved-review`
+status (Section 4.1), because 24 of its own 65 rules are `requires_review:
+true`. Phase 7 extends that same four-way vocabulary (`changed` /
+`unchanged` / `unresolved-review` / `refused-unsupported-construct`) from the
+fixture's 65 rules to all 631 — of which 590 are currently `requires_review:
+true` — and adds a coverage-risk line to the impact report: of all aligned
+rule pairs, how many were actually diffable versus held for review versus
+refused for unsupported constructs, following the same "never absorb into
+the headline accuracy number" principle Section 8 already applies to the
+Tier 1/Tier 2 gap. This extends Phase 2's alignment/diff engine to the full
+rule population; it does not replace it, and it does not introduce a new
+status vocabulary — Phase 3 already did.
 
 **7.3 A real product entry point.** Add a "Compare versions" action in
 `ui/frontend` and a corresponding `ui/backend` endpoint that: accepts two
@@ -452,7 +528,7 @@ Acceptance criteria:
   fixture (Phases 3-5).
 - A reviewer can open the existing workbench, pick the mortgage domain, and
   see the Tier 1 (then Tier 2) old-vs-new diff end to end (Phase 6).
-- At least one additional domain (`privacy_policy`, per Section 9's ordering)
+- At least one additional domain (`privacy_policy`, per Phase 5's ordering)
   reaches the same bar before this plan considers itself validated beyond a
   single domain's idiosyncrasies.
 
@@ -463,7 +539,7 @@ Acceptance criteria:
   without any hand-authored fixture in the loop.
 - Every one of the 631 mortgage rules resolves to an explicit status
   (changed, unchanged, unresolved-review, or refused) — none are silently
-  dropped because they were outside Tier 1's clean 41.
+  dropped because they were outside Tier 1's 65-rule fixture universe.
 - Measured runtime and cost for a full round trip are published and the
   product UX matches what was measured.
 

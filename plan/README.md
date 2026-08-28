@@ -13,11 +13,13 @@ diverging on what proves it works:
   domain's already-complete agent_01-11 pipeline output), with no external
   acquisition on the critical path.
 
-Sections 6-7 of `proposal.md` and Section 6 of `regdelta-product-plan.md`
-describe the same compiler/alignment/differential-execution engine — that
-part of the design does not depend on which validation data proves it, so
-keep the two in sync if either changes. Everything else (validation data,
-domain rollout order, success criteria) is intentionally track-specific.
+Section 6 of `proposal.md` and Section 6 of `regdelta-product-plan.md`
+describe the same compiler/alignment/differential-execution engine, and
+Phases 1-2 of each document's implementation plan are identical for the same
+reason — that part of the design does not depend on which validation data
+proves it, so keep those in sync if either changes. Everything else
+(validation data, domain rollout order, success criteria, and `proposal.md`'s
+Section 7 benchmark design specifically) is intentionally track-specific.
 
 This directory also retains the machine-readable contracts produced by the
 earlier compiler programme:
