@@ -19,8 +19,9 @@ and distinguishes observed scenario exposure from uncalibrated business risk.
 
 The evaluation uses two complementary open resources:
 
-1. **OpenExempt-CF**, a scalable controlled-change benchmark derived from the
-   CC BY 4.0 OpenExempt statutes, scenario generator, and deterministic solver.
+1. **OpenExempt-CF** (Counterfactual), a scalable controlled-change benchmark
+   derived from the CC BY 4.0 OpenExempt statutes, scenario generator, and
+   deterministic solver.
 2. **RegelRecht-Real**, a smaller real-change evaluation using versioned,
    executable Dutch laws and legal scenarios from the EUPL-licensed RegelRecht
    project.
@@ -42,15 +43,15 @@ They need to know:
 - how many cases are exposed to the change and by how much; and
 - which source provisions justify each reported impact.
 
-For an old policy document \(D_0\), a revised document \(D_1\), their compiled
-programs \(P_0\) and \(P_1\), and a scenario cohort \(X\), the primary object of
+For an old policy document $D_0$, a revised document $D_1$, their compiled
+programs $P_0$ and $P_1$, and a scenario cohort $X$, the primary object of
 study is the behavioral change set:
 
-\[
+$$
 X_\Delta = \{x \in X \mid P_0(x) \neq P_1(x)\}.
-\]
+$$
 
-For each \(x \in X_\Delta\), the system should report the old result, new
+For each $x \in X_\Delta$, the system should report the old result, new
 result, semantic reason for the difference, affected rule path, and supporting
 source evidence. Aggregate analysis should report affected-case prevalence,
 decision-flip matrices, monetary deltas where available, activated or
@@ -276,7 +277,7 @@ silently establish identity.
 
 ### 6.5 Impact propagation
 
-For document/version delta \(D\) and executable layer \(L\):
+For document/version delta $D$ and executable layer $L$:
 
 - `Direct(D,L)` contains active consumers whose selected evidence, condition,
   effect, or output changed.
@@ -321,12 +322,18 @@ optimizer semantics is implemented.
 
 #### Gold construction
 
-For each fixed case \(x\):
+For each fixed case $x$:
 
 ```python
 old_result = official_solver(old_statutes, x)
 new_result = official_solver(new_statutes, x)
 gold_changed = observable(old_result) != observable(new_result)
+if gold_changed:
+    gold_impacts.append({
+        "case_id": x.id,
+        "old_result": observable(old_result),
+        "new_result": observable(new_result),
+    })
 ```
 
 The mutation generator must validate that:
@@ -368,11 +375,16 @@ The mutation generator must validate that:
 ### 7.2 RegelRecht-Real: genuine version changes
 
 The Dutch government's [RegelRecht](https://github.com/MinBZK/regelrecht)
-project is EUPL-licensed and supplies machine-readable executable laws, source
-legal text, official URLs, effective dates, an execution engine, and BDD legal
-scenarios.
+project is EUPL-1.2-licensed and supplies an execution engine, editor, and BDD
+legal scenarios. The versioned legal source text and machine-readable law
+encodings are published separately in the companion
+[regelrecht-corpus](https://github.com/MinBZK/regelrecht-corpus) repository as
+dated YAML files (for example a `wet_op_de_zorgtoeslag` law with both a
+`2024-01-01.yaml` and a `2025-01-01.yaml` version). The adapter must pin both
+repositories by commit SHA so the genuine pairs below are reproducible from a
+clean checkout.
 
-The inspected public repository contains three genuine 2024-to-2025 pairs:
+The inspected public repositories contain three genuine 2024-to-2025 pairs:
 
 - the standard health-insurance premium regulation;
 - the Dutch Income Tax Act; and
@@ -391,9 +403,9 @@ is extended and independently tested.
 
 | Resource | Role | Limitation for change-impact evaluation |
 | --- | --- | --- |
-| [DeonticBench](https://github.com/guangyaodou/DeonticBench) | Regression and transfer over 6,483 labeled cases and reference Prolog | No natural old/new version pairs |
+| [DeonticBench](https://github.com/guangyaodou/DeonticBench) | Regression and transfer over 6,232 labeled cases and reference Prolog | No natural old/new version pairs |
 | [Dutch legal-text-to-DMN corpus](https://github.com/opengov-lab/legal-text-to-decision-model) | Text-to-executable compiler evaluation over 95 production models | One regulatory version per model |
-| [IEEE process-mining event logs](https://tfpm.compute.dtu.dk/resources/logs) | Future process-distribution and timing calibration | No aligned regulation versions or gold rule mappings |
+| [IEEE process-mining event logs](https://www.tf-pm.org/resources/logs) | Future process-distribution and timing calibration | No aligned regulation versions or gold rule mappings |
 | RC4PC data | Optional external baseline if it can be pinned and licensed reproducibly | Availability must be verified before it enters the committed protocol |
 
 ## 8. Experimental design
@@ -440,7 +452,15 @@ propagation rather than collapsing them into one number.
 Splits occur at the **policy-pair level**, not the scenario level. Scenarios
 derived from a policy mutation may not cross train/development/test boundaries.
 The fixed split manifest must pin upstream commit, mutation configuration,
-random seed, case hashes, and solver version.
+random seed, case hashes, and solver version. This splitting protocol applies
+to OpenExempt-CF, whose mutation generator can produce enough pairs for a
+meaningful train/development/test partition.
+
+RegelRecht-Real is held out entirely as an evaluation-only resource. With only
+three genuine version pairs, no train/development split of it is meaningful;
+none of its pairs, scenarios, or results may be used for prompt tuning,
+threshold selection, or model/configuration selection that is later scored
+against it.
 
 ## 9. Baselines and ablations
 
@@ -449,9 +469,12 @@ random seed, case hashes, and solver version.
 1. sentence-level textual diff;
 2. the current exact-ID and structural/evidence-hash comparison;
 3. LLM-only atomic change extraction in the style of requirement-delta work;
-4. structural LExec diff without execution;
-5. direct LLM prediction of affected cases; and
-6. RegDelta semantic differential execution.
+4. structural LExec diff without execution; and
+5. direct LLM prediction of affected cases.
+
+RegDelta's full semantic differential-execution system (Sections 6-8) is the
+proposed system evaluated against baselines 1-5 under the same scenario
+cohort and metrics; it is the point of comparison, not itself a baseline.
 
 ### Ablations
 
@@ -505,6 +528,45 @@ agent_11-executable-models/
   review_projection.bpmn
 ```
 
+Execution steps:
+
+1. Reconcile the graph shape `utils/lexec_ir.py`'s `lower_graph` expects with
+   the shape Agent 06 actually emits
+   (`optimized_compliance_knowledge_graph.json`), since `agent_11` currently
+   reads that graph through `utils/executable_models.py`, not
+   `utils/lexec_ir.py`.
+2. Add a compilation step (extend `utils/lexec_ir.py` or add
+   `utils/lexec_backend.py`) that lowers a frozen `lexec-ir/1.0` document unit
+   into (a) an executable DMN document containing only non-refused rules and
+   (b) `proof_records.json` capturing per-rule UNIQUE/ANY completeness and
+   overlap results, reusing the bounded proof utilities already referenced in
+   Section 4.1.
+3. Rewrite `agents/agent_11_executable_model_generator.py` to: call
+   `lower_graph` on Agent 06's optimized graph to produce `lexec_ir.json` and
+   `compilation_report.json` (the refusal and `ignored_fields` ledger from
+   Section 4.1's fail-closed lowering); compile only non-refused IR rules into
+   `executable_decisions.dmn` and `proof_records.json`; and keep today's
+   `build_graph_dmn`/`build_dags_bpmn` output, renamed to
+   `review_projection.dmn`/`review_projection.bpmn`, behaviorally unchanged so
+   existing review-UI consumers keep working.
+4. Update `utils/config.py`'s executable-models directory contract and
+   `docs/executable-models.md` to document the new six-file
+   `agent_11-executable-models/` layout shown above.
+5. Add `tests/test_agent_11_lexec_boundary.py` asserting: every graph rule
+   appears in exactly one of `lexec_ir.json`'s `rules` (executable) or
+   `refusals`, never both; `executable_decisions.dmn` contains only
+   non-refused rule IDs; and `review_projection.dmn`/`.bpmn` remain
+   byte-identical to today's `compliance_decisions.dmn`/`compliance_workflows.bpmn`
+   for existing fixtures (a regression guard against silently changing review
+   behavior while adding the executable path).
+6. Re-run the existing end-to-end fixtures (for example
+   `pipeline-output/e2e-mortgage-20260827/`) through the updated `agent_11`
+   and diff the new artifacts against the acceptance criteria before merging.
+7. Record the above as explicit task entries (ID, dependencies, acceptance
+   commands, evidence paths) in a RegDelta task registry, per `plan/README.md`'s
+   instruction that RegDelta implementation tasks update or replace
+   `plan/tasks.json` rather than inheriting legacy statuses.
+
 Acceptance criteria:
 
 - every rule is executable, refused, or review-only;
@@ -525,6 +587,35 @@ Implement:
 - downstream impact propagation; and
 - full-versus-incremental comparison.
 
+Execution steps:
+
+1. Add `utils/rule_alignment.py` implementing the Section 6.4 alignment order
+   (exact ID/citation, then source-section-plus-output-signature, then
+   normalized predicate/effect structure, then constrained semantic
+   similarity, then explicit review) and returning one-to-one, one-to-many,
+   split, merge, added, removed, and unresolved mappings.
+2. Add `utils/semantic_diff.py` implementing the Section 6.3 taxonomy as a
+   closed classification (`classify_change(old_rule_ir, new_rule_ir,
+   alignment) -> ChangeKind`) so every aligned rule pair resolves to exactly
+   one taxonomy entry.
+3. Add `utils/impact_propagation.py` implementing `Direct(D,L)`,
+   `Potential(D,L)`, and `Recompute(D,L)` (Section 6.5) over the existing
+   dependency DAG from `agent_10_dag_generator.py`, plus a `replay(old_ir,
+   new_ir, cases)` function that is the full-replay correctness oracle.
+4. Add `utils/witness_generation.py` for solver- and boundary-focused witness
+   search restricted to the LExec-supported subset (numeric boundary probes,
+   boolean flips, enum edge cases matching the Section 7.1 mutation
+   families).
+5. Add `cli/regdelta_diff.py` orchestrating the four modules above over two
+   `lexec_ir.json` document units and a scenario cohort, emitting the Section
+   12 impact-report contract (`regdelta-impact/1.0`).
+6. Add `tests/test_impact_propagation.py` and `tests/test_semantic_diff.py`
+   with deterministic fixtures; assert `Recompute` results exactly match full
+   `replay` output on every fixture before any incremental-savings claim is
+   made.
+7. Add `docs/regdelta_impact_contract.md` documenting the schema and worked
+   examples, in the style of `docs/ir-semantics-v1.md`.
+
 Acceptance criteria:
 
 - exact agreement with full replay on all deterministic fixtures;
@@ -544,6 +635,35 @@ Implement:
 - change-pair and result schemas; and
 - corpus validators.
 
+Execution steps:
+
+1. Add `bench/adapters/openexempt_cf.py` following the not-vendored,
+   pinned-commit pattern already used by `bench/adapters/dutch_dmn.py`:
+   OpenExempt itself is never vendored, only its upstream commit SHA,
+   license, and path conventions are recorded.
+2. Add `scripts/fetch_openexempt.sh`, mirroring the clone-and-pin recipe in
+   `docs/anchor_aggregation_recipe.md`, that clones `servantez/OpenExempt` at
+   a pinned SHA into a scratch directory (never into the repository).
+3. Add `bench/openexempt_mutate.py` implementing the five Section 7.1
+   mutation families (numeric cap change, boolean applicability change,
+   enumerated inclusion/exclusion, simple rule add/remove, condition
+   strengthen/weaken) and the five gold-construction validations from that
+   section (citation/field existence, old/new text-value agreement,
+   edit-manifest/program-delta agreement, successful execution on both
+   sides, identical case object).
+4. Add `scripts/build_openexempt_cf_split.py` producing a frozen split
+   manifest under `bench/splits/` that pins upstream commit, mutation
+   configuration, random seed, case hashes, and solver version (Section 8.4).
+5. Add a `bench/schemas/regdelta_pair-1.0.schema.json` validating the Section
+   7.1 pair-contract JSON, plus `scripts/validate_openexempt_cf_corpus.py`
+   checking every pair against the acceptance criteria below.
+6. Add `tests/test_openexempt_cf_adapter.py` covering the mutation
+   generator's five validations and the corpus validator using small
+   synthetic fixtures, so CI never requires network access.
+7. Document license and attribution in `benchmarks/README.md` and
+   `benchmarks/datasets.json`, matching the existing DeonticBench and Dutch
+   DMN entries' format.
+
 Acceptance criteria:
 
 - clean-checkout provider-free reproduction;
@@ -558,6 +678,31 @@ Run both versions through the complete extraction and compilation pipeline,
 align the extracted rules, execute supported cases, and compare the resulting
 impact set with OpenExempt gold.
 
+Execution steps:
+
+1. Add `scripts/run_openexempt_cf_e2e.py` that pushes each pair's old/new
+   statute text through the agent 01-11 pipeline (`cli/extract.py`), aligns
+   the two extracted `lexec_ir.json` outputs with `utils/rule_alignment.py`,
+   runs `cli/regdelta_diff.py`, and compares the resulting impact set against
+   the pair's `gold_impacts`.
+2. Wire the Section 9 baselines (sentence-level diff, exact-ID/hash
+   comparison, LLM-only atomic-change extraction, structural LExec diff
+   without execution, direct LLM prediction) into the same runner as
+   alternate `--baseline` modes, so all configurations share one metrics
+   path.
+3. Implement the Section 9 ablations as `--ablate
+   {provenance,normalization,execution,witness,propagation,fail_closed,exact_id_alignment}`
+   flags on the same runner.
+4. Add metric computation (extend `utils/metric_contract.py` or add
+   `utils/regdelta_metrics.py`) covering every Section 10 primary metric plus
+   the coverage-risk frontier, writing results under
+   `results/aggregates/regdelta/`.
+5. Enforce Section 8.4's pair-level, single-estimator split rules with a
+   `bench/manifest.py`-style validator before any result is retained.
+6. Add `tests/test_openexempt_cf_e2e_contract.py` asserting retained results
+   always include successful, failed, and refused records for every expected
+   pair, and that no baseline or ablation configuration is silently dropped.
+
 Acceptance criteria:
 
 - predeclared pair-level splits;
@@ -570,6 +715,28 @@ Acceptance criteria:
 
 Implement a pinned adapter for supported 2024/2025 law pairs and run the
 official external engine as the oracle.
+
+Execution steps:
+
+1. Add `bench/adapters/regelrecht.py` (not-vendored) pinning both
+   `MinBZK/regelrecht` (engine) and `MinBZK/regelrecht-corpus` (dated law
+   YAML) commit SHAs, and enumerating the three 2024/2025 pairs named in
+   Section 7.2.
+2. Add `scripts/fetch_regelrecht.sh`, mirroring the OpenExempt fetch recipe,
+   cloning both repositories into a scratch directory at their pinned SHAs.
+3. Add `bench/regelrecht_scope.py` that statically scans each YAML law's
+   operations against the LExec-supported construct list and emits an
+   explicit refusal record for every unsupported construct (nested
+   arithmetic, conditional external calls, rounding, unsupported date
+   operations) rather than skipping it silently.
+4. Add `bench/regelrecht_oracle.py` wrapping RegelRecht's own execution
+   engine as the external oracle via the same JSON-lines harness protocol
+   used by `bench/harness.py`/`bench/dmn_engine_harness.py`.
+5. Add `tests/test_regelrecht_adapter.py` with small fixture laws (not the
+   real corpus) verifying the scope-scan and harness-protocol wiring.
+6. Add `docs/regelrecht_real_protocol.md` documenting the pinned commits,
+   in-scope provisions, and reproduction commands, in the structure of
+   `docs/anchor_aggregation_recipe.md`.
 
 Acceptance criteria:
 
@@ -591,6 +758,24 @@ Extend the workbench with:
 - impacted-rule DAGs;
 - proved, observed, uncertain, and refused states; and
 - downloadable impact reports.
+
+Execution steps:
+
+1. Extend `ui/backend` with endpoints/serializers for the Section 12 impact-
+   report contract (`rule_alignments`, `semantic_changes`, `affected_cases`,
+   `witnesses`, `downstream_impacts`, `refusals`, `provenance`).
+2. Extend `ui/frontend` with the views listed above, reusing the existing
+   layered rule-graph UI for the impacted-rule DAGs and adding proved/
+   observed/uncertain/refused state badges and a downloadable-report action.
+3. Add `ui/backend` and `ui/frontend` component tests for the new views,
+   following the conventions already recorded in `ui/IMPLEMENTATION_STATUS.md`
+   and `ui/contracts.md`.
+4. Draft new `paper/sections/` content for RegDelta, using
+   `paper/EXPERIMENT_RUNBOOK.md`'s existing experiment-tracking conventions,
+   reporting controlled (OpenExempt-CF) and genuine (RegelRecht-Real) results
+   in clearly separate tables.
+5. Update `paper/tables/` and `paper/figures/` generation scripts to consume
+   `results/aggregates/regdelta/` from Phase 4.
 
 The paper must report controlled and genuine changes separately and must not
 convert engineering test coverage, fixture mutation score, or structural
