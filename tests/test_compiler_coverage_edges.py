@@ -171,14 +171,35 @@ def test_lexec_predicate_logic_domains_and_scope_refusals():
     assert lexec_ir._modality({"rule_type": "definition"}) == "definition"
     assert lexec_ir._modality({"mandatory": False}) == "permission"
     assert lexec_ir._modality({}) == "none"
+    digest = "a" * 64
     with pytest.raises(lexec_ir.LoweringRefusal):
-        lexec_ir._scope({"applicability_scope": "bad"})
+        lexec_ir._scope({"applicability_scope": "bad"}, digest)
     with pytest.raises(lexec_ir.LoweringRefusal):
-        lexec_ir._scope({"applicability_scope": {"loan_types": ["home"]}})
+        lexec_ir._scope({"applicability_scope": {"jurisdiction": [1]}}, digest)
     with pytest.raises(lexec_ir.LoweringRefusal):
-        lexec_ir._scope({"applicability_scope": {"jurisdiction": [1]}})
+        lexec_ir._scope({"scope_basis": "unknown"}, digest)
     with pytest.raises(lexec_ir.LoweringRefusal):
-        lexec_ir._scope({"scope_basis": "unknown"})
+        lexec_ir._scope({"applicability_scope": {"user_categories": ["consumers"]}}, digest)
+    # loan_types/transaction_types/occupancy_types are representable scope
+    # dimensions: they become a checkable ``scope.predicate`` (an "eq"/"or"
+    # formula over a dedicated free-text symbol), not a refusal.
+    scope, scope_symbols = lexec_ir._scope({"applicability_scope": {"loan_types": ["home", "condo"]}}, digest)
+    assert scope["predicate"] == {
+        "op": "or",
+        "args": [
+            {"op": "eq", "left": {"symbol": "loan_type"}, "right": {"literal": "home", "type": "string"}},
+            {"op": "eq", "left": {"symbol": "loan_type"}, "right": {"literal": "condo", "type": "string"}},
+        ],
+    }
+    assert [symbol["id"] for symbol in scope_symbols] == ["loan_type"]
+    assert scope_symbols[0]["domain"] == {"kind": "string", "predicates": ["eq"]}
+    both_scope, both_symbols = lexec_ir._scope(
+        {"applicability_scope": {"loan_types": ["home"], "transaction_types": ["purchase"]}}, digest,
+    )
+    assert both_scope["predicate"]["op"] == "and"
+    assert {symbol["id"] for symbol in both_symbols} == {"loan_type", "transaction_type"}
+    with pytest.raises(lexec_ir.LoweringRefusal):
+        lexec_ir._scope({"applicability_scope": {"loan_types": [""]}}, digest)
 
 
 def test_lexec_lowering_refusal_matrix_and_conflicting_symbols():

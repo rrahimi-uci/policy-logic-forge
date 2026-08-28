@@ -1,6 +1,6 @@
 {
-  "case_count": 5,
-  "cases_passed": 5,
+  "case_count": 6,
+  "cases_passed": 6,
   "claim_boundary": "Frozen provider-free expected projections and mutations only; this is not a corpus-level lowering accuracy estimate.",
   "failed_cases": [],
   "fixture_version": "lowering-oracle/1",

@@ -40,6 +40,16 @@ IGNORED_FIELD_REASONS = {
     "data_points_required": "NON_EXECUTABLE_METADATA", "audit_frequency": "NON_EXECUTABLE_METADATA", "entity_or_relationship": "NON_EXECUTABLE_METADATA",
     "entity_type": "NON_EXECUTABLE_METADATA", "relationship_definition": "NON_EXECUTABLE_METADATA", "dependencies": "NON_EXECUTABLE_METADATA",
     "execution": "NON_EXECUTABLE_METADATA", "dependent_rules": "NON_EXECUTABLE_METADATA", "deduplication_info": "NON_EXECUTABLE_METADATA",
+    # ``entity_definition`` is agent_05's descriptive entity/relationship-type
+    # context (see agent_05_rules_with_entities_merger.py); its sibling
+    # ``relationship_definition`` was already classified above.  ``conditions``
+    # and ``consequences`` are the legacy prose fields the extraction prompt
+    # historically emitted alongside the structured v2 contract; current
+    # prompts (e.g. domain-prompts/*/business_rules_extraction_compact.txt)
+    # explicitly instruct the model not to emit them because the structured
+    # fields fully supersede them, but older/shared-prompt runs (e.g. the
+    # mortgage domain) still produce them.
+    "entity_definition": "NON_EXECUTABLE_METADATA", "conditions": "NON_EXECUTABLE_METADATA", "consequences": "NON_EXECUTABLE_METADATA",
     "confidence_score": "AUDIT_STATUS_NOT_EXECUTABLE", "exception_verification": "AUDIT_STATUS_NOT_EXECUTABLE", "scope_derivation": "AUDIT_STATUS_NOT_EXECUTABLE",
     "grounding": "AUDIT_STATUS_NOT_EXECUTABLE", "requires_review": "AUDIT_STATUS_NOT_EXECUTABLE", "review_reason": "AUDIT_STATUS_NOT_EXECUTABLE",
     "reference_verified": "AUDIT_STATUS_NOT_EXECUTABLE", "reference_verification_note": "AUDIT_STATUS_NOT_EXECUTABLE",
@@ -321,18 +331,65 @@ def _modality(rule: Mapping[str, Any]) -> str:
     return "none"
 
 
-def _scope(rule: Mapping[str, Any]) -> dict[str, Any]:
+# Categorical applicability_scope fields with a representable IR predicate.
+# Each becomes a free-text string symbol checked by equality against the
+# scope list's values; unlike ``jurisdictions``/``parties``/effective dates
+# (retained as ``metadata`` only -- see below), these are folded into
+# ``scope.predicate`` and are therefore genuinely evaluated, not merely
+# recorded.  A rule listing several values for one field is satisfied when
+# any of them matches (an implicit "or"); several *different* fields must
+# all be satisfied (an implicit "and").
+_SCOPE_DIMENSION_SYMBOLS = {
+    "loan_types": "loan_type",
+    "transaction_types": "transaction_type",
+    "occupancy_types": "occupancy_type",
+}
+
+
+def _scope_dimension_symbol(symbol_id: str, rule: Mapping[str, Any], source_sha256: str) -> dict[str, Any]:
+    return {
+        "id": symbol_id,
+        "theory": "string",
+        "role": "input",
+        "domain": {"kind": "string", "predicates": ["eq"]},
+        "unit": None,
+        "derived_expression": None,
+        "provenance": _provenance(rule, source_sha256, "applicability_scope"),
+    }
+
+
+def _scope(rule: Mapping[str, Any], source_sha256: str) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     basis = rule.get("scope_basis")
     scope = rule.get("applicability_scope")
     if scope is not None and not isinstance(scope, Mapping):
         raise LoweringRefusal("INVALID_SCOPE", "applicability_scope", "Applicability scope must be an object.")
     scope = scope or {}
-    unsupported = {key: value for key, value in scope.items() if value not in (None, [], "") and key not in {"jurisdictions", "jurisdiction"}}
+    dimension_formulas: list[dict[str, Any]] = []
+    dimension_symbols: list[dict[str, Any]] = []
+    for field, symbol_id in _SCOPE_DIMENSION_SYMBOLS.items():
+        values = scope.get(field)
+        if not values:
+            continue
+        if not isinstance(values, list) or any(not isinstance(item, str) or not item for item in values):
+            raise LoweringRefusal("INVALID_SCOPE", field, f"{field!r} must be a non-empty list of non-empty strings.")
+        clauses = [{"op": "eq", "left": {"symbol": symbol_id}, "right": _literal(value, "string")} for value in values]
+        dimension_formulas.append(clauses[0] if len(clauses) == 1 else {"op": "or", "args": clauses})
+        dimension_symbols.append(_scope_dimension_symbol(symbol_id, rule, source_sha256))
+    unsupported = {
+        key: value
+        for key, value in scope.items()
+        if value not in (None, [], "") and key not in {"jurisdictions", "jurisdiction", *_SCOPE_DIMENSION_SYMBOLS}
+    }
     if unsupported:
         raise LoweringRefusal("UNREPRESENTABLE_SCOPE", "applicability_scope", f"Scope fields cannot be represented: {sorted(unsupported)}.")
     jurisdictions = scope.get("jurisdictions", scope.get("jurisdiction", rule.get("jurisdiction", [])))
     if jurisdictions is None:
         jurisdictions = []
+    elif isinstance(jurisdictions, str):
+        # A single-jurisdiction issuer is commonly recorded as a bare string
+        # (e.g. rule["jurisdiction"] == "Fannie Mae Selling Guide") rather
+        # than a one-element list; normalise without changing its meaning.
+        jurisdictions = [jurisdictions] if jurisdictions else []
     if not isinstance(jurisdictions, list) or any(not isinstance(item, str) for item in jurisdictions):
         raise LoweringRefusal("INVALID_SCOPE", "jurisdiction", "Jurisdictions must be a list of strings.")
     metadata: dict[str, Any] = {
@@ -343,9 +400,18 @@ def _scope(rule: Mapping[str, Any]) -> dict[str, Any]:
         "effective_to": rule.get("expiration_date"),
         "document_version": rule.get("versioning_status"),
     }
-    if basis not in {None, "genuinely_unscoped", "explicit_in_source", "explicitly_universal_in_source", "explicitly_none_in_source"}:
+    # "explicit" is the canonical value the executable-readiness prompts
+    # actually declare (prompts/executable_readiness_completion.txt); the
+    # other four are documented synonyms/companions accepted by
+    # utils/rule_contract.py's SCOPE_BASES for the same reasons given there.
+    # "inferred" and "unresolved_after_source_review" are deliberately
+    # excluded: neither is a final, evidence-backed scope determination.
+    if basis not in {None, "explicit", "genuinely_unscoped", "explicit_in_source", "explicitly_universal_in_source", "explicitly_none_in_source"}:
         raise LoweringRefusal("UNRESOLVED_SCOPE", "scope_basis", f"Scope basis {basis!r} is not frozen for LExec v1.")
-    return {"predicate": None, "metadata": metadata}
+    predicate = None
+    if dimension_formulas:
+        predicate = dimension_formulas[0] if len(dimension_formulas) == 1 else {"op": "and", "args": dimension_formulas}
+    return {"predicate": predicate, "metadata": metadata}, dimension_symbols
 
 
 def _lower_rule(rule: Mapping[str, Any], source_sha256: str) -> tuple[dict[str, Any], list[dict[str, Any]]]:
@@ -424,15 +490,16 @@ def _lower_rule(rule: Mapping[str, Any], source_sha256: str) -> tuple[dict[str, 
             "condition": _formula_for_predicate(exception, variables),
             "provenance": _provenance(rule, source_sha256, "exceptions"),
         })
+    scope, scope_symbols = _scope(rule, source_sha256)
     lowered = {
         "id": rule_id,
-        "scope": _scope(rule),
+        "scope": scope,
         "condition": condition,
         "exceptions": exceptions,
         "effects": effects,
         "provenance": base_provenance,
     }
-    return lowered, symbols
+    return lowered, [*symbols, *scope_symbols]
 
 
 def _refusal(rule: Mapping[str, Any], source_sha256: str, exc: LoweringRefusal) -> dict[str, Any]:
