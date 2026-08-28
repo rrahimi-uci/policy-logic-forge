@@ -406,6 +406,69 @@ def test_condition_logic_and_test_vector_absent_from_model_packet():
     assert "test_vector" not in claim_types
 
 
+# ─────────────────────────────────────────────────────────────────────────
+# rule_name: verified structurally, not against source quotes. It is a
+# display title the pipeline invents for human review navigation (e.g.
+# "Unpaid PACE Financing Bars Delivery") -- never a sentence any source
+# document states in those words. Confirmed against a real run's grounding
+# report: the verifier consistently, correctly rejected it ("does not state
+# the supplied generated rule name"), but that single claim then flipped the
+# *entire rule* to grounding_status "failed" even when every source-derived
+# claim was fully grounded -- the same class of false-positive already fixed
+# for condition_logic/test_vector above. See MODEL_CLAIM_TYPES and
+# deterministic_rule_claims.
+# ─────────────────────────────────────────────────────────────────────────
+
+def test_rule_name_is_not_a_model_claim_type():
+    assert "generated_label" not in MODEL_CLAIM_TYPES
+
+
+def test_rule_name_claim_uses_the_generated_label_claim_type():
+    rule = valid_rule()
+    rule["rule_name"] = "Unpaid PACE Financing Bars Delivery"
+    claim_types = {claim["claim_type"] for claim in extract_claims(rule) if claim["claim_id"] == "rule_name"}
+    assert claim_types == {"generated_label"}
+
+
+def test_rule_name_is_absent_from_the_model_packet():
+    """build_packet must not send rule_name to the LLM at all."""
+    rule = valid_rule()
+    rule["rule_name"] = "Unpaid PACE Financing Bars Delivery"
+    packet = GroundingVerifier.build_packet(rule, corpus={}, max_chars=8000)
+    claim_ids = {c["claim_id"] for c in packet["claims"]}
+    assert "rule_name" not in claim_ids
+
+
+def test_rule_name_is_certified_without_a_model_call_regardless_of_its_text():
+    rule = valid_rule()
+    rule["rule_name"] = "Unpaid PACE Financing Bars Delivery"
+    results = GroundingVerifier.deterministic_rule_claims(rule, entity_keys=["SELLER_SERVICER", "FANNIE_MAE"])
+    by_id = {r["claim_id"]: r for r in results}
+
+    assert by_id["rule_name"]["verdict"] == "supported"
+    assert by_id["rule_name"]["evidence_id"] is None
+    assert "not against source prose" in by_id["rule_name"]["reasoning"]
+
+
+def test_a_rule_with_only_an_unquotable_rule_name_is_still_fully_certified(tmp_path, monkeypatch):
+    """The regression this fix targets: a rule whose every source-derived
+    claim (condition, outcome, party, scope, exception, description) is
+    genuinely well-grounded must certify, even though its generated
+    rule_name can never be quoted verbatim from source."""
+    organized = _organized_corpus(tmp_path)
+    graph = graph_with_two_rules()
+    for rule in graph["business_rules"]:
+        rule["rule_name"] = f"A human-readable title for {rule['rule_id']}"
+    monkeypatch.setenv("KG_GROUNDING_RULES_PER_REQUEST", "1")
+    monkeypatch.setenv("KG_GROUNDING_WORKERS", "4")
+
+    final_graph, report = GroundingVerifier(SupportingResolver()).verify_graph(graph, organized, tmp_path / "output")
+
+    assert report["pass"] is True
+    assert report["rules_certified"] == 2
+    assert all(rule["grounding"]["status"] == "certified" for rule in final_graph["business_rules"])
+
+
 def test_markdown_response_coverage_uses_model_claim_denominator():
     report = {
         "pass": False, "rules_certified": 0, "total_rules": 1,
