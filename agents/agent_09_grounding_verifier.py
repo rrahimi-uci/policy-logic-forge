@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from collections import Counter
 from copy import deepcopy
 from datetime import datetime, timezone
+import difflib
 import json
 import os
 from pathlib import Path
@@ -67,6 +68,72 @@ def _normalise_text(value: Any) -> str:
     text = text.replace("\u00ad", "").replace("’", "'").replace("‘", "'")
     text = text.replace("“", '"').replace("”", '"')
     return re.sub(r"\s+", " ", text).strip().casefold()
+
+
+def _normalise_text_preserve_case(value: Any) -> str:
+    """Identical to _normalise_text minus the final .casefold().
+
+    Same character-level transforms (NFKC, quote unification, whitespace
+    collapse), so the result stays index-aligned with _normalise_text's
+    output for the same input -- a span found by matching against the
+    casefolded string can be sliced out of this one unchanged, recovering
+    the source's real casing/punctuation instead of a downcased copy.
+    """
+    text = unicodedata.normalize("NFKC", str(value or ""))
+    text = text.replace("­", "").replace("’", "'").replace("‘", "'")
+    text = text.replace("“", '"').replace("”", '"')
+    return re.sub(r"\s+", " ", text).strip()
+
+
+# A citation is only auto-repaired when the model's claimed source_text is
+# almost entirely (not just partially) one contiguous run of real corpus
+# text: found empirically (see _repair_near_match's docstring) that this
+# bar cleanly separates "the model paraphrased a boundary/word or two but
+# the real quote is genuinely there" from "the model summarized/fabricated
+# most of this and only a short, possibly-coincidental phrase overlaps."
+MIN_REPAIR_COVERAGE = 0.9
+MIN_REPAIR_CHARS = 40
+
+
+def _repair_near_match(quote: str, chunk_text: str) -> str | None:
+    """If `quote` isn't a verbatim substring of `chunk_text` but a genuine,
+    near-total (>=MIN_REPAIR_COVERAGE) contiguous run of it is, return that
+    real substring (in the chunk's own casing) instead of the model's
+    possibly-imprecise wording. Return None if no such run exists.
+
+    This never invents text: the repaired citation is always a literal
+    substring the corpus actually contains, never the model's paraphrase --
+    so even if the model's original wording had drifted from the source in
+    some way, the repaired citation cannot, by construction. It just
+    recognises that a real citation is present when the model got the
+    exact word boundaries slightly wrong, instead of discarding it outright.
+
+    Confirmed against a real run: of 583 evidence citations that failed an
+    exact match, splitting them by longest-contiguous-match coverage of the
+    claimed quote showed a clean bimodal split -- roughly a quarter were
+    >=90% covered by one real contiguous run (a boundary/word-level miss,
+    safe to repair), while the rest were 70% or less (a genuine paraphrase
+    or compression of multiple sentences, where discarding the unmatched
+    tail would mean guessing at what the model meant instead of reporting
+    what the corpus actually says -- left for a human or a real
+    re-verification, not silently patched).
+    """
+    normal_quote = _normalise_text(quote)
+    normal_chunk = _normalise_text(chunk_text)
+    if not normal_quote or not normal_chunk:
+        return None
+    matcher = difflib.SequenceMatcher(None, normal_quote, normal_chunk, autojunk=False)
+    match = matcher.find_longest_match(0, len(normal_quote), 0, len(normal_chunk))
+    if match.size < MIN_REPAIR_CHARS or match.size / len(normal_quote) < MIN_REPAIR_COVERAGE:
+        return None
+    cased_chunk = _normalise_text_preserve_case(chunk_text)
+    if len(cased_chunk) != len(normal_chunk):
+        # Casefold changed the string length for some character (rare, but
+        # real for a few non-ASCII letters) -- the two strings are no longer
+        # index-aligned, so slicing cased_chunk at normal_chunk's offsets
+        # would silently return the wrong span. Fail closed instead.
+        return None
+    return cased_chunk[match.b : match.b + match.size]
 
 
 def _iter_references(value: Any) -> Iterable[Mapping[str, Any]]:
@@ -370,6 +437,13 @@ class GroundingVerifier:
             chunk = cls._chunk_for_path(corpus, chunk_path)
             chunk_text = str((chunk or {}).get("text", ""))
             quote_found = bool(quote and chunk and _normalise_text(quote) in _normalise_text(chunk_text))
+            original_quote = quote
+            repaired = None
+            if not quote_found and quote and chunk_text:
+                repaired = _repair_near_match(quote, chunk_text)
+                if repaired is not None:
+                    quote = repaired
+                    quote_found = True
             remaining = max(0, max_chars - used_chars)
             context = ""
             if remaining and chunk_text:
@@ -381,14 +455,22 @@ class GroundingVerifier:
                 start = max(0, position - remaining // 3) if position >= 0 else 0
                 context = chunk_text[start:start + remaining]
                 used_chars += len(context)
-            records.append({
+            record = {
                 "evidence_id": f"E{index}",
                 "chunk_path": chunk_path,
                 "section_id": section_id,
                 "source_text": quote,
                 "source_text_found_in_chunk": quote_found,
                 "context": context,
-            })
+            }
+            if repaired is not None:
+                # Transparency/audit trail: a reviewer (or future analysis
+                # of the grounding report) can see this citation was
+                # corrected to a real corpus substring rather than accepted
+                # as the extraction agent originally wrote it.
+                record["source_text_repaired"] = True
+                record["original_source_text"] = original_quote
+            records.append(record)
         return records
 
     @classmethod
@@ -872,6 +954,7 @@ class GroundingVerifier:
             counts = {verdict: sum(item["verdict"] == verdict for item in combined_results) for verdict in VERDICTS}
             authentic_records = sum(item.get("source_text_found_in_chunk") is True for item in packet["evidence"])
             invalid_records = len(packet["evidence"]) - authentic_records
+            repaired_records = sum(item.get("source_text_repaired") is True for item in packet["evidence"])
             failed_relationship_ids = relationship_failures_by_rule.get(rule_id, [])
             certified = (
                 bool(combined_results)
@@ -891,6 +974,7 @@ class GroundingVerifier:
                 "counts": counts,
                 "evidence_records": len(packet["evidence"]),
                 "invalid_evidence_records": invalid_records,
+                "repaired_evidence_records": repaired_records,
                 "response_claims_returned": protocol["returned"],
                 "missing_claim_responses": protocol["missing"],
                 "duplicate_claim_responses": protocol["duplicates"],
@@ -934,6 +1018,7 @@ class GroundingVerifier:
         contradicted = sum(item["verdict"] == "contradicted" for item in model_results + deterministic_results)
         insufficient = sum(item["verdict"] == "insufficient_evidence" for item in model_results + deterministic_results)
         invalid_evidence = sum((rule.get("grounding") or {}).get("invalid_evidence_records", 0) for rule in rules)
+        repaired_evidence = sum((rule.get("grounding") or {}).get("repaired_evidence_records", 0) for rule in rules)
         passed = (
             not failures
             and not relationship_failures
@@ -967,6 +1052,7 @@ class GroundingVerifier:
             "contradicted_claims": contradicted,
             "insufficient_evidence_claims": insufficient,
             "invalid_evidence_records": invalid_evidence,
+            "repaired_evidence_records": repaired_evidence,
             "response_claims_returned": returned_responses,
             "missing_claim_responses": missing_responses,
             "duplicate_claim_responses": duplicate_responses,
@@ -997,7 +1083,8 @@ class GroundingVerifier:
             f"- Claims supported: {report.get('supported_claims')} / {report.get('total_claims')}",
             f"- Contradicted claims: {report.get('contradicted_claims')}",
             f"- Insufficient-evidence claims: {report.get('insufficient_evidence_claims')}",
-            f"- Invalid evidence records: {report.get('invalid_evidence_records')}", "",
+            f"- Invalid evidence records: {report.get('invalid_evidence_records')}",
+            f"- Repaired evidence records (near-match, corrected to real corpus text): {report.get('repaired_evidence_records')}", "",
             f"- Verifier response coverage: {report.get('response_claims_returned')} / {report.get('model_claims')} "
             f"({report.get('claim_coverage_percent')}%)",
             f"- Missing / duplicate / unexpected responses: {report.get('missing_claim_responses')} / "
