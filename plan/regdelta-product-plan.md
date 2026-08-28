@@ -26,6 +26,15 @@ differently, generate concrete examples, quantify how many cases are
 affected, and surface all of it in the existing review UI — proven first
 against a domain we have already fully extracted, not an external benchmark.
 
+This plan has two distinct endpoints, and they should not be conflated:
+Phases 1-6 produce an **engine-validated capability** — the compiler,
+differential engine, and alignment logic proven correct against controlled,
+partly hand-authored mortgage data, rendered in the UI. Phase 7 is what turns
+that into an actual **product**: a real second full document, run through the
+real pipeline, reached through a real entry point, with defined behavior
+across every rule (not just the clean subset used to validate the engine).
+Section 8 states the acceptance bar for each separately.
+
 ## 2. What already exists today
 
 This is a direct inventory of `pipeline-output/`, not an estimate.
@@ -359,7 +368,81 @@ Execution steps:
 3. Add component tests against the mortgage Tier 1 fixture, following the
    conventions in `ui/IMPLEMENTATION_STATUS.md`.
 
+### Phase 7: real end-to-end product workflow
+
+Phases 1-6 prove the engine is correct against controlled data. Phase 7 is
+what actually makes RegDelta a product: two real, full document versions,
+through the real pipeline, reached through a real entry point, with defined
+behavior for every rule — not just the 41 clean ones Tier 1 used to validate
+the engine in isolation.
+
+**7.1 A real second full document.** This is the one deliberate exception to
+this plan's "no new external input" posture (Sections 0 and 9): you cannot
+validate a two-full-real-document product workflow with only one document.
+Fannie Mae publishes dated, full Selling Guide PDFs publicly and for free on
+`singlefamily.fanniemae.com` — for example the effective dates already
+embedded in our own extracted rules' `source_reference` fields (`2025-04-02`,
+`2025-08-06`) confirm this is the same publication `compliance-files/mortgage/Fannie-Mae.pdf`
+was drawn from, and later dated editions of the same publication are
+published the same way. Acquire the next dated edition after the one already
+in `compliance-files/mortgage/`, run it through the full agent_01-11 pipeline
+as its own batch (same command shape as the existing `e2e-mortgage-20260827`
+run), and record actual runtime/cost — the existing run processed 506 chunks
+into 640 extracted rules across many LLM calls, so a second full run is a
+comparable real spend, not a free rerun.
+
+**7.2 Defined behavior for the whole rule population, not just the clean
+subset.** Today 590/631 mortgage rules are `requires_review: true`. Phase 7
+must define what the differential engine reports when either aligned side of
+a rule pair is review-required: never silently skip it and never silently
+call it "unchanged." Add an explicit `unresolved-review` status alongside
+`changed`/`unchanged`/`refused-unsupported-construct`, and add a
+coverage-risk line to the impact report — of all aligned rule pairs, how many
+were actually diffable versus held for review versus refused for unsupported
+constructs — following the same "never absorb into the headline accuracy
+number" principle Section 8 already applies to the Tier 1/Tier 2 gap. This
+extends Phase 2's alignment/diff engine to a wider input population; it does
+not replace it.
+
+**7.3 A real product entry point.** Add a "Compare versions" action in
+`ui/frontend` and a corresponding `ui/backend` endpoint that: accepts two
+document(-set) references (an existing batch, or a freshly uploaded file);
+triggers `cli/extract.py` for whichever side hasn't reached `agent_11` yet;
+triggers Phase 2's `cli/regdelta_diff.py` once both sides have; and renders
+the resulting impact report. Pipeline runs are not instant, so this needs an
+async job model exposing per-agent run status (queued / running agent N of
+11 / complete / failed), reusing the stage-status conventions already in
+`ui/backend/review_index.py`. Reject a cross-domain comparison outright, and
+block (with a clear message, not a partial diff) comparing a side that
+hasn't reached `agent_10`/`agent_11` yet.
+
+**7.4 Measured cost and latency, not assumed.** Record actual wall-clock time
+and LLM spend for both the 7.1 full second-document run and a full round
+trip through the 7.3 entry point, using the same reporting conventions as
+`docs/full_e2e_validation_2026-08-27.md`. If the full round trip is too slow
+or expensive to be a synchronous, interactive UI action, say so plainly and
+design the UX around it (an async "notify when ready" pattern, with the
+measured cost shown before a user commits to running it) rather than
+shipping a misleading "instant compare" experience.
+
+Acceptance criteria:
+
+- two full, independently-published real mortgage document versions are
+  compiled end to end through the actual product entry point, not a
+  hand-authored excerpt;
+- the impact report explicitly distinguishes changed / unchanged /
+  unresolved-review / refused-unsupported-construct for every aligned rule
+  pair — no rule silently disappears from the report;
+- coverage-risk numbers are reported alongside any accuracy claim;
+- actual runtime and cost for the full round trip are measured, published,
+  and reflected honestly in the product UX; and
+- only after this phase does "RegDelta is a product for the mortgage domain"
+  become a supportable claim — Phase 6 alone supports only "the engine is
+  validated and viewable," not "a customer can use this."
+
 ## 8. Success criteria
+
+**Engine-validated (Phases 1-6):**
 
 - 100% of mortgage Tier 1's hand-labeled cases correctly classified by the
   differential engine (Phase 3).
@@ -373,6 +456,21 @@ Execution steps:
   reaches the same bar before this plan considers itself validated beyond a
   single domain's idiosyncrasies.
 
+**Product-ready (Phase 7):**
+
+- A user can point the running product at two real, full mortgage document
+  versions and get back an impact report, through the actual UI entry point,
+  without any hand-authored fixture in the loop.
+- Every one of the 631 mortgage rules resolves to an explicit status
+  (changed, unchanged, unresolved-review, or refused) — none are silently
+  dropped because they were outside Tier 1's clean 41.
+- Measured runtime and cost for a full round trip are published and the
+  product UX matches what was measured.
+
+Do not describe RegDelta as "a product" based on Phase 6 alone — that phase
+proves the engine and gives reviewers something to look at, but Phase 7 is
+what a customer could actually use.
+
 ## 9. What this plan intentionally defers
 
 No external benchmark acquisition, license negotiation, or academic
@@ -380,3 +478,8 @@ baseline/ablation protocol is required by this plan. `proposal.md` remains
 the place those return if a research/benchmarks track is picked back up; nor
 does building this plan foreclose that — the compiler and differential
 engine built in Phases 1-2 are exactly what that track would also need.
+
+Phase 7's single new external input (Section 7.1's second Selling Guide
+edition) is the one deliberate exception to this posture, and is scoped as
+narrowly as possible: one more edition of a publication this repository
+already has one edition of, acquired only when Phase 7 actually starts.
