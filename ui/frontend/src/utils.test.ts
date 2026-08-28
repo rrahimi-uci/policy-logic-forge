@@ -8,6 +8,12 @@ describe("review workbench utilities", () => {
     expect(formatDate()).toBe("—");
     expect(formatDate("not-a-date")).toBe("not-a-date");
     expect(statusLabel("grounding_failed")).toBe("Grounding Failed");
+    // Real pipeline output can carry an explicit null for a field the
+    // extraction agent left unclassified (e.g. risk_level) -- this must
+    // render as "Unknown", not crash (see the review-workbench white-screen
+    // bug this guards against).
+    expect(statusLabel(null)).toBe("Unknown");
+    expect(statusLabel(undefined)).toBe("Unknown");
   });
 
   it("maps status tones and percentages", () => {
@@ -15,6 +21,7 @@ describe("review workbench utilities", () => {
     expect(statusTone("requires_review")).toBe("warn");
     expect(statusTone("grounding_failed")).toBe("bad");
     expect(statusTone("unknown")).toBe("neutral");
+    expect(statusTone(null)).toBe("neutral");
     expect(percent(2, 4)).toBe(50);
     expect(percent(1, 0)).toBe(0);
   });

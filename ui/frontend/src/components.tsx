@@ -3,7 +3,7 @@ import type { CompareResult, Diagnostic, DocumentRecord, Evidence, RegDeltaPairS
 import { addComment, addDecision, addLabel, compare, fetchAllRelationships, fetchAllRules, fetchDiagnostics, fetchDocuments, fetchEvidenceList, fetchRegDeltaDiff, fetchRegDeltaPairs, fetchRegDeltaRunDiff, fetchRegDeltaRuns, fetchRule, fetchRules, fetchSavedViews, saveView, search } from "./api";
 import { formatDate, formatNumber, percent, runOption, stageProgress, statusLabel, statusTone } from "./utils";
 
-export function Badge({ value, label, tone }: { value: string; label?: string; tone?: "good" | "warn" | "bad" | "neutral" }) {
+export function Badge({ value, label, tone }: { value: string | null | undefined; label?: string; tone?: "good" | "warn" | "bad" | "neutral" }) {
   return <span className={`badge badge-${tone || statusTone(value)}`}>{label || statusLabel(value)}</span>;
 }
 
