@@ -525,14 +525,25 @@ td small { display: block; margin-top: 4px; color: var(--muted); }
 }
 
 /* Layered rule topology and executable drill-down */
+.graph-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
 .graph-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; color: var(--muted); font-size: 11px; }
 .graph-legend span { display: inline-flex; align-items: center; gap: 6px; }
 .legend-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: #a6b3c5; }
 .legend-dot.source { background: #6c88bd; }
 .legend-dot.selected { background: var(--blue); box-shadow: 0 0 0 3px var(--blue-soft); }
 .legend-dot.downstream { background: #45a98d; }
-.layered-graph-scroll { min-height: 390px; overflow: auto; border: 1px solid #e5ebf3; border-radius: 12px; background: linear-gradient(180deg, #fbfcff, #f7faff); }
-.layered-graph { display: block; min-width: 1020px; }
+.zoom-controls { display: inline-flex; align-items: center; gap: 2px; padding: 3px; border-radius: 9px; background: #edf1f6; }
+.zoom-controls button { min-width: 28px; min-height: 28px; padding: 0 8px; border: 0; border-radius: 7px; color: var(--muted); background: transparent; font-size: 13px; font-weight: 760; }
+.zoom-controls button:hover:not(:disabled) { color: var(--ink); background: #fff; box-shadow: 0 1px 5px rgba(21, 34, 61, .1); }
+.zoom-controls button:disabled { opacity: .4; cursor: default; }
+.zoom-controls .zoom-level { min-width: 38px; color: var(--muted-strong); font-size: 11px; font-weight: 750; text-align: center; }
+.zoom-controls .zoom-fit { padding: 0 10px; font-size: 10px; text-transform: uppercase; letter-spacing: .03em; }
+/* Bounded, internally-scrollable viewport: real domains (600-2600+ rules)
+   produce SVGs far taller than any screen, so the graph must scroll within
+   its own panel rather than growing the whole page (see graph-view scroll
+   bug report). min-height keeps small graphs from looking cramped. */
+.layered-graph-scroll { min-height: 390px; max-height: min(70vh, 720px); overflow: auto; border: 1px solid #e5ebf3; border-radius: 12px; background: linear-gradient(180deg, #fbfcff, #f7faff); }
+.layered-graph { display: block; }
 .layer-label { fill: #7184a2; font-size: 10px; font-weight: 850; letter-spacing: .14em; }
 .rule-edge { fill: none; stroke: #b3bfd0; stroke-width: 1.5; opacity: .8; transition: stroke .16s ease, stroke-width .16s ease, opacity .16s ease; }
 .rule-edge.connected { stroke: var(--blue); stroke-width: 2.5; opacity: 1; }
