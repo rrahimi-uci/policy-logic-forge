@@ -1106,7 +1106,22 @@ class ExecutableReadinessCompleter:
             if cached is not None:
                 return index, deepcopy(cached)
             if completion is None:
-                rule = self._complete_evidence(rule, packet)
+                try:
+                    rule = self._complete_evidence(rule, packet)
+                except Exception as exc:
+                    # A single rule's own evidence-completion request can
+                    # fail for reasons no retry fixes: the provider rejected
+                    # the prompt outright (real case: OpenAI's content-policy
+                    # filter flagged one rule's text among ~2600, well past
+                    # the SDK's own transient-error retries), a persistent
+                    # network fault, etc. No further fallback exists below
+                    # this rule's own individual request -- crashing the
+                    # entire multi-hour run over one unprocessable rule would
+                    # discard every other rule's completed work for nothing.
+                    # Flag it closed instead: mark_readiness (see the caller
+                    # loop) turns this into an explicit, visible review
+                    # reason, exactly like any other unresolved evidence gap.
+                    rule["_evidence_completion_error"] = str(exc)
             else:
                 for field in ("exceptions", "exception_basis", "exception_verification", "applicability_scope", "scope_basis", "scope_derivation"):
                     if field not in completion:
@@ -1171,7 +1186,22 @@ class ExecutableReadinessCompleter:
             if not pending:
                 return completed
             if self.resolver is not None and hasattr(self.resolver, "complete_rules"):
-                response = self.resolver.complete_rules(requests)
+                try:
+                    response = self.resolver.complete_rules(requests)
+                except Exception as exc:
+                    # The whole batch's combined prompt was rejected -- most
+                    # often because one rule among the ~4 batched together
+                    # tripped the provider's content-policy filter, which
+                    # rejects the entire request, not just that rule's share
+                    # of it. Retry each rule in this batch on its own: a rule
+                    # that wasn't the actual cause gets a normal individual
+                    # completion (see finish_rule's completion=None path);
+                    # only the genuinely bad rule fails again, in isolation,
+                    # where finish_rule's own try/except turns it into an
+                    # explicit review flag instead of losing this whole batch.
+                    print(f"⚠️ agent_07 batch completion failed ({exc}); retrying its {len(pending)} rules individually", flush=True)
+                    completed.extend(finish_rule(index, original) for index, original in pending)
+                    return completed
                 by_id = {
                     str(item.get("rule_id")): item for item in response
                     if isinstance(item, Mapping) and item.get("rule_id")
@@ -1239,7 +1269,18 @@ class ExecutableReadinessCompleter:
             overlapping_ids = {rule_id for bucket in output_buckets.values() if len(bucket) > 1 for rule_id in bucket}
             entries: list[dict[str, Any]] = []
             if len(member_ids) <= max_rules_per_call:
-                analyses = self.resolver.analyse_entity(entity, summaries) if self.resolver else []
+                try:
+                    analyses = self.resolver.analyse_entity(entity, summaries) if self.resolver else []
+                except Exception as exc:
+                    # No retry level below this one exists for this group --
+                    # crashing the whole multi-hour run over one provider
+                    # rejection (real case: a content-policy filter) would
+                    # discard every other entity's completed analysis for
+                    # nothing. Fall through to the same "no entries returned"
+                    # path just below, which already turns an empty result
+                    # into an explicit unresolved/manual-review entry.
+                    print(f"⚠️ agent_07 conflict analysis failed for entity {entity!r} ({exc}); marking unresolved", flush=True)
+                    analyses = []
                 entries.extend(dict(item) for item in analyses if isinstance(item, Mapping))
             else:
                 # One dominant entity (e.g. a generic LENDER/FIRST_PARTY
@@ -1256,10 +1297,18 @@ class ExecutableReadinessCompleter:
                 )
 
                 def _call_bucket(batch_ids: list[str]) -> list[dict[str, Any]]:
-                    analyses = self.resolver.analyse_entity(
-                        entity,
-                        [item for item in summaries if str(item.get("rule_id")) in batch_ids],
-                    ) if self.resolver else []
+                    try:
+                        analyses = self.resolver.analyse_entity(
+                            entity,
+                            [item for item in summaries if str(item.get("rule_id")) in batch_ids],
+                        ) if self.resolver else []
+                    except Exception as exc:
+                        # Same reasoning as the single-call branch above: one
+                        # bucket's provider rejection must not cost every
+                        # other bucket (and every other entity) its
+                        # completed analysis.
+                        print(f"⚠️ agent_07 conflict analysis failed for entity {entity!r} bucket ({exc}); marking unresolved", flush=True)
+                        analyses = []
                     return [dict(item) for item in analyses if isinstance(item, Mapping)]
 
                 if batch_id_groups:
@@ -1367,6 +1416,9 @@ class ExecutableReadinessCompleter:
                     issues.append({"requirement": "conflicts", "reason": conflict.get("reasoning", "entity-local conflict is unresolved")})
             if any(item.get("rule_id") == str(rule.get("rule_id")) for item in references):
                 issues.append({"requirement": "referential_integrity", "reason": "rule has a dangling dependency reference"})
+            completion_error = rule.pop("_evidence_completion_error", None)
+            if completion_error:
+                issues.append({"requirement": "evidence_completion", "reason": f"Provider rejected this rule's completion request and no further evidence could be gathered: {completion_error}"})
             reviewed_rules.append(mark_readiness(rule, issues))
         final_graph["business_rules"] = reviewed_rules
         evidence_added_sections = cited_sections(final_graph) - cited_sections(baseline)
