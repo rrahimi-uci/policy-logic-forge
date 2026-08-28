@@ -6,9 +6,12 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 from agents.agent_09_grounding_verifier import (
+    MIN_REPAIR_CHARS,
+    MIN_REPAIR_COVERAGE,
     MODEL_CLAIM_TYPES,
     GroundingVerifier,
     OpenAIGroundingResolver,
+    _repair_near_match,
     certification_issues,
     extract_claims,
 )
@@ -206,6 +209,107 @@ def test_invalid_source_quote_cannot_be_certified(tmp_path):
     assert report["invalid_evidence_records"] >= 2
     assert report["insufficient_evidence_claims"] > 0
     assert all(rule["requires_review"] is True for rule in final_graph["business_rules"])
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Near-match citation repair: an extraction agent's attached source_text is
+# supposed to be a verbatim quote, but real production runs show it's often
+# almost-but-not-quite exact -- a word or clause added/dropped at a
+# boundary -- while the actual claim is still genuinely, substantially
+# grounded in the cited chunk. _repair_near_match recovers these instead of
+# discarding a real citation just because the extraction agent's transcription
+# of it was slightly imprecise. It never invents text: the repaired citation
+# is always a literal substring the corpus actually contains, never the
+# model's wording.
+# ─────────────────────────────────────────────────────────────────────────
+
+NEAR_MATCH_CHUNK = (
+    "The lender must obtain and review the executed agreement between the borrower "
+    "and the third-party solar provider before closing to confirm the ownership "
+    "status and financing structure of the panels for underwriting purposes."
+)
+
+
+def test_near_match_quote_with_a_trailing_addition_is_repaired_to_the_real_text():
+    quote = NEAR_MATCH_CHUNK + " as required by policy."  # ~91% coverage
+    repaired = _repair_near_match(quote, NEAR_MATCH_CHUNK)
+    assert repaired == NEAR_MATCH_CHUNK
+
+
+def test_a_largely_different_quote_is_not_repaired():
+    quote = "Something entirely different that shares almost no wording with the source passage at all whatsoever."
+    assert _repair_near_match(quote, NEAR_MATCH_CHUNK) is None
+
+
+def test_repair_requires_the_documented_coverage_and_length_floor():
+    # A short quote that IS an exact match never reaches the repair path
+    # (only called when the plain substring check already failed) -- this
+    # documents the two thresholds guarding the repair path itself.
+    assert MIN_REPAIR_COVERAGE == 0.9
+    assert MIN_REPAIR_CHARS == 40
+    # Below the coverage floor: half the quote is fabricated.
+    half_fabricated = NEAR_MATCH_CHUNK[: len(NEAR_MATCH_CHUNK) // 2] + " " + "x" * len(NEAR_MATCH_CHUNK)
+    assert _repair_near_match(half_fabricated, NEAR_MATCH_CHUNK) is None
+    # Below the absolute-length floor: a short, high-coverage match on trivial text.
+    assert _repair_near_match("obtain and review", NEAR_MATCH_CHUNK) is None
+
+
+def test_evidence_record_marks_a_repaired_citation_and_keeps_the_original_for_audit():
+    rules = [{
+        "rule_id": "R1",
+        "source_reference": {
+            "chunk_path": "b2_3/panels.txt", "section_id": "s1",
+            "source_text": NEAR_MATCH_CHUNK + " as required by policy.",
+        },
+        "field_evidence": {},
+    }]
+    corpus = {"chunks": [{"chunk_path": "b2_3/panels.txt", "text": NEAR_MATCH_CHUNK}]}
+
+    records = GroundingVerifier._evidence_records(rules, corpus, max_chars=4000)
+
+    assert len(records) == 1
+    record = records[0]
+    assert record["source_text_found_in_chunk"] is True
+    assert record["source_text"] == NEAR_MATCH_CHUNK
+    assert record["source_text_repaired"] is True
+    assert record["original_source_text"] == NEAR_MATCH_CHUNK + " as required by policy."
+
+
+def test_a_rule_whose_only_flaw_is_an_imprecise_but_repairable_citation_still_certifies(tmp_path):
+    organized = tmp_path / "organized" / "b2_3"
+    organized.mkdir(parents=True)
+    (organized / "panels.txt").write_text(NEAR_MATCH_CHUNK, encoding="utf-8")
+    graph = graph_with_two_rules()
+    for rule in graph["business_rules"]:
+        rule["source_reference"] = {
+            "chunk_path": "b2_3/panels.txt", "section_id": "s1",
+            "source_text": NEAR_MATCH_CHUNK + " as required by policy.",
+        }
+        for entries in rule["field_evidence"].values():
+            for evidence in entries:
+                evidence["chunk_path"] = "b2_3/panels.txt"
+                evidence["source_text"] = NEAR_MATCH_CHUNK + " as required by policy."
+
+    class QuoteEchoResolver(SupportingResolver):
+        def verify(self, packets):
+            return [
+                {
+                    "rule_id": packet["rule_id"], "claim_id": claim["claim_id"], "verdict": "supported",
+                    "evidence_id": packet["evidence"][0]["evidence_id"],
+                    "supporting_quote": NEAR_MATCH_CHUNK,
+                    "reasoning": "The repaired corpus text entails the claim.",
+                }
+                for packet in packets for claim in packet["claims"]
+            ]
+
+    final_graph, report = GroundingVerifier(QuoteEchoResolver()).verify_graph(
+        graph, tmp_path / "organized", tmp_path / "output"
+    )
+
+    assert report["pass"] is True
+    assert report["invalid_evidence_records"] == 0
+    assert report["repaired_evidence_records"] >= 2
+    assert all(rule["grounding"]["status"] == "certified" for rule in final_graph["business_rules"])
 
 
 def test_missing_duplicate_and_unexpected_responses_fail_closed(tmp_path):
