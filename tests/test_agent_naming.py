@@ -1,5 +1,6 @@
 """Contracts for the repository-wide ``agent_01``–``agent_11`` naming scheme."""
 
+import re
 from pathlib import Path
 
 from utils.agent_names import AGENT_IDS, PIPELINE_AGENTS, output_dir_name
@@ -90,6 +91,21 @@ def test_runtime_sources_contain_no_pre_refactor_agent_identifiers():
                 continue
             text = path.read_text(encoding="utf-8", errors="replace")
             for marker in legacy_markers:
-                if marker in text:
+                if _contains_legacy_marker(text, marker):
                     violations.append(f"{path.relative_to(PROJECT_ROOT)} contains {marker!r}")
     assert not violations, "\n".join(violations)
+
+
+def _contains_legacy_marker(text: str, marker: str) -> bool:
+    """True if `text` contains `marker`, without matching it as a prefix of
+    a *current*, valid multi-digit identifier. Markers already terminated by
+    a non-digit separator (``agent_1_``, ``agent-1-``) can never falsely
+    match inside e.g. ``agent_10_``, so a plain substring check is exact.
+    Markers ending in a bare digit (``Agent 1``, ``Agent-1``) are also a
+    prefix of every current identifier that continues that digit (``Agent
+    1`` is a substring of ``Agent 10`` and ``Agent 11``), so those require a
+    "not immediately followed by another digit" guard.
+    """
+    if marker[-1].isdigit():
+        return re.search(re.escape(marker) + r"(?!\d)", text) is not None
+    return marker in text
