@@ -1,0 +1,55 @@
+{
+  "schema_version": "regdelta-tier1-scenarios/1.0",
+  "note": "Hand-authored gold cases for the mobile_app_privacy Tier 1 fixture (plan/regdelta-product-plan.md Phase 5). Unlike mortgage's fixture, neither edited rule here has a downstream DAG dependent (see scripts/build_mobile_tier1_fixture.py), so there are no unresolved-review expectations -- only changed/unchanged.",
+  "scenarios": [
+    {
+      "case_id": "marketing_boundary_19",
+      "description": "Age 19: at/above the old under-18 exclusion, below the new under-21 exclusion.",
+      "inputs": {"age_years": 19},
+      "targets": ["batch115-uds-minors-marketing-exclusion"],
+      "expected": {"batch115-uds-minors-marketing-exclusion": {"old_status": "no_match", "new_status": "matched", "differs": true}}
+    },
+    {
+      "case_id": "marketing_clearly_under_both",
+      "description": "Age 15: under both the old and new threshold.",
+      "inputs": {"age_years": 15},
+      "targets": ["batch115-uds-minors-marketing-exclusion"],
+      "expected": {"batch115-uds-minors-marketing-exclusion": {"old_status": "matched", "new_status": "matched", "differs": false}}
+    },
+    {
+      "case_id": "marketing_clearly_over_both",
+      "description": "Age 25: over both thresholds.",
+      "inputs": {"age_years": 25},
+      "targets": ["batch115-uds-minors-marketing-exclusion"],
+      "expected": {"batch115-uds-minors-marketing-exclusion": {"old_status": "no_match", "new_status": "no_match", "differs": false}}
+    },
+    {
+      "case_id": "consent_boundary_13_no_consent",
+      "description": "Age 13, no prior parental consent: at the old under-13 threshold (no_match), below the new under-14 threshold (matched).",
+      "inputs": {"user_age_years": 13, "prior_parental_or_guardian_consent": false},
+      "targets": ["batch252_children_under_13_parental_consent"],
+      "expected": {"batch252_children_under_13_parental_consent": {"old_status": "no_match", "new_status": "matched", "differs": true}}
+    },
+    {
+      "case_id": "consent_clearly_under_both_no_consent",
+      "description": "Age 10, no prior consent: under both thresholds.",
+      "inputs": {"user_age_years": 10, "prior_parental_or_guardian_consent": false},
+      "targets": ["batch252_children_under_13_parental_consent"],
+      "expected": {"batch252_children_under_13_parental_consent": {"old_status": "matched", "new_status": "matched", "differs": false}}
+    },
+    {
+      "case_id": "consent_clearly_over_both",
+      "description": "Age 16: over both thresholds regardless of consent.",
+      "inputs": {"user_age_years": 16, "prior_parental_or_guardian_consent": false},
+      "targets": ["batch252_children_under_13_parental_consent"],
+      "expected": {"batch252_children_under_13_parental_consent": {"old_status": "no_match", "new_status": "no_match", "differs": false}}
+    },
+    {
+      "case_id": "consent_boundary_13_with_prior_consent_present",
+      "description": "Age 13 with prior parental consent already given. The rule's own condition (predicate p2) already requires no prior consent, so this fails on the condition itself (no_match) on both sides regardless of the age-threshold edit -- the rule's separately-declared exception for consent being true is, by construction, unreachable here (the same structural pattern found in the mortgage fixture; see scripts/build_mortgage_tier1_fixture.py's EDITS comments).",
+      "inputs": {"user_age_years": 13, "prior_parental_or_guardian_consent": true},
+      "targets": ["batch252_children_under_13_parental_consent"],
+      "expected": {"batch252_children_under_13_parental_consent": {"old_status": "no_match", "new_status": "no_match", "differs": false}}
+    }
+  ]
+}
