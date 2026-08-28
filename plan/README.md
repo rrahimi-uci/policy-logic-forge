@@ -1,7 +1,25 @@
-# Research proposal and task contracts
+# RegDelta plans and task contracts
 
-[`proposal.md`](proposal.md) is the canonical research and implementation
-proposal for RegDelta. It replaces the superseded NeurIPS proposal and plan.
+RegDelta has two parallel planning documents, sharing one engine design but
+diverging on what proves it works:
+
+- [`proposal.md`](proposal.md) is the research/benchmark track. It targets
+  academic venues and depends on acquiring external evaluation resources
+  (OpenExempt-CF, RegelRecht-Real) not yet present in this repository. It
+  replaces the superseded NeurIPS proposal and plan.
+- [`regdelta-product-plan.md`](regdelta-product-plan.md) is the
+  product-engineering track. It validates the same engine entirely against
+  data and code this repository already has (starting with the `mortgage`
+  domain's already-complete agent_01-11 pipeline output), with no external
+  acquisition on the critical path.
+
+Section 6 of `proposal.md` and Section 6 of `regdelta-product-plan.md`
+describe the same compiler/alignment/differential-execution engine, and
+Phases 1-2 of each document's implementation plan are identical for the same
+reason — that part of the design does not depend on which validation data
+proves it, so keep those in sync if either changes. Everything else
+(validation data, domain rollout order, success criteria, and `proposal.md`'s
+Section 7 benchmark design specifically) is intentionally track-specific.
 
 This directory also retains the machine-readable contracts produced by the
 earlier compiler programme:
