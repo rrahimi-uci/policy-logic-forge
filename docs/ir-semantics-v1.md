@@ -73,10 +73,28 @@ Condition logic is lowered recursively from v2 `all`, `any`, and
 ## Scope, exceptions, and effects
 
 Scope metadata retains jurisdictions, responsible/counterparties, authority,
-effective dates, and version status.  A genuinely-unscoped (or explicitly
-universal/none) rule has a null scope predicate.  Structured scope fields
-without an IR representation, unresolved/inferred scope, and non-empty
-unsupported applicability fields are refused rather than dropped.
+effective dates, and version status.  These are recorded but never
+themselves resolved by the bounded evaluator (`utils/feel.py`): any rule
+whose metadata is non-empty in one of these dimensions evaluates as
+`unknown`, because the evaluator has no jurisdiction/party/date runtime
+context.  This is a deliberate, tested safety property (see
+`tests/test_feel.py::test_contextual_scope_and_collect_are_not_silently_executed`)
+and out of scope for the differential-execution engine described in
+`plan/regdelta-product-plan.md`, which evaluates one whole compiled document
+against another rather than asking whether a rule is in force for a given
+real-world date/party/jurisdiction.
+
+`applicability_scope`'s `loan_types`, `transaction_types`, and
+`occupancy_types` fields are, by contrast, lowered into a genuinely checkable
+`scope.predicate` formula: each populated field becomes a dedicated free-text
+string symbol (`loan_type`, `transaction_type`, `occupancy_type`) compared by
+equality against the field's listed values (an implicit "or" across values,
+an implicit "and" across the up-to-three fields).  A rule with none of these
+three fields populated -- and no other applicability field populated -- has
+a null scope predicate, i.e. is genuinely unscoped.  Every *other* structured
+scope field without an IR representation, unresolved/inferred scope, and any
+other non-empty unsupported applicability field are still refused rather
+than dropped or silently treated as universal.
 
 Exceptions use `semantics.exception_reading = defeater_or`: if any exception
 condition is true, the rule is defeated; false exceptions do not affect the

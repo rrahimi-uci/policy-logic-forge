@@ -70,7 +70,7 @@ def test_oracle_refuses_unrepresentable_scope_instead_of_dropping_it():
         "condition_logic": {"predicate_ref": "p"},
         "outcomes": [{"variable": "y", "operator": "=", "value": True, "value_type": "boolean"}],
         "variables": [{"name": "x", "type": "boolean", "role": "input"}, {"name": "y", "type": "boolean", "role": "output"}],
-        "applicability_scope": {"loan_types": ["commercial"]},
+        "applicability_scope": {"user_categories": ["commercial"]},
         "scope_basis": "explicit_in_source",
         "exceptions": [],
         "source_reference": _source(),
@@ -81,7 +81,7 @@ def test_oracle_refuses_unrepresentable_scope_instead_of_dropping_it():
         "rule_id": "oracle_scope",
         "code": "UNREPRESENTABLE_SCOPE",
         "construct": "applicability_scope",
-        "detail": "Scope fields cannot be represented: ['loan_types'].",
+        "detail": "Scope fields cannot be represented: ['user_categories'].",
         "requires_review": True,
         "provenance": [{
             "chunk_path": "oracle/source.txt",
@@ -93,9 +93,35 @@ def test_oracle_refuses_unrepresentable_scope_instead_of_dropping_it():
     }]
 
 
+def test_oracle_represents_categorical_scope_dimensions_as_a_predicate():
+    rule = {
+        "rule_id": "oracle_scope_dimension",
+        "condition_predicates": [{"predicate_id": "p", "variable": "x", "operator": "==", "value": True, "value_type": "boolean"}],
+        "condition_logic": {"predicate_ref": "p"},
+        "outcomes": [{"variable": "y", "operator": "=", "value": True, "value_type": "boolean"}],
+        "variables": [{"name": "x", "type": "boolean", "role": "input"}, {"name": "y", "type": "boolean", "role": "output"}],
+        "applicability_scope": {"loan_types": ["conventional"], "transaction_types": ["purchase"]},
+        "scope_basis": "explicit_in_source",
+        "exceptions": [],
+        "source_reference": _source(),
+    }
+    ir = lower_graph([rule], source_sha256="c" * 64)
+    assert ir["refusals"] == []
+    assert len(ir["rules"]) == 1
+    assert ir["rules"][0]["scope"]["predicate"] == {
+        "op": "and",
+        "args": [
+            {"op": "eq", "left": {"symbol": "loan_type"}, "right": {"literal": "conventional", "type": "string"}},
+            {"op": "eq", "left": {"symbol": "transaction_type"}, "right": {"literal": "purchase", "type": "string"}},
+        ],
+    }
+    symbol_ids = {symbol["id"] for symbol in ir["symbols"]}
+    assert {"loan_type", "transaction_type"} <= symbol_ids
+
+
 def test_frozen_fixture_cases_and_mutations_all_pass():
     report = run_oracle(load_fixture(ROOT / "tests/fixtures/lowering_oracle"))
-    assert report["cases_passed"] == report["case_count"] == 5
+    assert report["cases_passed"] == report["case_count"] == 6
     assert report["mutations_killed"] == report["mutation_count"] == 6
     assert report["mutation_score"] == 1.0
     assert report["failed_cases"] == []
