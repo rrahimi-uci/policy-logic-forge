@@ -1,0 +1,31 @@
+Selling Guide Update
+
+B7-1-01, Provision of Mortgage Insurance (04/02/2025)
+
+Unless the lender has provided another charter-compliant form of credit
+enhancement, the lender must obtain a primary mortgage insurance policy for
+a conventional first mortgage loan that has an LTV ratio greater than 78% at
+the time it is purchased for Fannie Mae's portfolio or securitized.
+
+C1-1-01, Execution Options (02/05/2025)
+
+Minimum submission amounts (by aggregate issue date principal balance)
+required are: fixed-rate mortgage loans, single-lender pools: $1.25 million
+adjustable-rate mortgage loans, single-lender pools: $500,000 Fannie Majors,
+multiple-lender pools: $1,000. (Fannie Majors pools in aggregate must meet
+the minimum amounts noted above to be opened.)
+
+A2-2-06, Representations and Warranties on Property Value (09/03/2025)
+
+In addition to the limited waiver of underwriting representations and
+warranties available for certain DU loans, loans may also benefit from
+enforcement relief of certain representations and warranties related to the
+appraisal and value of the subject property (without regard to underwriting
+method). To be eligible for relief: the loan must be secured by a one-unit
+detached, attached, or condo property (manufactured homes are not
+eligible); and the appraisal must receive a CU risk score of 3.0 or below.
+Note: See B4-1.1-04, Unacceptable Appraisal Practices for examples of
+unacceptable practices. When this criteria is met, the lender is not
+responsible for the following requirements described in this Guide:
+underwriting the appraisal report to determine whether the subject
+property presents adequate collateral for the mortgage;

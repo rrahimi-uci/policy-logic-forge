@@ -1,0 +1,39 @@
+{
+  "schema_version": "regdelta-tier2-comparison/1.0",
+  "edits_checked": 3,
+  "edits_recovered": 3,
+  "results": [
+    {
+      "tier1_rule_id": "R-120-004",
+      "citation_code": "B7-1-01",
+      "old_value": 80,
+      "new_value": 78,
+      "tier2_rules_at_citation": [
+        "B1-R001-HIGH-LTV-MI-REQUIREMENT"
+      ],
+      "recovered": true
+    },
+    {
+      "tier1_rule_id": "batch5_mortgage_pool_fixed_rate_submission_minimum",
+      "citation_code": "C1-1-01",
+      "old_value": 1000000,
+      "new_value": 1250000,
+      "tier2_rules_at_citation": [
+        "B1-R002-FIXED-RATE-SINGLE-LENDER-MINIMUM",
+        "B1-R003-ADJUSTABLE-RATE-SINGLE-LENDER-MINIMUM",
+        "B1-R004-FANNIE-MAJORS-MULTIPLE-LENDER-MINIMUM"
+      ],
+      "recovered": true
+    },
+    {
+      "tier1_rule_id": "B32-A2-2-06-001",
+      "citation_code": "A2-2-06",
+      "old_value": 2.5,
+      "new_value": 3.0,
+      "tier2_rules_at_citation": [
+        "B1-R005-PROPERTY-VALUE-RELIEF-ELIGIBILITY"
+      ],
+      "recovered": true
+    }
+  ]
+}
