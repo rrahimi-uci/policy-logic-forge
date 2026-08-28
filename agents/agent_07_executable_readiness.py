@@ -282,6 +282,10 @@ LEGACY_VALUE_TYPES = {
     # execution, classification, entity_attachment all share
     # deterministic_rule_claims' validate_rule_v2 fallback check).
     "enum_set": "list",
+    # Same shape again, found on a real mortgage-v2 run: a set of numbers
+    # checked with "in" (e.g. loan_term_years in [10, 15, 20, 30]) is
+    # "number_array" with a different name, not a distinct type.
+    "number_set": "list",
     "number_array": "list",
     "list_number": "list",
     "number_list": "list",

@@ -254,9 +254,14 @@ def test_enum_set_and_number_array_predicate_value_types_normalise_to_list():
         "predicate_id": "p3", "variable": "monthly_payment_sequence_number", "operator": "in",
         "value": [1, 2, 3], "value_type": "number_array",
     })
+    rule["condition_predicates"].append({
+        "predicate_id": "p4", "variable": "loan_term_years", "operator": "in",
+        "value": [10, 15, 20, 30], "value_type": "number_set",
+    })
 
     normalise_rule_contract(rule)
 
+    assert rule["condition_predicates"][-3]["value_type"] == "list"
     assert rule["condition_predicates"][-2]["value_type"] == "list"
     assert rule["condition_predicates"][-1]["value_type"] == "list"
 
