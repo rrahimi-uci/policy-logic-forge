@@ -403,7 +403,7 @@ is extended and independently tested.
 
 | Resource | Role | Limitation for change-impact evaluation |
 | --- | --- | --- |
-| [DeonticBench](https://github.com/guangyaodou/DeonticBench) | Regression and transfer over 6,232 labeled cases and reference Prolog | No natural old/new version pairs |
+| [DeonticBench](https://github.com/guangyaodou/DeonticBench) | Regression and transfer over 6,483 labeled cases (whole + hard splits, already vendored under `compliance-files/deonticbench/`) and reference Prolog | No natural old/new version pairs |
 | [Dutch legal-text-to-DMN corpus](https://github.com/opengov-lab/legal-text-to-decision-model) | Text-to-executable compiler evaluation over 95 production models | One regulatory version per model |
 | [IEEE process-mining event logs](https://www.tf-pm.org/resources/logs) | Future process-distribution and timing calibration | No aligned regulation versions or gold rule mappings |
 | RC4PC data | Optional external baseline if it can be pinned and licensed reproducibly | Availability must be verified before it enters the committed protocol |
