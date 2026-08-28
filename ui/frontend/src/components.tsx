@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { CompareResult, Diagnostic, DocumentRecord, Evidence, Relationship, RuleDetail, RuleRow, RunSummary, Stage, SearchResult } from "./types";
-import { addComment, addDecision, addLabel, compare, fetchAllRelationships, fetchAllRules, fetchDiagnostics, fetchDocuments, fetchEvidenceList, fetchRule, fetchRules, fetchSavedViews, saveView, search } from "./api";
+import type { CompareResult, Diagnostic, DocumentRecord, Evidence, RegDeltaPairSummary, RegDeltaReport, Relationship, RuleDetail, RuleRow, RunSummary, Stage, SearchResult } from "./types";
+import { addComment, addDecision, addLabel, compare, fetchAllRelationships, fetchAllRules, fetchDiagnostics, fetchDocuments, fetchEvidenceList, fetchRegDeltaDiff, fetchRegDeltaPairs, fetchRule, fetchRules, fetchSavedViews, saveView, search } from "./api";
 import { formatDate, formatNumber, percent, runOption, stageProgress, statusLabel, statusTone } from "./utils";
 
-export function Badge({ value, label }: { value: string; label?: string }) {
-  return <span className={`badge badge-${statusTone(value)}`}>{label || statusLabel(value)}</span>;
+export function Badge({ value, label, tone }: { value: string; label?: string; tone?: "good" | "warn" | "bad" | "neutral" }) {
+  return <span className={`badge badge-${tone || statusTone(value)}`}>{label || statusLabel(value)}</span>;
 }
 
 export function MetricCard({ label, value, detail, tone = "neutral" }: { label: string; value: string | number; detail?: string; tone?: string }) {
@@ -271,6 +271,74 @@ export function CompareView({ runs, onError }: { runs: RunSummary[]; onError: (m
   const load = async () => { if (!left || !right) return; try { setResult(await compare(left, right)); } catch (error) { onError(String(error)); } };
   useEffect(() => { if (left && right) void load(); }, [left, right]);
   return <div className="view-stack"><section className="panel"><div className="panel-heading"><div><p className="eyebrow">Regression analysis</p><h1>Compare runs</h1><p className="muted">Exact IDs first, stable structural and evidence hashes second; uncertain matches remain unmatched.</p></div><button className="button" onClick={() => void load()}>Refresh comparison</button></div><div className="compare-select"><label>Baseline<select value={left} onChange={(event) => setLeft(event.target.value)}>{runs.map((run) => <option key={run.run_id} value={run.run_id}>{runOption(run)}</option>)}</select></label><span>→</span><label>Candidate<select value={right} onChange={(event) => setRight(event.target.value)}>{runs.map((run) => <option key={run.run_id} value={run.run_id}>{runOption(run)}</option>)}</select></label></div></section>{result && <><div className="metric-grid">{Object.entries(result.summary).map(([key, value]) => <MetricCard key={key} label={statusLabel(key)} value={value} tone={value ? "warn" : "good"} />)}</div><section className="panel"><PanelTitle eyebrow="Rule delta" title={`${result.rules.changed.length} changed · ${result.rules.added.length} added · ${result.rules.removed.length} removed`} /><div className="diff-list">{result.rules.changed.slice(0, 80).map((item) => <div className="diff-row" key={item.rule_id}><strong>{item.rule_name}</strong><span className="mono">{item.rule_id}</span><span>{item.changes.join(" · ")}</span><Badge value={item.after_status} /></div>)}{result.rules.added.slice(0, 20).map((id) => <div className="diff-row" key={`add-${id}`}><Badge value="added" /><span className="mono">{id}</span></div>)}{result.rules.removed.slice(0, 20).map((id) => <div className="diff-row" key={`remove-${id}`}><Badge value="removed" /><span className="mono">{id}</span></div>)}{!result.rules.changed.length && !result.rules.added.length && !result.rules.removed.length && <div className="empty-state">No rule deltas.</div>}</div></section><section className="panel"><PanelTitle eyebrow="Relationship delta" title={`${result.relationships.changed?.length || 0} changed · ${result.relationships.added.length} added · ${result.relationships.removed.length} removed`} /><div className="diff-list">{(result.relationships.changed || []).slice(0, 80).map((item) => <div className="diff-row" key={item.relationship_id}><strong>{item.kind}</strong><span className="mono">{item.relationship_id}</span><span>{item.changes.join(" · ")}</span></div>)}{!result.relationships.changed?.length && !result.relationships.added.length && !result.relationships.removed.length && <div className="empty-state">No relationship deltas.</div>}</div></section></>}</div>;
+}
+
+function regdeltaTone(status: string): "good" | "warn" | "bad" | "neutral" {
+  if (status === "unchanged") return "good";
+  if (status === "unresolved-review") return "warn";
+  if (status === "refused-unsupported-construct" || status === "removed") return "bad";
+  return "warn"; // any other taxonomy label is a real behavioral change
+}
+
+export function RegDeltaView({ onError }: { onError: (message: string) => void }) {
+  const [pairs, setPairs] = useState<RegDeltaPairSummary[]>([]);
+  const [pairId, setPairId] = useState("");
+  const [report, setReport] = useState<RegDeltaReport | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => { void fetchRegDeltaPairs().then((items) => { setPairs(items); setPairId((current) => current || items.find((item) => item.status === "ready")?.pair_id || ""); }).catch((error) => onError(String(error))); }, []);
+  useEffect(() => {
+    if (!pairId) return;
+    setLoading(true);
+    fetchRegDeltaDiff(pairId).then(setReport).catch((error) => onError(String(error))).finally(() => setLoading(false));
+  }, [pairId]);
+
+  const changed = useMemo(() => report ? report.semantic_changes.filter((change) => change.taxonomy !== "unchanged") : [], [report]);
+  const statusEntries = useMemo(() => report ? Object.entries(report.downstream_impacts.statuses).filter(([, value]) => value.status !== "unchanged") : [], [report]);
+
+  return <div className="view-stack">
+    <section className="panel">
+      <div className="panel-heading">
+        <div><p className="eyebrow">Behavioral differential execution</p><h1>Regulatory change impact</h1><p className="muted">Old vs. new document versions, compiled and executed -- not textual or hash comparison. See plan/regdelta-product-plan.md.</p></div>
+      </div>
+      <div className="compare-select"><label>Pair<select value={pairId} onChange={(event) => setPairId(event.target.value)}>{pairs.map((pair) => <option key={pair.pair_id} value={pair.pair_id} disabled={pair.status !== "ready"}>{pair.pair_id}{pair.status !== "ready" ? " (load error)" : ""}</option>)}</select></label></div>
+      {!pairs.length && !loading && <div className="empty-state">No RegDelta pairs found under <span className="mono">fixtures/regdelta/</span>.</div>}
+    </section>
+    {loading && <Loading label="Running the differential-execution engine…" />}
+    {report && !loading && <>
+      <div className="metric-grid">
+        {Object.entries(report.metrics).map(([key, value]) => <MetricCard key={key} label={statusLabel(key)} value={value} tone={key === "refused_count" || key === "unresolved_review_count" ? (value ? "warn" : "good") : "neutral"} />)}
+      </div>
+      <section className="panel">
+        <PanelTitle eyebrow="Downstream impact" title={`${report.downstream_impacts.direct.length} directly changed · ${report.downstream_impacts.potential.length} potentially impacted · ${report.downstream_impacts.recompute.length} recomputed`} />
+        <div className="diff-list">
+          {statusEntries.map(([ruleId, value]) => <div className="diff-row" key={ruleId}><span className="mono">{ruleId}</span><Badge value={value.status} label={statusLabel(value.status)} tone={regdeltaTone(value.status)} /><Badge value={report.downstream_impacts.direct.includes(ruleId) ? "direct" : report.downstream_impacts.recompute.includes(ruleId) ? "recompute" : "potential"} tone="neutral" /></div>)}
+          {!statusEntries.length && <div className="empty-state">Every rule in this pair's universe is unchanged.</div>}
+        </div>
+      </section>
+      <section className="panel">
+        <PanelTitle eyebrow="Semantic changes" title={`${changed.length} of ${report.semantic_changes.length} aligned rules changed`} />
+        <div className="diff-list">
+          {changed.map((change) => <div className="diff-row" key={change.rule_id}><span className="mono">{change.rule_id}</span><Badge value={change.taxonomy} label={statusLabel(change.taxonomy)} tone={regdeltaTone(change.taxonomy)} />{change.detail && "direction" in change.detail && change.detail.direction ? <span>{String(change.detail.direction)}: {String(change.detail.old_literal)} → {String(change.detail.new_literal)}</span> : null}</div>)}
+          {!changed.length && <div className="empty-state">No semantic changes in this pair.</div>}
+        </div>
+      </section>
+      <section className="panel">
+        <PanelTitle eyebrow="Witnesses" title={`${report.witnesses.length} scenario/rule pairs demonstrate a behavioral difference`} />
+        <div className="diff-list">
+          {report.witnesses.map((witness) => <div className="diff-row" key={`${witness.case_id}-${witness.rule_id}`}><span className="mono">{witness.case_id}</span><span className="mono">{witness.rule_id}</span><span>{witness.old_result.status} → {witness.new_result.status}</span></div>)}
+          {!report.witnesses.length && <div className="empty-state">No witnesses for this pair (no scenarios, or none differ).</div>}
+        </div>
+      </section>
+      <section className="panel">
+        <PanelTitle eyebrow="Refusals" title={`${report.refusals.length} rules compiled on neither side`} />
+        <div className="diff-list">
+          {report.refusals.map((refusal) => <div className="diff-row" key={refusal.rule_id}><Badge value="refused" tone="bad" /><span className="mono">{refusal.rule_id}</span></div>)}
+          {!report.refusals.length && <div className="empty-state">Nothing refused in this pair's universe.</div>}
+        </div>
+      </section>
+    </>}
+  </div>;
 }
 
 export function SearchOverlay({ runId, query, onClose, onRule }: { runId: string; query: string; onClose: () => void; onRule: (id: string) => void }) {

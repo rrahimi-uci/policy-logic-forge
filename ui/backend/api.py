@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
+from .regdelta import RegDeltaPairs
 from .review_index import ReviewIndex, _slug, build_review_index, stable_hash
 from .review_store import ReviewStore
 
@@ -23,12 +24,17 @@ MAX_ARTIFACT_VIEW_BYTES = 2_000_000
 
 
 class ReviewService:
-    def __init__(self, pipeline_root: str | Path, index_root: str | Path | None = None, review_db: str | Path | None = None) -> None:
+    def __init__(
+        self, pipeline_root: str | Path, index_root: str | Path | None = None, review_db: str | Path | None = None,
+        regdelta_root: str | Path | None = None,
+    ) -> None:
         self.pipeline_root = Path(pipeline_root).expanduser().resolve()
         default_index_root = Path(__file__).resolve().parents[1] / ".cache" / "review-index"
         self.index_root = Path(index_root or default_index_root).expanduser().resolve()
         self.index_root.mkdir(parents=True, exist_ok=True)
         self.review_store = ReviewStore(review_db or self.index_root.parent / "review-state" / "review.db")
+        default_regdelta_root = Path(__file__).resolve().parents[2] / "fixtures" / "regdelta"
+        self.regdelta = RegDeltaPairs(regdelta_root or default_regdelta_root)
         self._cache: dict[str, ReviewIndex] = {}
         self._cache_signature: dict[str, tuple[tuple[str, int, int], ...]] = {}
 
@@ -290,6 +296,10 @@ def _route_get(service: ReviewService, path: str, params: dict[str, list[str]]) 
             return {"items": service.search(run_id, params)}
     if segments[1:] == ["compare"]:
         return service.compare(_first(params, "left") or "", _first(params, "right") or "")
+    if segments[1:] == ["regdelta", "pairs"]:
+        return {"items": service.regdelta.list_pairs()}
+    if len(segments) == 4 and segments[1:3] == ["regdelta", "pairs"]:
+        return service.regdelta.diff(segments[3])
     if segments[1:] == ["review", "views"]:
         return {"items": service.review_store.list_views(_first(params, "run_id"), _first(params, "reviewer"))}
     if segments[1:] == ["review", "history"]:

@@ -9,6 +9,7 @@ import {
   GraphView,
   Loading,
   Overview,
+  RegDeltaView,
   RuleTableView,
   RuleWorkbench,
   RunsView,
@@ -19,7 +20,7 @@ import { Icon, type IconName } from "./icons";
 import type { RunSummary, Stage } from "./types";
 import { navItems } from "./utils";
 
-type View = "runs" | "overview" | "queue" | "rules" | "evidence" | "graph" | "compare" | "diagnostics" | "stage";
+type View = "runs" | "overview" | "queue" | "rules" | "evidence" | "graph" | "compare" | "regdelta" | "diagnostics" | "stage";
 
 const viewLabels: Record<View, string> = {
   runs: "Runs",
@@ -29,6 +30,7 @@ const viewLabels: Record<View, string> = {
   evidence: "Documents & evidence",
   graph: "Graph explorer",
   compare: "Compare runs",
+  regdelta: "Regulatory change impact",
   diagnostics: "Diagnostics",
   stage: "Stage detail",
 };
@@ -146,7 +148,7 @@ export default function App() {
       <div className="context-bar"><span>{viewLabels[view]}</span>{run && <><b aria-hidden="true">/</b><strong>{run.run_id}</strong></>}</div>
       {error && <div className="main-error"><ErrorNotice message={error} onRetry={() => { setError(""); void loadRuns(true); }} /><button className="error-dismiss" aria-label="Dismiss error" onClick={() => setError("")}><Icon name="close" /></button></div>}
 
-      {!run ? <div className="empty-state spacious"><strong>No pipeline runs found</strong><span>Place a completed or in-progress bundle under <span className="mono">pipeline-output/</span>, then refresh.</span></div> : <div className="content">
+      {!run ? (view === "regdelta" ? <div className="content"><RegDeltaView onError={setError} /></div> : <div className="empty-state spacious"><strong>No pipeline runs found</strong><span>Place a completed or in-progress bundle under <span className="mono">pipeline-output/</span>, then refresh.</span></div>) : <div className="content">
         {view === "runs" && <RunsView runs={runs} onSelect={selectRun} />}
         {view === "overview" && <Overview run={run} stages={stages} onStage={(selected) => { setStage(selected); setView("stage"); }} onView={navigate} />}
         {view === "stage" && stage && <div className="view-stack">
@@ -161,6 +163,7 @@ export default function App() {
         {view === "graph" && <GraphView runId={selectedRun} mode={queue === "unresolved_conflicts" ? "conflicts" : "all"} onError={setError} />}
         {view === "diagnostics" && <DiagnosticsView runId={selectedRun} onError={setError} />}
         {view === "compare" && <CompareView runs={runs} onError={setError} />}
+        {view === "regdelta" && <RegDeltaView onError={setError} />}
       </div>}
       {searchOpen && <SearchOverlay runId={selectedRun} query={searchQuery} onClose={() => setSearchOpen(false)} onRule={(id) => { setSearchOpen(false); openRule(id); }} />}
     </main>

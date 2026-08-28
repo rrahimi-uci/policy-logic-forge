@@ -98,6 +98,11 @@ def test_http_routes_and_overlay(service: ReviewService, tmp_path: Path) -> None
         assert _get(base + "/api/runs/fixture-run/artifacts?path=missing.json")[0] == 404
         assert _get(base + "/api/runs/fixture-run/search?q=email")[0] == 200
         assert _get(base + "/api/compare?left=fixture-run&right=fixture-run-2")[0] == 200
+        status, payload = _get(base + "/api/regdelta/pairs")
+        assert status == 200 and any(item["pair_id"] == "mortgage_tier1" for item in payload["items"])
+        status, payload = _get(base + "/api/regdelta/pairs/mortgage_tier1")
+        assert status == 200 and payload["metrics"]["universe_size"] == 65
+        assert _get(base + "/api/regdelta/pairs/no-such-pair")[0] == 404
         request = urllib.request.Request(base + "/api/review/comments", data=json.dumps({"reviewer": "a", "run_id": "fixture-run", "artifact_type": "rule", "artifact_id": "r1", "text": "note"}).encode(), headers={"Content-Type": "application/json"}, method="POST")
         with urllib.request.urlopen(request) as response:
             assert response.status == 201

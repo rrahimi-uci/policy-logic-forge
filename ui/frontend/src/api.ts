@@ -1,4 +1,4 @@
-import type { ArtifactPayload, CompareResult, Diagnostic, DocumentRecord, Evidence, Relationship, RuleDetail, RuleRow, RunSummary, SavedView, Stage, SearchResult } from "./types";
+import type { ArtifactPayload, CompareResult, Diagnostic, DocumentRecord, Evidence, RegDeltaPairSummary, RegDeltaReport, Relationship, RuleDetail, RuleRow, RunSummary, SavedView, Stage, SearchResult } from "./types";
 
 const API_BASE = (import.meta.env.VITE_C2C_API_BASE as string | undefined) || "/api";
 
@@ -94,6 +94,15 @@ export function search(runId: string, query: string, kind?: string): Promise<{ i
 
 export function compare(left: string, right: string): Promise<CompareResult> {
   return request(`/compare?${new URLSearchParams({ left, right })}`);
+}
+
+export async function fetchRegDeltaPairs(): Promise<RegDeltaPairSummary[]> {
+  const response = await request<{ items: RegDeltaPairSummary[] }>("/regdelta/pairs");
+  return response.items;
+}
+
+export function fetchRegDeltaDiff(pairId: string): Promise<RegDeltaReport> {
+  return request(`/regdelta/pairs/${encodeURIComponent(pairId)}`);
 }
 
 export function addComment(payload: { reviewer: string; run_id: string; artifact_type: string; artifact_id: string; text: string; field_path?: string; artifact_hash?: string }): Promise<unknown> {
