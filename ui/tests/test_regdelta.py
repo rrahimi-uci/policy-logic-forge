@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from ui.backend.regdelta import RegDeltaPairs
+from ui.backend.regdelta import RegDeltaPairs, RegDeltaRuns
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -63,3 +63,53 @@ def test_diff_against_the_real_checked_in_mortgage_tier1_fixture():
     report = pairs.diff("mortgage_tier1")
     assert report["metrics"]["universe_size"] == 65
     assert set(report["downstream_impacts"]["direct"]) == {"R-120-004", "batch5_mortgage_pool_fixed_rate_submission_minimum"}
+
+
+# --- RegDeltaRuns: whole-population run-vs-run comparison (Phase 7.2) --------
+
+def _write_run(root: Path, run_id: str, rules: list[dict], edges: list[tuple[str, str]] | None = None) -> None:
+    run_dir = root / run_id
+    (run_dir / "agent_06-optimized").mkdir(parents=True)
+    (run_dir / "agent_06-optimized" / "optimized_compliance_knowledge_graph.json").write_text(json.dumps({"business_rules": rules}), encoding="utf-8")
+    if edges is not None:
+        (run_dir / "agent_10-dag-generation").mkdir(parents=True)
+        dag = {"dags": [{"dag_id": "d1", "edges": [{"source_rule_id": s, "target_rule_id": t} for s, t in edges]}]}
+        (run_dir / "agent_10-dag-generation" / "dependency_dags.json").write_text(json.dumps(dag), encoding="utf-8")
+
+
+@pytest.fixture()
+def runs_root(tmp_path: Path) -> Path:
+    root = tmp_path / "pipeline-output"
+    old_rule = _write_rule("R-1", 10)
+    new_rule = _write_rule("R-1", 8)
+    downstream_old = {**_write_rule("R-2", 5), "requires_review": True}
+    downstream_new = {**_write_rule("R-2", 5), "requires_review": True}
+    _write_run(root, "run-old", [old_rule, downstream_old], edges=[("R-1", "R-2")])
+    _write_run(root, "run-new", [new_rule, downstream_new])
+    return root
+
+
+def test_list_runs_reports_only_directories_with_agent_06_output(runs_root: Path):
+    (runs_root / "not-a-run").mkdir()
+    runs = RegDeltaRuns(runs_root)
+    items = {item["run_id"]: item for item in runs.list_runs()}
+    assert set(items) == {"run-old", "run-new"}
+    assert items["run-old"]["has_dag"] is True
+    assert items["run-new"]["has_dag"] is False
+
+
+def test_diff_covers_the_whole_population_and_uses_the_old_sides_dag(runs_root: Path):
+    runs = RegDeltaRuns(runs_root)
+    report = runs.diff("run-old", "run-new")
+    assert report["pair_id"] == "run-old::run-new"
+    assert report["metrics"]["universe_size"] == 2
+    assert report["downstream_impacts"]["direct"] == ["R-1"]
+    # R-2 only has a DAG edge because run-old's agent_10 output supplies it
+    # (run-new has none) -- confirms the "prefer old, fall back to new" rule.
+    assert report["downstream_impacts"]["statuses"]["R-2"]["status"] == "unresolved-review"
+    assert runs.diff("run-old", "run-new") is report  # cached
+
+
+def test_diff_raises_for_an_unknown_run(runs_root: Path):
+    with pytest.raises(KeyError):
+        RegDeltaRuns(runs_root).diff("run-old", "no-such-run")

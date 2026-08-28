@@ -50,6 +50,7 @@ compliance-files/privacy_policy/
 compliance-files/mobile_app_privacy/
 compliance-files/deonticbench/
 compliance-files/mortgage/
+compliance-files/mortgage-v2/
 
 # OS / editor
 .DS_Store

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { CompareResult, Diagnostic, DocumentRecord, Evidence, RegDeltaPairSummary, RegDeltaReport, Relationship, RuleDetail, RuleRow, RunSummary, Stage, SearchResult } from "./types";
-import { addComment, addDecision, addLabel, compare, fetchAllRelationships, fetchAllRules, fetchDiagnostics, fetchDocuments, fetchEvidenceList, fetchRegDeltaDiff, fetchRegDeltaPairs, fetchRule, fetchRules, fetchSavedViews, saveView, search } from "./api";
+import type { CompareResult, Diagnostic, DocumentRecord, Evidence, RegDeltaPairSummary, RegDeltaReport, RegDeltaRunSummary, Relationship, RuleDetail, RuleRow, RunSummary, Stage, SearchResult } from "./types";
+import { addComment, addDecision, addLabel, compare, fetchAllRelationships, fetchAllRules, fetchDiagnostics, fetchDocuments, fetchEvidenceList, fetchRegDeltaDiff, fetchRegDeltaPairs, fetchRegDeltaRunDiff, fetchRegDeltaRuns, fetchRule, fetchRules, fetchSavedViews, saveView, search } from "./api";
 import { formatDate, formatNumber, percent, runOption, stageProgress, statusLabel, statusTone } from "./utils";
 
 export function Badge({ value, label, tone }: { value: string; label?: string; tone?: "good" | "warn" | "bad" | "neutral" }) {
@@ -281,17 +281,28 @@ function regdeltaTone(status: string): "good" | "warn" | "bad" | "neutral" {
 }
 
 export function RegDeltaView({ onError }: { onError: (message: string) => void }) {
+  const [mode, setMode] = useState<"fixture" | "runs">("fixture");
   const [pairs, setPairs] = useState<RegDeltaPairSummary[]>([]);
   const [pairId, setPairId] = useState("");
+  const [runs, setRuns] = useState<RegDeltaRunSummary[]>([]);
+  const [oldRun, setOldRun] = useState("");
+  const [newRun, setNewRun] = useState("");
   const [report, setReport] = useState<RegDeltaReport | null>(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => { void fetchRegDeltaPairs().then((items) => { setPairs(items); setPairId((current) => current || items.find((item) => item.status === "ready")?.pair_id || ""); }).catch((error) => onError(String(error))); }, []);
+  useEffect(() => { void fetchRegDeltaRuns().then((items) => { setRuns(items); setOldRun((current) => current || items[0]?.run_id || ""); setNewRun((current) => current || items[1]?.run_id || items[0]?.run_id || ""); }).catch((error) => onError(String(error))); }, []);
   useEffect(() => {
-    if (!pairId) return;
+    if (mode !== "fixture" || !pairId) return;
     setLoading(true);
     fetchRegDeltaDiff(pairId).then(setReport).catch((error) => onError(String(error))).finally(() => setLoading(false));
-  }, [pairId]);
+  }, [mode, pairId]);
+  const loadRunDiff = () => {
+    if (!oldRun || !newRun) return;
+    setLoading(true);
+    fetchRegDeltaRunDiff(oldRun, newRun).then(setReport).catch((error) => onError(String(error))).finally(() => setLoading(false));
+  };
+  useEffect(() => { if (mode === "runs") loadRunDiff(); }, [mode, oldRun, newRun]);
 
   const changed = useMemo(() => report ? report.semantic_changes.filter((change) => change.taxonomy !== "unchanged") : [], [report]);
   const statusEntries = useMemo(() => report ? Object.entries(report.downstream_impacts.statuses).filter(([, value]) => value.status !== "unchanged") : [], [report]);
@@ -301,8 +312,19 @@ export function RegDeltaView({ onError }: { onError: (message: string) => void }
       <div className="panel-heading">
         <div><p className="eyebrow">Behavioral differential execution</p><h1>Regulatory change impact</h1><p className="muted">Old vs. new document versions, compiled and executed -- not textual or hash comparison. See plan/regdelta-product-plan.md.</p></div>
       </div>
-      <div className="compare-select"><label>Pair<select value={pairId} onChange={(event) => setPairId(event.target.value)}>{pairs.map((pair) => <option key={pair.pair_id} value={pair.pair_id} disabled={pair.status !== "ready"}>{pair.pair_id}{pair.status !== "ready" ? " (load error)" : ""}</option>)}</select></label></div>
-      {!pairs.length && !loading && <div className="empty-state">No RegDelta pairs found under <span className="mono">fixtures/regdelta/</span>.</div>}
+      <div className="compare-select">
+        <label>Source<select value={mode} onChange={(event) => setMode(event.target.value as "fixture" | "runs")}><option value="fixture">Curated fixture pair</option><option value="runs">Two pipeline runs</option></select></label>
+        {mode === "fixture"
+          ? <label>Pair<select value={pairId} onChange={(event) => setPairId(event.target.value)}>{pairs.map((pair) => <option key={pair.pair_id} value={pair.pair_id} disabled={pair.status !== "ready"}>{pair.pair_id}{pair.status !== "ready" ? " (load error)" : ""}</option>)}</select></label>
+          : <>
+            <label>Baseline run<select value={oldRun} onChange={(event) => setOldRun(event.target.value)}>{runs.map((run) => <option key={run.run_id} value={run.run_id}>{run.run_id}</option>)}</select></label>
+            <span>→</span>
+            <label>Candidate run<select value={newRun} onChange={(event) => setNewRun(event.target.value)}>{runs.map((run) => <option key={run.run_id} value={run.run_id}>{run.run_id}</option>)}</select></label>
+            <button className="button" onClick={loadRunDiff}>Compare</button>
+          </>}
+      </div>
+      {mode === "fixture" && !pairs.length && !loading && <div className="empty-state">No RegDelta pairs found under <span className="mono">fixtures/regdelta/</span>.</div>}
+      {mode === "runs" && !runs.length && !loading && <div className="empty-state">No pipeline runs with agent_06 output found under <span className="mono">pipeline-output/</span>. Whole-population, no-scenario comparison -- see plan/regdelta-product-plan.md Section 7.2.</div>}
     </section>
     {loading && <Loading label="Running the differential-execution engine…" />}
     {report && !loading && <>

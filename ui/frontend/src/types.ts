@@ -259,3 +259,8 @@ export interface RegDeltaReport {
   provenance: Record<string, string>;
   metrics: Record<string, number>;
 }
+
+export interface RegDeltaRunSummary {
+  run_id: string;
+  has_dag: boolean;
+}

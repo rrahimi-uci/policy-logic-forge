@@ -6,7 +6,7 @@ import * as api from "./api";
 
 vi.mock("./api", async () => {
   const actual = await vi.importActual<typeof import("./api")>("./api");
-  return { ...actual, fetchRules: vi.fn(), fetchAllRules: vi.fn(), fetchAllRelationships: vi.fn(), fetchRule: vi.fn(), fetchDocuments: vi.fn(), fetchEvidenceList: vi.fn(), fetchSavedViews: vi.fn(), saveView: vi.fn(), fetchRelationships: vi.fn(), fetchDiagnostics: vi.fn(), search: vi.fn(), compare: vi.fn(), addComment: vi.fn(), addDecision: vi.fn(), addLabel: vi.fn(), fetchRegDeltaPairs: vi.fn(), fetchRegDeltaDiff: vi.fn() };
+  return { ...actual, fetchRules: vi.fn(), fetchAllRules: vi.fn(), fetchAllRelationships: vi.fn(), fetchRule: vi.fn(), fetchDocuments: vi.fn(), fetchEvidenceList: vi.fn(), fetchSavedViews: vi.fn(), saveView: vi.fn(), fetchRelationships: vi.fn(), fetchDiagnostics: vi.fn(), search: vi.fn(), compare: vi.fn(), addComment: vi.fn(), addDecision: vi.fn(), addLabel: vi.fn(), fetchRegDeltaPairs: vi.fn(), fetchRegDeltaDiff: vi.fn(), fetchRegDeltaRuns: vi.fn(), fetchRegDeltaRunDiff: vi.fn() };
 });
 
 const run: RunSummary = { run_id: "privacy-run", source_dir: "/tmp/run", status: "requires_review", stage_count: 2, completed_stage_count: 1, rule_count: 2, document_count: 1, evidence_count: 2, relationship_count: 1, diagnostic_count: 1, error_count: 1, warning_count: 0, review_queue_count: 1, unresolved_conflict_count: 0, rule_status_counts: { certified: 1, requires_review: 1 }, readiness_counts: {}, grounding_counts: {}, metadata: {}, queues: { requires_review: 1, grounding_failed: 1, readiness_failed: 1, unresolved_conflicts: 0 } };
@@ -26,6 +26,7 @@ beforeEach(() => {
   vi.mocked(api.search).mockResolvedValue({ items: [{ kind: "rule", id: "r1", title: "Retention rule", snippet: "Keep data", status: "requires_review", score: 10 }] });
   vi.mocked(api.compare).mockResolvedValue({ left: run, right: run, summary: { rules_added: 0, rules_removed: 0, rules_changed: 1, relationships_changed: 1 }, rules: { added: [], removed: [], changed: [{ rule_id: "r1", rule_name: "Retention rule", changes: ["status"], before_status: "certified", after_status: "requires_review" }] }, relationships: { added: [], removed: [], changed: [{ relationship_id: "rel", kind: "dependency", changes: ["evidence"] }] } } as any);
   vi.mocked(api.addComment).mockResolvedValue({}); vi.mocked(api.addDecision).mockResolvedValue({}); vi.mocked(api.addLabel).mockResolvedValue({});
+  vi.mocked(api.fetchRegDeltaPairs).mockResolvedValue([]); vi.mocked(api.fetchRegDeltaRuns).mockResolvedValue([]);
 });
 
 describe("review workbench components", () => {
