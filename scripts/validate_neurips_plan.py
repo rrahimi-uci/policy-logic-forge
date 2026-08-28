@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate and operate the machine-readable NeurIPS 2027 execution plan.
+"""Validate the canonical research proposal and operate the task registry.
 
 Examples:
 
@@ -11,8 +11,10 @@ Examples:
 
 The validator is deliberately standard-library only. It validates structure,
 dependency closure, cycles, status/evidence contracts, acceptance commands,
-scope totals, and the generated summary embedded in plan/neurips-plan-2027.md.
-It never runs planned paid/network tasks automatically.
+scope totals, and the required structure of plan/proposal.md. The task registry
+records the completed legacy compiler programme; it is not a machine-readable
+representation of the new RegDelta implementation phases. The command never
+runs planned paid/network tasks automatically.
 """
 
 from __future__ import annotations
@@ -28,12 +30,23 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parent.parent
 REGISTRY = ROOT / "plan" / "tasks.json"
-PLAN = ROOT / "plan" / "neurips-plan-2027.md"
+PLAN = ROOT / "plan" / "proposal.md"
 IR_SCHEMA = ROOT / "plan" / "lexec-ir-v1.schema.json"
 SUMMARY_START = "<!-- GENERATED_TASK_SUMMARY_START -->"
 SUMMARY_END = "<!-- GENERATED_TASK_SUMMARY_END -->"
 PHASE_ORDER = ("G0", "A", "J", "G2", "G3", "G4", "G5", "Writing")
 COMPLETE_STATUSES = {"done", "implemented"}
+REQUIRED_PROPOSAL_SECTIONS = (
+    "# RegDelta: Source-Grounded Differential Execution for Regulatory Change Impact",
+    "## 1. Problem statement",
+    "## 4. Corrections to the current capability assessment",
+    "## 5. Scope and claim boundary",
+    "## 7. Open benchmark design",
+    "## 8. Experimental design",
+    "## 11. Implementation plan",
+    "## 13. Defensible claims",
+    "## 15. Final recommendation",
+)
 
 
 class PlanValidationError(ValueError):
@@ -273,21 +286,32 @@ def render_summary(registry: dict[str, Any]) -> str:
         f"**Ready now:** {', '.join(f'`{task_id}`' for task_id in ready) if ready else 'none'}.",
         "",
         f"Generated from [`plan/tasks.json`](tasks.json) by "
-        "`scripts/validate_neurips_plan.py`; manual edits to this block fail CI.",
+        "`scripts/validate_neurips_plan.py`; this summarizes the historical task registry.",
         SUMMARY_END,
     ])
     return "\n".join(lines)
 
 
+def validate_proposal(plan_path: Path = PLAN) -> list[str]:
+    """Validate the canonical proposal without conflating it with task status."""
+
+    try:
+        text = plan_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        return [f"canonical proposal cannot be loaded: {exc}"]
+    errors: list[str] = []
+    for heading in REQUIRED_PROPOSAL_SECTIONS:
+        _require(heading in text, f"canonical proposal is missing required heading: {heading}", errors)
+    _require("neurips-plan-2027.md" not in text, "canonical proposal references the removed legacy plan", errors)
+    _require("neurIips-proposal-2027.md" not in text, "canonical proposal references the removed legacy proposal", errors)
+    return errors
+
+
 def validate_embedded_summary(registry: dict[str, Any], plan_path: Path = PLAN) -> list[str]:
-    text = plan_path.read_text(encoding="utf-8")
-    if SUMMARY_START not in text or SUMMARY_END not in text:
-        return ["plan is missing generated summary markers"]
-    start = text.index(SUMMARY_START)
-    end = text.index(SUMMARY_END, start) + len(SUMMARY_END)
-    actual = text[start:end]
-    expected = render_summary(registry)
-    return [] if actual == expected else ["embedded generated summary is stale; render it with --summary and update via reviewable patch"]
+    """Backward-compatible entry point for callers of the former plan check."""
+
+    del registry
+    return validate_proposal(plan_path)
 
 
 def run_commands(task: dict[str, Any]) -> int:
@@ -303,8 +327,8 @@ def run_commands(task: dict[str, Any]) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     mode = parser.add_mutually_exclusive_group(required=True)
-    mode.add_argument("--check", action="store_true", help="Validate registry and embedded plan summary")
-    mode.add_argument("--summary", action="store_true", help="Render the authoritative Markdown summary")
+    mode.add_argument("--check", action="store_true", help="Validate registry, IR schema, and canonical proposal")
+    mode.add_argument("--summary", action="store_true", help="Render the historical task-registry summary")
     mode.add_argument("--ready", action="store_true", help="List non-complete tasks whose dependencies are done")
     mode.add_argument("--show", metavar="TASK_ID", help="Show one task as JSON")
     mode.add_argument("--run", metavar="TASK_ID", help="Run one task's acceptance commands")
@@ -324,7 +348,7 @@ def main() -> int:
 
     tasks = task_index(registry)
     if args.check:
-        print(f"Plan valid: {len(tasks)} tasks, no missing dependencies, no cycles, summary current.")
+        print(f"Proposal and registry valid: {len(tasks)} historical tasks, no missing dependencies or cycles.")
         return 0
     if args.summary:
         print(render_summary(registry))

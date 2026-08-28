@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Run the corpus feature + expressiveness census (IR-2, plan/neurips-plan-2027.md
-§3.6) against one or more knowledge-graph JSON files and write
+"""Run the corpus feature + expressiveness census (IR-2 in plan/tasks.json)
+against one or more knowledge-graph JSON files and write
 docs/theory_coverage.md and docs/expressiveness_census.md. Use
 ``--manifest-out`` with an explicit run label and scope note to retain a
 metadata-only, content-addressed run record alongside the reports.

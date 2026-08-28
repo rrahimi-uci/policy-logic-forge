@@ -1,9 +1,9 @@
-"""Corpus feature census (IR-2, plan/neurips-plan-2027.md §3.6).
+"""Corpus feature census (IR-2 in plan/tasks.json).
 
 The compiler IR's supported type/operator subset must be frozen from a
 *measurement* of what real v2 rule graphs actually contain, not from a guess
 made before any measurement exists. Freezing first and measuring after is
-exactly how proposal §9.4's blocker was missed for two review passes:
+exactly how the legacy research design's blocker was missed for two review passes:
 refusing the `string` theory silently refuses 34 of the anchor's 58 testable
 models (the Requirements half, where the anchor scores *higher*), which drops
 the primary instrument-validation endpoint to n=24 -- a sample size at which
