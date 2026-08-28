@@ -15,6 +15,39 @@ from utils.executable_models import (  # noqa: E402
     build_graph_dmn,
     validate_executable_models,
 )
+from utils.lexec_compile import build_compilation_report, build_proof_records, compile_and_prove  # noqa: E402
+
+
+def _lower_and_prove(graph: dict, output_dir: Path, *, document_id: str) -> dict | None:
+    """Emit lexec_ir.json/compilation_report.json/proof_records.json.
+
+    Additive and best-effort: a failure here must never block or replace
+    the review-projection DMN/BPMN this agent already produces (the UI
+    depends on those file names -- see ui/backend/review_index.py). Returns
+    the compilation report on success, or None (with a printed warning) on
+    an unexpected failure.
+
+    ``executable_decisions.dmn`` (proposal.md Phase 1's proposed fourth
+    file) is deliberately not produced yet: utils.dmn_builder cannot
+    represent a rule with a non-null ``scope.predicate`` (raises
+    UNSUPPORTED_SCOPE), which is now most compiled mortgage rules since
+    utils.lexec_ir started representing loan/transaction/occupancy-type
+    scope as a checkable predicate. Extending DMN emission to fold
+    scope.predicate into the table's condition columns is separate,
+    scoped follow-on work, not silently done here.
+    """
+
+    try:
+        ir = compile_and_prove(graph, document_id=document_id)
+    except Exception as exc:  # noqa: BLE001 - never let this block DMN/BPMN output
+        print(f"WARNING: LExec compilation skipped ({type(exc).__name__}: {exc})", flush=True)
+        return None
+    compilation_report = build_compilation_report(ir)
+    proof_records = build_proof_records(ir)
+    (output_dir / "lexec_ir.json").write_text(json.dumps(ir, indent=2) + "\n", encoding="utf-8")
+    (output_dir / "compilation_report.json").write_text(json.dumps(compilation_report, indent=2) + "\n", encoding="utf-8")
+    (output_dir / "proof_records.json").write_text(json.dumps(proof_records, indent=2) + "\n", encoding="utf-8")
+    return compilation_report
 
 
 def generate(input_graph: Path, dags_file: Path, output_dir: Path) -> dict:
@@ -30,6 +63,11 @@ def generate(input_graph: Path, dags_file: Path, output_dir: Path) -> dict:
     output_dir.mkdir(parents=True, exist_ok=True)
     (output_dir / "compliance_decisions.dmn").write_bytes(dmn)
     (output_dir / "compliance_workflows.bpmn").write_bytes(bpmn)
+    # input_graph is .../<batch>/agent_06-optimized/optimized_compliance_knowledge_graph.json;
+    # its batch directory is a more meaningful IR document_id than the
+    # (often batch-agnostic) output directory name.
+    document_id = input_graph.resolve().parents[1].name or "lexec-ir"
+    compilation_report = _lower_and_prove(graph, output_dir, document_id=document_id)
     report = {
         "generator": "agent_11_executable_model_generator",
         "source_graph": str(input_graph),
@@ -39,6 +77,7 @@ def generate(input_graph: Path, dags_file: Path, output_dir: Path) -> dict:
         "dmn_file": "compliance_decisions.dmn",
         "bpmn_file": "compliance_workflows.bpmn",
         "validation": "pass",
+        "lexec_compilation": compilation_report,
     }
     (output_dir / "executable_model_report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     return report
