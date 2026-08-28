@@ -272,14 +272,42 @@ LEGACY_VALUE_TYPES = {
     "array": "list",
     "enum_array": "list",
     "enum_list": "list",
+    # "enum_set" (a set of enum values checked with "in", e.g. a predicate
+    # over {"detached dwelling", "condo unit", ...}) is the exact same shape
+    # as the already-mapped "enum_array"/"string_array" -- just another
+    # plural the model reached for. Found via a real mortgage run: this was
+    # the single condition_predicates[].value_type behind a hard
+    # schema_consistency invariant failure that also fanned out into four
+    # separate false grounding-claim failures for the same rule (variable,
+    # execution, classification, entity_attachment all share
+    # deterministic_rule_claims' validate_rule_v2 fallback check).
+    "enum_set": "list",
+    "number_array": "list",
     "list_number": "list",
     "number_list": "list",
     "string_array": "list",
     "string_list": "list",
+    # A single categorical value (e.g. transaction_type == "not_assumed"),
+    # as opposed to enum_set/enum_array's set-of-values shape above.
+    "enum_value": "enum",
+    # A [min, max] pair, e.g. property_unit_count between [1, 4].
+    "number_range": "range",
     # Models occasionally use the prompt's descriptive ``free_text`` label
     # where the v2 contract requires the canonical ``string`` value_type.
     "free_text": "string",
 }
+# Deliberately NOT normalised: outcome value_types "formula"/"expression"
+# (e.g. "min(0.10 * new_refinance_loan_balance, 15000)") and "object" (a
+# dict-shaped lookup table). Unlike the aliases above, these aren't a
+# renamed spelling of an existing scalar value_type -- they're a genuinely
+# different, currently-unsupported shape (a computed expression or a
+# structured lookup, not a literal constant). Coercing them to "string"
+# would pass validation but silently misrepresent them to any downstream
+# consumer (DMN/BPMN, LExec IR) that assumes value_type "string" means a
+# literal value -- exactly the kind of silent approximation this pipeline's
+# fail-closed philosophy exists to prevent. These rules correctly stay
+# flagged for review until the v2 contract gains real support for computed
+# outcome values.
 
 LEGACY_OPERATORS = {
     "=": "==",
