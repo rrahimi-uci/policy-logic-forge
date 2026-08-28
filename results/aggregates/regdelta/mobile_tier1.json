@@ -1,0 +1,17 @@
+{
+  "claim_boundary": "Engine-validated (plan/regdelta-product-plan.md Phase 5) against a 88-rule hand-curated subset of one real mobile_app_privacy pipeline run with 2 hand-authored edits and 7 hand-labeled scenarios. Not a corpus-level accuracy estimate.",
+  "compiled_new": 18,
+  "compiled_old": 18,
+  "direct_count": 2,
+  "fixture": "fixtures/regdelta/mobile_tier1",
+  "hand_labeled_agreement": 1.0,
+  "hand_labeled_expectations_checked": 7,
+  "pair_id": "mobile-tier1",
+  "potential_count": 2,
+  "recompute_count": 0,
+  "refused_count": 70,
+  "scenario_count": 7,
+  "schema_version": "regdelta-tier1-results/1.0",
+  "universe_size": 88,
+  "unresolved_review_count": 0
+}

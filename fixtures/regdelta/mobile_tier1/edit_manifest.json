@@ -1,0 +1,21 @@
+{
+  "schema_version": "regdelta-tier1-edit-manifest/1.0",
+  "edits": [
+    {
+      "rule_id": "batch115-uds-minors-marketing-exclusion",
+      "predicate_id": "p1",
+      "old_value": 18,
+      "new_value": 21,
+      "new_effective_date": "2026-01-01",
+      "rationale": "Hand-authored Tier 1 edit: raise the marketing-plan/referral-reward age exclusion from under 18 to under 21, an 'lt' predicate weakening (more users are excluded)."
+    },
+    {
+      "rule_id": "batch252_children_under_13_parental_consent",
+      "predicate_id": "p1",
+      "old_value": 13,
+      "new_value": 14,
+      "new_effective_date": "2026-01-01",
+      "rationale": "Hand-authored Tier 1 edit: raise the parental-consent age threshold for children's personal information from under 13 to under 14, an 'lt' predicate weakening (more users require consent)."
+    }
+  ]
+}

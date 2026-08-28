@@ -50,6 +50,15 @@ IGNORED_FIELD_REASONS = {
     # fields fully supersede them, but older/shared-prompt runs (e.g. the
     # mortgage domain) still produce them.
     "entity_definition": "NON_EXECUTABLE_METADATA", "conditions": "NON_EXECUTABLE_METADATA", "consequences": "NON_EXECUTABLE_METADATA",
+    # ``legal_basis`` (mobile_app_privacy: a closed GDPR Article 6 vocabulary
+    # -- consent/contract/legitimate_interests/not_stated) describes *why* a
+    # rule exists, not what input a scenario must supply to trigger it --
+    # the same category as the already-classified ``risk_level``, not a new
+    # applicability_scope-style dimension. ``language``/``detected_language``/
+    # ``source_language`` describe what language the source text happens to
+    # be written in.
+    "legal_basis": "NON_EXECUTABLE_METADATA", "language": "NON_EXECUTABLE_METADATA",
+    "detected_language": "NON_EXECUTABLE_METADATA", "source_language": "NON_EXECUTABLE_METADATA",
     "confidence_score": "AUDIT_STATUS_NOT_EXECUTABLE", "exception_verification": "AUDIT_STATUS_NOT_EXECUTABLE", "scope_derivation": "AUDIT_STATUS_NOT_EXECUTABLE",
     "grounding": "AUDIT_STATUS_NOT_EXECUTABLE", "requires_review": "AUDIT_STATUS_NOT_EXECUTABLE", "review_reason": "AUDIT_STATUS_NOT_EXECUTABLE",
     "reference_verified": "AUDIT_STATUS_NOT_EXECUTABLE", "reference_verification_note": "AUDIT_STATUS_NOT_EXECUTABLE",
