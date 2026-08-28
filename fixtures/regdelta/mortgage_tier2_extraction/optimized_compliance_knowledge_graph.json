@@ -1,0 +1,2743 @@
+{
+    "metadata": {
+        "optimizer_version": "1.0",
+        "timestamp": "2026-08-28 12:08:17",
+        "model_used": "gpt-5.6-luna",
+        "reasoning_effort": "high",
+        "original_rule_count": 5,
+        "optimized_rule_count": 5,
+        "rules_removed_count": 0,
+        "dependencies_added_count": 0
+    },
+    "optimization_summary": {
+        "deduplication": {
+            "strategy": "Conservative - only remove rationally identical rules",
+            "duplicate_groups": 0,
+            "rules_removed": 0,
+            "rationale": "Analyzed all rules for rational duplicates. Removed only those expressing identical business logic while preserving rules with meaningful differences in thresholds, contexts, or conditions.",
+            "analysis_notes": "No rule pair meets the mandatory 75-point merge threshold. B1-R002 and B1-R003 are the closest conceptual pair because they use the same single-lender-pool submission framework and identical outcome structure, but their fixed-rate versus adjustable-rate contexts and $1.25 million versus $500,000 thresholds are substantive distinctions. B1-R004 is related structurally to both pool-minimum rules but differs in execution option, multiple-lender pool context, $1,000 threshold, and additional pool-opening requirement. B1-R001 and B1-R005 are both within the conventional first-mortgage domain but perform different compliance functions. No regulatory references were supplied for any rule, so source-consistency points were conservatively scored at zero rather than inferred. Retain all five rules. The $1,000 threshold in B1-R004 is materially different from the other pool minimums and may warrant independent source validation, but it must not be normalized or merged without confirming the governing regulation."
+        },
+        "dependency_analysis": {
+            "strategy": "Comprehensive relationship mapping",
+            "dependencies_found": 0,
+            "dependency_chains": 0,
+            "conflicts_identified": 0,
+            "rules_with_dependencies": 0,
+            "rationale": "Identified prerequisite, sequential, conditional, complementary, contradictory, and override relationships between rules to enable proper execution ordering and conflict resolution.",
+            "analysis_notes": "No actionable cross-rule dependencies rated 3 or higher were identified. Each rule is self-contained and evaluates its own inputs to produce its own compliance outcome. B1-R001-HIGH-LTV-MI-REQUIREMENT requires an LTV ratio, purchase context, and credit-enhancement status, but no other supplied rule calculates or supplies those values. B1-R005-PROPERTY-VALUE-RELIEF-ELIGIBILITY requires property characteristics and a CU risk score, but no supplied rule produces or validates those inputs. B1-R002-FIXED-RATE-SINGLE-LENDER-MINIMUM, B1-R003-ADJUSTABLE-RATE-SINGLE-LENDER-MINIMUM, and B1-R004-FANNIE-MAJORS-MULTIPLE-LENDER-MINIMUM are parallel submission-eligibility rules rather than sequential dependencies: B1-R002 and B1-R003 apply to different rate types, while B1-R004 applies to multiple-lender Fannie Majors pools. Although these rules share the output variable minimum_submission_amount_usd and the outcome submission_requirement_met, their applicability conditions are mutually exclusive as written, so they do not create a contradiction or override relationship. No direct or indirect circular dependency exists. For workflow automation, the three pool-minimum rules should be implemented as mutually exclusive branches selected by rate type, execution option type, and pool type; the LTV/MI rule and property-value-relief rule should be evaluated independently when their respective loan and property contexts apply. Confidence scoring is not applicable because no dependency edge met the required minimum strength threshold."
+        }
+    },
+    "business_rules": [
+        {
+            "schema_version": "2.0",
+            "rule_id": "B1-R001-HIGH-LTV-MI-REQUIREMENT",
+            "rule_name": "Primary Mortgage Insurance Required for High-LTV Conventional First Mortgages",
+            "rule_type": "compliance",
+            "description": "A conventional first mortgage loan with an LTV ratio greater than 78% must have a primary mortgage insurance policy when purchased for Fannie Mae's portfolio or securitized, unless the lender has provided another charter-compliant form of credit enhancement.",
+            "condition_predicates": [
+                {
+                    "predicate_id": "p1",
+                    "variable": "ltv_ratio",
+                    "operator": ">",
+                    "value": 78,
+                    "value_type": "number"
+                },
+                {
+                    "predicate_id": "p2",
+                    "variable": "purchase_context",
+                    "operator": "=",
+                    "value": "Fannie Mae's portfolio",
+                    "value_type": "enum"
+                },
+                {
+                    "predicate_id": "p3",
+                    "variable": "purchase_context",
+                    "operator": "=",
+                    "value": "securitized",
+                    "value_type": "enum"
+                },
+                {
+                    "predicate_id": "p4",
+                    "variable": "credit_enhancement_provided",
+                    "operator": "=",
+                    "value": false,
+                    "value_type": "boolean"
+                }
+            ],
+            "condition_logic": {
+                "all": [
+                    {
+                        "predicate_ref": "p1"
+                    },
+                    {
+                        "any": [
+                            {
+                                "predicate_ref": "p2"
+                            },
+                            {
+                                "predicate_ref": "p3"
+                            }
+                        ]
+                    },
+                    {
+                        "predicate_ref": "p4"
+                    }
+                ]
+            },
+            "outcomes": [
+                {
+                    "variable": "primary_mortgage_insurance_policy_required",
+                    "operator": "=",
+                    "value": true,
+                    "value_type": "boolean"
+                }
+            ],
+            "variables": [
+                {
+                    "name": "ltv_ratio",
+                    "type": "number",
+                    "unit": "percent",
+                    "allowed_range": [
+                        0,
+                        100
+                    ],
+                    "role": "input"
+                },
+                {
+                    "name": "purchase_context",
+                    "type": "enum",
+                    "allowed_values": [
+                        "Fannie Mae's portfolio",
+                        "securitized"
+                    ],
+                    "role": "input"
+                },
+                {
+                    "name": "credit_enhancement_provided",
+                    "type": "boolean",
+                    "role": "input"
+                },
+                {
+                    "name": "primary_mortgage_insurance_policy_required",
+                    "type": "boolean",
+                    "role": "output"
+                }
+            ],
+            "recommended_hit_policy": "UNIQUE",
+            "versioning_status": "current_no_known_supersession",
+            "applicability_scope": {
+                "loan_types": [
+                    "CONVENTIONAL_FIRST_MORTGAGE_LOAN"
+                ],
+                "occupancy_types": [],
+                "transaction_types": [
+                    "Fannie Mae portfolio purchase",
+                    "securitization"
+                ]
+            },
+            "scope_basis": "direct_scope_evidence",
+            "inference_reasoning": "The source expressly identifies conventional first mortgage loans, the greater-than-78% LTV threshold, and portfolio-purchase or securitization contexts.",
+            "responsible_party": "Lender",
+            "counterparties": [
+                "PRIMARY_MORTGAGE_INSURANCE_POLICY",
+                "CREDIT_ENHANCEMENT"
+            ],
+            "exceptions": [
+                {
+                    "exception_id": "e1",
+                    "description": "The mortgage insurance requirement does not apply when the lender has provided another charter-compliant form of credit enhancement."
+                }
+            ],
+            "exception_basis": "explicit_in_source",
+            "test_vectors": [
+                {
+                    "inputs": {
+                        "ltv_ratio": 78,
+                        "purchase_context": "Fannie Mae's portfolio",
+                        "credit_enhancement_provided": false
+                    },
+                    "expected_output": {
+                        "primary_mortgage_insurance_policy_required": false
+                    },
+                    "vector_basis": "derived_from_source",
+                    "boundary_condition": true
+                },
+                {
+                    "inputs": {
+                        "ltv_ratio": 79,
+                        "purchase_context": "securitized",
+                        "credit_enhancement_provided": false
+                    },
+                    "expected_output": {
+                        "primary_mortgage_insurance_policy_required": true
+                    },
+                    "vector_basis": "source_attested",
+                    "boundary_condition": false
+                }
+            ],
+            "source_reference": {
+                "chunk_path": "selling_guide_update/mortgage_insurance_requirement_for_high_ltv_conventional_first_mortgages_b7_1_01_04_02_2025_exe.txt",
+                "section_id": "Mortgage Insurance Requirement for High-LTV Conventional First Mortgages (B7-1-01; 04/02/2025)",
+                "start_word_position": 31,
+                "end_word_position": 77,
+                "source_text": "This section establishes a mortgage insurance requirement for conventional first mortgage loans with an LTV ratio greater than 78% when the loan is purchased for Fannie Mae's portfolio or securitized. The requirement does not apply when the lender has provided another charter-compliant form of credit enhancement.",
+                "text_match_score": 1.0,
+                "source_text_bridged": true
+            },
+            "field_evidence": {
+                "condition_predicates": [
+                    {
+                        "chunk_path": "selling_guide_update/mortgage_insurance_requirement_for_high_ltv_conventional_first_mortgages_b7_1_01_04_02_2025_exe.txt",
+                        "section_id": "Mortgage Insurance Requirement for High-LTV Conventional First Mortgages (B7-1-01; 04/02/2025)",
+                        "source_text": "This section establishes a mortgage insurance requirement for conventional first mortgage loans with an LTV ratio greater than 78% when the loan is purchased for Fannie Mae's portfolio or securitized."
+                    }
+                ],
+                "outcomes": [
+                    {
+                        "chunk_path": "selling_guide_update/mortgage_insurance_requirement_for_high_ltv_conventional_first_mortgages_b7_1_01_04_02_2025_exe.txt",
+                        "section_id": "Mortgage Insurance Requirement for High-LTV Conventional First Mortgages (B7-1-01; 04/02/2025)",
+                        "source_text": "the lender must obtain a primary mortgage insurance policy"
+                    }
+                ],
+                "responsible_party": [
+                    {
+                        "chunk_path": "selling_guide_update/mortgage_insurance_requirement_for_high_ltv_conventional_first_mortgages_b7_1_01_04_02_2025_exe.txt",
+                        "section_id": "Mortgage Insurance Requirement for High-LTV Conventional First Mortgages (B7-1-01; 04/02/2025)",
+                        "source_text": "the lender must obtain a primary mortgage insurance policy"
+                    }
+                ],
+                "scope_basis": [
+                    {
+                        "chunk_path": "selling_guide_update/mortgage_insurance_requirement_for_high_ltv_conventional_first_mortgages_b7_1_01_04_02_2025_exe.txt",
+                        "section_id": "Mortgage Insurance Requirement for High-LTV Conventional First Mortgages (B7-1-01; 04/02/2025)",
+                        "source_text": "for conventional first mortgage loans with an LTV ratio greater than 78% when the loan is purchased for Fannie Mae's portfolio or securitized"
+                    }
+                ],
+                "versioning_status": [
+                    {
+                        "chunk_path": "selling_guide_update/mortgage_insurance_requirement_for_high_ltv_conventional_first_mortgages_b7_1_01_04_02_2025_exe.txt",
+                        "section_id": "Mortgage Insurance Requirement for High-LTV Conventional First Mortgages (B7-1-01; 04/02/2025)",
+                        "source_text": "B7-1-01, Provision of Mortgage Insurance (04/02/2025)"
+                    }
+                ],
+                "exceptions": [
+                    {
+                        "chunk_path": "selling_guide_update/mortgage_insurance_requirement_for_high_ltv_conventional_first_mortgages_b7_1_01_04_02_2025_exe.txt",
+                        "section_id": "Mortgage Insurance Requirement for High-LTV Conventional First Mortgages (B7-1-01; 04/02/2025)",
+                        "source_text": "The requirement does not apply when the lender has provided another charter-compliant form of credit enhancement."
+                    }
+                ],
+                "test_vectors": [
+                    {
+                        "chunk_path": "selling_guide_update/mortgage_insurance_requirement_for_high_ltv_conventional_first_mortgages_b7_1_01_04_02_2025_exe.txt",
+                        "section_id": "Mortgage Insurance Requirement for High-LTV Conventional First Mortgages (B7-1-01; 04/02/2025)",
+                        "source_text": "an LTV ratio greater than 78%"
+                    }
+                ]
+            },
+            "reference_verified": true,
+            "reference_verification_note": "ok_bridged_exact_span",
+            "confidence_score": 75,
+            "contract_issues": [
+                {
+                    "section": 1,
+                    "code": "invalid_predicate_operator",
+                    "path": "condition_predicates[1].operator",
+                    "message": "Operator must be one of ['!=', '<', '<=', '==', '>', '>=', 'in', 'not_in'].",
+                    "severity": "error"
+                },
+                {
+                    "section": 1,
+                    "code": "invalid_predicate_operator",
+                    "path": "condition_predicates[2].operator",
+                    "message": "Operator must be one of ['!=', '<', '<=', '==', '>', '>=', 'in', 'not_in'].",
+                    "severity": "error"
+                },
+                {
+                    "section": 1,
+                    "code": "invalid_predicate_operator",
+                    "path": "condition_predicates[3].operator",
+                    "message": "Operator must be one of ['!=', '<', '<=', '==', '>', '>=', 'in', 'not_in'].",
+                    "severity": "error"
+                },
+                {
+                    "section": 6,
+                    "code": "missing_exception_predicate_id",
+                    "path": "exceptions[0].predicate_id",
+                    "message": "Exception predicate ID is required.",
+                    "severity": "error"
+                },
+                {
+                    "section": 6,
+                    "code": "undefined_exception_variable",
+                    "path": "exceptions[0].variable",
+                    "message": "Exception variables must be declared in variables.",
+                    "severity": "error"
+                },
+                {
+                    "section": 6,
+                    "code": "invalid_exception_operator",
+                    "path": "exceptions[0].operator",
+                    "message": "Exception operator is invalid.",
+                    "severity": "error"
+                },
+                {
+                    "section": 6,
+                    "code": "invalid_exception_value_type",
+                    "path": "exceptions[0].value_type",
+                    "message": "Exception value_type is invalid.",
+                    "severity": "error"
+                },
+                {
+                    "section": 4,
+                    "code": "invalid_scope_basis",
+                    "path": "scope_basis",
+                    "message": "scope_basis is not a recognized candidate or final evidence state.",
+                    "severity": "error"
+                }
+            ],
+            "requires_review": true,
+            "readiness": {
+                "checks": {
+                    "1_typed_logic_and_variables": {
+                        "status": "fail",
+                        "reasons": [
+                            {
+                                "code": "invalid_predicate_operator",
+                                "path": "condition_predicates[1].operator",
+                                "message": "Operator must be one of ['!=', '<', '<=', '==', '>', '>=', 'in', 'not_in'].",
+                                "severity": "error"
+                            },
+                            {
+                                "code": "invalid_predicate_operator",
+                                "path": "condition_predicates[2].operator",
+                                "message": "Operator must be one of ['!=', '<', '<=', '==', '>', '>=', 'in', 'not_in'].",
+                                "severity": "error"
+                            },
+                            {
+                                "code": "invalid_predicate_operator",
+                                "path": "condition_predicates[3].operator",
+                                "message": "Operator must be one of ['!=', '<', '<=', '==', '>', '>=', 'in', 'not_in'].",
+                                "severity": "error"
+                            }
+                        ]
+                    },
+                    "2_dependencies_conflicts_hit_policy": {
+                        "status": "pending",
+                        "reasons": [
+                            {
+                                "code": "dependency_analysis_pending",
+                                "path": "recommended_hit_policy",
+                                "message": "agent_06 has not completed dependency/conflict analysis.",
+                                "severity": "info"
+                            }
+                        ]
+                    },
+                    "3_versioning": {
+                        "status": "pass",
+                        "reasons": []
+                    },
+                    "4_scope": {
+                        "status": "fail",
+                        "reasons": [
+                            {
+                                "code": "invalid_scope_basis",
+                                "path": "scope_basis",
+                                "message": "scope_basis is not a recognized candidate or final evidence state.",
+                                "severity": "error"
+                            }
+                        ]
+                    },
+                    "5_parties": {
+                        "status": "pass",
+                        "reasons": []
+                    },
+                    "6_exceptions": {
+                        "status": "fail",
+                        "reasons": [
+                            {
+                                "code": "missing_exception_predicate_id",
+                                "path": "exceptions[0].predicate_id",
+                                "message": "Exception predicate ID is required.",
+                                "severity": "error"
+                            },
+                            {
+                                "code": "undefined_exception_variable",
+                                "path": "exceptions[0].variable",
+                                "message": "Exception variables must be declared in variables.",
+                                "severity": "error"
+                            },
+                            {
+                                "code": "invalid_exception_operator",
+                                "path": "exceptions[0].operator",
+                                "message": "Exception operator is invalid.",
+                                "severity": "error"
+                            },
+                            {
+                                "code": "invalid_exception_value_type",
+                                "path": "exceptions[0].value_type",
+                                "message": "Exception value_type is invalid.",
+                                "severity": "error"
+                            }
+                        ]
+                    },
+                    "7_source_fidelity": {
+                        "status": "pass",
+                        "reasons": []
+                    },
+                    "8_test_vectors": {
+                        "status": "pass",
+                        "reasons": []
+                    }
+                },
+                "failed_sections": [
+                    1,
+                    4,
+                    6
+                ],
+                "pending_sections": [
+                    2
+                ],
+                "requires_review": true,
+                "status": "review_required"
+            },
+            "entity_or_relationship": "CONVENTIONAL_FIRST_MORTGAGE_LOAN",
+            "entity_type": "entity",
+            "entity_definition": {
+                "description": "",
+                "key_attributes": [],
+                "examples": [
+                    "A conventional first mortgage loan with an LTV ratio greater than 78%.",
+                    "a conventional first mortgage loan that has an LTV ratio greater than 78%"
+                ]
+            }
+        },
+        {
+            "schema_version": "2.0",
+            "rule_id": "B1-R005-PROPERTY-VALUE-RELIEF-ELIGIBILITY",
+            "rule_name": "Property-Value Representations-and-Warranties Relief Eligibility",
+            "rule_type": "eligibility",
+            "description": "A loan may receive enforcement relief for certain representations and warranties related to appraisal and subject-property value when it is secured by a one-unit detached, attached, or condominium property, the property is not a manufactured home, and the appraisal receives a CU risk score of 3.0 or below. When these criteria are met, the lender is not responsible for underwriting the appraisal report to determine whether the subject property presents adequate collateral.",
+            "condition_predicates": [
+                {
+                    "predicate_id": "p1",
+                    "variable": "unit_count",
+                    "operator": "=",
+                    "value": 1,
+                    "value_type": "number"
+                },
+                {
+                    "predicate_id": "p2",
+                    "variable": "property_form",
+                    "operator": "=",
+                    "value": "detached",
+                    "value_type": "enum"
+                },
+                {
+                    "predicate_id": "p3",
+                    "variable": "property_form",
+                    "operator": "=",
+                    "value": "attached",
+                    "value_type": "enum"
+                },
+                {
+                    "predicate_id": "p4",
+                    "variable": "property_form",
+                    "operator": "=",
+                    "value": "condo",
+                    "value_type": "enum"
+                },
+                {
+                    "predicate_id": "p5",
+                    "variable": "manufactured_home",
+                    "operator": "=",
+                    "value": false,
+                    "value_type": "boolean"
+                },
+                {
+                    "predicate_id": "p6",
+                    "variable": "cu_risk_score",
+                    "operator": "<=",
+                    "value": 3,
+                    "value_type": "number"
+                }
+            ],
+            "condition_logic": {
+                "all": [
+                    {
+                        "predicate_ref": "p1"
+                    },
+                    {
+                        "any": [
+                            {
+                                "predicate_ref": "p2"
+                            },
+                            {
+                                "predicate_ref": "p3"
+                            },
+                            {
+                                "predicate_ref": "p4"
+                            }
+                        ]
+                    },
+                    {
+                        "predicate_ref": "p5"
+                    },
+                    {
+                        "predicate_ref": "p6"
+                    }
+                ]
+            },
+            "outcomes": [
+                {
+                    "variable": "property_value_relief_eligibility",
+                    "operator": "=",
+                    "value": "eligible",
+                    "value_type": "enum"
+                },
+                {
+                    "variable": "lender_appraisal_underwriting_responsibility",
+                    "operator": "=",
+                    "value": "not responsible for adequate collateral determination",
+                    "value_type": "enum"
+                }
+            ],
+            "variables": [
+                {
+                    "name": "unit_count",
+                    "type": "number",
+                    "allowed_range": [
+                        0,
+                        null
+                    ],
+                    "role": "input"
+                },
+                {
+                    "name": "property_form",
+                    "type": "enum",
+                    "allowed_values": [
+                        "detached",
+                        "attached",
+                        "condo"
+                    ],
+                    "role": "input"
+                },
+                {
+                    "name": "manufactured_home",
+                    "type": "boolean",
+                    "role": "input"
+                },
+                {
+                    "name": "cu_risk_score",
+                    "type": "number",
+                    "allowed_range": [
+                        0,
+                        null
+                    ],
+                    "role": "input"
+                },
+                {
+                    "name": "property_value_relief_eligibility",
+                    "type": "enum",
+                    "allowed_values": [
+                        "eligible",
+                        "not eligible"
+                    ],
+                    "role": "output"
+                },
+                {
+                    "name": "lender_appraisal_underwriting_responsibility",
+                    "type": "enum",
+                    "allowed_values": [
+                        "not responsible for adequate collateral determination"
+                    ],
+                    "role": "output"
+                }
+            ],
+            "recommended_hit_policy": "UNIQUE",
+            "versioning_status": "current_no_known_supersession",
+            "applicability_scope": {
+                "loan_types": [
+                    "CONVENTIONAL_FIRST_MORTGAGE_LOAN"
+                ],
+                "occupancy_types": [
+                    "one-unit detached",
+                    "one-unit attached",
+                    "one-unit condominium"
+                ],
+                "transaction_types": []
+            },
+            "scope_basis": "direct_scope_evidence",
+            "inference_reasoning": "The source expressly states the eligible property forms, manufactured-home exclusion, CU score threshold, appraisal-related relief, and lender responsibility consequence.",
+            "responsible_party": "Lender",
+            "counterparties": [
+                "APPRAISAL",
+                "SUBJECT_PROPERTY_VALUE",
+                "CU_RISK_SCORE",
+                "MANUFACTURED_HOME"
+            ],
+            "exceptions": [
+                {
+                    "exception_id": "e1",
+                    "description": "Manufactured homes are not eligible for the described property-value enforcement relief."
+                }
+            ],
+            "exception_basis": "explicit_in_source",
+            "test_vectors": [
+                {
+                    "inputs": {
+                        "unit_count": 1,
+                        "property_form": "detached",
+                        "manufactured_home": false,
+                        "cu_risk_score": 3
+                    },
+                    "expected_output": {
+                        "property_value_relief_eligibility": "eligible",
+                        "lender_appraisal_underwriting_responsibility": "not responsible for adequate collateral determination"
+                    },
+                    "vector_basis": "source_attested",
+                    "boundary_condition": true
+                },
+                {
+                    "inputs": {
+                        "unit_count": 1,
+                        "property_form": "condo",
+                        "manufactured_home": true,
+                        "cu_risk_score": 3
+                    },
+                    "expected_output": {
+                        "property_value_relief_eligibility": "not eligible"
+                    },
+                    "vector_basis": "source_attested",
+                    "boundary_condition": false
+                }
+            ],
+            "source_reference": {
+                "chunk_path": "selling_guide_update/property_value_representations_and_warranties_relief_eligibility_and_appraisal_requirements_a2_2_06.txt",
+                "section_id": "Property Value Representations-and-Warranties Relief: Eligibility and Appraisal Requirements (A2-2-06; 09/03/2025)",
+                "start_word_position": 108,
+                "end_word_position": 232,
+                "source_text": "In addition to the limited waiver of underwriting representations and warranties available for certain DU loans, loans may also benefit from enforcement relief of certain representations and warranties related to the appraisal and value of the subject property (without regard to underwriting method). To be eligible for relief: the loan must be secured by a one-unit detached, attached, or condo property (manufactured homes are not eligible); and the appraisal must receive a CU risk score of 3.0 or below. Note: See B4-1.1-04, Unacceptable Appraisal Practices for examples of unacceptable practices. When this criteria is met, the lender is not responsible for the following requirements described in this Guide: underwriting the appraisal report to determine whether the subject property presents adequate collateral for the mortgage;",
+                "text_match_score": 1.0,
+                "source_text_bridged": true
+            },
+            "field_evidence": {
+                "condition_predicates": [
+                    {
+                        "chunk_path": "selling_guide_update/property_value_representations_and_warranties_relief_eligibility_and_appraisal_requirements_a2_2_06.txt",
+                        "section_id": "Property Value Representations-and-Warranties Relief: Eligibility and Appraisal Requirements (A2-2-06; 09/03/2025)",
+                        "source_text": "To be eligible for relief: the loan must be secured by a one-unit detached, attached, or condo property (manufactured homes are not eligible); and the appraisal must receive a CU risk score of 3.0 or below."
+                    }
+                ],
+                "outcomes": [
+                    {
+                        "chunk_path": "selling_guide_update/property_value_representations_and_warranties_relief_eligibility_and_appraisal_requirements_a2_2_06.txt",
+                        "section_id": "Property Value Representations-and-Warranties Relief: Eligibility and Appraisal Requirements (A2-2-06; 09/03/2025)",
+                        "source_text": "When this criteria is met, the lender is not responsible for the following requirements described in this Guide: underwriting the appraisal report to determine whether the subject property presents adequate collateral for the mortgage;"
+                    }
+                ],
+                "responsible_party": [
+                    {
+                        "chunk_path": "selling_guide_update/property_value_representations_and_warranties_relief_eligibility_and_appraisal_requirements_a2_2_06.txt",
+                        "section_id": "Property Value Representations-and-Warranties Relief: Eligibility and Appraisal Requirements (A2-2-06; 09/03/2025)",
+                        "source_text": "the lender is not responsible for the following requirements described in this Guide"
+                    }
+                ],
+                "scope_basis": [
+                    {
+                        "chunk_path": "selling_guide_update/property_value_representations_and_warranties_relief_eligibility_and_appraisal_requirements_a2_2_06.txt",
+                        "section_id": "Property Value Representations-and-Warranties Relief: Eligibility and Appraisal Requirements (A2-2-06; 09/03/2025)",
+                        "source_text": "the loan must be secured by a one-unit detached, attached, or condo property"
+                    }
+                ],
+                "versioning_status": [
+                    {
+                        "chunk_path": "selling_guide_update/property_value_representations_and_warranties_relief_eligibility_and_appraisal_requirements_a2_2_06.txt",
+                        "section_id": "Property Value Representations-and-Warranties Relief: Eligibility and Appraisal Requirements (A2-2-06; 09/03/2025)",
+                        "source_text": "A2-2-06, Representations and Warranties on Property Value (09/03/2025)"
+                    }
+                ],
+                "exceptions": [
+                    {
+                        "chunk_path": "selling_guide_update/property_value_representations_and_warranties_relief_eligibility_and_appraisal_requirements_a2_2_06.txt",
+                        "section_id": "Property Value Representations-and-Warranties Relief: Eligibility and Appraisal Requirements (A2-2-06; 09/03/2025)",
+                        "source_text": "manufactured homes are not eligible"
+                    }
+                ],
+                "test_vectors": [
+                    {
+                        "chunk_path": "selling_guide_update/property_value_representations_and_warranties_relief_eligibility_and_appraisal_requirements_a2_2_06.txt",
+                        "section_id": "Property Value Representations-and-Warranties Relief: Eligibility and Appraisal Requirements (A2-2-06; 09/03/2025)",
+                        "source_text": "the appraisal must receive a CU risk score of 3.0 or below"
+                    }
+                ]
+            },
+            "reference_verified": true,
+            "reference_verification_note": "ok_bridged_exact_span",
+            "confidence_score": 75,
+            "contract_issues": [
+                {
+                    "section": 1,
+                    "code": "invalid_predicate_operator",
+                    "path": "condition_predicates[0].operator",
+                    "message": "Operator must be one of ['!=', '<', '<=', '==', '>', '>=', 'in', 'not_in'].",
+                    "severity": "error"
+                },
+                {
+                    "section": 1,
+                    "code": "invalid_predicate_operator",
+                    "path": "condition_predicates[1].operator",
+                    "message": "Operator must be one of ['!=', '<', '<=', '==', '>', '>=', 'in', 'not_in'].",
+                    "severity": "error"
+                },
+                {
+                    "section": 1,
+                    "code": "invalid_predicate_operator",
+                    "path": "condition_predicates[2].operator",
+                    "message": "Operator must be one of ['!=', '<', '<=', '==', '>', '>=', 'in', 'not_in'].",
+                    "severity": "error"
+                },
+                {
+                    "section": 1,
+                    "code": "invalid_predicate_operator",
+                    "path": "condition_predicates[3].operator",
+                    "message": "Operator must be one of ['!=', '<', '<=', '==', '>', '>=', 'in', 'not_in'].",
+                    "severity": "error"
+                },
+                {
+                    "section": 1,
+                    "code": "invalid_predicate_operator",
+                    "path": "condition_predicates[4].operator",
+                    "message": "Operator must be one of ['!=', '<', '<=', '==', '>', '>=', 'in', 'not_in'].",
+                    "severity": "error"
+                },
+                {
+                    "section": 6,
+                    "code": "missing_exception_predicate_id",
+                    "path": "exceptions[0].predicate_id",
+                    "message": "Exception predicate ID is required.",
+                    "severity": "error"
+                },
+                {
+                    "section": 6,
+                    "code": "undefined_exception_variable",
+                    "path": "exceptions[0].variable",
+                    "message": "Exception variables must be declared in variables.",
+                    "severity": "error"
+                },
+                {
+                    "section": 6,
+                    "code": "invalid_exception_operator",
+                    "path": "exceptions[0].operator",
+                    "message": "Exception operator is invalid.",
+                    "severity": "error"
+                },
+                {
+                    "section": 6,
+                    "code": "invalid_exception_value_type",
+                    "path": "exceptions[0].value_type",
+                    "message": "Exception value_type is invalid.",
+                    "severity": "error"
+                },
+                {
+                    "section": 4,
+                    "code": "invalid_scope_basis",
+                    "path": "scope_basis",
+                    "message": "scope_basis is not a recognized candidate or final evidence state.",
+                    "severity": "error"
+                }
+            ],
+            "requires_review": true,
+            "readiness": {
+                "checks": {
+                    "1_typed_logic_and_variables": {
+                        "status": "fail",
+                        "reasons": [
+                            {
+                                "code": "invalid_predicate_operator",
+                                "path": "condition_predicates[0].operator",
+                                "message": "Operator must be one of ['!=', '<', '<=', '==', '>', '>=', 'in', 'not_in'].",
+                                "severity": "error"
+                            },
+                            {
+                                "code": "invalid_predicate_operator",
+                                "path": "condition_predicates[1].operator",
+                                "message": "Operator must be one of ['!=', '<', '<=', '==', '>', '>=', 'in', 'not_in'].",
+                                "severity": "error"
+                            },
+                            {
+                                "code": "invalid_predicate_operator",
+                                "path": "condition_predicates[2].operator",
+                                "message": "Operator must be one of ['!=', '<', '<=', '==', '>', '>=', 'in', 'not_in'].",
+                                "severity": "error"
+                            },
+                            {
+                                "code": "invalid_predicate_operator",
+                                "path": "condition_predicates[3].operator",
+                                "message": "Operator must be one of ['!=', '<', '<=', '==', '>', '>=', 'in', 'not_in'].",
+                                "severity": "error"
+                            },
+                            {
+                                "code": "invalid_predicate_operator",
+                                "path": "condition_predicates[4].operator",
+                                "message": "Operator must be one of ['!=', '<', '<=', '==', '>', '>=', 'in', 'not_in'].",
+                                "severity": "error"
+                            }
+                        ]
+                    },
+                    "2_dependencies_conflicts_hit_policy": {
+                        "status": "pending",
+                        "reasons": [
+                            {
+                                "code": "dependency_analysis_pending",
+                                "path": "recommended_hit_policy",
+                                "message": "agent_06 has not completed dependency/conflict analysis.",
+                                "severity": "info"
+                            }
+                        ]
+                    },
+                    "3_versioning": {
+                        "status": "pass",
+                        "reasons": []
+                    },
+                    "4_scope": {
+                        "status": "fail",
+                        "reasons": [
+                            {
+                                "code": "invalid_scope_basis",
+                                "path": "scope_basis",
+                                "message": "scope_basis is not a recognized candidate or final evidence state.",
+                                "severity": "error"
+                            }
+                        ]
+                    },
+                    "5_parties": {
+                        "status": "pass",
+                        "reasons": []
+                    },
+                    "6_exceptions": {
+                        "status": "fail",
+                        "reasons": [
+                            {
+                                "code": "missing_exception_predicate_id",
+                                "path": "exceptions[0].predicate_id",
+                                "message": "Exception predicate ID is required.",
+                                "severity": "error"
+                            },
+                            {
+                                "code": "undefined_exception_variable",
+                                "path": "exceptions[0].variable",
+                                "message": "Exception variables must be declared in variables.",
+                                "severity": "error"
+                            },
+                            {
+                                "code": "invalid_exception_operator",
+                                "path": "exceptions[0].operator",
+                                "message": "Exception operator is invalid.",
+                                "severity": "error"
+                            },
+                            {
+                                "code": "invalid_exception_value_type",
+                                "path": "exceptions[0].value_type",
+                                "message": "Exception value_type is invalid.",
+                                "severity": "error"
+                            }
+                        ]
+                    },
+                    "7_source_fidelity": {
+                        "status": "pass",
+                        "reasons": []
+                    },
+                    "8_test_vectors": {
+                        "status": "pass",
+                        "reasons": []
+                    }
+                },
+                "failed_sections": [
+                    1,
+                    4,
+                    6
+                ],
+                "pending_sections": [
+                    2
+                ],
+                "requires_review": true,
+                "status": "review_required"
+            },
+            "entity_or_relationship": "PROPERTY_VALUE_RELIEF",
+            "entity_type": "entity",
+            "entity_definition": {
+                "description": "",
+                "key_attributes": [],
+                "examples": [
+                    "enforcement relief of certain representations and warranties related to the appraisal and value"
+                ]
+            }
+        },
+        {
+            "schema_version": "2.0",
+            "rule_id": "B1-R002-FIXED-RATE-SINGLE-LENDER-MINIMUM",
+            "rule_name": "Fixed-Rate Single-Lender Pool Minimum Submission Amount",
+            "rule_type": "constraint",
+            "description": "Fixed-rate mortgage loans submitted in single-lender pools require an aggregate issue date principal balance of at least $1.25 million.",
+            "condition_predicates": [
+                {
+                    "predicate_id": "p1",
+                    "variable": "rate_type",
+                    "operator": "=",
+                    "value": "fixed-rate mortgage loans",
+                    "value_type": "enum"
+                },
+                {
+                    "predicate_id": "p2",
+                    "variable": "pool_type",
+                    "operator": "=",
+                    "value": "single-lender pools",
+                    "value_type": "enum"
+                },
+                {
+                    "predicate_id": "p3",
+                    "variable": "aggregate_issue_date_principal_balance",
+                    "operator": ">=",
+                    "value": 1250000,
+                    "value_type": "number"
+                }
+            ],
+            "condition_logic": {
+                "all": [
+                    {
+                        "predicate_ref": "p1"
+                    },
+                    {
+                        "predicate_ref": "p2"
+                    },
+                    {
+                        "predicate_ref": "p3"
+                    }
+                ]
+            },
+            "outcomes": [
+                {
+                    "variable": "minimum_submission_amount_usd",
+                    "operator": "=",
+                    "value": 1250000,
+                    "value_type": "number"
+                },
+                {
+                    "variable": "submission_requirement_met",
+                    "operator": "=",
+                    "value": true,
+                    "value_type": "boolean"
+                }
+            ],
+            "variables": [
+                {
+                    "name": "rate_type",
+                    "type": "enum",
+                    "allowed_values": [
+                        "fixed-rate mortgage loans"
+                    ],
+                    "role": "input"
+                },
+                {
+                    "name": "pool_type",
+                    "type": "enum",
+                    "allowed_values": [
+                        "single-lender pools"
+                    ],
+                    "role": "input"
+                },
+                {
+                    "name": "aggregate_issue_date_principal_balance",
+                    "type": "number",
+                    "unit": "USD",
+                    "allowed_range": [
+                        0,
+                        null
+                    ],
+                    "role": "input"
+                },
+                {
+                    "name": "minimum_submission_amount_usd",
+                    "type": "number",
+                    "unit": "USD",
+                    "role": "output"
+                },
+                {
+                    "name": "submission_requirement_met",
+                    "type": "boolean",
+                    "role": "output"
+                }
+            ],
+            "recommended_hit_policy": "UNIQUE",
+            "versioning_status": "current_no_known_supersession",
+            "applicability_scope": {
+                "loan_types": [
+                    "CONVENTIONAL_FIRST_MORTGAGE_LOAN"
+                ],
+                "occupancy_types": [],
+                "transaction_types": [
+                    "submission"
+                ]
+            },
+            "scope_basis": "direct_scope_evidence",
+            "inference_reasoning": "The excerpt expressly describes minimum submission amounts by aggregate issue date principal balance and identifies the fixed-rate, single-lender category.",
+            "responsible_party": "Lender",
+            "counterparties": [
+                "CONVENTIONAL_FIRST_MORTGAGE_LOAN"
+            ],
+            "exceptions": [],
+            "exception_basis": "unresolved_final_state: the supplied excerpt does not state whether additional exceptions apply.",
+            "test_vectors": [
+                {
+                    "inputs": {
+                        "rate_type": "fixed-rate mortgage loans",
+                        "pool_type": "single-lender pools",
+                        "aggregate_issue_date_principal_balance": 1250000
+                    },
+                    "expected_output": {
+                        "minimum_submission_amount_usd": 1250000,
+                        "submission_requirement_met": true
+                    },
+                    "vector_basis": "source_attested",
+                    "boundary_condition": true
+                }
+            ],
+            "source_reference": {
+                "chunk_path": "selling_guide_update/mortgage_insurance_requirement_for_high_ltv_conventional_first_mortgages_b7_1_01_04_02_2025_exe.txt",
+                "section_id": "Execution Options (C1-1-01; 02/05/2025)",
+                "start_word_position": 129,
+                "end_word_position": 173,
+                "source_text": "Minimum submission amounts (by aggregate issue date principal balance) required are: fixed-rate mortgage loans, single-lender pools: $1.25 million adjustable-rate mortgage loans, single-lender pools: $500,000 Fannie Majors, multiple-lender pools: $1,000. (Fannie Majors pools in aggregate must meet the minimum amounts noted above to be opened.)",
+                "text_match_score": 1.0,
+                "source_text_bridged": true
+            },
+            "field_evidence": {
+                "condition_predicates": [
+                    {
+                        "chunk_path": "selling_guide_update/mortgage_insurance_requirement_for_high_ltv_conventional_first_mortgages_b7_1_01_04_02_2025_exe.txt",
+                        "section_id": "Execution Options (C1-1-01; 02/05/2025)",
+                        "source_text": "Minimum submission amounts (by aggregate issue date principal balance) required are: fixed-rate mortgage loans, single-lender pools"
+                    }
+                ],
+                "outcomes": [
+                    {
+                        "chunk_path": "selling_guide_update/mortgage_insurance_requirement_for_high_ltv_conventional_first_mortgages_b7_1_01_04_02_2025_exe.txt",
+                        "section_id": "Execution Options (C1-1-01; 02/05/2025)",
+                        "source_text": "fixed-rate mortgage loans, single-lender pools: $1.25 million"
+                    }
+                ],
+                "responsible_party": [],
+                "scope_basis": [
+                    {
+                        "chunk_path": "selling_guide_update/mortgage_insurance_requirement_for_high_ltv_conventional_first_mortgages_b7_1_01_04_02_2025_exe.txt",
+                        "section_id": "Execution Options (C1-1-01; 02/05/2025)",
+                        "source_text": "Minimum submission amounts (by aggregate issue date principal balance) required are"
+                    }
+                ],
+                "versioning_status": [
+                    {
+                        "chunk_path": "selling_guide_update/mortgage_insurance_requirement_for_high_ltv_conventional_first_mortgages_b7_1_01_04_02_2025_exe.txt",
+                        "section_id": "Execution Options (C1-1-01; 02/05/2025)",
+                        "source_text": "C1-1-01, Execution Options (02/05/2025)"
+                    }
+                ],
+                "exceptions": [],
+                "test_vectors": [
+                    {
+                        "chunk_path": "selling_guide_update/mortgage_insurance_requirement_for_high_ltv_conventional_first_mortgages_b7_1_01_04_02_2025_exe.txt",
+                        "section_id": "Execution Options (C1-1-01; 02/05/2025)",
+                        "source_text": "fixed-rate mortgage loans, single-lender pools: $1.25 million"
+                    }
+                ]
+            },
+            "requires_review": true,
+            "review_reason": "The excerpt states the submission minimum but does not identify the responsible party.",
+            "reference_verified": true,
+            "reference_verification_note": "ok_bridged_exact_span",
+            "confidence_score": 75,
+            "contract_issues": [
+                {
+                    "section": 1,
+                    "code": "invalid_predicate_operator",
+                    "path": "condition_predicates[0].operator",
+                    "message": "Operator must be one of ['!=', '<', '<=', '==', '>', '>=', 'in', 'not_in'].",
+                    "severity": "error"
+                },
+                {
+                    "section": 1,
+                    "code": "invalid_predicate_operator",
+                    "path": "condition_predicates[1].operator",
+                    "message": "Operator must be one of ['!=', '<', '<=', '==', '>', '>=', 'in', 'not_in'].",
+                    "severity": "error"
+                },
+                {
+                    "section": 4,
+                    "code": "invalid_scope_basis",
+                    "path": "scope_basis",
+                    "message": "scope_basis is not a recognized candidate or final evidence state.",
+                    "severity": "error"
+                },
+                {
+                    "section": 6,
+                    "code": "invalid_exception_basis",
+                    "path": "exception_basis",
+                    "message": "exception_basis is required.",
+                    "severity": "error"
+                },
+                {
+                    "section": 7,
+                    "code": "missing_field_evidence",
+                    "path": "field_evidence.responsible_party",
+                    "message": "At least one source pointer is required.",
+                    "severity": "error"
+                },
+                {
+                    "section": 7,
+                    "code": "missing_field_evidence",
+                    "path": "field_evidence.exceptions",
+                    "message": "At least one source pointer is required.",
+                    "severity": "error"
+                }
+            ],
+            "readiness": {
+                "checks": {
+                    "1_typed_logic_and_variables": {
+                        "status": "fail",
+                        "reasons": [
+                            {
+                                "code": "invalid_predicate_operator",
+                                "path": "condition_predicates[0].operator",
+                                "message": "Operator must be one of ['!=', '<', '<=', '==', '>', '>=', 'in', 'not_in'].",
+                                "severity": "error"
+                            },
+                            {
+                                "code": "invalid_predicate_operator",
+                                "path": "condition_predicates[1].operator",
+                                "message": "Operator must be one of ['!=', '<', '<=', '==', '>', '>=', 'in', 'not_in'].",
+                                "severity": "error"
+                            }
+                        ]
+                    },
+                    "2_dependencies_conflicts_hit_policy": {
+                        "status": "pending",
+                        "reasons": [
+                            {
+                                "code": "dependency_analysis_pending",
+                                "path": "recommended_hit_policy",
+                                "message": "agent_06 has not completed dependency/conflict analysis.",
+                                "severity": "info"
+                            }
+                        ]
+                    },
+                    "3_versioning": {
+                        "status": "pass",
+                        "reasons": []
+                    },
+                    "4_scope": {
+                        "status": "fail",
+                        "reasons": [
+                            {
+                                "code": "invalid_scope_basis",
+                                "path": "scope_basis",
+                                "message": "scope_basis is not a recognized candidate or final evidence state.",
+                                "severity": "error"
+                            }
+                        ]
+                    },
+                    "5_parties": {
+                        "status": "pass",
+                        "reasons": []
+                    },
+                    "6_exceptions": {
+                        "status": "fail",
+                        "reasons": [
+                            {
+                                "code": "invalid_exception_basis",
+                                "path": "exception_basis",
+                                "message": "exception_basis is required.",
+                                "severity": "error"
+                            }
+                        ]
+                    },
+                    "7_source_fidelity": {
+                        "status": "fail",
+                        "reasons": [
+                            {
+                                "code": "missing_field_evidence",
+                                "path": "field_evidence.responsible_party",
+                                "message": "At least one source pointer is required.",
+                                "severity": "error"
+                            },
+                            {
+                                "code": "missing_field_evidence",
+                                "path": "field_evidence.exceptions",
+                                "message": "At least one source pointer is required.",
+                                "severity": "error"
+                            }
+                        ]
+                    },
+                    "8_test_vectors": {
+                        "status": "pass",
+                        "reasons": []
+                    }
+                },
+                "failed_sections": [
+                    1,
+                    4,
+                    6,
+                    7
+                ],
+                "pending_sections": [
+                    2
+                ],
+                "requires_review": true,
+                "status": "review_required"
+            },
+            "entity_or_relationship": "EXECUTION_OPTION_APPLIES_TO_LOANS",
+            "entity_type": "relationship",
+            "relationship_definition": {
+                "description": "",
+                "source_entity": "EXECUTION_OPTION",
+                "target_entity": "CONVENTIONAL_FIRST_MORTGAGE_LOAN",
+                "directionality": "",
+                "examples": [
+                    "adjustable-rate mortgage loans, single-lender pools"
+                ]
+            }
+        },
+        {
+            "schema_version": "2.0",
+            "rule_id": "B1-R003-ADJUSTABLE-RATE-SINGLE-LENDER-MINIMUM",
+            "rule_name": "Adjustable-Rate Single-Lender Pool Minimum Submission Amount",
+            "rule_type": "constraint",
+            "description": "Adjustable-rate mortgage loans submitted in single-lender pools require an aggregate issue date principal balance of at least $500,000.",
+            "condition_predicates": [
+                {
+                    "predicate_id": "p1",
+                    "variable": "rate_type",
+                    "operator": "=",
+                    "value": "adjustable-rate mortgage loans",
+                    "value_type": "enum"
+                },
+                {
+                    "predicate_id": "p2",
+                    "variable": "pool_type",
+                    "operator": "=",
+                    "value": "single-lender pools",
+                    "value_type": "enum"
+                },
+                {
+                    "predicate_id": "p3",
+                    "variable": "aggregate_issue_date_principal_balance",
+                    "operator": ">=",
+                    "value": 500000,
+                    "value_type": "number"
+                }
+            ],
+            "condition_logic": {
+                "all": [
+                    {
+                        "predicate_ref": "p1"
+                    },
+                    {
+                        "predicate_ref": "p2"
+                    },
+                    {
+                        "predicate_ref": "p3"
+                    }
+                ]
+            },
+            "outcomes": [
+                {
+                    "variable": "minimum_submission_amount_usd",
+                    "operator": "=",
+                    "value": 500000,
+                    "value_type": "number"
+                },
+                {
+                    "variable": "submission_requirement_met",
+                    "operator": "=",
+                    "value": true,
+                    "value_type": "boolean"
+                }
+            ],
+            "variables": [
+                {
+                    "name": "rate_type",
+                    "type": "enum",
+                    "allowed_values": [
+                        "adjustable-rate mortgage loans"
+                    ],
+                    "role": "input"
+                },
+                {
+                    "name": "pool_type",
+                    "type": "enum",
+                    "allowed_values": [
+                        "single-lender pools"
+                    ],
+                    "role": "input"
+                },
+                {
+                    "name": "aggregate_issue_date_principal_balance",
+                    "type": "number",
+                    "unit": "USD",
+                    "allowed_range": [
+                        0,
+                        null
+                    ],
+                    "role": "input"
+                },
+                {
+                    "name": "minimum_submission_amount_usd",
+                    "type": "number",
+                    "unit": "USD",
+                    "role": "output"
+                },
+                {
+                    "name": "submission_requirement_met",
+                    "type": "boolean",
+                    "role": "output"
+                }
+            ],
+            "recommended_hit_policy": "UNIQUE",
+            "versioning_status": "current_no_known_supersession",
+            "applicability_scope": {
+                "loan_types": [
+                    "CONVENTIONAL_FIRST_MORTGAGE_LOAN"
+                ],
+                "occupancy_types": [],
+                "transaction_types": [
+                    "submission"
+                ]
+            },
+            "scope_basis": "direct_scope_evidence",
+            "inference_reasoning": "The excerpt expressly describes minimum submission amounts by aggregate issue date principal balance and identifies the adjustable-rate, single-lender category.",
+            "responsible_party": "Lender",
+            "counterparties": [
+                "CONVENTIONAL_FIRST_MORTGAGE_LOAN"
+            ],
+            "exceptions": [],
+            "exception_basis": "unresolved_final_state: the supplied excerpt does not state whether additional exceptions apply.",
+            "test_vectors": [
+                {
+                    "inputs": {
+                        "rate_type": "adjustable-rate mortgage loans",
+                        "pool_type": "single-lender pools",
+                        "aggregate_issue_date_principal_balance": 500000
+                    },
+                    "expected_output": {
+                        "minimum_submission_amount_usd": 500000,
+                        "submission_requirement_met": true
+                    },
+                    "vector_basis": "source_attested",
+                    "boundary_condition": true
+                }
+            ],
+            "source_reference": {
+                "chunk_path": "selling_guide_update/mortgage_insurance_requirement_for_high_ltv_conventional_first_mortgages_b7_1_01_04_02_2025_exe.txt",
+                "section_id": "Execution Options (C1-1-01; 02/05/2025)",
+                "start_word_position": 129,
+                "end_word_position": 173,
+                "source_text": "Minimum submission amounts (by aggregate issue date principal balance) required are: fixed-rate mortgage loans, single-lender pools: $1.25 million adjustable-rate mortgage loans, single-lender pools: $500,000 Fannie Majors, multiple-lender pools: $1,000. (Fannie Majors pools in aggregate must meet the minimum amounts noted above to be opened.)",
+                "text_match_score": 1.0,
+                "source_text_bridged": true
+            },
+            "field_evidence": {
+                "condition_predicates": [
+                    {
+                        "chunk_path": "selling_guide_update/mortgage_insurance_requirement_for_high_ltv_conventional_first_mortgages_b7_1_01_04_02_2025_exe.txt",
+                        "section_id": "Execution Options (C1-1-01; 02/05/2025)",
+                        "source_text": "Minimum submission amounts (by aggregate issue date principal balance) required are: adjustable-rate mortgage loans, single-lender pools"
+                    }
+                ],
+                "outcomes": [
+                    {
+                        "chunk_path": "selling_guide_update/mortgage_insurance_requirement_for_high_ltv_conventional_first_mortgages_b7_1_01_04_02_2025_exe.txt",
+                        "section_id": "Execution Options (C1-1-01; 02/05/2025)",
+                        "source_text": "adjustable-rate mortgage loans, single-lender pools: $500,000"
+                    }
+                ],
+                "responsible_party": [],
+                "scope_basis": [
+                    {
+                        "chunk_path": "selling_guide_update/mortgage_insurance_requirement_for_high_ltv_conventional_first_mortgages_b7_1_01_04_02_2025_exe.txt",
+                        "section_id": "Execution Options (C1-1-01; 02/05/2025)",
+                        "source_text": "Minimum submission amounts (by aggregate issue date principal balance) required are"
+                    }
+                ],
+                "versioning_status": [
+                    {
+                        "chunk_path": "selling_guide_update/mortgage_insurance_requirement_for_high_ltv_conventional_first_mortgages_b7_1_01_04_02_2025_exe.txt",
+                        "section_id": "Execution Options (C1-1-01; 02/05/2025)",
+                        "source_text": "C1-1-01, Execution Options (02/05/2025)"
+                    }
+                ],
+                "exceptions": [],
+                "test_vectors": [
+                    {
+                        "chunk_path": "selling_guide_update/mortgage_insurance_requirement_for_high_ltv_conventional_first_mortgages_b7_1_01_04_02_2025_exe.txt",
+                        "section_id": "Execution Options (C1-1-01; 02/05/2025)",
+                        "source_text": "adjustable-rate mortgage loans, single-lender pools: $500,000"
+                    }
+                ]
+            },
+            "requires_review": true,
+            "review_reason": "The excerpt states the submission minimum but does not identify the responsible party.",
+            "reference_verified": true,
+            "reference_verification_note": "ok_bridged_exact_span",
+            "confidence_score": 75,
+            "contract_issues": [
+                {
+                    "section": 1,
+                    "code": "invalid_predicate_operator",
+                    "path": "condition_predicates[0].operator",
+                    "message": "Operator must be one of ['!=', '<', '<=', '==', '>', '>=', 'in', 'not_in'].",
+                    "severity": "error"
+                },
+                {
+                    "section": 1,
+                    "code": "invalid_predicate_operator",
+                    "path": "condition_predicates[1].operator",
+                    "message": "Operator must be one of ['!=', '<', '<=', '==', '>', '>=', 'in', 'not_in'].",
+                    "severity": "error"
+                },
+                {
+                    "section": 4,
+                    "code": "invalid_scope_basis",
+                    "path": "scope_basis",
+                    "message": "scope_basis is not a recognized candidate or final evidence state.",
+                    "severity": "error"
+                },
+                {
+                    "section": 6,
+                    "code": "invalid_exception_basis",
+                    "path": "exception_basis",
+                    "message": "exception_basis is required.",
+                    "severity": "error"
+                },
+                {
+                    "section": 7,
+                    "code": "missing_field_evidence",
+                    "path": "field_evidence.responsible_party",
+                    "message": "At least one source pointer is required.",
+                    "severity": "error"
+                },
+                {
+                    "section": 7,
+                    "code": "missing_field_evidence",
+                    "path": "field_evidence.exceptions",
+                    "message": "At least one source pointer is required.",
+                    "severity": "error"
+                }
+            ],
+            "readiness": {
+                "checks": {
+                    "1_typed_logic_and_variables": {
+                        "status": "fail",
+                        "reasons": [
+                            {
+                                "code": "invalid_predicate_operator",
+                                "path": "condition_predicates[0].operator",
+                                "message": "Operator must be one of ['!=', '<', '<=', '==', '>', '>=', 'in', 'not_in'].",
+                                "severity": "error"
+                            },
+                            {
+                                "code": "invalid_predicate_operator",
+                                "path": "condition_predicates[1].operator",
+                                "message": "Operator must be one of ['!=', '<', '<=', '==', '>', '>=', 'in', 'not_in'].",
+                                "severity": "error"
+                            }
+                        ]
+                    },
+                    "2_dependencies_conflicts_hit_policy": {
+                        "status": "pending",
+                        "reasons": [
+                            {
+                                "code": "dependency_analysis_pending",
+                                "path": "recommended_hit_policy",
+                                "message": "agent_06 has not completed dependency/conflict analysis.",
+                                "severity": "info"
+                            }
+                        ]
+                    },
+                    "3_versioning": {
+                        "status": "pass",
+                        "reasons": []
+                    },
+                    "4_scope": {
+                        "status": "fail",
+                        "reasons": [
+                            {
+                                "code": "invalid_scope_basis",
+                                "path": "scope_basis",
+                                "message": "scope_basis is not a recognized candidate or final evidence state.",
+                                "severity": "error"
+                            }
+                        ]
+                    },
+                    "5_parties": {
+                        "status": "pass",
+                        "reasons": []
+                    },
+                    "6_exceptions": {
+                        "status": "fail",
+                        "reasons": [
+                            {
+                                "code": "invalid_exception_basis",
+                                "path": "exception_basis",
+                                "message": "exception_basis is required.",
+                                "severity": "error"
+                            }
+                        ]
+                    },
+                    "7_source_fidelity": {
+                        "status": "fail",
+                        "reasons": [
+                            {
+                                "code": "missing_field_evidence",
+                                "path": "field_evidence.responsible_party",
+                                "message": "At least one source pointer is required.",
+                                "severity": "error"
+                            },
+                            {
+                                "code": "missing_field_evidence",
+                                "path": "field_evidence.exceptions",
+                                "message": "At least one source pointer is required.",
+                                "severity": "error"
+                            }
+                        ]
+                    },
+                    "8_test_vectors": {
+                        "status": "pass",
+                        "reasons": []
+                    }
+                },
+                "failed_sections": [
+                    1,
+                    4,
+                    6,
+                    7
+                ],
+                "pending_sections": [
+                    2
+                ],
+                "requires_review": true,
+                "status": "review_required"
+            },
+            "entity_or_relationship": "EXECUTION_OPTION_APPLIES_TO_LOANS",
+            "entity_type": "relationship",
+            "relationship_definition": {
+                "description": "",
+                "source_entity": "EXECUTION_OPTION",
+                "target_entity": "CONVENTIONAL_FIRST_MORTGAGE_LOAN",
+                "directionality": "",
+                "examples": [
+                    "adjustable-rate mortgage loans, single-lender pools"
+                ]
+            }
+        },
+        {
+            "schema_version": "2.0",
+            "rule_id": "B1-R004-FANNIE-MAJORS-MULTIPLE-LENDER-MINIMUM",
+            "rule_name": "Fannie Majors Multiple-Lender Pool Minimum Submission Amount",
+            "rule_type": "constraint",
+            "description": "Fannie Majors submitted in multiple-lender pools require an aggregate issue date principal balance of at least $1,000, and Fannie Majors pools must meet the applicable minimum amount in aggregate to be opened.",
+            "condition_predicates": [
+                {
+                    "predicate_id": "p1",
+                    "variable": "execution_option_type",
+                    "operator": "=",
+                    "value": "Fannie Majors",
+                    "value_type": "enum"
+                },
+                {
+                    "predicate_id": "p2",
+                    "variable": "pool_type",
+                    "operator": "=",
+                    "value": "multiple-lender pools",
+                    "value_type": "enum"
+                },
+                {
+                    "predicate_id": "p3",
+                    "variable": "aggregate_issue_date_principal_balance",
+                    "operator": ">=",
+                    "value": 1000,
+                    "value_type": "number"
+                }
+            ],
+            "condition_logic": {
+                "all": [
+                    {
+                        "predicate_ref": "p1"
+                    },
+                    {
+                        "predicate_ref": "p2"
+                    },
+                    {
+                        "predicate_ref": "p3"
+                    }
+                ]
+            },
+            "outcomes": [
+                {
+                    "variable": "minimum_submission_amount_usd",
+                    "operator": "=",
+                    "value": 1000,
+                    "value_type": "number"
+                },
+                {
+                    "variable": "submission_requirement_met",
+                    "operator": "=",
+                    "value": true,
+                    "value_type": "boolean"
+                }
+            ],
+            "variables": [
+                {
+                    "name": "execution_option_type",
+                    "type": "enum",
+                    "allowed_values": [
+                        "Fannie Majors"
+                    ],
+                    "role": "input"
+                },
+                {
+                    "name": "pool_type",
+                    "type": "enum",
+                    "allowed_values": [
+                        "multiple-lender pools"
+                    ],
+                    "role": "input"
+                },
+                {
+                    "name": "aggregate_issue_date_principal_balance",
+                    "type": "number",
+                    "unit": "USD",
+                    "allowed_range": [
+                        0,
+                        null
+                    ],
+                    "role": "input"
+                },
+                {
+                    "name": "minimum_submission_amount_usd",
+                    "type": "number",
+                    "unit": "USD",
+                    "role": "output"
+                },
+                {
+                    "name": "submission_requirement_met",
+                    "type": "boolean",
+                    "role": "output"
+                }
+            ],
+            "recommended_hit_policy": "UNIQUE",
+            "versioning_status": "current_no_known_supersession",
+            "applicability_scope": {
+                "loan_types": [
+                    "CONVENTIONAL_FIRST_MORTGAGE_LOAN"
+                ],
+                "occupancy_types": [],
+                "transaction_types": [
+                    "submission",
+                    "pool opening"
+                ]
+            },
+            "scope_basis": "direct_scope_evidence",
+            "inference_reasoning": "The excerpt expressly identifies Fannie Majors, multiple-lender pools, the $1,000 minimum, and the aggregate amount required to open a pool.",
+            "responsible_party": "Lender",
+            "counterparties": [
+                "CONVENTIONAL_FIRST_MORTGAGE_LOAN"
+            ],
+            "exceptions": [],
+            "exception_basis": "unresolved_final_state: the supplied excerpt does not state whether additional exceptions apply.",
+            "test_vectors": [
+                {
+                    "inputs": {
+                        "execution_option_type": "Fannie Majors",
+                        "pool_type": "multiple-lender pools",
+                        "aggregate_issue_date_principal_balance": 1000
+                    },
+                    "expected_output": {
+                        "minimum_submission_amount_usd": 1000,
+                        "submission_requirement_met": true
+                    },
+                    "vector_basis": "source_attested",
+                    "boundary_condition": true
+                }
+            ],
+            "source_reference": {
+                "chunk_path": "selling_guide_update/mortgage_insurance_requirement_for_high_ltv_conventional_first_mortgages_b7_1_01_04_02_2025_exe.txt",
+                "section_id": "Execution Options (C1-1-01; 02/05/2025)",
+                "start_word_position": 129,
+                "end_word_position": 173,
+                "source_text": "Minimum submission amounts (by aggregate issue date principal balance) required are: fixed-rate mortgage loans, single-lender pools: $1.25 million adjustable-rate mortgage loans, single-lender pools: $500,000 Fannie Majors, multiple-lender pools: $1,000. (Fannie Majors pools in aggregate must meet the minimum amounts noted above to be opened.)",
+                "text_match_score": 1.0,
+                "source_text_bridged": true
+            },
+            "field_evidence": {
+                "condition_predicates": [
+                    {
+                        "chunk_path": "selling_guide_update/mortgage_insurance_requirement_for_high_ltv_conventional_first_mortgages_b7_1_01_04_02_2025_exe.txt",
+                        "section_id": "Execution Options (C1-1-01; 02/05/2025)",
+                        "source_text": "Fannie Majors, multiple-lender pools"
+                    }
+                ],
+                "outcomes": [
+                    {
+                        "chunk_path": "selling_guide_update/mortgage_insurance_requirement_for_high_ltv_conventional_first_mortgages_b7_1_01_04_02_2025_exe.txt",
+                        "section_id": "Execution Options (C1-1-01; 02/05/2025)",
+                        "source_text": "Fannie Majors, multiple-lender pools: $1,000. (Fannie Majors pools in aggregate must meet the minimum amounts noted above to be opened.)"
+                    }
+                ],
+                "responsible_party": [],
+                "scope_basis": [
+                    {
+                        "chunk_path": "selling_guide_update/mortgage_insurance_requirement_for_high_ltv_conventional_first_mortgages_b7_1_01_04_02_2025_exe.txt",
+                        "section_id": "Execution Options (C1-1-01; 02/05/2025)",
+                        "source_text": "Fannie Majors pools in aggregate must meet the minimum amounts noted above to be opened."
+                    }
+                ],
+                "versioning_status": [
+                    {
+                        "chunk_path": "selling_guide_update/mortgage_insurance_requirement_for_high_ltv_conventional_first_mortgages_b7_1_01_04_02_2025_exe.txt",
+                        "section_id": "Execution Options (C1-1-01; 02/05/2025)",
+                        "source_text": "C1-1-01, Execution Options (02/05/2025)"
+                    }
+                ],
+                "exceptions": [],
+                "test_vectors": [
+                    {
+                        "chunk_path": "selling_guide_update/mortgage_insurance_requirement_for_high_ltv_conventional_first_mortgages_b7_1_01_04_02_2025_exe.txt",
+                        "section_id": "Execution Options (C1-1-01; 02/05/2025)",
+                        "source_text": "Fannie Majors, multiple-lender pools: $1,000."
+                    }
+                ]
+            },
+            "requires_review": true,
+            "review_reason": "The excerpt states the submission minimum but does not identify the responsible party.",
+            "reference_verified": true,
+            "reference_verification_note": "ok_bridged_exact_span",
+            "confidence_score": 75,
+            "contract_issues": [
+                {
+                    "section": 1,
+                    "code": "invalid_predicate_operator",
+                    "path": "condition_predicates[0].operator",
+                    "message": "Operator must be one of ['!=', '<', '<=', '==', '>', '>=', 'in', 'not_in'].",
+                    "severity": "error"
+                },
+                {
+                    "section": 1,
+                    "code": "invalid_predicate_operator",
+                    "path": "condition_predicates[1].operator",
+                    "message": "Operator must be one of ['!=', '<', '<=', '==', '>', '>=', 'in', 'not_in'].",
+                    "severity": "error"
+                },
+                {
+                    "section": 4,
+                    "code": "invalid_scope_basis",
+                    "path": "scope_basis",
+                    "message": "scope_basis is not a recognized candidate or final evidence state.",
+                    "severity": "error"
+                },
+                {
+                    "section": 6,
+                    "code": "invalid_exception_basis",
+                    "path": "exception_basis",
+                    "message": "exception_basis is required.",
+                    "severity": "error"
+                },
+                {
+                    "section": 7,
+                    "code": "missing_field_evidence",
+                    "path": "field_evidence.responsible_party",
+                    "message": "At least one source pointer is required.",
+                    "severity": "error"
+                },
+                {
+                    "section": 7,
+                    "code": "missing_field_evidence",
+                    "path": "field_evidence.exceptions",
+                    "message": "At least one source pointer is required.",
+                    "severity": "error"
+                }
+            ],
+            "readiness": {
+                "checks": {
+                    "1_typed_logic_and_variables": {
+                        "status": "fail",
+                        "reasons": [
+                            {
+                                "code": "invalid_predicate_operator",
+                                "path": "condition_predicates[0].operator",
+                                "message": "Operator must be one of ['!=', '<', '<=', '==', '>', '>=', 'in', 'not_in'].",
+                                "severity": "error"
+                            },
+                            {
+                                "code": "invalid_predicate_operator",
+                                "path": "condition_predicates[1].operator",
+                                "message": "Operator must be one of ['!=', '<', '<=', '==', '>', '>=', 'in', 'not_in'].",
+                                "severity": "error"
+                            }
+                        ]
+                    },
+                    "2_dependencies_conflicts_hit_policy": {
+                        "status": "pending",
+                        "reasons": [
+                            {
+                                "code": "dependency_analysis_pending",
+                                "path": "recommended_hit_policy",
+                                "message": "agent_06 has not completed dependency/conflict analysis.",
+                                "severity": "info"
+                            }
+                        ]
+                    },
+                    "3_versioning": {
+                        "status": "pass",
+                        "reasons": []
+                    },
+                    "4_scope": {
+                        "status": "fail",
+                        "reasons": [
+                            {
+                                "code": "invalid_scope_basis",
+                                "path": "scope_basis",
+                                "message": "scope_basis is not a recognized candidate or final evidence state.",
+                                "severity": "error"
+                            }
+                        ]
+                    },
+                    "5_parties": {
+                        "status": "pass",
+                        "reasons": []
+                    },
+                    "6_exceptions": {
+                        "status": "fail",
+                        "reasons": [
+                            {
+                                "code": "invalid_exception_basis",
+                                "path": "exception_basis",
+                                "message": "exception_basis is required.",
+                                "severity": "error"
+                            }
+                        ]
+                    },
+                    "7_source_fidelity": {
+                        "status": "fail",
+                        "reasons": [
+                            {
+                                "code": "missing_field_evidence",
+                                "path": "field_evidence.responsible_party",
+                                "message": "At least one source pointer is required.",
+                                "severity": "error"
+                            },
+                            {
+                                "code": "missing_field_evidence",
+                                "path": "field_evidence.exceptions",
+                                "message": "At least one source pointer is required.",
+                                "severity": "error"
+                            }
+                        ]
+                    },
+                    "8_test_vectors": {
+                        "status": "pass",
+                        "reasons": []
+                    }
+                },
+                "failed_sections": [
+                    1,
+                    4,
+                    6,
+                    7
+                ],
+                "pending_sections": [
+                    2
+                ],
+                "requires_review": true,
+                "status": "review_required"
+            },
+            "entity_or_relationship": "EXECUTION_OPTION_APPLIES_TO_LOANS",
+            "entity_type": "relationship",
+            "relationship_definition": {
+                "description": "",
+                "source_entity": "EXECUTION_OPTION",
+                "target_entity": "CONVENTIONAL_FIRST_MORTGAGE_LOAN",
+                "directionality": "",
+                "examples": [
+                    "adjustable-rate mortgage loans, single-lender pools"
+                ]
+            }
+        }
+    ],
+    "deduplication_details": {
+        "duplicate_groups": [],
+        "pairwise_assessments": [
+            {
+                "rule_pair": [
+                    "B1-R001-HIGH-LTV-MI-REQUIREMENT",
+                    "B1-R005-PROPERTY-VALUE-RELIEF-ELIGIBILITY"
+                ],
+                "similarity_score": 10,
+                "score_breakdown": {
+                    "semantic_equivalence": 5,
+                    "numeric_precision": 0,
+                    "contextual_alignment": 5,
+                    "source_consistency": 0,
+                    "consequence_alignment": 0
+                },
+                "determination": "KEEP SEPARATE",
+                "rationale": "Both rules apply broadly to conventional first mortgage loans, but they govern different compliance functions. B1-R001 requires primary mortgage insurance or another charter-compliant credit enhancement when LTV exceeds 78% and the loan is held in or securitized by Fannie Mae. B1-R005 determines eligibility for enforcement relief related to appraisal and collateral-value representations based on property characteristics and a CU risk score of 3.0 or below. The numeric conditions, property or transaction context, and outcomes are materially different."
+            },
+            {
+                "rule_pair": [
+                    "B1-R001-HIGH-LTV-MI-REQUIREMENT",
+                    "B1-R002-FIXED-RATE-SINGLE-LENDER-MINIMUM"
+                ],
+                "similarity_score": 7,
+                "score_breakdown": {
+                    "semantic_equivalence": 2,
+                    "numeric_precision": 0,
+                    "contextual_alignment": 5,
+                    "source_consistency": 0,
+                    "consequence_alignment": 0
+                },
+                "determination": "KEEP SEPARATE",
+                "rationale": "The rules share only the broad conventional first-mortgage scope. B1-R001 addresses mortgage insurance or credit enhancement for loans with LTV greater than 78%, whereas B1-R002 establishes a $1.25 million minimum aggregate issue-date principal balance for fixed-rate loans in single-lender pools. Their conditions, thresholds, outcomes, and compliance consequences are unrelated."
+            },
+            {
+                "rule_pair": [
+                    "B1-R001-HIGH-LTV-MI-REQUIREMENT",
+                    "B1-R003-ADJUSTABLE-RATE-SINGLE-LENDER-MINIMUM"
+                ],
+                "similarity_score": 7,
+                "score_breakdown": {
+                    "semantic_equivalence": 2,
+                    "numeric_precision": 0,
+                    "contextual_alignment": 5,
+                    "source_consistency": 0,
+                    "consequence_alignment": 0
+                },
+                "determination": "KEEP SEPARATE",
+                "rationale": "The rules share only the broad conventional first-mortgage scope. B1-R001 concerns mortgage insurance or alternative credit enhancement for LTV above 78%, while B1-R003 requires a $500,000 minimum aggregate issue-date principal balance for adjustable-rate loans in single-lender pools. The numeric thresholds, business requirements, and outcomes differ materially."
+            },
+            {
+                "rule_pair": [
+                    "B1-R001-HIGH-LTV-MI-REQUIREMENT",
+                    "B1-R004-FANNIE-MAJORS-MULTIPLE-LENDER-MINIMUM"
+                ],
+                "similarity_score": 7,
+                "score_breakdown": {
+                    "semantic_equivalence": 2,
+                    "numeric_precision": 0,
+                    "contextual_alignment": 5,
+                    "source_consistency": 0,
+                    "consequence_alignment": 0
+                },
+                "determination": "KEEP SEPARATE",
+                "rationale": "The rules share only the broad conventional first-mortgage scope. B1-R001 imposes a mortgage-insurance or credit-enhancement requirement for LTV greater than 78%, while B1-R004 governs a $1,000 minimum aggregate balance for Fannie Majors in multiple-lender pools and includes an additional pool-opening requirement. The conditions, threshold, transaction context, and outcomes are distinct."
+            },
+            {
+                "rule_pair": [
+                    "B1-R005-PROPERTY-VALUE-RELIEF-ELIGIBILITY",
+                    "B1-R002-FIXED-RATE-SINGLE-LENDER-MINIMUM"
+                ],
+                "similarity_score": 7,
+                "score_breakdown": {
+                    "semantic_equivalence": 2,
+                    "numeric_precision": 0,
+                    "contextual_alignment": 5,
+                    "source_consistency": 0,
+                    "consequence_alignment": 0
+                },
+                "determination": "KEEP SEPARATE",
+                "rationale": "B1-R005 is an eligibility rule for property-value enforcement relief, requiring a one-unit detached, attached, or condominium property, exclusion of manufactured homes, and a CU risk score of 3.0 or below. B1-R002 is a pool-submission constraint requiring at least $1.25 million for fixed-rate loans in single-lender pools. The rules have different subject matter, predicates, numeric values, and outcomes."
+            },
+            {
+                "rule_pair": [
+                    "B1-R005-PROPERTY-VALUE-RELIEF-ELIGIBILITY",
+                    "B1-R003-ADJUSTABLE-RATE-SINGLE-LENDER-MINIMUM"
+                ],
+                "similarity_score": 7,
+                "score_breakdown": {
+                    "semantic_equivalence": 2,
+                    "numeric_precision": 0,
+                    "contextual_alignment": 5,
+                    "source_consistency": 0,
+                    "consequence_alignment": 0
+                },
+                "determination": "KEEP SEPARATE",
+                "rationale": "B1-R005 concerns appraisal-related enforcement-relief eligibility based on property form, manufactured-home status, and CU risk score. B1-R003 concerns a $500,000 aggregate balance minimum for adjustable-rate loans submitted in single-lender pools. The rules do not express the same business requirement and must remain separate."
+            },
+            {
+                "rule_pair": [
+                    "B1-R005-PROPERTY-VALUE-RELIEF-ELIGIBILITY",
+                    "B1-R004-FANNIE-MAJORS-MULTIPLE-LENDER-MINIMUM"
+                ],
+                "similarity_score": 7,
+                "score_breakdown": {
+                    "semantic_equivalence": 2,
+                    "numeric_precision": 0,
+                    "contextual_alignment": 5,
+                    "source_consistency": 0,
+                    "consequence_alignment": 0
+                },
+                "determination": "KEEP SEPARATE",
+                "rationale": "B1-R005 grants or denies property-value enforcement-relief eligibility and removes a specified lender appraisal-underwriting responsibility when its property and CU-score criteria are met. B1-R004 imposes a $1,000 aggregate balance minimum for Fannie Majors in multiple-lender pools and separately addresses pool opening. The rules have different requirements, contexts, and consequences."
+            },
+            {
+                "rule_pair": [
+                    "B1-R002-FIXED-RATE-SINGLE-LENDER-MINIMUM",
+                    "B1-R003-ADJUSTABLE-RATE-SINGLE-LENDER-MINIMUM"
+                ],
+                "similarity_score": 39,
+                "score_breakdown": {
+                    "semantic_equivalence": 22,
+                    "numeric_precision": 0,
+                    "contextual_alignment": 12,
+                    "source_consistency": 0,
+                    "consequence_alignment": 5
+                },
+                "determination": "KEEP SEPARATE",
+                "rationale": "These rules share a common structural pattern: each requires an aggregate issue-date principal balance minimum for loans submitted in single-lender pools, and each uses the same submission-compliance outcome. However, they apply to different rate types and establish materially different thresholds: $1.25 million for fixed-rate loans versus $500,000 for adjustable-rate loans. Under the conservative policy, the product-specific contexts and amounts are meaningful variations, not wording differences."
+            },
+            {
+                "rule_pair": [
+                    "B1-R002-FIXED-RATE-SINGLE-LENDER-MINIMUM",
+                    "B1-R004-FANNIE-MAJORS-MULTIPLE-LENDER-MINIMUM"
+                ],
+                "similarity_score": 35,
+                "score_breakdown": {
+                    "semantic_equivalence": 20,
+                    "numeric_precision": 0,
+                    "contextual_alignment": 10,
+                    "source_consistency": 0,
+                    "consequence_alignment": 5
+                },
+                "determination": "KEEP SEPARATE",
+                "rationale": "Both rules address aggregate principal-balance minimums for pool-related submissions and have a submission requirement outcome. Nevertheless, B1-R002 applies to fixed-rate loans in single-lender pools and requires $1.25 million. B1-R004 applies to Fannie Majors in multiple-lender pools, requires $1,000, and adds a pool-opening condition. The pool type, execution option, threshold, and additional outcome differ."
+            },
+            {
+                "rule_pair": [
+                    "B1-R003-ADJUSTABLE-RATE-SINGLE-LENDER-MINIMUM",
+                    "B1-R004-FANNIE-MAJORS-MULTIPLE-LENDER-MINIMUM"
+                ],
+                "similarity_score": 35,
+                "score_breakdown": {
+                    "semantic_equivalence": 20,
+                    "numeric_precision": 0,
+                    "contextual_alignment": 10,
+                    "source_consistency": 0,
+                    "consequence_alignment": 5
+                },
+                "determination": "KEEP SEPARATE",
+                "rationale": "Both rules address aggregate principal-balance minimums for pool submissions and use a submission requirement outcome. B1-R003 applies to adjustable-rate loans in single-lender pools with a $500,000 threshold. B1-R004 applies to Fannie Majors in multiple-lender pools with a $1,000 threshold and includes a separate pool-opening requirement. These are distinct product and pool-specific rules."
+            }
+        ],
+        "statistics": {
+            "total_rules_analyzed": 5,
+            "duplicate_groups_found": 0,
+            "total_duplicates_removed": 0,
+            "rules_after_deduplication": 5,
+            "average_similarity_score": 16.3,
+            "score_distribution": {
+                "90_100_definite": 0,
+                "75_89_likely": 0,
+                "60_74_possible": 0,
+                "below_60_not_duplicate": 10
+            }
+        },
+        "analysis_notes": "No rule pair meets the mandatory 75-point merge threshold. B1-R002 and B1-R003 are the closest conceptual pair because they use the same single-lender-pool submission framework and identical outcome structure, but their fixed-rate versus adjustable-rate contexts and $1.25 million versus $500,000 thresholds are substantive distinctions. B1-R004 is related structurally to both pool-minimum rules but differs in execution option, multiple-lender pool context, $1,000 threshold, and additional pool-opening requirement. B1-R001 and B1-R005 are both within the conventional first-mortgage domain but perform different compliance functions. No regulatory references were supplied for any rule, so source-consistency points were conservatively scored at zero rather than inferred. Retain all five rules. The $1,000 threshold in B1-R004 is materially different from the other pool minimums and may warrant independent source validation, but it must not be normalized or merged without confirming the governing regulation."
+    },
+    "dependency_details": {
+        "dependencies": [],
+        "dependency_chains": [],
+        "conflicts": []
+    },
+    "entity_types": {
+        "CONVENTIONAL_FIRST_MORTGAGE_LOAN": {
+            "definition": "Conventional first mortgage loan subject to the excerpt's high-LTV mortgage insurance requirement.",
+            "attributes": [
+                "loan_type",
+                "mortgage_position",
+                "ltv_ratio",
+                "purchase_status",
+                "mi_status",
+                "purchase_context",
+                "insurance_status",
+                "portfolio_flag",
+                "securitized_flag"
+            ],
+            "examples": [
+                "A conventional first mortgage loan with an LTV ratio greater than 78%.",
+                "a conventional first mortgage loan that has an LTV ratio greater than 78%"
+            ],
+            "business_rules": [
+                "LTV above 78% at purchase requires primary mortgage insurance unless compliant credit enhancement exists.",
+                "At purchase for Fannie Mae's portfolio or securitization, LTV above 78% requires mortgage insurance absent compliant enhancement.",
+                "Primary mortgage insurance is required above 78% LTV unless another charter-compliant credit enhancement exists."
+            ]
+        },
+        "LTV_RATIO": {
+            "definition": "Loan-to-value ratio used to determine the stated high-LTV mortgage insurance requirement.",
+            "attributes": [
+                "ratio",
+                "threshold",
+                "measurement_time",
+                "loan_reference",
+                "requirement_status",
+                "loan",
+                "high_ltv_status"
+            ],
+            "examples": [
+                "An LTV ratio greater than 78% at the time of purchase.",
+                "An LTV ratio greater than 78% at the time the loan is purchased."
+            ],
+            "business_rules": [
+                "An LTV ratio greater than 78% triggers the stated mortgage insurance requirement.",
+                "An LTV ratio greater than 78% triggers the stated requirement at purchase."
+            ]
+        },
+        "PRIMARY_MORTGAGE_INSURANCE_POLICY": {
+            "definition": "Primary mortgage insurance policy required for qualifying high-LTV conventional first mortgage loans.",
+            "attributes": [
+                "policy_type",
+                "coverage_type",
+                "requirement_status",
+                "loan_reference",
+                "exception_status"
+            ],
+            "examples": [
+                "A primary mortgage insurance policy for a high-LTV conventional first mortgage loan."
+            ],
+            "business_rules": [
+                "Primary mortgage insurance is required absent another charter-compliant credit enhancement."
+            ]
+        },
+        "CREDIT_ENHANCEMENT": {
+            "definition": "Charter-compliant alternative credit enhancement provided instead of primary mortgage insurance.",
+            "attributes": [
+                "form",
+                "charter_compliance",
+                "provider",
+                "loan_reference",
+                "mi_alternative",
+                "charter_status",
+                "loan",
+                "substitution_role",
+                "enhancement_type",
+                "compliance_status",
+                "alternative_role",
+                "lender_role"
+            ],
+            "examples": [
+                "Another charter-compliant form of credit enhancement provided by the lender.",
+                "Another charter-compliant form of credit enhancement.",
+                "another charter-compliant form of credit enhancement"
+            ],
+            "business_rules": [
+                "Another charter-compliant credit enhancement can remove the primary mortgage insurance requirement.",
+                "A charter-compliant credit enhancement can substitute for the stated mortgage insurance requirement.",
+                "Another charter-compliant credit enhancement can remove the mortgage-insurance requirement."
+            ]
+        },
+        "PROPERTY_VALUE_REPRESENTATIONS_AND_WARRANTIES_RELIEF": {
+            "definition": "Enforcement relief for certain appraisal and subject-property-value representations and warranties.",
+            "attributes": [
+                "relief_scope",
+                "representation_type",
+                "appraisal_scope",
+                "value_scope",
+                "eligibility_status",
+                "scope",
+                "DU_relation",
+                "appraisal",
+                "property_value",
+                "eligibility"
+            ],
+            "examples": [
+                "Enforcement relief related to the appraisal and subject-property value.",
+                "Enforcement relief for representations and warranties related to appraisal and subject-property value."
+            ],
+            "business_rules": [
+                "Eligibility requires a CU risk score of 3.0 or below and a qualifying one-unit nonmanufactured property.",
+                "Eligibility requires the stated property type and CU risk score, while manufactured homes are excluded."
+            ]
+        },
+        "APPRAISAL": {
+            "definition": "Appraisal associated with property value representations, warranties, and appraisal-underwriting requirements.",
+            "attributes": [
+                "appraisal_reference",
+                "property_reference",
+                "value_reference",
+                "underwriting_requirement",
+                "unacceptable_practice_status",
+                "subject_property",
+                "underwriting",
+                "value",
+                "practice",
+                "relief",
+                "property_value",
+                "appraisal_type",
+                "underwriting_status",
+                "practice_reference"
+            ],
+            "examples": [
+                "An appraisal subject to the appraisal-underwriting requirement.",
+                "An appraisal used in underwriting.",
+                "the appraisal and value"
+            ],
+            "business_rules": [
+                "The described relief cross-references requirements concerning unacceptable appraisal practices.",
+                "Appraisal requirements and unacceptable appraisal practices are relevant to the stated relief.",
+                "Appraisal-related relief remains subject to appraisal-underwriting requirements."
+            ]
+        },
+        "SUBJECT_PROPERTY_VALUE": {
+            "definition": "Value of the property that is the subject of appraisal-related representations and warranties.",
+            "attributes": [
+                "value_amount",
+                "property_reference",
+                "representation_type",
+                "warranty_type",
+                "relief_status"
+            ],
+            "examples": [
+                "Subject-property value representations and warranties."
+            ],
+            "business_rules": [
+                "The relief concerns certain representations and warranties related to subject-property value."
+            ]
+        },
+        "ONE_UNIT_PROPERTY": {
+            "definition": "One-unit detached, attached, or condominium property qualifying for described relief eligibility.",
+            "attributes": [
+                "unit_count",
+                "property_form",
+                "detached_status",
+                "attached_status",
+                "condominium_status"
+            ],
+            "examples": [
+                "A one-unit detached, attached, or condominium property."
+            ],
+            "business_rules": [
+                "Eligible property must be one-unit detached, attached, or condominium property."
+            ]
+        },
+        "MANUFACTURED_HOME": {
+            "definition": "Manufactured home identified as excluded from described property-value relief eligibility.",
+            "attributes": [
+                "property_type",
+                "unit_count",
+                "eligibility_status",
+                "exclusion_status",
+                "property_reference",
+                "relief_eligibility",
+                "exclusion",
+                "property"
+            ],
+            "examples": [
+                "A manufactured home excluded from relief eligibility.",
+                "Manufactured homes are excluded from stated property-value relief eligibility."
+            ],
+            "business_rules": [
+                "Manufactured homes are excluded from this relief eligibility.",
+                "Manufactured homes do not satisfy the stated property-value relief eligibility."
+            ]
+        },
+        "CU_RISK_SCORE": {
+            "definition": "Collateral Underwriter risk score used as a property-value relief eligibility threshold.",
+            "attributes": [
+                "score_value",
+                "threshold",
+                "loan_reference",
+                "relief_eligibility",
+                "risk_status",
+                "score",
+                "eligibility",
+                "loan",
+                "property",
+                "risk_type",
+                "eligibility_role",
+                "source"
+            ],
+            "examples": [
+                "A CU risk score of 3.0 or below.",
+                "a CU risk score of 3.0 or below"
+            ],
+            "business_rules": [
+                "The CU risk score must be 3.0 or below for described relief eligibility.",
+                "The CU risk score must be 3.0 or below for stated relief eligibility.",
+                "Relief eligibility requires a CU risk score of 3.0 or below."
+            ]
+        },
+        "Mortgage Insurance Policy": {
+            "definition": "A primary mortgage insurance policy obtained for qualifying high-LTV conventional first mortgage loans.",
+            "attributes": [
+                "policy_type",
+                "primary_flag",
+                "loan",
+                "lender",
+                "status",
+                "ltv_trigger",
+                "requirement_status",
+                "exception"
+            ],
+            "examples": [
+                "A primary mortgage insurance policy for a conventional first mortgage loan.",
+                "a primary mortgage insurance policy"
+            ],
+            "business_rules": [
+                "The lender must obtain primary mortgage insurance unless another charter-compliant credit enhancement is provided.",
+                "Primary mortgage insurance is required unless alternative charter-compliant credit enhancement exists."
+            ]
+        },
+        "Lender": {
+            "definition": "The party responsible for obtaining required mortgage insurance or providing credit enhancement.",
+            "attributes": [
+                "name",
+                "loan",
+                "policy",
+                "enhancement",
+                "responsibility",
+                "obligation",
+                "insurance_role",
+                "enhancement_role",
+                "loan_role"
+            ],
+            "examples": [
+                "The lender must obtain a primary mortgage insurance policy.",
+                "the lender must obtain a primary mortgage insurance policy"
+            ],
+            "business_rules": [
+                "The lender must obtain the policy unless it provides another charter-compliant credit enhancement.",
+                "The lender must obtain primary mortgage insurance unless qualifying credit enhancement is provided."
+            ]
+        },
+        "Subject Property": {
+            "definition": "The property whose appraisal and value support mortgage-loan underwriting and relief eligibility.",
+            "attributes": [
+                "unit_count",
+                "property_type",
+                "attachment",
+                "manufactured_flag",
+                "value"
+            ],
+            "examples": [
+                "A one-unit detached, attached, or condominium property."
+            ],
+            "business_rules": [
+                "Eligible properties are one-unit detached, attached, or condominium properties; manufactured homes are excluded."
+            ]
+        },
+        "PROPERTY": {
+            "definition": "A subject property classified as one-unit detached, attached, or condominium for relief eligibility.",
+            "attributes": [
+                "unit_count",
+                "property_type",
+                "attachment_type",
+                "manufactured_flag",
+                "eligibility_status"
+            ],
+            "examples": [
+                "one-unit detached, attached, or condominium property"
+            ],
+            "business_rules": [
+                "Relief eligibility requires one unit and excludes manufactured homes."
+            ]
+        },
+        "PROPERTY_VALUE_RELIEF": {
+            "definition": "Enforcement relief for certain representations and warranties concerning appraisal and subject-property value.",
+            "attributes": [
+                "relief_scope",
+                "representation_scope",
+                "eligibility_status",
+                "du_reference",
+                "appraisal_reference"
+            ],
+            "examples": [
+                "enforcement relief of certain representations and warranties related to the appraisal and value"
+            ],
+            "business_rules": [
+                "Relief is limited to stated property, appraisal, and risk-score eligibility requirements."
+            ]
+        },
+        "EXECUTION_OPTION": {
+            "definition": "A mortgage-loan submission category defined by rate and pooling terms.",
+            "attributes": [
+                "rate_type",
+                "pool_type",
+                "lender_scope",
+                "issue_date",
+                "minimum_amount"
+            ],
+            "examples": [
+                "fixed-rate mortgage loans, single-lender pools"
+            ],
+            "business_rules": [
+                "Minimum submission amounts are required for fixed-rate and adjustable-rate single-lender pools."
+            ]
+        },
+        "APPRAISAL_PRACTICE": {
+            "definition": "An appraisal practice assessed for acceptability under referenced requirements.",
+            "attributes": [
+                "practice_type",
+                "acceptability",
+                "guide_reference",
+                "appraisal_scope",
+                "relief_impact"
+            ],
+            "examples": [
+                "unacceptable appraisal practices"
+            ],
+            "business_rules": [
+                "Unacceptable appraisal practices are cross-referenced in B4-1.1-04."
+            ]
+        }
+    },
+    "relationships": {
+        "HAS_LTV_RATIO": {
+            "source_entity": "CONVENTIONAL_FIRST_MORTGAGE_LOAN",
+            "target_entity": "LTV_RATIO",
+            "definition": "Associates a conventional first mortgage loan with its loan-to-value ratio.",
+            "cardinality": "one-to-one",
+            "examples": [
+                "A conventional first mortgage loan has an LTV ratio greater than 78%."
+            ],
+            "business_rules": [
+                "The LTV ratio is evaluated at purchase for the mortgage insurance requirement."
+            ]
+        },
+        "REQUIRES_PRIMARY_MORTGAGE_INSURANCE": {
+            "source_entity": "CONVENTIONAL_FIRST_MORTGAGE_LOAN",
+            "target_entity": "PRIMARY_MORTGAGE_INSURANCE_POLICY",
+            "definition": "Links a qualifying high-LTV conventional first mortgage loan to required primary mortgage insurance.",
+            "cardinality": "one-to-one",
+            "examples": [
+                "A loan with an LTV ratio greater than 78% requires a primary mortgage insurance policy."
+            ],
+            "business_rules": [
+                "The requirement does not apply when compliant credit enhancement has been provided."
+            ]
+        },
+        "PROVIDED_FOR_LOAN": {
+            "source_entity": "CREDIT_ENHANCEMENT",
+            "target_entity": "CONVENTIONAL_FIRST_MORTGAGE_LOAN",
+            "definition": "Associates lender-provided charter-compliant credit enhancement with a covered mortgage loan.",
+            "cardinality": "one-to-many",
+            "examples": [
+                "Another charter-compliant form of credit enhancement is provided for the loan."
+            ],
+            "business_rules": [
+                "The credit enhancement must be charter-compliant to serve as the stated alternative."
+            ]
+        },
+        "ALTERNATIVE_TO_PRIMARY_MORTGAGE_INSURANCE": {
+            "source_entity": "CREDIT_ENHANCEMENT",
+            "target_entity": "PRIMARY_MORTGAGE_INSURANCE_POLICY",
+            "definition": "Records credit enhancement as an alternative to the primary mortgage insurance requirement.",
+            "cardinality": "one-to-one",
+            "examples": [
+                "Another charter-compliant credit enhancement instead of primary mortgage insurance."
+            ],
+            "business_rules": [
+                "A compliant alternative credit enhancement removes the stated primary mortgage insurance requirement."
+            ]
+        },
+        "AVAILABLE_TO_LOAN": {
+            "source_entity": "PROPERTY_VALUE_REPRESENTATIONS_AND_WARRANTIES_RELIEF",
+            "target_entity": "CONVENTIONAL_FIRST_MORTGAGE_LOAN",
+            "definition": "Associates property-value representations-and-warranties relief with loans that may benefit.",
+            "cardinality": "one-to-many",
+            "examples": [
+                "A loan may benefit from enforcement relief related to appraisal and value."
+            ],
+            "business_rules": [
+                "Relief applies only to certain appraisal and subject-property-value representations and warranties."
+            ]
+        },
+        "CONCERNS_APPRAISAL": {
+            "source_entity": "PROPERTY_VALUE_REPRESENTATIONS_AND_WARRANTIES_RELIEF",
+            "target_entity": "APPRAISAL",
+            "definition": "Associates the relief with appraisal-related representations and warranties.",
+            "cardinality": "one-to-many",
+            "examples": [
+                "Relief of representations and warranties related to the appraisal."
+            ],
+            "business_rules": [
+                "The described relief covers certain appraisal-related representations and warranties."
+            ]
+        },
+        "CONCERNS_SUBJECT_PROPERTY_VALUE": {
+            "source_entity": "PROPERTY_VALUE_REPRESENTATIONS_AND_WARRANTIES_RELIEF",
+            "target_entity": "SUBJECT_PROPERTY_VALUE",
+            "definition": "Associates the relief with subject-property-value representations and warranties.",
+            "cardinality": "one-to-many",
+            "examples": [
+                "Relief of representations and warranties related to subject-property value."
+            ],
+            "business_rules": [
+                "Only certain representations and warranties concerning subject-property value receive relief."
+            ]
+        },
+        "REQUIRES_CU_RISK_SCORE": {
+            "source_entity": "PROPERTY_VALUE_REPRESENTATIONS_AND_WARRANTIES_RELIEF",
+            "target_entity": "CU_RISK_SCORE",
+            "definition": "Associates relief eligibility with a CU risk score at or below 3.0.",
+            "cardinality": "one-to-many",
+            "examples": [
+                "Relief eligibility requires a CU risk score of 3.0 or below."
+            ],
+            "business_rules": [
+                "A CU risk score above 3.0 does not satisfy the described relief eligibility condition."
+            ]
+        },
+        "REQUIRES_ONE_UNIT_PROPERTY": {
+            "source_entity": "PROPERTY_VALUE_REPRESENTATIONS_AND_WARRANTIES_RELIEF",
+            "target_entity": "ONE_UNIT_PROPERTY",
+            "definition": "Associates relief eligibility with a qualifying one-unit detached, attached, or condominium property.",
+            "cardinality": "one-to-many",
+            "examples": [
+                "Eligibility requires a one-unit detached, attached, or condominium property."
+            ],
+            "business_rules": [
+                "The property must be one-unit and detached, attached, or condominium."
+            ]
+        },
+        "EXCLUDES_MANUFACTURED_HOME": {
+            "source_entity": "PROPERTY_VALUE_REPRESENTATIONS_AND_WARRANTIES_RELIEF",
+            "target_entity": "MANUFACTURED_HOME",
+            "definition": "Records that manufactured homes are excluded from described relief eligibility.",
+            "cardinality": "one-to-many",
+            "examples": [
+                "Manufactured homes are excluded from eligibility."
+            ],
+            "business_rules": [
+                "A manufactured home cannot satisfy this relief's property eligibility requirement."
+            ]
+        },
+        "LOAN_HAS_LTV_RATIO": {
+            "source_entity": "CONVENTIONAL_FIRST_MORTGAGE_LOAN",
+            "target_entity": "LTV_RATIO",
+            "definition": "Associates a conventional first mortgage loan with its applicable loan-to-value ratio.",
+            "cardinality": "one-to-one",
+            "examples": [
+                "A conventional first mortgage loan with an LTV ratio greater than 78%."
+            ],
+            "business_rules": [
+                "An LTV ratio greater than 78% activates the stated mortgage insurance requirement at purchase."
+            ]
+        },
+        "LOAN_REQUIRES_PRIMARY_MORTGAGE_INSURANCE": {
+            "source_entity": "CONVENTIONAL_FIRST_MORTGAGE_LOAN",
+            "target_entity": "Mortgage Insurance Policy",
+            "definition": "Connects a qualifying high-LTV conventional first mortgage loan to a primary mortgage insurance policy.",
+            "cardinality": "one-to-one",
+            "examples": [
+                "A primary mortgage insurance policy for a conventional first mortgage loan."
+            ],
+            "business_rules": [
+                "The lender must obtain primary mortgage insurance unless another charter-compliant credit enhancement is provided."
+            ]
+        },
+        "LENDER_OBTAINS_MORTGAGE_INSURANCE": {
+            "source_entity": "Lender",
+            "target_entity": "Mortgage Insurance Policy",
+            "definition": "Links a lender to a primary mortgage insurance policy it must obtain.",
+            "cardinality": "one-to-many",
+            "examples": [
+                "The lender must obtain a primary mortgage insurance policy.",
+                "the lender must obtain a primary mortgage insurance policy"
+            ],
+            "business_rules": [
+                "The lender obtains the policy for a qualifying loan unless compliant credit enhancement applies.",
+                "The lender must obtain insurance unless another charter-compliant credit enhancement is provided."
+            ]
+        },
+        "LENDER_PROVIDES_CREDIT_ENHANCEMENT": {
+            "source_entity": "Lender",
+            "target_entity": "CREDIT_ENHANCEMENT",
+            "definition": "Connects a lender with another charter-compliant credit enhancement it has provided.",
+            "cardinality": "one-to-many",
+            "examples": [
+                "The lender has provided another charter-compliant form of credit enhancement."
+            ],
+            "business_rules": [
+                "Provided charter-compliant credit enhancement can remove the stated mortgage insurance requirement."
+            ]
+        },
+        "LOAN_HAS_SUBJECT_PROPERTY": {
+            "source_entity": "CONVENTIONAL_FIRST_MORTGAGE_LOAN",
+            "target_entity": "Subject Property",
+            "definition": "Associates a conventional first mortgage loan with its subject property.",
+            "cardinality": "one-to-one",
+            "examples": [
+                "A loan associated with a one-unit detached, attached, or condominium property.",
+                "subject-property value"
+            ],
+            "business_rules": [
+                "Property-value relief eligibility requires a one-unit detached, attached, or condominium property.",
+                "Property-value representations concern the loan's subject property."
+            ]
+        },
+        "SUBJECT_PROPERTY_HAS_APPRAISAL": {
+            "source_entity": "Subject Property",
+            "target_entity": "APPRAISAL",
+            "definition": "Links a subject property to an appraisal used for underwriting.",
+            "cardinality": "one-to-one",
+            "examples": [
+                "An appraisal used in underwriting for the subject property."
+            ],
+            "business_rules": [
+                "The appraisal supports underwriting and representations concerning subject-property value."
+            ]
+        },
+        "RELIEF_APPLIES_TO_LOAN": {
+            "source_entity": "PROPERTY_VALUE_REPRESENTATIONS_AND_WARRANTIES_RELIEF",
+            "target_entity": "CONVENTIONAL_FIRST_MORTGAGE_LOAN",
+            "definition": "Associates property-value relief with loans receiving eligible enforcement relief.",
+            "cardinality": "one-to-many",
+            "examples": [
+                "Loans may benefit from enforcement relief related to appraisal and value."
+            ],
+            "business_rules": [
+                "Only loans satisfying the stated eligibility conditions may receive the relief."
+            ]
+        },
+        "RELIEF_CONCERNS_APPRAISAL": {
+            "source_entity": "PROPERTY_VALUE_REPRESENTATIONS_AND_WARRANTIES_RELIEF",
+            "target_entity": "APPRAISAL",
+            "definition": "Associates property-value relief with appraisals related to covered representations and warranties.",
+            "cardinality": "one-to-many",
+            "examples": [
+                "Enforcement relief of representations and warranties related to the appraisal."
+            ],
+            "business_rules": [
+                "The relief concerns certain appraisal-related representations and warranties."
+            ]
+        },
+        "RELIEF_REQUIRES_CU_RISK_SCORE": {
+            "source_entity": "PROPERTY_VALUE_REPRESENTATIONS_AND_WARRANTIES_RELIEF",
+            "target_entity": "CU_RISK_SCORE",
+            "definition": "Links relief eligibility to CU risk scores meeting the stated threshold.",
+            "cardinality": "one-to-many",
+            "examples": [
+                "A CU risk score of 3.0 or below."
+            ],
+            "business_rules": [
+                "The CU risk score must be 3.0 or below for stated relief eligibility."
+            ]
+        },
+        "RELIEF_EXCLUDES_MANUFACTURED_HOME": {
+            "source_entity": "PROPERTY_VALUE_REPRESENTATIONS_AND_WARRANTIES_RELIEF",
+            "target_entity": "MANUFACTURED_HOME",
+            "definition": "Records manufactured-home exclusion from property-value relief eligibility.",
+            "cardinality": "one-to-many",
+            "examples": [
+                "Manufactured homes are excluded from this relief eligibility."
+            ],
+            "business_rules": [
+                "Manufactured homes are excluded from the stated property-value relief."
+            ]
+        },
+        "APPRAISAL_ADDRESSES_PROPERTY": {
+            "source_entity": "APPRAISAL",
+            "target_entity": "PROPERTY",
+            "definition": "An appraisal addresses the value of a subject property.",
+            "cardinality": "one-to-one",
+            "examples": [
+                "the appraisal and value"
+            ],
+            "business_rules": [
+                "Appraisal-related requirements apply to the subject property's value."
+            ]
+        },
+        "PROPERTY_VALUE_RELIEF_APPLIES_TO_LOANS": {
+            "source_entity": "PROPERTY_VALUE_RELIEF",
+            "target_entity": "CONVENTIONAL_FIRST_MORTGAGE_LOAN",
+            "definition": "Property-value enforcement relief may benefit eligible loans.",
+            "cardinality": "one-to-many",
+            "examples": [
+                "loans may also benefit from enforcement relief"
+            ],
+            "business_rules": [
+                "Relief applies only when stated eligibility requirements are met."
+            ]
+        },
+        "RELIEF_REQUIRES_CU_SCORE": {
+            "source_entity": "PROPERTY_VALUE_RELIEF",
+            "target_entity": "CU_RISK_SCORE",
+            "definition": "Relief eligibility uses a CU risk-score threshold.",
+            "cardinality": "one-to-many",
+            "examples": [
+                "a CU risk score of 3.0 or below"
+            ],
+            "business_rules": [
+                "The CU risk score must be 3.0 or below for eligibility."
+            ]
+        },
+        "RELIEF_CONCERNS_APPRAISALS": {
+            "source_entity": "PROPERTY_VALUE_RELIEF",
+            "target_entity": "APPRAISAL",
+            "definition": "Property-value relief concerns representations and warranties related to appraisal.",
+            "cardinality": "one-to-many",
+            "examples": [
+                "representations and warranties related to the appraisal"
+            ],
+            "business_rules": [
+                "Relief covers only certain appraisal-related representations and warranties."
+            ]
+        },
+        "LOAN_REQUIRES_MORTGAGE_INSURANCE": {
+            "source_entity": "CONVENTIONAL_FIRST_MORTGAGE_LOAN",
+            "target_entity": "Mortgage Insurance Policy",
+            "definition": "A high-LTV conventional first mortgage loan requires primary mortgage insurance unless credit enhancement exists.",
+            "cardinality": "one-to-one",
+            "examples": [
+                "an LTV ratio greater than 78%"
+            ],
+            "business_rules": [
+                "The requirement applies above 78% LTV absent another charter-compliant credit enhancement."
+            ]
+        },
+        "CREDIT_ENHANCEMENT_SUPPORTS_LOANS": {
+            "source_entity": "CREDIT_ENHANCEMENT",
+            "target_entity": "CONVENTIONAL_FIRST_MORTGAGE_LOAN",
+            "definition": "A charter-compliant credit enhancement can replace required mortgage insurance.",
+            "cardinality": "one-to-many",
+            "examples": [
+                "another charter-compliant form of credit enhancement"
+            ],
+            "business_rules": [
+                "Alternative charter-compliant credit enhancement removes the mortgage-insurance requirement."
+            ]
+        },
+        "EXECUTION_OPTION_APPLIES_TO_LOANS": {
+            "source_entity": "EXECUTION_OPTION",
+            "target_entity": "CONVENTIONAL_FIRST_MORTGAGE_LOAN",
+            "definition": "An execution option applies to mortgage loans grouped by rate and pool structure.",
+            "cardinality": "one-to-many",
+            "examples": [
+                "adjustable-rate mortgage loans, single-lender pools"
+            ],
+            "business_rules": [
+                "Minimum submission amounts are required by execution category."
+            ]
+        },
+        "APPRAISAL_PRACTICE_GOVERNS_APPRAISAL": {
+            "source_entity": "APPRAISAL_PRACTICE",
+            "target_entity": "APPRAISAL",
+            "definition": "Referenced appraisal practices inform appraisal acceptability requirements.",
+            "cardinality": "one-to-many",
+            "examples": [
+                "unacceptable appraisal practices"
+            ],
+            "business_rules": [
+                "Unacceptable appraisal practices are cross-referenced in B4-1.1-04."
+            ]
+        }
+    }
+}
