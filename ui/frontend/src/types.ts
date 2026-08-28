@@ -200,3 +200,62 @@ export interface SearchResult {
   status: string;
   score: number;
 }
+
+export interface RegDeltaPairSummary {
+  pair_id: string;
+  status: "ready" | "load_error";
+  error?: string;
+  old_rule_count?: number;
+  new_rule_count?: number;
+  has_scenarios?: boolean;
+  has_dag_edges?: boolean;
+}
+
+export interface RegDeltaAlignment {
+  kind: "one_to_one" | "added" | "removed";
+  old_rule_ids: string[];
+  new_rule_ids: string[];
+  method: string;
+}
+
+export interface RegDeltaChange {
+  rule_id: string;
+  taxonomy: string;
+  detail: Record<string, unknown> | null;
+}
+
+export interface RegDeltaRuleResult {
+  old: { status: string; outputs: Record<string, unknown>; reason: string | null };
+  new: { status: string; outputs: Record<string, unknown>; reason: string | null };
+  differs: boolean;
+}
+
+export interface RegDeltaCase {
+  case_id: string;
+  rule_results: Record<string, RegDeltaRuleResult>;
+}
+
+export interface RegDeltaWitness {
+  case_id: string;
+  rule_id: string;
+  old_result: RegDeltaRuleResult["old"];
+  new_result: RegDeltaRuleResult["new"];
+}
+
+export interface RegDeltaStatus {
+  status: string;
+  detail: Record<string, unknown> | null;
+}
+
+export interface RegDeltaReport {
+  schema_version: string;
+  pair_id: string;
+  rule_alignments: RegDeltaAlignment[];
+  semantic_changes: RegDeltaChange[];
+  affected_cases: RegDeltaCase[];
+  witnesses: RegDeltaWitness[];
+  downstream_impacts: { direct: string[]; potential: string[]; recompute: string[]; statuses: Record<string, RegDeltaStatus> };
+  refusals: { rule_id: string; old_code: string | null; new_code: string | null }[];
+  provenance: Record<string, string>;
+  metrics: Record<string, number>;
+}

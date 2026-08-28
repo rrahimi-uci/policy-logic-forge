@@ -31,6 +31,6 @@ describe("review workbench utilities", () => {
     expect(queueRows(rows, "other")).toHaveLength(2);
     expect(stageProgress([{ status: "completed" }, { status: "missing" }] as any)).toBe(50);
     expect(runOption({ run_id: "run", rule_count: 2 } as any)).toBe("run · 2 rules");
-    expect(navItems.length).toBe(8);
+    expect(navItems.length).toBe(9);
   });
 });

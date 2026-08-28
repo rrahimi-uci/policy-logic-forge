@@ -1,12 +1,12 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { CompareView, connectedRuleIds, DiagnosticsView, DocumentsView, ErrorNotice, GraphView, layeredRuleLayout, Loading, MetricCard, Overview, RuleTableView, RuleWorkbench, SearchOverlay, StageFlow, wrapNodeText } from "./components";
-import type { RuleDetail, RunSummary, Stage } from "./types";
+import { CompareView, connectedRuleIds, DiagnosticsView, DocumentsView, ErrorNotice, GraphView, layeredRuleLayout, Loading, MetricCard, Overview, RegDeltaView, RuleTableView, RuleWorkbench, SearchOverlay, StageFlow, wrapNodeText } from "./components";
+import type { RegDeltaReport, RuleDetail, RunSummary, Stage } from "./types";
 import * as api from "./api";
 
 vi.mock("./api", async () => {
   const actual = await vi.importActual<typeof import("./api")>("./api");
-  return { ...actual, fetchRules: vi.fn(), fetchAllRules: vi.fn(), fetchAllRelationships: vi.fn(), fetchRule: vi.fn(), fetchDocuments: vi.fn(), fetchEvidenceList: vi.fn(), fetchSavedViews: vi.fn(), saveView: vi.fn(), fetchRelationships: vi.fn(), fetchDiagnostics: vi.fn(), search: vi.fn(), compare: vi.fn(), addComment: vi.fn(), addDecision: vi.fn(), addLabel: vi.fn() };
+  return { ...actual, fetchRules: vi.fn(), fetchAllRules: vi.fn(), fetchAllRelationships: vi.fn(), fetchRule: vi.fn(), fetchDocuments: vi.fn(), fetchEvidenceList: vi.fn(), fetchSavedViews: vi.fn(), saveView: vi.fn(), fetchRelationships: vi.fn(), fetchDiagnostics: vi.fn(), search: vi.fn(), compare: vi.fn(), addComment: vi.fn(), addDecision: vi.fn(), addLabel: vi.fn(), fetchRegDeltaPairs: vi.fn(), fetchRegDeltaDiff: vi.fn() };
 });
 
 const run: RunSummary = { run_id: "privacy-run", source_dir: "/tmp/run", status: "requires_review", stage_count: 2, completed_stage_count: 1, rule_count: 2, document_count: 1, evidence_count: 2, relationship_count: 1, diagnostic_count: 1, error_count: 1, warning_count: 0, review_queue_count: 1, unresolved_conflict_count: 0, rule_status_counts: { certified: 1, requires_review: 1 }, readiness_counts: {}, grounding_counts: {}, metadata: {}, queues: { requires_review: 1, grounding_failed: 1, readiness_failed: 1, unresolved_conflicts: 0 } };
@@ -100,6 +100,26 @@ describe("review workbench components", () => {
   it("supports search overlay and run comparison", async () => {
     render(<SearchOverlay runId="r" query="retention" onClose={vi.fn()} onRule={vi.fn()} />); await waitFor(() => expect(screen.getAllByText("Retention rule").length).toBeGreaterThan(0));
     render(<CompareView runs={[run, { ...run, run_id: "candidate" }]} onError={vi.fn()} />); await waitFor(() => expect(screen.getByText("Rules Changed")).toBeInTheDocument());
+  });
+
+  it("renders a RegDelta impact report, including witnesses and refusals", async () => {
+    vi.mocked(api.fetchRegDeltaPairs).mockResolvedValue([{ pair_id: "mortgage_tier1", status: "ready", old_rule_count: 65, new_rule_count: 65, has_scenarios: true, has_dag_edges: true }]);
+    const report: RegDeltaReport = {
+      schema_version: "regdelta-impact/1.0", pair_id: "mortgage_tier1",
+      rule_alignments: [{ kind: "one_to_one", old_rule_ids: ["R-120-004"], new_rule_ids: ["R-120-004"], method: "exact_id" }],
+      semantic_changes: [{ rule_id: "R-120-004", taxonomy: "threshold_or_constant_change", detail: { op: "gt", old_literal: 80, new_literal: 78, direction: "weakening" } }],
+      affected_cases: [{ case_id: "boundary_79", rule_results: { "R-120-004": { old: { status: "no_match", outputs: {}, reason: null }, new: { status: "matched", outputs: {}, reason: null }, differs: true } } }],
+      witnesses: [{ case_id: "boundary_79", rule_id: "R-120-004", old_result: { status: "no_match", outputs: {}, reason: null }, new_result: { status: "matched", outputs: {}, reason: null } }],
+      downstream_impacts: { direct: ["R-120-004"], potential: ["R-120-004", "R-120-003"], recompute: [], statuses: { "R-120-004": { status: "threshold_or_constant_change", detail: null }, "R-120-003": { status: "unresolved-review", detail: null } } },
+      refusals: [{ rule_id: "B32-A2-2-06-001", old_code: "SYMBOL_CONFLICT", new_code: "SYMBOL_CONFLICT" }],
+      provenance: {}, metrics: { universe_size: 65, direct_count: 1, refused_count: 1, unresolved_review_count: 1 },
+    };
+    vi.mocked(api.fetchRegDeltaDiff).mockResolvedValue(report);
+    render(<RegDeltaView onError={vi.fn()} />);
+    await waitFor(() => expect(screen.getAllByText("R-120-004").length).toBeGreaterThan(0));
+    expect(screen.getByText("R-120-003")).toBeInTheDocument();
+    expect(screen.getByText("B32-A2-2-06-001")).toBeInTheDocument();
+    expect(screen.getByText("weakening: 80 → 78")).toBeInTheDocument();
   });
 
   it("covers explicit empty and error states", async () => {

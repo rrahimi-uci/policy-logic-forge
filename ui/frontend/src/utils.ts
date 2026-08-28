@@ -8,6 +8,7 @@ export const navItems = [
   ["evidence", "Documents & evidence", "evidence"],
   ["graph", "Graph explorer", "graph"],
   ["compare", "Compare runs", "compare"],
+  ["regdelta", "Regulatory change impact", "regdelta"],
   ["diagnostics", "Diagnostics", "diagnostics"],
 ] as const;
 
