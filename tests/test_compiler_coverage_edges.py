@@ -179,7 +179,7 @@ def test_lexec_predicate_logic_domains_and_scope_refusals():
     with pytest.raises(lexec_ir.LoweringRefusal):
         lexec_ir._scope({"scope_basis": "unknown"}, digest)
     with pytest.raises(lexec_ir.LoweringRefusal):
-        lexec_ir._scope({"applicability_scope": {"user_categories": ["consumers"]}}, digest)
+        lexec_ir._scope({"applicability_scope": {"service_scope": ["consumers"]}}, digest)
     # loan_types/transaction_types/occupancy_types are representable scope
     # dimensions: they become a checkable ``scope.predicate`` (an "eq"/"or"
     # formula over a dedicated free-text symbol), not a refusal.

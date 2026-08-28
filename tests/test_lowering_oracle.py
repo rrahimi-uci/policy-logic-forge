@@ -70,7 +70,7 @@ def test_oracle_refuses_unrepresentable_scope_instead_of_dropping_it():
         "condition_logic": {"predicate_ref": "p"},
         "outcomes": [{"variable": "y", "operator": "=", "value": True, "value_type": "boolean"}],
         "variables": [{"name": "x", "type": "boolean", "role": "input"}, {"name": "y", "type": "boolean", "role": "output"}],
-        "applicability_scope": {"user_categories": ["commercial"]},
+        "applicability_scope": {"service_scope": ["commercial"]},
         "scope_basis": "explicit_in_source",
         "exceptions": [],
         "source_reference": _source(),
@@ -81,7 +81,7 @@ def test_oracle_refuses_unrepresentable_scope_instead_of_dropping_it():
         "rule_id": "oracle_scope",
         "code": "UNREPRESENTABLE_SCOPE",
         "construct": "applicability_scope",
-        "detail": "Scope fields cannot be represented: ['user_categories'].",
+        "detail": "Scope fields cannot be represented: ['service_scope'].",
         "requires_review": True,
         "provenance": [{
             "chunk_path": "oracle/source.txt",

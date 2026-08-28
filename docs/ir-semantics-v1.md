@@ -84,15 +84,19 @@ and out of scope for the differential-execution engine described in
 against another rather than asking whether a rule is in force for a given
 real-world date/party/jurisdiction.
 
-`applicability_scope`'s `loan_types`, `transaction_types`, and
-`occupancy_types` fields are, by contrast, lowered into a genuinely checkable
-`scope.predicate` formula: each populated field becomes a dedicated free-text
-string symbol (`loan_type`, `transaction_type`, `occupancy_type`) compared by
-equality against the field's listed values (an implicit "or" across values,
-an implicit "and" across the up-to-three fields).  A rule with none of these
-three fields populated -- and no other applicability field populated -- has
-a null scope predicate, i.e. is genuinely unscoped.  Every *other* structured
-scope field without an IR representation, unresolved/inferred scope, and any
+`applicability_scope`'s `loan_types`, `transaction_types`, `occupancy_types`
+(mortgage's dominant scope vocabulary), and `user_categories`,
+`information_types` (privacy_policy's) are, by contrast, lowered into a
+genuinely checkable `scope.predicate` formula: each populated field becomes
+a dedicated free-text string symbol (`loan_type`, `transaction_type`,
+`occupancy_type`, `user_category`, `information_type` respectively)
+compared by equality against the field's listed values (an implicit "or"
+across values, an implicit "and" across however many of these five fields
+are populated).  A rule with none of them populated -- and no other
+applicability field populated -- has a null scope predicate, i.e. is
+genuinely unscoped.  Every *other* structured scope field without an IR
+representation (each domain's extraction has produced a handful of rarer,
+one-off field names beyond these five), unresolved/inferred scope, and any
 other non-empty unsupported applicability field are still refused rather
 than dropped or silently treated as universal.
 

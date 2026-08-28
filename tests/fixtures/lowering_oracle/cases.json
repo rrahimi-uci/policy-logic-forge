@@ -97,12 +97,12 @@
         "condition_logic": {"predicate_ref": "p1"},
         "outcomes": [{"variable": "y", "operator": "=", "value": true, "value_type": "boolean"}],
         "variables": [{"name": "x", "type": "boolean", "role": "input"}, {"name": "y", "type": "boolean", "role": "output"}],
-        "applicability_scope": {"user_categories": ["commercial"]},
+        "applicability_scope": {"service_scope": ["commercial"]},
         "scope_basis": "explicit_in_source",
         "exceptions": [],
         "source_reference": {"chunk_path": "oracle/source.txt", "section_id": "s1", "source_text": "A commercial condition.", "start_offset": 0, "end_offset": 24}
       },
-      "expected": {"status": "refused", "refusal": {"rule_id": "oracle_scope", "code": "UNREPRESENTABLE_SCOPE", "construct": "applicability_scope", "detail": "Scope fields cannot be represented: ['user_categories'].", "requires_review": true}}
+      "expected": {"status": "refused", "refusal": {"rule_id": "oracle_scope", "code": "UNREPRESENTABLE_SCOPE", "construct": "applicability_scope", "detail": "Scope fields cannot be represented: ['service_scope'].", "requires_review": true}}
     },
     {
       "id": "scope_dimension_representable",
