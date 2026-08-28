@@ -88,6 +88,32 @@ def test_index_normalizes_artifacts_and_queues(tmp_path: Path) -> None:
         index.queue("nope")
 
 
+def test_index_treats_an_explicit_null_status_field_as_unknown_not_none(tmp_path: Path) -> None:
+    """Real pipeline output can carry an explicit `"risk_level": null` for a
+    rule the extraction agent left unclassified (confirmed against the real
+    mortgage run's optimized_compliance_knowledge_graph.json). `.get(key,
+    "unknown")` only substitutes when the key is *absent*, so an explicit
+    null used to leak straight through as None -- which crashed the review
+    workbench's frontend (it assumes these are always non-empty strings and
+    calls `.replaceAll()` on them) with a full white-screen render failure.
+    """
+    run = make_run(tmp_path)
+    graph_path = run / "agent_06-optimized" / "optimized_compliance_knowledge_graph.json"
+    graph = json.loads(graph_path.read_text())
+    rule = graph["business_rules"][0]
+    rule["risk_level"] = None
+    rule["rule_type"] = None
+    rule["readiness"]["status"] = None
+    rule["grounding"]["status"] = None
+    graph_path.write_text(json.dumps(graph), encoding="utf-8")
+
+    row = ReviewIndex.from_directory(run).rules[0]
+    assert row["risk_level"] == "unknown"
+    assert row["rule_type"] == "unknown"
+    assert row["readiness_status"] == "unknown"
+    assert row["grounding_status"] == "unknown"
+
+
 def test_index_writes_contract_and_search_database(tmp_path: Path) -> None:
     index = build_review_index(make_run(tmp_path), tmp_path / "index")
     output = tmp_path / "index"

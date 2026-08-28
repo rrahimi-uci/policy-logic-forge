@@ -358,14 +358,20 @@ def _build_rules(optimized: Mapping[str, Any], run_id: str, artifact_path: str) 
             "rule_id": str(raw.get("rule_id", "")),
             "rule_name": str(raw.get("rule_name") or raw.get("name") or raw.get("rule_id") or "Unnamed rule"),
             "description": raw.get("description", ""),
-            "rule_type": raw.get("rule_type", "unknown"),
-            "risk_level": raw.get("risk_level", "unknown"),
+            # `.get(key, "unknown")` only substitutes when the key is absent;
+            # real pipeline output can carry an explicit `null` for a field
+            # the extraction agent left unclassified (e.g. risk_level), which
+            # would otherwise flow straight through as None and crash any
+            # frontend code that assumes these are always non-empty strings
+            # (see the review-workbench white-screen bug this fixed).
+            "rule_type": raw.get("rule_type") or "unknown",
+            "risk_level": raw.get("risk_level") or "unknown",
             "mandatory": bool(raw.get("mandatory", False)),
             "requires_review": bool(raw.get("requires_review", False)),
             "review_reason": raw.get("review_reason"),
-            "readiness_status": readiness.get("status", "unknown"),
+            "readiness_status": readiness.get("status") or "unknown",
             "readiness_failures": _safe_list(readiness.get("failed_requirements")),
-            "grounding_status": grounding.get("status", "unknown"),
+            "grounding_status": grounding.get("status") or "unknown",
             "grounding_counts": _safe_dict(grounding.get("counts")),
             "confidence_score": raw.get("confidence_score"),
             "source_reference": source_ref,

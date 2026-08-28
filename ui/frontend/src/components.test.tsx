@@ -79,6 +79,21 @@ describe("review workbench components", () => {
     fireEvent.change(screen.getByLabelText("Saved view name"), { target: { value: "High risk" } }); fireEvent.click(screen.getByText("Save view")); await waitFor(() => expect(api.saveView).toHaveBeenCalled());
   });
 
+  it("renders a rule with an explicit-null risk_level as Unknown instead of crashing", async () => {
+    // Real pipeline output can carry `"risk_level": null` for a rule the
+    // extraction agent left unclassified (confirmed against the real
+    // mortgage run's data) -- this used to crash the whole table with
+    // `Cannot read properties of null (reading 'replaceAll')`. A distinct
+    // rule_name (other tests in this file don't unmount between `it`s and
+    // query "Retention rule" unscoped) keeps this test's leftover DOM from
+    // making later assertions ambiguous.
+    vi.mocked(api.fetchRules).mockResolvedValueOnce({ items: [{ ...detail, rule_name: "Unclassified rule", risk_level: null as unknown as string }], total: 1, facets: {} } as any);
+    const { container } = render(<RuleTableView runId="r" onRule={vi.fn()} onError={vi.fn()} />);
+    const scope = within(container);
+    await waitFor(() => expect(scope.getByText("Unclassified rule")).toBeInTheDocument());
+    expect(scope.getByText("Unknown")).toBeInTheDocument();
+  });
+
   it("renders a rule workbench and persists review overlay", async () => {
     render(<RuleWorkbench runId="r" ruleId="r1" onBack={vi.fn()} onError={vi.fn()} />);
     await waitFor(() => expect(screen.getByText("Retention rule")).toBeInTheDocument());

@@ -22,11 +22,17 @@ export function formatDate(value?: string): string {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
 }
 
-export function statusLabel(value: string): string {
+export function statusLabel(value: string | null | undefined): string {
+  // Real pipeline output can carry an explicit null for a field the
+  // extraction agent left unclassified (e.g. risk_level); rendering
+  // "Unknown" instead of crashing keeps one unclassified rule from taking
+  // down the whole view.
+  if (value == null) return "Unknown";
   return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-export function statusTone(value: string): "good" | "warn" | "bad" | "neutral" {
+export function statusTone(value: string | null | undefined): "good" | "warn" | "bad" | "neutral" {
+  if (value == null) return "neutral";
   if (["certified", "ready", "completed", "completed_embedded", "supported"].includes(value)) return "good";
   if (["requires_review", "unresolved", "inferred", "incomplete", "warning"].includes(value)) return "warn";
   if (["failed", "grounding_failed", "readiness_failed", "missing", "error", "contradicted"].includes(value)) return "bad";
