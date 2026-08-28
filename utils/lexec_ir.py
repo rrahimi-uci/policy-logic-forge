@@ -343,6 +343,12 @@ _SCOPE_DIMENSION_SYMBOLS = {
     "loan_types": "loan_type",
     "transaction_types": "transaction_type",
     "occupancy_types": "occupancy_type",
+    # user_categories/information_types are the dominant scope vocabulary in
+    # the privacy_policy domain (534/533 of 802 rules in one real run --
+    # far more than any other populated field there), the same relationship
+    # loan_types/transaction_types have to the mortgage domain.
+    "user_categories": "user_category",
+    "information_types": "information_type",
 }
 
 
