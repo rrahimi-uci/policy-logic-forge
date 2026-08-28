@@ -103,6 +103,12 @@ def test_http_routes_and_overlay(service: ReviewService, tmp_path: Path) -> None
         status, payload = _get(base + "/api/regdelta/pairs/mortgage_tier1")
         assert status == 200 and payload["metrics"]["universe_size"] == 65
         assert _get(base + "/api/regdelta/pairs/no-such-pair")[0] == 404
+        status, payload = _get(base + "/api/regdelta/runs")
+        assert status == 200 and {"fixture-run", "fixture-run-2"} <= {item["run_id"] for item in payload["items"]}
+        status, payload = _get(base + "/api/regdelta/runs/diff?old=fixture-run&new=fixture-run-2")
+        assert status == 200 and payload["pair_id"] == "fixture-run::fixture-run-2"
+        assert _get(base + "/api/regdelta/runs/diff?old=fixture-run")[0] == 422
+        assert _get(base + "/api/regdelta/runs/diff?old=fixture-run&new=no-such-run")[0] == 404
         request = urllib.request.Request(base + "/api/review/comments", data=json.dumps({"reviewer": "a", "run_id": "fixture-run", "artifact_type": "rule", "artifact_id": "r1", "text": "note"}).encode(), headers={"Content-Type": "application/json"}, method="POST")
         with urllib.request.urlopen(request) as response:
             assert response.status == 201

@@ -1,4 +1,4 @@
-import type { ArtifactPayload, CompareResult, Diagnostic, DocumentRecord, Evidence, RegDeltaPairSummary, RegDeltaReport, Relationship, RuleDetail, RuleRow, RunSummary, SavedView, Stage, SearchResult } from "./types";
+import type { ArtifactPayload, CompareResult, Diagnostic, DocumentRecord, Evidence, RegDeltaPairSummary, RegDeltaReport, RegDeltaRunSummary, Relationship, RuleDetail, RuleRow, RunSummary, SavedView, Stage, SearchResult } from "./types";
 
 const API_BASE = (import.meta.env.VITE_C2C_API_BASE as string | undefined) || "/api";
 
@@ -126,4 +126,13 @@ export function fetchSavedViews(runId?: string, reviewer?: string): Promise<{ it
 
 export function saveView(payload: { reviewer: string; name: string; run_id?: string; definition: Record<string, unknown> }): Promise<SavedView> {
   return request("/review/views", { method: "POST", body: JSON.stringify(payload) });
+}
+
+export async function fetchRegDeltaRuns(): Promise<RegDeltaRunSummary[]> {
+  const response = await request<{ items: RegDeltaRunSummary[] }>("/regdelta/runs");
+  return response.items;
+}
+
+export function fetchRegDeltaRunDiff(oldRun: string, newRun: string): Promise<RegDeltaReport> {
+  return request(`/regdelta/runs/diff?${new URLSearchParams({ old: oldRun, new: newRun })}`);
 }
