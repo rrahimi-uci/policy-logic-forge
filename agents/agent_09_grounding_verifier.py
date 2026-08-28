@@ -40,6 +40,26 @@ MODEL_CLAIM_TYPES = {
 # against validate_rule_v2's own predicate-coverage check, and test_vector
 # against the rule's own declared variables/outcomes. See
 # GroundingVerifier._verify_test_vector.
+#
+# rule_name (claim_type "generated_label") is excluded for the identical
+# reason: it is a short display title the extraction pipeline invents for
+# human review navigation (e.g. "Unpaid PACE Financing Bars Delivery"), never
+# a sentence any source document states in those words. Confirmed against a
+# real run's grounding report: the verifier consistently rejected it with
+# reasoning like "does not state the supplied generated rule name" -- correct
+# on its own terms, but that single claim then flipped the *entire rule* to
+# grounding_status "failed" (see _finalize_rule_results/verify_graph, which
+# fail a rule closed if *any* claim is unsupported), even when every
+# source-derived claim (condition, outcome, party, scope, exception,
+# description) was fully grounded. Verified structurally in
+# deterministic_rule_claims instead: always "supported", since a generated
+# label has no source-groundedness dimension to check beyond the
+# non-emptiness extract_claims() already gates it on. The real `description`
+# field stays a MODEL_CLAIM_TYPE -- unlike rule_name it is a real
+# paraphrase/summary of source content, and the same real run's data shows it
+# catching genuine extraction errors (e.g. a rule paraphrasing source
+# "should be equal" as "must equal", or a permissive "may be excluded" as a
+# definitive boolean outcome) that are worth keeping in front of a reviewer.
 
 
 def _normalise_text(value: Any) -> str:
@@ -85,7 +105,7 @@ def extract_claims(rule: Mapping[str, Any], graph: Mapping[str, Any] | None = No
 
     rule_name = str(rule.get("rule_name", "")).strip()
     if rule_name:
-        add("rule_name", "rule_name", "description", rule_name, rule_name)
+        add("rule_name", "rule_name", "generated_label", rule_name, rule_name)
     description = str(rule.get("description", "")).strip()
     if description:
         add("description", "description", "description", description, description)
@@ -653,6 +673,13 @@ class GroundingVerifier:
                 verdict, reason = logic_verdict, logic_reason
             elif claim_type == "test_vector":
                 verdict, reason = cls._verify_test_vector(claim, rule)
+            elif claim_type == "generated_label":
+                verdict, reason = "supported", (
+                    "rule_name is a display label the pipeline generates for human review "
+                    "navigation, not a fact any source sentence states in these words; "
+                    "verified structurally (non-empty, per extract_claims), not against "
+                    "source prose."
+                )
             else:
                 verdict, reason = default_verdict, (default_reason if not issues else default_bad_reason)
             results.append({
