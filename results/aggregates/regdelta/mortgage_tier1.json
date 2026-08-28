@@ -1,0 +1,20 @@
+{
+  "claim_boundary": "Engine-validated (plan/regdelta-product-plan.md Phase 3) against a 65-rule hand-curated subset of one real mortgage pipeline run with 3 hand-authored edits and 9 hand-labeled scenarios. Not a corpus-level accuracy estimate and not yet a product claim (Phase 7 is what makes RegDelta a product).",
+  "compiled_new": 45,
+  "compiled_old": 45,
+  "direct_count": 2,
+  "fixture": "fixtures/regdelta/mortgage_tier1",
+  "hand_labeled_agreement": 1.0,
+  "hand_labeled_expectations_checked": 16,
+  "hand_labeled_expectations_matched": 16,
+  "incremental_equals_full_replay": true,
+  "pair_id": "mortgage-tier1",
+  "potential_count": 5,
+  "recompute_count": 0,
+  "refused_count": 20,
+  "scenario_count": 9,
+  "schema_version": "regdelta-tier1-results/1.0",
+  "universe_size": 65,
+  "unresolved_review_count": 3,
+  "witness_count": 2
+}

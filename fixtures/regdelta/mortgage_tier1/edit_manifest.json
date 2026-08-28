@@ -1,0 +1,29 @@
+{
+  "schema_version": "regdelta-tier1-edit-manifest/1.0",
+  "edits": [
+    {
+      "rule_id": "R-120-004",
+      "predicate_id": "p2",
+      "old_value": 80,
+      "new_value": 78,
+      "new_effective_date": "2026-01-01",
+      "rationale": "Hand-authored Tier 1 edit (not a real Fannie Mae announcement): lower the LTV trigger for required primary mortgage insurance from 80% to 78%, a 'gt' predicate weakening (more loans require PMI)."
+    },
+    {
+      "rule_id": "batch5_mortgage_pool_fixed_rate_submission_minimum",
+      "predicate_id": "p2",
+      "old_value": 1000000,
+      "new_value": 1250000,
+      "new_effective_date": "2026-01-01",
+      "rationale": "Hand-authored Tier 1 edit: raise the minimum aggregate principal balance for single-lender fixed-rate MBS pool submission from $1,000,000 to $1,250,000, a 'ge' predicate strengthening (fewer pools qualify)."
+    },
+    {
+      "rule_id": "B32-A2-2-06-001",
+      "predicate_id": "p5",
+      "old_value": 2.5,
+      "new_value": 3.0,
+      "new_effective_date": "2026-01-01",
+      "rationale": "Hand-authored Tier 1 edit: raise the CU risk score ceiling for appraisal enforcement relief from 2.5 to 3.0, a 'le' predicate weakening (more loans qualify for relief)."
+    }
+  ]
+}

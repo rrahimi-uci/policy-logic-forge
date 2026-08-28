@@ -1,0 +1,149 @@
+{
+  "schema_version": "regdelta-tier1-scenarios/1.0",
+  "note": "Hand-authored gold cases for the mortgage Tier 1 fixture (plan/regdelta-product-plan.md Section 4.1). Each scenario supplies inputs for one edited rule's own condition_predicates, the loan_type/transaction_type values its applicability_scope requires (see utils.lexec_ir's scope.predicate extension -- without these the rule reads 'unknown' regardless of the edited threshold), and (where applicable) its known DAG dependent's unrelated predicate variable, which is deliberately never supplied here -- the dependent (R-120-003, B8-MBS-LOAN-001/002) is requires_review:true and is expected to read 'unresolved-review' regardless of what its own evaluation would say.",
+  "scenarios": [
+    {
+      "case_id": "r120004_boundary_79_no_enhancement",
+      "description": "LTV 79%: below the old 80% trigger, above the new 78% trigger.",
+      "inputs": {
+        "loan_type": "conventional first mortgage loan",
+        "transaction_type": "Fannie Mae portfolio purchase",
+        "conventional_first_mortgage": true,
+        "ltv_ratio_percent": 79,
+        "another_charter_compliant_credit_enhancement_provided": false,
+        "fannie_mae_purchase_or_securitization": true
+      },
+      "targets": ["R-120-004", "R-120-003"],
+      "expected": {
+        "R-120-004": {"old_status": "no_match", "new_status": "matched", "differs": true},
+        "R-120-003": {"status": "unresolved-review"}
+      }
+    },
+    {
+      "case_id": "r120004_clearly_above_both_thresholds",
+      "description": "LTV 90%: above both the old and new trigger -- PMI required either way.",
+      "inputs": {
+        "loan_type": "conventional first mortgage loan",
+        "transaction_type": "Fannie Mae portfolio purchase",
+        "conventional_first_mortgage": true,
+        "ltv_ratio_percent": 90,
+        "another_charter_compliant_credit_enhancement_provided": false,
+        "fannie_mae_purchase_or_securitization": true
+      },
+      "targets": ["R-120-004", "R-120-003"],
+      "expected": {
+        "R-120-004": {"old_status": "matched", "new_status": "matched", "differs": false},
+        "R-120-003": {"status": "unresolved-review"}
+      }
+    },
+    {
+      "case_id": "r120004_clearly_below_both_thresholds",
+      "description": "LTV 70%: below both thresholds -- PMI not required either way.",
+      "inputs": {
+        "loan_type": "conventional first mortgage loan",
+        "transaction_type": "Fannie Mae portfolio purchase",
+        "conventional_first_mortgage": true,
+        "ltv_ratio_percent": 70,
+        "another_charter_compliant_credit_enhancement_provided": false,
+        "fannie_mae_purchase_or_securitization": true
+      },
+      "targets": ["R-120-004", "R-120-003"],
+      "expected": {
+        "R-120-004": {"old_status": "no_match", "new_status": "no_match", "differs": false},
+        "R-120-003": {"status": "unresolved-review"}
+      }
+    },
+    {
+      "case_id": "r120004_boundary_79_but_alternate_enhancement_present",
+      "description": "Same 79% boundary LTV, but an alternate credit enhancement is present. R-120-004's own condition already requires 'no alternate enhancement' (predicate p3), so this fails on the condition itself (no_match) on both sides regardless of the threshold edit -- the rule's separately-declared exception for the same variable being true is, by construction, unreachable here.",
+      "inputs": {
+        "loan_type": "conventional first mortgage loan",
+        "transaction_type": "Fannie Mae portfolio purchase",
+        "conventional_first_mortgage": true,
+        "ltv_ratio_percent": 79,
+        "another_charter_compliant_credit_enhancement_provided": true,
+        "fannie_mae_purchase_or_securitization": true
+      },
+      "targets": ["R-120-004"],
+      "expected": {
+        "R-120-004": {"old_status": "no_match", "new_status": "no_match", "differs": false}
+      }
+    },
+    {
+      "case_id": "r120004_wrong_loan_type_is_out_of_scope",
+      "description": "A loan_type outside R-120-004's declared scope: out of scope (no_match) on both sides regardless of LTV or the threshold edit.",
+      "inputs": {
+        "loan_type": "manufactured home loan",
+        "transaction_type": "Fannie Mae portfolio purchase",
+        "conventional_first_mortgage": true,
+        "ltv_ratio_percent": 90,
+        "another_charter_compliant_credit_enhancement_provided": false,
+        "fannie_mae_purchase_or_securitization": true
+      },
+      "targets": ["R-120-004"],
+      "expected": {
+        "R-120-004": {"old_status": "no_match", "new_status": "no_match", "differs": false}
+      }
+    },
+    {
+      "case_id": "batch5_boundary_1100000",
+      "description": "Aggregate pool balance $1,100,000: met the old $1,000,000 minimum, misses the new, higher $1,250,000 minimum.",
+      "inputs": {
+        "loan_type": "fixed-rate mortgage loans",
+        "transaction_type": "single-lender MBS pool submission",
+        "pool_category": "fixed-rate mortgage loans, single-lender pool",
+        "aggregate_issue_date_principal_balance": 1100000
+      },
+      "targets": ["batch5_mortgage_pool_fixed_rate_submission_minimum", "B8-MBS-LOAN-001", "B8-MBS-LOAN-002"],
+      "expected": {
+        "batch5_mortgage_pool_fixed_rate_submission_minimum": {"old_status": "matched", "new_status": "no_match", "differs": true},
+        "B8-MBS-LOAN-001": {"status": "unresolved-review"},
+        "B8-MBS-LOAN-002": {"status": "unresolved-review"}
+      }
+    },
+    {
+      "case_id": "batch5_clearly_above_both_thresholds",
+      "description": "Aggregate pool balance $2,000,000: comfortably above both minimums.",
+      "inputs": {
+        "loan_type": "fixed-rate mortgage loans",
+        "transaction_type": "single-lender MBS pool submission",
+        "pool_category": "fixed-rate mortgage loans, single-lender pool",
+        "aggregate_issue_date_principal_balance": 2000000
+      },
+      "targets": ["batch5_mortgage_pool_fixed_rate_submission_minimum", "B8-MBS-LOAN-001", "B8-MBS-LOAN-002"],
+      "expected": {
+        "batch5_mortgage_pool_fixed_rate_submission_minimum": {"old_status": "matched", "new_status": "matched", "differs": false},
+        "B8-MBS-LOAN-001": {"status": "unresolved-review"},
+        "B8-MBS-LOAN-002": {"status": "unresolved-review"}
+      }
+    },
+    {
+      "case_id": "batch5_clearly_below_both_thresholds",
+      "description": "Aggregate pool balance $500,000: below both minimums.",
+      "inputs": {
+        "loan_type": "fixed-rate mortgage loans",
+        "transaction_type": "single-lender MBS pool submission",
+        "pool_category": "fixed-rate mortgage loans, single-lender pool",
+        "aggregate_issue_date_principal_balance": 500000
+      },
+      "targets": ["batch5_mortgage_pool_fixed_rate_submission_minimum"],
+      "expected": {
+        "batch5_mortgage_pool_fixed_rate_submission_minimum": {"old_status": "no_match", "new_status": "no_match", "differs": false}
+      }
+    },
+    {
+      "case_id": "batch5_wrong_pool_category",
+      "description": "Adjustable-rate pool: the condition's own equality predicate (p1) already requires the fixed-rate, single-lender pool category, so this fails on the condition itself (no_match) on both sides regardless of the balance or the threshold edit -- the rule's separately-declared exceptions for other pool categories are, by construction, unreachable here.",
+      "inputs": {
+        "loan_type": "fixed-rate mortgage loans",
+        "transaction_type": "single-lender MBS pool submission",
+        "pool_category": "adjustable-rate mortgage loans, single-lender pool",
+        "aggregate_issue_date_principal_balance": 5000000
+      },
+      "targets": ["batch5_mortgage_pool_fixed_rate_submission_minimum"],
+      "expected": {
+        "batch5_mortgage_pool_fixed_rate_submission_minimum": {"old_status": "no_match", "new_status": "no_match", "differs": false}
+      }
+    }
+  ]
+}

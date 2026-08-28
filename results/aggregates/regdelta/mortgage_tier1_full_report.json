@@ -1,0 +1,1402 @@
+{
+  "affected_cases": [
+    {
+      "case_id": "r120004_boundary_79_no_enhancement",
+      "rule_results": {
+        "R-120-003": {
+          "differs": false,
+          "new": {
+            "outputs": {},
+            "reason": null,
+            "status": "no_match"
+          },
+          "old": {
+            "outputs": {},
+            "reason": null,
+            "status": "no_match"
+          }
+        },
+        "R-120-004": {
+          "differs": true,
+          "new": {
+            "outputs": {
+              "primary_mortgage_insurance_policy_required": true
+            },
+            "reason": null,
+            "status": "matched"
+          },
+          "old": {
+            "outputs": {},
+            "reason": null,
+            "status": "no_match"
+          }
+        }
+      }
+    },
+    {
+      "case_id": "r120004_clearly_above_both_thresholds",
+      "rule_results": {
+        "R-120-003": {
+          "differs": false,
+          "new": {
+            "outputs": {},
+            "reason": null,
+            "status": "no_match"
+          },
+          "old": {
+            "outputs": {},
+            "reason": null,
+            "status": "no_match"
+          }
+        },
+        "R-120-004": {
+          "differs": false,
+          "new": {
+            "outputs": {
+              "primary_mortgage_insurance_policy_required": true
+            },
+            "reason": null,
+            "status": "matched"
+          },
+          "old": {
+            "outputs": {
+              "primary_mortgage_insurance_policy_required": true
+            },
+            "reason": null,
+            "status": "matched"
+          }
+        }
+      }
+    },
+    {
+      "case_id": "r120004_clearly_below_both_thresholds",
+      "rule_results": {
+        "R-120-003": {
+          "differs": false,
+          "new": {
+            "outputs": {},
+            "reason": null,
+            "status": "no_match"
+          },
+          "old": {
+            "outputs": {},
+            "reason": null,
+            "status": "no_match"
+          }
+        },
+        "R-120-004": {
+          "differs": false,
+          "new": {
+            "outputs": {},
+            "reason": null,
+            "status": "no_match"
+          },
+          "old": {
+            "outputs": {},
+            "reason": null,
+            "status": "no_match"
+          }
+        }
+      }
+    },
+    {
+      "case_id": "r120004_boundary_79_but_alternate_enhancement_present",
+      "rule_results": {
+        "R-120-004": {
+          "differs": false,
+          "new": {
+            "outputs": {},
+            "reason": null,
+            "status": "no_match"
+          },
+          "old": {
+            "outputs": {},
+            "reason": null,
+            "status": "no_match"
+          }
+        }
+      }
+    },
+    {
+      "case_id": "r120004_wrong_loan_type_is_out_of_scope",
+      "rule_results": {
+        "R-120-004": {
+          "differs": false,
+          "new": {
+            "outputs": {},
+            "reason": null,
+            "status": "no_match"
+          },
+          "old": {
+            "outputs": {},
+            "reason": null,
+            "status": "no_match"
+          }
+        }
+      }
+    },
+    {
+      "case_id": "batch5_boundary_1100000",
+      "rule_results": {
+        "B8-MBS-LOAN-001": {
+          "differs": false,
+          "new": {
+            "outputs": {},
+            "reason": null,
+            "status": "no_match"
+          },
+          "old": {
+            "outputs": {},
+            "reason": null,
+            "status": "no_match"
+          }
+        },
+        "B8-MBS-LOAN-002": {
+          "differs": false,
+          "new": {
+            "outputs": {},
+            "reason": null,
+            "status": "no_match"
+          },
+          "old": {
+            "outputs": {},
+            "reason": null,
+            "status": "no_match"
+          }
+        },
+        "batch5_mortgage_pool_fixed_rate_submission_minimum": {
+          "differs": true,
+          "new": {
+            "outputs": {},
+            "reason": null,
+            "status": "no_match"
+          },
+          "old": {
+            "outputs": {
+              "minimum_submission_requirement_satisfied": true,
+              "required_minimum_submission_amount": 1000000
+            },
+            "reason": null,
+            "status": "matched"
+          }
+        }
+      }
+    },
+    {
+      "case_id": "batch5_clearly_above_both_thresholds",
+      "rule_results": {
+        "B8-MBS-LOAN-001": {
+          "differs": false,
+          "new": {
+            "outputs": {},
+            "reason": null,
+            "status": "no_match"
+          },
+          "old": {
+            "outputs": {},
+            "reason": null,
+            "status": "no_match"
+          }
+        },
+        "B8-MBS-LOAN-002": {
+          "differs": false,
+          "new": {
+            "outputs": {},
+            "reason": null,
+            "status": "no_match"
+          },
+          "old": {
+            "outputs": {},
+            "reason": null,
+            "status": "no_match"
+          }
+        },
+        "batch5_mortgage_pool_fixed_rate_submission_minimum": {
+          "differs": false,
+          "new": {
+            "outputs": {
+              "minimum_submission_requirement_satisfied": true,
+              "required_minimum_submission_amount": 1000000
+            },
+            "reason": null,
+            "status": "matched"
+          },
+          "old": {
+            "outputs": {
+              "minimum_submission_requirement_satisfied": true,
+              "required_minimum_submission_amount": 1000000
+            },
+            "reason": null,
+            "status": "matched"
+          }
+        }
+      }
+    },
+    {
+      "case_id": "batch5_clearly_below_both_thresholds",
+      "rule_results": {
+        "batch5_mortgage_pool_fixed_rate_submission_minimum": {
+          "differs": false,
+          "new": {
+            "outputs": {},
+            "reason": null,
+            "status": "no_match"
+          },
+          "old": {
+            "outputs": {},
+            "reason": null,
+            "status": "no_match"
+          }
+        }
+      }
+    },
+    {
+      "case_id": "batch5_wrong_pool_category",
+      "rule_results": {
+        "batch5_mortgage_pool_fixed_rate_submission_minimum": {
+          "differs": false,
+          "new": {
+            "outputs": {},
+            "reason": null,
+            "status": "no_match"
+          },
+          "old": {
+            "outputs": {},
+            "reason": null,
+            "status": "no_match"
+          }
+        }
+      }
+    }
+  ],
+  "downstream_impacts": {
+    "direct": [
+      "R-120-004",
+      "batch5_mortgage_pool_fixed_rate_submission_minimum"
+    ],
+    "potential": [
+      "B8-MBS-LOAN-001",
+      "B8-MBS-LOAN-002",
+      "R-120-003",
+      "R-120-004",
+      "batch5_mortgage_pool_fixed_rate_submission_minimum"
+    ],
+    "recompute": [],
+    "statuses": {
+      "B102-MORTGAGE_LOAN-CONFORMING-LIMIT-001": {
+        "detail": null,
+        "status": "unchanged"
+      },
+      "B102-PROPERTY-RURAL-INSPECTION-001": {
+        "detail": null,
+        "status": "unchanged"
+      },
+      "B106-MORTGAGE_LOAN-TWO_CLOSING_CASHOUT_TITLE": {
+        "detail": null,
+        "status": "unchanged"
+      },
+      "B106-MORTGAGE_LOAN-TWO_CLOSING_DOCUMENTS": {
+        "detail": "not compiled on either side",
+        "status": "refused-unsupported-construct"
+      },
+      "B108-LDML-005": {
+        "detail": "not compiled on either side",
+        "status": "refused-unsupported-construct"
+      },
+      "B108-SS-001": {
+        "detail": "not compiled on either side",
+        "status": "refused-unsupported-construct"
+      },
+      "B11-MORTGAGE_LOAN-PERSONAL-GIFT-001": {
+        "detail": "not compiled on either side",
+        "status": "refused-unsupported-construct"
+      },
+      "B11-MORTGAGE_LOAN-PERSONAL-GIFT-CONTRIBUTION-001": {
+        "detail": null,
+        "status": "unchanged"
+      },
+      "B11-MORTGAGE_LOAN-PERSONAL-GIFT-CONTRIBUTION-002": {
+        "detail": "not compiled on either side",
+        "status": "refused-unsupported-construct"
+      },
+      "B116-LOAN_APPLICATION-OTHER-INCOME-DOCUMENTATION": {
+        "detail": "not compiled on either side",
+        "status": "refused-unsupported-construct"
+      },
+      "B12-R01-MORTGAGE_LOAN-MINIMUM-CONTRIBUTION-EXCEPTION": {
+        "detail": "not compiled on either side",
+        "status": "refused-unsupported-construct"
+      },
+      "B122-LENDER_DELIVERS_MORTGAGE_LOAN-APPRAISER-REFUSAL-PROHIBITION": {
+        "detail": null,
+        "status": "unchanged"
+      },
+      "B125-BORROWER-GIFT-COHABITATION-003": {
+        "detail": null,
+        "status": "unchanged"
+      },
+      "B13-R02-LENDER-TRADING-ACCOUNT-UPDATES": {
+        "detail": null,
+        "status": "unchanged"
+      },
+      "B16-R004-ADU-RENTAL-INCOME-CAP": {
+        "detail": "not compiled on either side",
+        "status": "refused-unsupported-construct"
+      },
+      "B18-R04-post-closing-qc-tax-transcript-reverification": {
+        "detail": "not compiled on either side",
+        "status": "refused-unsupported-construct"
+      },
+      "B2-R002-MORTGAGE-LOAN-QC-RELIEF": {
+        "detail": null,
+        "status": "unchanged"
+      },
+      "B25-R01": {
+        "detail": "not compiled on either side",
+        "status": "refused-unsupported-construct"
+      },
+      "B25-R03": {
+        "detail": null,
+        "status": "unchanged"
+      },
+      "B26-LENDER-ALTERNATIVE-DELIVERY-003": {
+        "detail": null,
+        "status": "unchanged"
+      },
+      "B26-LENDER-MBS-DISCLOSURE-002": {
+        "detail": null,
+        "status": "unchanged"
+      },
+      "B26-LENDER-MBS-PROSPECTUS-001": {
+        "detail": null,
+        "status": "unchanged"
+      },
+      "B26-LENDER-QC-FILE-SUBMISSION-004": {
+        "detail": "not compiled on either side",
+        "status": "refused-unsupported-construct"
+      },
+      "B29-R02-lender-appraisal-replacement-report": {
+        "detail": null,
+        "status": "unchanged"
+      },
+      "B29-R04-ucdp-appraisal-submission": {
+        "detail": null,
+        "status": "unchanged"
+      },
+      "B32-A2-2-05-002-LENDER": {
+        "detail": null,
+        "status": "unchanged"
+      },
+      "B32-A2-2-06-001": {
+        "detail": "not compiled on either side",
+        "status": "refused-unsupported-construct"
+      },
+      "B35-LENDER-DELIVERS-MORTGAGE-LOAN-TIMING": {
+        "detail": null,
+        "status": "unchanged"
+      },
+      "B36-R01-LENDER-QC-PROGRAM": {
+        "detail": null,
+        "status": "unchanged"
+      },
+      "B36-R02-LENDER-QC-SAMPLE-SELECTION": {
+        "detail": null,
+        "status": "unchanged"
+      },
+      "B36-R03-LENDER-QC-RECORD-RETENTION": {
+        "detail": null,
+        "status": "unchanged"
+      },
+      "B36-R05-REPRESENTATION-WARRANTY-DU-UNDISCLOSED-DEBT": {
+        "detail": null,
+        "status": "unchanged"
+      },
+      "B39-LENDER-PREFUNDING-MONTHLY-SAMPLE": {
+        "detail": "not compiled on either side",
+        "status": "refused-unsupported-construct"
+      },
+      "B39-LENDER-PREFUNDING-WRITTEN-PLAN": {
+        "detail": "not compiled on either side",
+        "status": "refused-unsupported-construct"
+      },
+      "B42-MORTGAGE_LOAN-HOMESTYLE_REFRESH-IMPROVEMENT_CAP": {
+        "detail": "not compiled on either side",
+        "status": "refused-unsupported-construct"
+      },
+      "B46-LOAN_DOCUMENT-ENOTE-MERS-004": {
+        "detail": null,
+        "status": "unchanged"
+      },
+      "B51-R004": {
+        "detail": null,
+        "status": "unchanged"
+      },
+      "B56-LOAN_DOCUMENT-VISUAL-EXHIBITS-002": {
+        "detail": "not compiled on either side",
+        "status": "refused-unsupported-construct"
+      },
+      "B56-MORTGAGE_LOAN-HOMESTYLE-PROHIBITION-003": {
+        "detail": "not compiled on either side",
+        "status": "refused-unsupported-construct"
+      },
+      "B58-MORTGAGE_LOAN-MANUFACTURED_HOME-CASH_OUT_ELIGIBILITY": {
+        "detail": null,
+        "status": "unchanged"
+      },
+      "B63-R02-housing-counseling-satisfies-education": {
+        "detail": null,
+        "status": "unchanged"
+      },
+      "B69-BORROWER-IDA-NO-REPAYMENT-NO-LIEN-005": {
+        "detail": null,
+        "status": "unchanged"
+      },
+      "B69-LENDER-HLTV-APPRAISAL-REPRESENTATIONS-001": {
+        "detail": null,
+        "status": "unchanged"
+      },
+      "B77-LA-LTD-DOCUMENTATION-001": {
+        "detail": null,
+        "status": "unchanged"
+      },
+      "B77-LA-LTD-QUALIFYING-INCOME-002": {
+        "detail": null,
+        "status": "unchanged"
+      },
+      "B78-R003": {
+        "detail": null,
+        "status": "unchanged"
+      },
+      "B8-MBS-LOAN-001": {
+        "detail": null,
+        "status": "unresolved-review"
+      },
+      "B8-MBS-LOAN-002": {
+        "detail": null,
+        "status": "unresolved-review"
+      },
+      "B80-R05": {
+        "detail": null,
+        "status": "unchanged"
+      },
+      "B83-R02-BORROWER-ROV-DISCLOSURE": {
+        "detail": "not compiled on either side",
+        "status": "refused-unsupported-construct"
+      },
+      "B86-LENDER_DELIVERS_MORTGAGE_LOAN-GOVERNMENT-ENFORCEMENT-001": {
+        "detail": null,
+        "status": "unchanged"
+      },
+      "B92-R05-PROPERTY-PUD-QUALIFICATION": {
+        "detail": null,
+        "status": "unchanged"
+      },
+      "B93-BORROWER-CORPORATE-ORDINARY-INCOME-002": {
+        "detail": null,
+        "status": "unchanged"
+      },
+      "B96-LOAN_APPLICATION-UNEMPLOYMENT_BENEFITS-QUALIFICATION": {
+        "detail": "not compiled on either side",
+        "status": "refused-unsupported-construct"
+      },
+      "B97-SELLER-SERVICER-FORM-520-SUBMISSION-005": {
+        "detail": null,
+        "status": "unchanged"
+      },
+      "BR-111-BORROWER-001": {
+        "detail": null,
+        "status": "unchanged"
+      },
+      "BR-111-BORROWER-002": {
+        "detail": null,
+        "status": "unchanged"
+      },
+      "R-119-SELLER_SERVICER-MERS-MIN-001": {
+        "detail": null,
+        "status": "unchanged"
+      },
+      "R-120-003": {
+        "detail": null,
+        "status": "unresolved-review"
+      },
+      "R-120-004": {
+        "detail": {
+          "changed_fields": [
+            "condition",
+            "scope"
+          ]
+        },
+        "status": "multi_field_change"
+      },
+      "R82-LENDER-TX506-APPRAISAL-001": {
+        "detail": null,
+        "status": "unchanged"
+      },
+      "batch19_r02_untrue_selling_warranty_remedy": {
+        "detail": null,
+        "status": "unchanged"
+      },
+      "batch19_r04_seller_servicer_audit_record_delivery": {
+        "detail": null,
+        "status": "unchanged"
+      },
+      "batch4_rule_003_significant_defect_correction_process": {
+        "detail": "not compiled on either side",
+        "status": "refused-unsupported-construct"
+      },
+      "batch5_mortgage_pool_fixed_rate_submission_minimum": {
+        "detail": {
+          "changed_fields": [
+            "condition",
+            "scope"
+          ]
+        },
+        "status": "multi_field_change"
+      }
+    }
+  },
+  "metrics": {
+    "compiled_new": 45,
+    "compiled_old": 45,
+    "direct_count": 2,
+    "potential_count": 5,
+    "recompute_count": 0,
+    "refused_count": 20,
+    "universe_size": 65,
+    "unresolved_review_count": 3
+  },
+  "pair_id": "mortgage-tier1",
+  "provenance": {
+    "new_document_id": "mortgage-tier1-new",
+    "new_source_sha256": "d978d8fe9aab1a613d982f7fa2847d35c8cd551683987cb17e43d64a34adec44",
+    "old_document_id": "mortgage-tier1-old",
+    "old_source_sha256": "d978d8fe9aab1a613d982f7fa2847d35c8cd551683987cb17e43d64a34adec44"
+  },
+  "refusals": [
+    {
+      "new_code": "SYMBOL_CONFLICT",
+      "old_code": "SYMBOL_CONFLICT",
+      "rule_id": "B106-MORTGAGE_LOAN-TWO_CLOSING_DOCUMENTS"
+    },
+    {
+      "new_code": "UNCLASSIFIED_FIELD",
+      "old_code": "UNCLASSIFIED_FIELD",
+      "rule_id": "B108-LDML-005"
+    },
+    {
+      "new_code": "UNCLASSIFIED_FIELD",
+      "old_code": "UNCLASSIFIED_FIELD",
+      "rule_id": "B108-SS-001"
+    },
+    {
+      "new_code": "SYMBOL_CONFLICT",
+      "old_code": "SYMBOL_CONFLICT",
+      "rule_id": "B11-MORTGAGE_LOAN-PERSONAL-GIFT-001"
+    },
+    {
+      "new_code": "SYMBOL_CONFLICT",
+      "old_code": "SYMBOL_CONFLICT",
+      "rule_id": "B11-MORTGAGE_LOAN-PERSONAL-GIFT-CONTRIBUTION-002"
+    },
+    {
+      "new_code": "UNCLASSIFIED_FIELD",
+      "old_code": "UNCLASSIFIED_FIELD",
+      "rule_id": "B116-LOAN_APPLICATION-OTHER-INCOME-DOCUMENTATION"
+    },
+    {
+      "new_code": "UNCLASSIFIED_FIELD",
+      "old_code": "UNCLASSIFIED_FIELD",
+      "rule_id": "B12-R01-MORTGAGE_LOAN-MINIMUM-CONTRIBUTION-EXCEPTION"
+    },
+    {
+      "new_code": "SYMBOL_CONFLICT",
+      "old_code": "SYMBOL_CONFLICT",
+      "rule_id": "B16-R004-ADU-RENTAL-INCOME-CAP"
+    },
+    {
+      "new_code": "UNRESOLVED_SCOPE",
+      "old_code": "UNRESOLVED_SCOPE",
+      "rule_id": "B18-R04-post-closing-qc-tax-transcript-reverification"
+    },
+    {
+      "new_code": "SYMBOL_CONFLICT",
+      "old_code": "SYMBOL_CONFLICT",
+      "rule_id": "B25-R01"
+    },
+    {
+      "new_code": "MISSING_PREDICATES",
+      "old_code": "MISSING_PREDICATES",
+      "rule_id": "B26-LENDER-QC-FILE-SUBMISSION-004"
+    },
+    {
+      "new_code": "SYMBOL_CONFLICT",
+      "old_code": "SYMBOL_CONFLICT",
+      "rule_id": "B32-A2-2-06-001"
+    },
+    {
+      "new_code": "UNCLASSIFIED_FIELD",
+      "old_code": "UNCLASSIFIED_FIELD",
+      "rule_id": "B39-LENDER-PREFUNDING-MONTHLY-SAMPLE"
+    },
+    {
+      "new_code": "UNCLASSIFIED_FIELD",
+      "old_code": "UNCLASSIFIED_FIELD",
+      "rule_id": "B39-LENDER-PREFUNDING-WRITTEN-PLAN"
+    },
+    {
+      "new_code": "TYPE_MISMATCH",
+      "old_code": "TYPE_MISMATCH",
+      "rule_id": "B42-MORTGAGE_LOAN-HOMESTYLE_REFRESH-IMPROVEMENT_CAP"
+    },
+    {
+      "new_code": "SYMBOL_CONFLICT",
+      "old_code": "SYMBOL_CONFLICT",
+      "rule_id": "B56-LOAN_DOCUMENT-VISUAL-EXHIBITS-002"
+    },
+    {
+      "new_code": "SYMBOL_CONFLICT",
+      "old_code": "SYMBOL_CONFLICT",
+      "rule_id": "B56-MORTGAGE_LOAN-HOMESTYLE-PROHIBITION-003"
+    },
+    {
+      "new_code": "UNSUPPORTED_VARIABLE_TYPE",
+      "old_code": "UNSUPPORTED_VARIABLE_TYPE",
+      "rule_id": "B83-R02-BORROWER-ROV-DISCLOSURE"
+    },
+    {
+      "new_code": "SYMBOL_CONFLICT",
+      "old_code": "SYMBOL_CONFLICT",
+      "rule_id": "B96-LOAN_APPLICATION-UNEMPLOYMENT_BENEFITS-QUALIFICATION"
+    },
+    {
+      "new_code": "UNCLASSIFIED_FIELD",
+      "old_code": "UNCLASSIFIED_FIELD",
+      "rule_id": "batch4_rule_003_significant_defect_correction_process"
+    }
+  ],
+  "rule_alignments": [
+    {
+      "kind": "one_to_one",
+      "method": "exact_id",
+      "new_rule_ids": [
+        "B102-MORTGAGE_LOAN-CONFORMING-LIMIT-001"
+      ],
+      "old_rule_ids": [
+        "B102-MORTGAGE_LOAN-CONFORMING-LIMIT-001"
+      ]
+    },
+    {
+      "kind": "one_to_one",
+      "method": "exact_id",
+      "new_rule_ids": [
+        "B102-PROPERTY-RURAL-INSPECTION-001"
+      ],
+      "old_rule_ids": [
+        "B102-PROPERTY-RURAL-INSPECTION-001"
+      ]
+    },
+    {
+      "kind": "one_to_one",
+      "method": "exact_id",
+      "new_rule_ids": [
+        "B106-MORTGAGE_LOAN-TWO_CLOSING_CASHOUT_TITLE"
+      ],
+      "old_rule_ids": [
+        "B106-MORTGAGE_LOAN-TWO_CLOSING_CASHOUT_TITLE"
+      ]
+    },
+    {
+      "kind": "one_to_one",
+      "method": "exact_id",
+      "new_rule_ids": [
+        "B11-MORTGAGE_LOAN-PERSONAL-GIFT-CONTRIBUTION-001"
+      ],
+      "old_rule_ids": [
+        "B11-MORTGAGE_LOAN-PERSONAL-GIFT-CONTRIBUTION-001"
+      ]
+    },
+    {
+      "kind": "one_to_one",
+      "method": "exact_id",
+      "new_rule_ids": [
+        "B122-LENDER_DELIVERS_MORTGAGE_LOAN-APPRAISER-REFUSAL-PROHIBITION"
+      ],
+      "old_rule_ids": [
+        "B122-LENDER_DELIVERS_MORTGAGE_LOAN-APPRAISER-REFUSAL-PROHIBITION"
+      ]
+    },
+    {
+      "kind": "one_to_one",
+      "method": "exact_id",
+      "new_rule_ids": [
+        "B125-BORROWER-GIFT-COHABITATION-003"
+      ],
+      "old_rule_ids": [
+        "B125-BORROWER-GIFT-COHABITATION-003"
+      ]
+    },
+    {
+      "kind": "one_to_one",
+      "method": "exact_id",
+      "new_rule_ids": [
+        "B13-R02-LENDER-TRADING-ACCOUNT-UPDATES"
+      ],
+      "old_rule_ids": [
+        "B13-R02-LENDER-TRADING-ACCOUNT-UPDATES"
+      ]
+    },
+    {
+      "kind": "one_to_one",
+      "method": "exact_id",
+      "new_rule_ids": [
+        "B2-R002-MORTGAGE-LOAN-QC-RELIEF"
+      ],
+      "old_rule_ids": [
+        "B2-R002-MORTGAGE-LOAN-QC-RELIEF"
+      ]
+    },
+    {
+      "kind": "one_to_one",
+      "method": "exact_id",
+      "new_rule_ids": [
+        "B25-R03"
+      ],
+      "old_rule_ids": [
+        "B25-R03"
+      ]
+    },
+    {
+      "kind": "one_to_one",
+      "method": "exact_id",
+      "new_rule_ids": [
+        "B26-LENDER-ALTERNATIVE-DELIVERY-003"
+      ],
+      "old_rule_ids": [
+        "B26-LENDER-ALTERNATIVE-DELIVERY-003"
+      ]
+    },
+    {
+      "kind": "one_to_one",
+      "method": "exact_id",
+      "new_rule_ids": [
+        "B26-LENDER-MBS-DISCLOSURE-002"
+      ],
+      "old_rule_ids": [
+        "B26-LENDER-MBS-DISCLOSURE-002"
+      ]
+    },
+    {
+      "kind": "one_to_one",
+      "method": "exact_id",
+      "new_rule_ids": [
+        "B26-LENDER-MBS-PROSPECTUS-001"
+      ],
+      "old_rule_ids": [
+        "B26-LENDER-MBS-PROSPECTUS-001"
+      ]
+    },
+    {
+      "kind": "one_to_one",
+      "method": "exact_id",
+      "new_rule_ids": [
+        "B29-R02-lender-appraisal-replacement-report"
+      ],
+      "old_rule_ids": [
+        "B29-R02-lender-appraisal-replacement-report"
+      ]
+    },
+    {
+      "kind": "one_to_one",
+      "method": "exact_id",
+      "new_rule_ids": [
+        "B29-R04-ucdp-appraisal-submission"
+      ],
+      "old_rule_ids": [
+        "B29-R04-ucdp-appraisal-submission"
+      ]
+    },
+    {
+      "kind": "one_to_one",
+      "method": "exact_id",
+      "new_rule_ids": [
+        "B32-A2-2-05-002-LENDER"
+      ],
+      "old_rule_ids": [
+        "B32-A2-2-05-002-LENDER"
+      ]
+    },
+    {
+      "kind": "one_to_one",
+      "method": "exact_id",
+      "new_rule_ids": [
+        "B35-LENDER-DELIVERS-MORTGAGE-LOAN-TIMING"
+      ],
+      "old_rule_ids": [
+        "B35-LENDER-DELIVERS-MORTGAGE-LOAN-TIMING"
+      ]
+    },
+    {
+      "kind": "one_to_one",
+      "method": "exact_id",
+      "new_rule_ids": [
+        "B36-R01-LENDER-QC-PROGRAM"
+      ],
+      "old_rule_ids": [
+        "B36-R01-LENDER-QC-PROGRAM"
+      ]
+    },
+    {
+      "kind": "one_to_one",
+      "method": "exact_id",
+      "new_rule_ids": [
+        "B36-R02-LENDER-QC-SAMPLE-SELECTION"
+      ],
+      "old_rule_ids": [
+        "B36-R02-LENDER-QC-SAMPLE-SELECTION"
+      ]
+    },
+    {
+      "kind": "one_to_one",
+      "method": "exact_id",
+      "new_rule_ids": [
+        "B36-R03-LENDER-QC-RECORD-RETENTION"
+      ],
+      "old_rule_ids": [
+        "B36-R03-LENDER-QC-RECORD-RETENTION"
+      ]
+    },
+    {
+      "kind": "one_to_one",
+      "method": "exact_id",
+      "new_rule_ids": [
+        "B36-R05-REPRESENTATION-WARRANTY-DU-UNDISCLOSED-DEBT"
+      ],
+      "old_rule_ids": [
+        "B36-R05-REPRESENTATION-WARRANTY-DU-UNDISCLOSED-DEBT"
+      ]
+    },
+    {
+      "kind": "one_to_one",
+      "method": "exact_id",
+      "new_rule_ids": [
+        "B46-LOAN_DOCUMENT-ENOTE-MERS-004"
+      ],
+      "old_rule_ids": [
+        "B46-LOAN_DOCUMENT-ENOTE-MERS-004"
+      ]
+    },
+    {
+      "kind": "one_to_one",
+      "method": "exact_id",
+      "new_rule_ids": [
+        "B51-R004"
+      ],
+      "old_rule_ids": [
+        "B51-R004"
+      ]
+    },
+    {
+      "kind": "one_to_one",
+      "method": "exact_id",
+      "new_rule_ids": [
+        "B58-MORTGAGE_LOAN-MANUFACTURED_HOME-CASH_OUT_ELIGIBILITY"
+      ],
+      "old_rule_ids": [
+        "B58-MORTGAGE_LOAN-MANUFACTURED_HOME-CASH_OUT_ELIGIBILITY"
+      ]
+    },
+    {
+      "kind": "one_to_one",
+      "method": "exact_id",
+      "new_rule_ids": [
+        "B63-R02-housing-counseling-satisfies-education"
+      ],
+      "old_rule_ids": [
+        "B63-R02-housing-counseling-satisfies-education"
+      ]
+    },
+    {
+      "kind": "one_to_one",
+      "method": "exact_id",
+      "new_rule_ids": [
+        "B69-BORROWER-IDA-NO-REPAYMENT-NO-LIEN-005"
+      ],
+      "old_rule_ids": [
+        "B69-BORROWER-IDA-NO-REPAYMENT-NO-LIEN-005"
+      ]
+    },
+    {
+      "kind": "one_to_one",
+      "method": "exact_id",
+      "new_rule_ids": [
+        "B69-LENDER-HLTV-APPRAISAL-REPRESENTATIONS-001"
+      ],
+      "old_rule_ids": [
+        "B69-LENDER-HLTV-APPRAISAL-REPRESENTATIONS-001"
+      ]
+    },
+    {
+      "kind": "one_to_one",
+      "method": "exact_id",
+      "new_rule_ids": [
+        "B77-LA-LTD-DOCUMENTATION-001"
+      ],
+      "old_rule_ids": [
+        "B77-LA-LTD-DOCUMENTATION-001"
+      ]
+    },
+    {
+      "kind": "one_to_one",
+      "method": "exact_id",
+      "new_rule_ids": [
+        "B77-LA-LTD-QUALIFYING-INCOME-002"
+      ],
+      "old_rule_ids": [
+        "B77-LA-LTD-QUALIFYING-INCOME-002"
+      ]
+    },
+    {
+      "kind": "one_to_one",
+      "method": "exact_id",
+      "new_rule_ids": [
+        "B78-R003"
+      ],
+      "old_rule_ids": [
+        "B78-R003"
+      ]
+    },
+    {
+      "kind": "one_to_one",
+      "method": "exact_id",
+      "new_rule_ids": [
+        "B8-MBS-LOAN-001"
+      ],
+      "old_rule_ids": [
+        "B8-MBS-LOAN-001"
+      ]
+    },
+    {
+      "kind": "one_to_one",
+      "method": "exact_id",
+      "new_rule_ids": [
+        "B8-MBS-LOAN-002"
+      ],
+      "old_rule_ids": [
+        "B8-MBS-LOAN-002"
+      ]
+    },
+    {
+      "kind": "one_to_one",
+      "method": "exact_id",
+      "new_rule_ids": [
+        "B80-R05"
+      ],
+      "old_rule_ids": [
+        "B80-R05"
+      ]
+    },
+    {
+      "kind": "one_to_one",
+      "method": "exact_id",
+      "new_rule_ids": [
+        "B86-LENDER_DELIVERS_MORTGAGE_LOAN-GOVERNMENT-ENFORCEMENT-001"
+      ],
+      "old_rule_ids": [
+        "B86-LENDER_DELIVERS_MORTGAGE_LOAN-GOVERNMENT-ENFORCEMENT-001"
+      ]
+    },
+    {
+      "kind": "one_to_one",
+      "method": "exact_id",
+      "new_rule_ids": [
+        "B92-R05-PROPERTY-PUD-QUALIFICATION"
+      ],
+      "old_rule_ids": [
+        "B92-R05-PROPERTY-PUD-QUALIFICATION"
+      ]
+    },
+    {
+      "kind": "one_to_one",
+      "method": "exact_id",
+      "new_rule_ids": [
+        "B93-BORROWER-CORPORATE-ORDINARY-INCOME-002"
+      ],
+      "old_rule_ids": [
+        "B93-BORROWER-CORPORATE-ORDINARY-INCOME-002"
+      ]
+    },
+    {
+      "kind": "one_to_one",
+      "method": "exact_id",
+      "new_rule_ids": [
+        "B97-SELLER-SERVICER-FORM-520-SUBMISSION-005"
+      ],
+      "old_rule_ids": [
+        "B97-SELLER-SERVICER-FORM-520-SUBMISSION-005"
+      ]
+    },
+    {
+      "kind": "one_to_one",
+      "method": "exact_id",
+      "new_rule_ids": [
+        "BR-111-BORROWER-001"
+      ],
+      "old_rule_ids": [
+        "BR-111-BORROWER-001"
+      ]
+    },
+    {
+      "kind": "one_to_one",
+      "method": "exact_id",
+      "new_rule_ids": [
+        "BR-111-BORROWER-002"
+      ],
+      "old_rule_ids": [
+        "BR-111-BORROWER-002"
+      ]
+    },
+    {
+      "kind": "one_to_one",
+      "method": "exact_id",
+      "new_rule_ids": [
+        "R-119-SELLER_SERVICER-MERS-MIN-001"
+      ],
+      "old_rule_ids": [
+        "R-119-SELLER_SERVICER-MERS-MIN-001"
+      ]
+    },
+    {
+      "kind": "one_to_one",
+      "method": "exact_id",
+      "new_rule_ids": [
+        "R-120-003"
+      ],
+      "old_rule_ids": [
+        "R-120-003"
+      ]
+    },
+    {
+      "kind": "one_to_one",
+      "method": "exact_id",
+      "new_rule_ids": [
+        "R-120-004"
+      ],
+      "old_rule_ids": [
+        "R-120-004"
+      ]
+    },
+    {
+      "kind": "one_to_one",
+      "method": "exact_id",
+      "new_rule_ids": [
+        "R82-LENDER-TX506-APPRAISAL-001"
+      ],
+      "old_rule_ids": [
+        "R82-LENDER-TX506-APPRAISAL-001"
+      ]
+    },
+    {
+      "kind": "one_to_one",
+      "method": "exact_id",
+      "new_rule_ids": [
+        "batch19_r02_untrue_selling_warranty_remedy"
+      ],
+      "old_rule_ids": [
+        "batch19_r02_untrue_selling_warranty_remedy"
+      ]
+    },
+    {
+      "kind": "one_to_one",
+      "method": "exact_id",
+      "new_rule_ids": [
+        "batch19_r04_seller_servicer_audit_record_delivery"
+      ],
+      "old_rule_ids": [
+        "batch19_r04_seller_servicer_audit_record_delivery"
+      ]
+    },
+    {
+      "kind": "one_to_one",
+      "method": "exact_id",
+      "new_rule_ids": [
+        "batch5_mortgage_pool_fixed_rate_submission_minimum"
+      ],
+      "old_rule_ids": [
+        "batch5_mortgage_pool_fixed_rate_submission_minimum"
+      ]
+    }
+  ],
+  "schema_version": "regdelta-impact/1.0",
+  "semantic_changes": [
+    {
+      "detail": null,
+      "rule_id": "B102-MORTGAGE_LOAN-CONFORMING-LIMIT-001",
+      "taxonomy": "unchanged"
+    },
+    {
+      "detail": null,
+      "rule_id": "B102-PROPERTY-RURAL-INSPECTION-001",
+      "taxonomy": "unchanged"
+    },
+    {
+      "detail": null,
+      "rule_id": "B106-MORTGAGE_LOAN-TWO_CLOSING_CASHOUT_TITLE",
+      "taxonomy": "unchanged"
+    },
+    {
+      "detail": null,
+      "rule_id": "B11-MORTGAGE_LOAN-PERSONAL-GIFT-CONTRIBUTION-001",
+      "taxonomy": "unchanged"
+    },
+    {
+      "detail": null,
+      "rule_id": "B122-LENDER_DELIVERS_MORTGAGE_LOAN-APPRAISER-REFUSAL-PROHIBITION",
+      "taxonomy": "unchanged"
+    },
+    {
+      "detail": null,
+      "rule_id": "B125-BORROWER-GIFT-COHABITATION-003",
+      "taxonomy": "unchanged"
+    },
+    {
+      "detail": null,
+      "rule_id": "B13-R02-LENDER-TRADING-ACCOUNT-UPDATES",
+      "taxonomy": "unchanged"
+    },
+    {
+      "detail": null,
+      "rule_id": "B2-R002-MORTGAGE-LOAN-QC-RELIEF",
+      "taxonomy": "unchanged"
+    },
+    {
+      "detail": null,
+      "rule_id": "B25-R03",
+      "taxonomy": "unchanged"
+    },
+    {
+      "detail": null,
+      "rule_id": "B26-LENDER-ALTERNATIVE-DELIVERY-003",
+      "taxonomy": "unchanged"
+    },
+    {
+      "detail": null,
+      "rule_id": "B26-LENDER-MBS-DISCLOSURE-002",
+      "taxonomy": "unchanged"
+    },
+    {
+      "detail": null,
+      "rule_id": "B26-LENDER-MBS-PROSPECTUS-001",
+      "taxonomy": "unchanged"
+    },
+    {
+      "detail": null,
+      "rule_id": "B29-R02-lender-appraisal-replacement-report",
+      "taxonomy": "unchanged"
+    },
+    {
+      "detail": null,
+      "rule_id": "B29-R04-ucdp-appraisal-submission",
+      "taxonomy": "unchanged"
+    },
+    {
+      "detail": null,
+      "rule_id": "B32-A2-2-05-002-LENDER",
+      "taxonomy": "unchanged"
+    },
+    {
+      "detail": null,
+      "rule_id": "B35-LENDER-DELIVERS-MORTGAGE-LOAN-TIMING",
+      "taxonomy": "unchanged"
+    },
+    {
+      "detail": null,
+      "rule_id": "B36-R01-LENDER-QC-PROGRAM",
+      "taxonomy": "unchanged"
+    },
+    {
+      "detail": null,
+      "rule_id": "B36-R02-LENDER-QC-SAMPLE-SELECTION",
+      "taxonomy": "unchanged"
+    },
+    {
+      "detail": null,
+      "rule_id": "B36-R03-LENDER-QC-RECORD-RETENTION",
+      "taxonomy": "unchanged"
+    },
+    {
+      "detail": null,
+      "rule_id": "B36-R05-REPRESENTATION-WARRANTY-DU-UNDISCLOSED-DEBT",
+      "taxonomy": "unchanged"
+    },
+    {
+      "detail": null,
+      "rule_id": "B46-LOAN_DOCUMENT-ENOTE-MERS-004",
+      "taxonomy": "unchanged"
+    },
+    {
+      "detail": null,
+      "rule_id": "B51-R004",
+      "taxonomy": "unchanged"
+    },
+    {
+      "detail": null,
+      "rule_id": "B58-MORTGAGE_LOAN-MANUFACTURED_HOME-CASH_OUT_ELIGIBILITY",
+      "taxonomy": "unchanged"
+    },
+    {
+      "detail": null,
+      "rule_id": "B63-R02-housing-counseling-satisfies-education",
+      "taxonomy": "unchanged"
+    },
+    {
+      "detail": null,
+      "rule_id": "B69-BORROWER-IDA-NO-REPAYMENT-NO-LIEN-005",
+      "taxonomy": "unchanged"
+    },
+    {
+      "detail": null,
+      "rule_id": "B69-LENDER-HLTV-APPRAISAL-REPRESENTATIONS-001",
+      "taxonomy": "unchanged"
+    },
+    {
+      "detail": null,
+      "rule_id": "B77-LA-LTD-DOCUMENTATION-001",
+      "taxonomy": "unchanged"
+    },
+    {
+      "detail": null,
+      "rule_id": "B77-LA-LTD-QUALIFYING-INCOME-002",
+      "taxonomy": "unchanged"
+    },
+    {
+      "detail": null,
+      "rule_id": "B78-R003",
+      "taxonomy": "unchanged"
+    },
+    {
+      "detail": null,
+      "rule_id": "B8-MBS-LOAN-001",
+      "taxonomy": "unchanged"
+    },
+    {
+      "detail": null,
+      "rule_id": "B8-MBS-LOAN-002",
+      "taxonomy": "unchanged"
+    },
+    {
+      "detail": null,
+      "rule_id": "B80-R05",
+      "taxonomy": "unchanged"
+    },
+    {
+      "detail": null,
+      "rule_id": "B86-LENDER_DELIVERS_MORTGAGE_LOAN-GOVERNMENT-ENFORCEMENT-001",
+      "taxonomy": "unchanged"
+    },
+    {
+      "detail": null,
+      "rule_id": "B92-R05-PROPERTY-PUD-QUALIFICATION",
+      "taxonomy": "unchanged"
+    },
+    {
+      "detail": null,
+      "rule_id": "B93-BORROWER-CORPORATE-ORDINARY-INCOME-002",
+      "taxonomy": "unchanged"
+    },
+    {
+      "detail": null,
+      "rule_id": "B97-SELLER-SERVICER-FORM-520-SUBMISSION-005",
+      "taxonomy": "unchanged"
+    },
+    {
+      "detail": null,
+      "rule_id": "BR-111-BORROWER-001",
+      "taxonomy": "unchanged"
+    },
+    {
+      "detail": null,
+      "rule_id": "BR-111-BORROWER-002",
+      "taxonomy": "unchanged"
+    },
+    {
+      "detail": null,
+      "rule_id": "R-119-SELLER_SERVICER-MERS-MIN-001",
+      "taxonomy": "unchanged"
+    },
+    {
+      "detail": null,
+      "rule_id": "R-120-003",
+      "taxonomy": "unchanged"
+    },
+    {
+      "detail": {
+        "changed_fields": [
+          "condition",
+          "scope"
+        ]
+      },
+      "rule_id": "R-120-004",
+      "taxonomy": "multi_field_change"
+    },
+    {
+      "detail": null,
+      "rule_id": "R82-LENDER-TX506-APPRAISAL-001",
+      "taxonomy": "unchanged"
+    },
+    {
+      "detail": null,
+      "rule_id": "batch19_r02_untrue_selling_warranty_remedy",
+      "taxonomy": "unchanged"
+    },
+    {
+      "detail": null,
+      "rule_id": "batch19_r04_seller_servicer_audit_record_delivery",
+      "taxonomy": "unchanged"
+    },
+    {
+      "detail": {
+        "changed_fields": [
+          "condition",
+          "scope"
+        ]
+      },
+      "rule_id": "batch5_mortgage_pool_fixed_rate_submission_minimum",
+      "taxonomy": "multi_field_change"
+    }
+  ],
+  "witnesses": [
+    {
+      "case_id": "r120004_boundary_79_no_enhancement",
+      "new_result": {
+        "outputs": {
+          "primary_mortgage_insurance_policy_required": true
+        },
+        "reason": null,
+        "status": "matched"
+      },
+      "old_result": {
+        "outputs": {},
+        "reason": null,
+        "status": "no_match"
+      },
+      "rule_id": "R-120-004"
+    },
+    {
+      "case_id": "batch5_boundary_1100000",
+      "new_result": {
+        "outputs": {},
+        "reason": null,
+        "status": "no_match"
+      },
+      "old_result": {
+        "outputs": {
+          "minimum_submission_requirement_satisfied": true,
+          "required_minimum_submission_amount": 1000000
+        },
+        "reason": null,
+        "status": "matched"
+      },
+      "rule_id": "batch5_mortgage_pool_fixed_rate_submission_minimum"
+    }
+  ]
+}
