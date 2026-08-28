@@ -1,4 +1,4 @@
-"""PIPE-1/PIPE-2 (plan/neurips-plan-2027.md §3.1-3.2): a "full corpus" extraction
+"""PIPE-1/PIPE-2 (plan/tasks.json): a "full corpus" extraction
 run must actually read the full corpus.
 
 Before this fix, `BusinessRulesExtractor.read_text_files_batch` truncated

@@ -1,18 +1,18 @@
 # Anchor release-contents audit (A1a)
 
-**Task:** `plan/neurips-plan-2027.md` §4.1 A1a. **Status: done — resolves the open
-question in proposal Appendix B / plan §15.3 item 1.** Repository audited via
+**Historical task:** `A1a` in `plan/tasks.json`. **Status: done — resolves the
+open release-content question from the superseded research plan.** Repository audited via
 the GitHub API tree endpoint and raw file fetches on 2026-08-24, commit
 `6a4844fb235d4f958d0810bba7089a2e9078099e` of
 `github.com/opengov-lab/legal-text-to-decision-model` (branch `main`).
 
 ## The question this resolves
 
-The third-pass review of the proposal (§27.3 item 1) and the plan (§15.3 item
-1) both flagged the same open uncertainty: *"I could not confirm that the
+The third-pass review of the superseded proposal and plan both flagged the
+same open uncertainty: *"I could not confirm that the
 generated models or expected result files are released — only source models,
 gold models, legal text, and the harness."* That uncertainty gated whether
-plan §4.1's A1b (deterministic evaluator replay) is executable at all, or
+the `A1b` task (deterministic evaluator replay) is executable at all, or
 whether A2 (fresh generation) was the only route.
 
 ## Finding: the generated models and results ARE released, in full

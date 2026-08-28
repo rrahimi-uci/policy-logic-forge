@@ -1,4 +1,4 @@
-"""Contract tests for the machine-readable NeurIPS execution plan."""
+"""Contract tests for the canonical proposal and historical task registry."""
 
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ from scripts.validate_neurips_plan import (
     render_summary,
     validate_embedded_summary,
     validate_ir_schema,
+    validate_proposal,
     validate_registry,
 )
 
@@ -25,10 +26,13 @@ def test_repository_registry_and_embedded_summary_are_valid() -> None:
 
     assert validate_registry(registry) == []
     assert validate_ir_schema() == []
+    assert validate_proposal() == []
     assert validate_embedded_summary(registry) == []
     assert REGISTRY == ROOT / "plan" / "tasks.json"
-    assert PLAN == ROOT / "plan" / "neurips-plan-2027.md"
-    assert (ROOT / "plan" / "neurIips-proposal-2027.md").is_file()
+    assert PLAN == ROOT / "plan" / "proposal.md"
+    assert PLAN.is_file()
+    assert not (ROOT / "plan" / "neurips-plan-2027.md").exists()
+    assert not (ROOT / "plan" / "neurIips-proposal-2027.md").exists()
     assert not (ROOT / "neurips-plan-2027.md").exists()
     assert not (ROOT / "neurIips-proposal-2027.md").exists()
 

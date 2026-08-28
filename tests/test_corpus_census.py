@@ -1,7 +1,7 @@
-"""IR-2 (plan/neurips-plan-2027.md §3.6): the corpus feature census must run
+"""IR-2 (plan/tasks.json): the corpus feature census must run
 *before* the compiler's supported type/operator subset is frozen.
 
-Proposal §9.4 shows what freezing-before-measuring costs: refusing the
+The historical evaluation design shows what freezing-before-measuring costs: refusing the
 `string` theory silently refuses 34 of the anchor's 58 testable models,
 which drops the primary instrument-validation endpoint to n=24 -- a sample
 size at which its own declared success criterion fails even at the true

@@ -1,9 +1,11 @@
 # Plan audit — 2026-08-26
 
-This report records the August 26, 2026 review of
-[`plan/neurips-plan-2027.md`](../plan/neurips-plan-2027.md) and the companion
-docs against the repository's current code, tests, validators, and retained
-artifacts.
+This historical report records the August 26, 2026 review of the now-removed
+NeurIPS execution plan and its companion documents against the repository's
+code, tests, validators, and retained artifacts at that time. The canonical
+current direction is [`plan/proposal.md`](../plan/proposal.md); the task IDs
+below remain preserved in `plan/tasks.json` as historical implementation
+evidence.
 
 ## Findings applied
 

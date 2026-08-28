@@ -1,9 +1,12 @@
-# NeurIPS plan contracts
+# Research proposal and task contracts
 
-This directory contains the machine-readable contracts behind
-[`neurips-plan-2027.md`](neurips-plan-2027.md):
+[`proposal.md`](proposal.md) is the canonical research and implementation
+proposal for RegDelta. It replaces the superseded NeurIPS proposal and plan.
 
-- `tasks.json` is authoritative for task IDs, dependency edges, statuses,
+This directory also retains the machine-readable contracts produced by the
+earlier compiler programme:
+
+- `tasks.json` is the historical registry for task IDs, dependency edges, statuses,
   person-day estimates, scope membership, acceptance commands, artifacts, and
   evidence paths.
 - `lexec-ir-v1.schema.json` is the structural contract for the proposed
@@ -29,5 +32,7 @@ non-claiming artifacts are complete but the scientific gate still depends on
 licensed data, approved external engines, human adjudication, or
 GPU/provider-approved runs. Use `conditional` for work outside the committed
 scope and `blocked` only when a named external dependency prevents execution.
-Update the generated summary in the Markdown plan with exact `--summary` output
-in the same PR as any registry change.
+`--summary` renders the historical registry summary; it is not embedded in or
+authoritative for the new RegDelta proposal. Future RegDelta implementation
+tasks should update or replace the registry explicitly rather than inheriting
+legacy completion statuses.
