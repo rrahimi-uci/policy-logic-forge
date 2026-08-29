@@ -6,11 +6,13 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 from agents.agent_09_grounding_verifier import (
+    MAX_ANCHOR_SPAN_EXPANSION,
     MIN_REPAIR_CHARS,
     MIN_REPAIR_COVERAGE,
     MODEL_CLAIM_TYPES,
     GroundingVerifier,
     OpenAIGroundingResolver,
+    _repair_by_anchors,
     _repair_near_match,
     certification_issues,
     extract_claims,
@@ -585,3 +587,68 @@ def test_markdown_response_coverage_uses_model_claim_denominator():
     markdown = GroundingVerifier.report_markdown(report)
     assert "Verifier response coverage: 1 / 1 (100.0%)" in markdown
     assert "Verifier response coverage: 1 / 3" not in markdown
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Anchor span recovery: the broader of the two repair strategies. The
+# extraction agent is reliable at identifying WHERE a passage is and
+# unreliable at TRANSCRIBING it, so its first/last few words are used only
+# as pointers and everything between them comes from the corpus. This
+# recovers the dominant real failure -- the model found the right passage
+# but compressed/paraphrased its MIDDLE -- which the contiguous-run
+# strategy above cannot reach by construction.
+# ─────────────────────────────────────────────────────────────────────────
+
+ANCHOR_CHUNK = (
+    "The lender must obtain and review the executed lease agreement between the borrower and "
+    "the third-party solar provider, confirm that the agreement does not encumber title, and "
+    "verify the panels before the loan is delivered to Fannie Mae for purchase or securitization."
+)
+
+
+def test_middle_drift_is_recovered_from_the_corpus_not_the_model():
+    """The model keeps the real opening and closing but paraphrases the
+    middle -- exactly the case the contiguous strategy cannot repair."""
+    drifted = (
+        "The lender must obtain and review the executed lease agreement between the borrower and "
+        "the solar company and check the title is clear and "
+        "verify the panels before the loan is delivered to Fannie Mae for purchase or securitization."
+    )
+    assert _repair_near_match(drifted, ANCHOR_CHUNK) == ANCHOR_CHUNK
+    # The model's own paraphrase ("the solar company") must NOT survive:
+    # the repaired citation is corpus text end to end.
+    assert "solar company" not in _repair_near_match(drifted, ANCHOR_CHUNK)
+
+
+def test_anchor_recovery_refuses_when_the_opening_is_not_in_the_chunk():
+    fabricated = "Borrowers shall submit a notarized affidavit and " + "then " * 10 + "conclude the filing."
+    assert _repair_by_anchors(fabricated, ANCHOR_CHUNK) is None
+
+
+def test_anchor_recovery_refuses_to_balloon_a_citation_into_surrounding_text():
+    """A real head plus a tail that only reappears far away must not
+    silently widen the citation across unrelated paragraphs."""
+    far_chunk = ANCHOR_CHUNK + (" Unrelated intervening policy text. " * 40) + "for purchase or securitization."
+    quote = (
+        "The lender must obtain and review the executed lease agreement between the borrower and "
+        "for purchase or securitization."
+    )
+    recovered = _repair_by_anchors(quote, far_chunk)
+    if recovered is not None:
+        normalised_quote_length = len(" ".join(quote.split()))
+        assert len(recovered) <= MAX_ANCHOR_SPAN_EXPANSION * normalised_quote_length
+
+
+def test_anchor_recovery_refuses_a_quote_too_short_to_anchor():
+    assert _repair_by_anchors("must obtain and review", ANCHOR_CHUNK) is None
+
+
+def test_anchor_recovered_span_is_always_real_corpus_text():
+    drifted = (
+        "The lender must obtain and review the executed lease agreement between the borrower and "
+        "some other wording entirely, and "
+        "verify the panels before the loan is delivered to Fannie Mae for purchase or securitization."
+    )
+    recovered = _repair_by_anchors(drifted, ANCHOR_CHUNK)
+    assert recovered is not None
+    assert recovered in ANCHOR_CHUNK
