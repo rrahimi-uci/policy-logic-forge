@@ -186,6 +186,41 @@ def entity_rule_groups(graph: Mapping[str, Any]) -> dict[str, list[str]]:
     return {key: sorted(value) for key, value in sorted(groups.items())}
 
 
+def source_document_roots(rule: Mapping[str, Any]) -> set[str]:
+    """Return source-document identities asserted by a rule's citations.
+
+    Organized corpus paths use the first relative path component as the
+    document/package identity (for example ``site_a/collection.txt``). The
+    helper deliberately reads only citation metadata, never rule names or
+    descriptions, so conflict scoping cannot be influenced by lexical
+    guesses. An empty set means the rule has no usable source identity and
+    must remain in the conservative unscoped conflict group.
+    """
+    paths: list[str] = []
+    for source in _references(rule.get("source_reference")):
+        value = str(source.get("chunk_path") or "").strip()
+        if value:
+            paths.append(value)
+    evidence = rule.get("field_evidence")
+    if isinstance(evidence, Mapping):
+        for records in evidence.values():
+            if not isinstance(records, list):
+                continue
+            for record in records:
+                if not isinstance(record, Mapping):
+                    continue
+                value = str(record.get("chunk_path") or "").strip()
+                if value:
+                    paths.append(value)
+    roots: set[str] = set()
+    for path in paths:
+        normalised = path.replace("\\", "/").strip("/")
+        parts = [part for part in normalised.split("/") if part not in {"", ".", ".."}]
+        if parts:
+            roots.add(parts[0])
+    return roots
+
+
 def naming_issues(graph: Mapping[str, Any]) -> list[dict[str, str]]:
     """Validate exact canonical naming, including parties, without alias guesses."""
     issues: list[dict[str, str]] = []

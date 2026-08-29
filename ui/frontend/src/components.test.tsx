@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { CompareView, connectedRuleIds, DiagnosticsView, DocumentsView, ErrorNotice, GraphView, layeredRuleLayout, Loading, MetricCard, Overview, RegDeltaView, RuleTableView, RuleWorkbench, SearchOverlay, shouldRenderBpmn, StageFlow, wrapNodeText } from "./components";
+import { CompareView, connectedRuleIds, DiagnosticsView, DocumentsView, ErrorNotice, ExecutableRepresentations, GraphView, layeredRuleLayout, Loading, MetricCard, Overview, RegDeltaView, RuleTableView, RuleWorkbench, SearchOverlay, shouldRenderBpmn, StageFlow, wrapNodeText } from "./components";
 import type { RegDeltaReport, RuleDetail, RunSummary, Stage } from "./types";
 import * as api from "./api";
 
@@ -57,11 +57,23 @@ describe("review workbench components", () => {
     expect(links).toEqual(["r2"]);
   });
 
-  it("only renders BPMN projections for rules with workflow complexity", () => {
+  it("only renders BPMN projections for source-explicit multi-step workflows", () => {
     expect(shouldRenderBpmn(detail)).toBe(false);
-    expect(shouldRenderBpmn({ ...detail, condition_predicates: [{ variable: "x" }, { variable: "y" }] })).toBe(true);
-    expect(shouldRenderBpmn({ ...detail, exceptions: [{ reason: "override" }] })).toBe(true);
-    expect(shouldRenderBpmn({ ...detail, relationships: [{ relationship_id: "r1-r2", kind: "dependency", source_rule_id: "r1", target_rule_id: "r2", rule_ids: ["r1", "r2"], status: "supported" }] })).toBe(true);
+    expect(shouldRenderBpmn({ ...detail, condition_predicates: [{ variable: "x" }, { variable: "y" }] })).toBe(false);
+    expect(shouldRenderBpmn({ ...detail, workflow_semantics: { kind: "prescriptive_process", basis: "explicit_in_source", trigger_event: "account submitted", actor_role: "FIRST_PARTY", evidence: [{ chunk_path: "doc/chunk.txt", section_id: "Privacy", source_text: "When submitted, verify then retain." }], ordered_steps: [{ step_id: "verify", name: "Verify", kind: "user_task" }, { step_id: "retain", name: "Retain", kind: "service_task" }] } })).toBe(true);
+  });
+
+  it("organizes DMN and CMMN in tabs and omits BPMN for an obvious decision", () => {
+    const { container } = render(<ExecutableRepresentations rule={detail} />);
+    const scope = within(container);
+    expect(scope.getByRole("tab", { name: /DMN/ })).toHaveAttribute("aria-selected", "true");
+    expect(scope.getByRole("tab", { name: /CMMN/ })).toBeInTheDocument();
+    expect(scope.getByRole("tab", { name: /SBVR/ })).toBeInTheDocument();
+    expect(scope.queryByRole("tab", { name: /BPMN/ })).not.toBeInTheDocument();
+    fireEvent.click(scope.getByRole("tab", { name: /CMMN/ }));
+    expect(scope.getByRole("tabpanel", { name: "CMMN review case" })).toHaveTextContent("No review case");
+    fireEvent.click(scope.getByRole("tab", { name: /SBVR/ }));
+    expect(scope.getByRole("tabpanel", { name: "SBVR vocabulary" })).toHaveTextContent("Typed vocabulary");
   });
 
   it("renders stage flow and overview actions", () => {
@@ -112,12 +124,14 @@ describe("review workbench components", () => {
 
   it("renders documents, graph, and diagnostics", async () => {
     render(<DocumentsView runId="r" onError={vi.fn()} />); await waitFor(() => expect(screen.getByText("doc/chunk.txt")).toBeInTheDocument()); fireEvent.click(screen.getByRole("tab", { name: "Evidence links" })); await waitFor(() => expect(screen.getByText("r1 · outcomes")).toBeInTheDocument());
-    render(<GraphView runId="r" onError={vi.fn()} />); await waitFor(() => expect(screen.getByTestId("layered-rule-graph")).toBeInTheDocument());
-    fireEvent.click(screen.getByRole("button", { name: "Select rule r1" }));
-    await waitFor(() => expect(screen.getByText("DMN decision table")).toBeInTheDocument());
-    expect(document.querySelectorAll(".executable-grid.dmn-only").length).toBeGreaterThan(0);
-    expect(document.querySelector(".rule-node.selected")).toBeTruthy();
-    expect(document.querySelector(".rule-node.downstream")).toBeTruthy();
+    const { container: graphContainer } = render(<GraphView runId="r" onError={vi.fn()} />); const graphScope = within(graphContainer);
+    await waitFor(() => expect(graphScope.getByTestId("layered-rule-graph")).toBeInTheDocument());
+    fireEvent.click(graphScope.getByRole("button", { name: "Select rule r1" }));
+    await waitFor(() => expect(graphScope.getByRole("tab", { name: /DMN/ })).toBeInTheDocument());
+    expect(graphScope.queryByRole("tab", { name: /BPMN/ })).not.toBeInTheDocument();
+    expect(graphScope.getByRole("tabpanel", { name: "DMN decision table" })).toBeInTheDocument();
+    expect(graphContainer.querySelector(".rule-node.selected")).toBeTruthy();
+    expect(graphContainer.querySelector(".rule-node.downstream")).toBeTruthy();
     render(<DiagnosticsView runId="r" onError={vi.fn()} />); await waitFor(() => expect(screen.getByText("Missing source")).toBeInTheDocument());
   });
 

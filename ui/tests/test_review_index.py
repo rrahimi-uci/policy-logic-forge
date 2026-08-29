@@ -80,6 +80,11 @@ def test_index_normalizes_artifacts_and_queues(tmp_path: Path) -> None:
     assert any(row["kind"] == "entity_relationship" and row["source_entity"] == "FIRST_PARTY" for row in index.relationships)
     assert index.search("collect your email", kind="evidence")[0]["kind"] == "evidence"
     assert index.rules[0]["evidence"][0]["evidence_id"] == index.evidence[0]["evidence_id"]
+    projection = index.rules[0]["sbvr_projection"]
+    assert projection["profile_type"] == "sbvr_aligned_rule_projection"
+    assert projection["conformance"] == "derived_from_rule_contract"
+    assert projection["fact_types"][0]["fact_type_id"] == "r1"
+    assert any(concept["concept_id"] == "FIRST_PARTY" for concept in projection["concepts"])
     assert index.stages[0]["primary_artifacts"] == ["agent_01-organized-documents/_processing_results.json"]
     assert "output_counts" in index.stages[0]
     assert index.get_rule("unknown") is None
@@ -112,6 +117,21 @@ def test_index_treats_an_explicit_null_status_field_as_unknown_not_none(tmp_path
     assert row["rule_type"] == "unknown"
     assert row["readiness_status"] == "unknown"
     assert row["grounding_status"] == "unknown"
+
+
+def test_index_preserves_and_indexes_multiple_source_references(tmp_path: Path) -> None:
+    run = make_run(tmp_path)
+    graph_path = run / "agent_06-optimized" / "optimized_compliance_knowledge_graph.json"
+    graph = json.loads(graph_path.read_text())
+    graph["business_rules"][0]["source_reference"] = [
+        {"chunk_path": "site/privacy-a.txt", "section_id": "A", "source_text": "Collect email."},
+        {"chunk_path": "site/privacy-b.txt", "section_id": "B", "source_text": "Use email for support."},
+    ]
+    graph_path.write_text(json.dumps(graph), encoding="utf-8")
+    index = ReviewIndex.from_directory(run)
+    row = index.rules[0]
+    assert isinstance(row["source_reference"], list)
+    assert len([item for item in row["evidence"] if item["field_path"] == "source_reference"]) == 2
 
 
 def test_index_writes_contract_and_search_database(tmp_path: Path) -> None:

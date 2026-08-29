@@ -31,6 +31,7 @@ from utils.kg_readiness import (
     naming_issues,
     referential_integrity_issues,
     source_document_index,
+    source_document_roots,
 )
 from utils.llm_client import create_llm_client
 from utils.prompt_manager import get_prompt_manager
@@ -52,6 +53,12 @@ def _build_token_index(search_chunks: list[tuple[Mapping[str, Any], str, str]]) 
     for position, (_chunk, lower, path_lower) in enumerate(search_chunks):
         tokens = set(re.findall(r"[a-z][a-z0-9_-]{3,}", lower))
         tokens.update(re.findall(r"[a-z][a-z0-9_-]{3,}", path_lower))
+        # Paths encode useful source identity using underscores and numeric
+        # prefixes (``1070_wnep_com``). Keep the original tokens for stable
+        # compatibility, but also index separator-delimited components so a
+        # rule mentioning ``WNEP`` can retrieve its own package without a
+        # domain-specific map.
+        tokens.update(re.findall(r"[a-z][a-z0-9]{2,}", re.sub(r"[^a-z0-9]+", " ", path_lower)))
         normalized_path = re.sub(r"[^a-z0-9]", "", path_lower)
         if normalized_path:
             tokens.add("__pathnorm__:" + normalized_path)
@@ -897,6 +904,37 @@ def _normalise_rule_contract(rule: dict[str, Any]) -> dict[str, Any]:
         variables.append(variable)
         variable_by_name[name.lower()] = variable
 
+    # Older extraction batches occasionally used descriptive role labels such
+    # as ``condition``/``result``/``context``. The v2 contract has only
+    # input/output/derived; infer the canonical role from how the variable is
+    # actually used in this rule. This is a local structural repair, not a
+    # source-claim inference: a variable used by a predicate is an input, one
+    # assigned by an outcome is an output, and an ambiguous/unused variable is
+    # retained conservatively as derived.
+    predicate_names = {
+        str(item.get("variable", "")).strip().casefold()
+        for item in [*(rule.get("condition_predicates", []) or []), *(rule.get("exceptions", []) or [])]
+        if isinstance(item, Mapping) and str(item.get("variable", "")).strip()
+    }
+    outcome_names = {
+        str(item.get("variable", "")).strip().casefold()
+        for item in (rule.get("outcomes", []) or [])
+        if isinstance(item, Mapping) and str(item.get("variable", "")).strip()
+    }
+    for variable in variables:
+        if not isinstance(variable, Mapping):
+            continue
+        role = str(variable.get("role", "")).strip().casefold()
+        if role in {"input", "output", "derived"}:
+            continue
+        name = str(variable.get("name", "")).strip().casefold()
+        if name in outcome_names and name not in predicate_names:
+            variable["role"] = "output"
+        elif name in predicate_names and name not in outcome_names:
+            variable["role"] = "input"
+        else:
+            variable["role"] = "derived"
+
     verification = rule.get("exception_verification")
     if (
         rule.get("exception_basis") == "explicit_in_source"
@@ -970,6 +1008,17 @@ def _is_deferred_contract_issue(issue: Mapping[str, Any], rule: Mapping[str, Any
     code = str(issue.get("code", ""))
     if code == "missing_field_evidence":
         return True
+    if code == "missing_evidence_reference_field":
+        # The malformed citation is removed by _normalise_field_evidence_references;
+        # the resulting empty field remains an evidence-limited review item.
+        return True
+    if code in {"missing_condition_predicates", "empty_condition_logic_branch"}:
+        # Some source-backed policy statements are unconditional assertions
+        # (for example, a document revision date or an automatic collection
+        # disclosure). They still cannot be executed as a conditional DMN row,
+        # but treating the representation gap as deferred lets the pipeline
+        # complete while the rule stays explicitly review-required.
+        return bool(rule.get("source_reference")) and bool(rule.get("outcomes"))
     if code == "invalid_outcome_value_type":
         path = str(issue.get("path", ""))
         try:
@@ -1066,6 +1115,90 @@ def _complete_predicate_value_types(rule: dict[str, Any]) -> None:
             )
             if inferred is not None:
                 item["value_type"] = inferred
+
+
+_SOURCE_RECOVERY_STOPWORDS = frozenset({
+    "about", "after", "also", "and", "are", "before", "being", "between", "both", "but", "can", "could",
+    "does", "from", "for", "has", "have", "into", "may", "must", "not", "only", "our", "should", "that",
+    "the", "their", "there", "these", "this", "those", "under", "when", "where", "which", "will", "with", "you",
+})
+
+
+def _recover_source_reference(rule: dict[str, Any], packet: Mapping[str, Any]) -> bool:
+    """Attach a citation only when bounded lexical retrieval is unambiguous.
+
+    Agent 03 can produce a semantically useful rule while omitting the source
+    pointer. A later readiness pass should be able to recover an obvious
+    pointer, but must not turn a loose keyword hit into asserted evidence.
+    This helper therefore requires a configurable token-overlap floor and a
+    margin over the runner-up. Ambiguous candidates remain review-required.
+    """
+    if _evidence_pointer(rule.get("source_reference")) is not None:
+        return False
+    passages = packet.get("candidate_passages")
+    if not isinstance(passages, list):
+        return False
+    query = {
+        token.casefold()
+        for token in re.findall(r"[A-Za-z][A-Za-z0-9_-]{3,}", " ".join(str(rule.get(key, "")) for key in ("rule_name", "description")))
+        if token.casefold() not in _SOURCE_RECOVERY_STOPWORDS
+    }
+    if len(query) < 4:
+        return False
+    candidates: list[tuple[float, dict[str, Any]]] = []
+    rule_id_tokens = {
+        token.casefold()
+        for token in re.findall(r"[A-Za-z][A-Za-z0-9]{2,}", re.sub(r"[^A-Za-z0-9]+", " ", str(rule.get("rule_id", ""))))
+        if token.casefold() not in {"rule", "batch"}
+    }
+    for passage in passages:
+        if not isinstance(passage, Mapping):
+            continue
+        text = str(passage.get("text") or "")
+        if not text or not str(passage.get("chunk_path") or "").strip() or not str(passage.get("section_id") or "").strip():
+            continue
+        tokens = {
+            token.casefold()
+            for token in re.findall(r"[A-Za-z][A-Za-z0-9_-]{3,}", text)
+            if token.casefold() not in _SOURCE_RECOVERY_STOPWORDS
+        }
+        overlap = len(query & tokens) / max(1, len(query))
+        anchor_hits = min(1.0, float(passage.get("anchor_hits") or 0) / max(1, len(query)))
+        candidates.append((overlap * 0.9 + anchor_hits * 0.1, dict(passage)))
+    if not candidates:
+        return False
+    # If the stable rule ID names a source package, restrict recovery to that
+    # package before comparing prose similarity. This prevents a generic
+    # phrase such as "international transfer" from selecting an unrelated
+    # policy that happens to use the same language.
+    scoped = [
+        item for item in candidates
+        if rule_id_tokens.intersection({
+            token.casefold()
+            for token in re.findall(r"[A-Za-z][A-Za-z0-9]{2,}", re.sub(r"[^A-Za-z0-9]+", " ", str(item[1].get("chunk_path", ""))))
+        })
+    ]
+    if scoped:
+        candidates = scoped
+    candidates.sort(key=lambda item: (-item[0], str(item[1].get("chunk_path"))))
+    best_score, best = candidates[0]
+    runner_up = candidates[1][0] if len(candidates) > 1 else 0.0
+    try:
+        min_score = float(os.getenv("KG_READINESS_SOURCE_RECOVERY_MIN_OVERLAP", "0.55"))
+        min_margin = float(os.getenv("KG_READINESS_SOURCE_RECOVERY_MIN_MARGIN", "0.12"))
+    except (TypeError, ValueError):
+        min_score, min_margin = 0.55, 0.12
+    if best_score < min_score or best_score - runner_up < min_margin:
+        return False
+    rule["source_reference"] = {
+        "chunk_path": str(best["chunk_path"]),
+        "section_id": str(best["section_id"]),
+        "source_text": str(best["text"]),
+        "reference_verified": False,
+        "recovery_method": "bounded_lexical_retrieval",
+        "recovery_score": round(best_score, 4),
+    }
+    return True
 
 
 def _evidence_text(rule: Mapping[str, Any], verification: Mapping[str, Any]) -> str:
@@ -1173,12 +1306,68 @@ def _normalise_conflict_entries(
     relationships over different output names remain unresolved/conflicting.
     """
     normalized: list[dict[str, Any]] = []
+
+    def pair_entry(left_id: str, right_id: str, template: Mapping[str, Any]) -> dict[str, Any]:
+        """Return a pair-level finding with deterministic safe cases resolved.
+
+        A model may conservatively return one unresolved group for a large
+        entity. Treating that group as a conflict for every member overstates
+        the review queue: rules with disjoint output variables cannot assign a
+        contradictory value to the same DMN slot. Reduce the group to pairs,
+        resolve only that mechanically provable case, and preserve unresolved
+        status for pairs that still share an output assignment.
+        """
+        current = dict(template)
+        current["rule_ids"] = [left_id, right_id]
+        left_outcomes = {
+            str(item.get("variable")): (item.get("value"), item.get("value_type"))
+            for item in rules_by_id[left_id].get("outcomes", []) or []
+            if isinstance(item, Mapping) and item.get("variable")
+        }
+        right_outcomes = {
+            str(item.get("variable")): (item.get("value"), item.get("value_type"))
+            for item in rules_by_id[right_id].get("outcomes", []) or []
+            if isinstance(item, Mapping) and item.get("variable")
+        }
+        shared = set(left_outcomes) & set(right_outcomes)
+        equivalent = bool(shared) and all(
+            _semantic_output_value(*left_outcomes[name])
+            == _semantic_output_value(*right_outcomes[name])
+            for name in shared
+        )
+        if not shared or equivalent:
+            current.update({
+                "status": "non_conflict",
+                "reasoning": (
+                    "The rules have disjoint outcome variables, or their shared "
+                    "assignments are semantically equivalent after boolean/enum normalization."
+                ),
+                "resolution": "No conflict; preserve each rule's output mapping.",
+            })
+        elif not str(current.get("reasoning", "")).strip() or str(current.get("reasoning", "")).startswith("No entity-local conflict analysis"):
+            current["reasoning"] = "The rules share an outcome variable and no safe co-firing determination was returned."
+            current["resolution"] = "Manual review required."
+        return current
+
     for entry in entries:
         current = dict(entry)
+        rule_ids = [str(value) for value in current.get("rule_ids", []) if str(value) in rules_by_id]
+        unresolved_status = current.get("status") == "unresolved" or (
+            current.get("status") == "conflict" and not str(current.get("resolution", "")).strip()
+        )
+        if unresolved_status and len(rule_ids) > 2:
+            # Preserve the analyzer's explanation on each pair, while making
+            # the readiness gate depend only on the pair that can actually
+            # co-fire into a shared output.
+            normalized.extend(
+                pair_entry(left_id, right_id, current)
+                for index, left_id in enumerate(sorted(set(rule_ids)))
+                for right_id in sorted(set(rule_ids))[index + 1:]
+            )
+            continue
         if current.get("status") != "unresolved":
             normalized.append(current)
             continue
-        rule_ids = [str(value) for value in current.get("rule_ids", []) if str(value) in rules_by_id]
         if len(rule_ids) < 2:
             normalized.append(current)
             continue
@@ -1296,6 +1485,33 @@ def _verify_completion_evidence(rule: dict[str, Any], corpus: Mapping[str, Any])
                 entry["source_text_repaired"] = True
 
 
+def _normalise_field_evidence_references(rule: dict[str, Any]) -> None:
+    """Canonicalize field citations while preserving fail-closed gaps.
+
+    A malformed citation must not remain as a partially populated object: it
+    makes the schema gate fail before downstream remediation can run. Keep
+    only complete pointers (accepting the legacy ``quote``/``text`` aliases),
+    canonicalize them to ``source_text``, and leave an empty field for the
+    readiness checker to mark as evidence-limited. No new evidence is
+    invented and unresolved fields therefore remain review-required.
+    """
+    evidence = rule.get("field_evidence")
+    if not isinstance(evidence, dict):
+        return
+    for field, records in list(evidence.items()):
+        if not isinstance(records, list):
+            continue
+        normalized: list[dict[str, Any]] = []
+        for record in records:
+            if not isinstance(record, Mapping):
+                continue
+            pointer = _evidence_pointer(record)
+            if pointer is None:
+                continue
+            normalized.append({**dict(record), **pointer})
+        evidence[field] = normalized
+
+
 def _report_markdown(report: Mapping[str, Any]) -> str:
     corpus = report["invariants"]["corpus_integrity"]
     lines = ["# Sections added", ""]
@@ -1396,16 +1612,39 @@ class ExecutableReadinessCompleter:
             # See _evidence_pointer's comment: a rule can legitimately cite
             # more than one excerpt; use the first for retrieval anchoring.
             source = next((item for item in source if isinstance(item, Mapping)), {})
-        quote = source.get("source_text", "") if isinstance(source, Mapping) else ""
-        text = " ".join(str(rule.get(key, "")) for key in ("rule_name", "description")) + " " + str(quote)
+        # Treat a partial/list-shaped citation as unresolved for retrieval;
+        # its text may be stale and must not bias source recovery.
+        quote = source.get("source_text", "") if isinstance(source, Mapping) and _evidence_pointer(rule.get("source_reference")) is not None else ""
+        # Rule IDs often preserve the source package identifier even when the
+        # natural-language title does not. Include that stable identifier in
+        # retrieval anchors; it is metadata, not a semantic claim.
+        text = " ".join(str(rule.get(key, "")) for key in ("rule_id", "rule_name", "description")) + " " + str(quote)
         # A previous pass may identify an exact cross-section whose criteria
         # were outside the first bounded packet. Include that evidence limit in
         # retrieval anchors so remediation can fetch the named section.
-        text += " " + json.dumps({
-            "exception_verification": rule.get("exception_verification"),
-            "scope_derivation": rule.get("scope_derivation"),
-        }, ensure_ascii=False)
+        # Resolver-generated evidence can itself contain a stale or unrelated
+        # citation. Do not let that metadata steer recovery when the primary
+        # source pointer is missing; it remains useful as a supplemental
+        # anchor only after a source reference already exists.
+        if _evidence_pointer(rule.get("source_reference")) is not None:
+            text += " " + json.dumps({
+                "exception_verification": rule.get("exception_verification"),
+                "scope_derivation": rule.get("scope_derivation"),
+            }, ensure_ascii=False)
         anchors = {token.lower() for token in re.findall(r"[A-Za-z][A-Za-z0-9_-]{3,}", text)}
+        # Also split stable identifiers/titles on separators. A greedy token
+        # such as ``rule_147_wnep_international_transfer`` otherwise hides the
+        # useful package token ``wnep`` from the inverted index.
+        identifier_text = " ".join(str(rule.get(key, "")) for key in ("rule_id", "rule_name"))
+        rule_id_anchors = {
+            token.lower()
+            for token in re.findall(r"[A-Za-z][A-Za-z0-9]{2,}", re.sub(r"[^A-Za-z0-9]+", " ", str(rule.get("rule_id", ""))))
+            if token.lower() not in {"rule", "batch"}
+        }
+        anchors.update(
+            token.lower()
+            for token in re.findall(r"[A-Za-z][A-Za-z0-9]{2,}", re.sub(r"[^A-Za-z0-9]+", " ", identifier_text))
+        )
         markers = {"except", "unless", "notwithstanding", "however", "waiver", "exempt"}
         matches = []
         search_chunks = corpus.get("_search_index")
@@ -1447,6 +1686,16 @@ class ExecutableReadinessCompleter:
                 anchor in lower or anchor in path_lower or re.sub(r"[^a-z0-9]", "", anchor) in normalized_path
                 for anchor in anchors
             )
+            # A package/domain token in a chunk path is a stronger identity
+            # signal than the same generic word in policy prose. Weight those
+            # separator-delimited path hits so bounded packets retain the
+            # likely source package even when common terms dominate the text
+            # score (without introducing a dataset-specific domain map).
+            path_tokens = set(re.findall(r"[a-z][a-z0-9]{2,}", re.sub(r"[^a-z0-9]+", " ", path_lower)))
+            # Only stable rule-id components receive the path bonus. Common
+            # prose terms such as ``information`` and ``services`` occur in
+            # many packages and would otherwise overpower the identity hit.
+            score += 8 * sum(anchor in path_tokens for anchor in rule_id_anchors)
             if score or any(marker in lower for marker in markers):
                 matches.append({"chunk_path": chunk.get("chunk_path"), "section_id": chunk.get("section_id"), "text": chunk.get("text"), "anchor_hits": score})
         matches.sort(key=lambda item: (-item["anchor_hits"], str(item["chunk_path"])))
@@ -1575,7 +1824,9 @@ class ExecutableReadinessCompleter:
             cache_key = self._fingerprint(rule, packet)
             cached = self._checkpoint.get(cache_key)
             if cached is not None:
-                return index, deepcopy(cached)
+                cached_rule = deepcopy(cached)
+                _recover_source_reference(cached_rule, packet)
+                return index, cached_rule
             if completion is None:
                 try:
                     rule = self._complete_evidence(rule, packet)
@@ -1609,6 +1860,7 @@ class ExecutableReadinessCompleter:
                 if isinstance(derivation, dict):
                     derivation["reviewed_chunk_count"] = corpus.get("chunk_count", 0)
                     derivation["corpus_sha256"] = corpus.get("corpus_sha256")
+            _recover_source_reference(rule, packet)
             # Re-apply after the merge, not just before it: a completion's own
             # applicability_scope (richer, but not obligated to repeat every
             # standard key) replaces the pre-completion default wholesale
@@ -1620,6 +1872,7 @@ class ExecutableReadinessCompleter:
                 rule["applicability_scope"].setdefault(key, [])
             _verify_completion_evidence(rule, corpus)
             rule = _normalise_rule_contract(rule)
+            _normalise_field_evidence_references(rule)
             _normalise_final_evidence_states(rule, corpus)
             # Re-validate against the now-normalised values. agent_03 stamped
             # contract_issues/requires_review against the raw model output at
@@ -1653,6 +1906,7 @@ class ExecutableReadinessCompleter:
                     _normalise_final_evidence_states(cached_rule, corpus)
                     cached_rule = annotate_rule_contract(cached_rule)
                     cached_rule["execution"] = _project_execution(cached_rule)
+                    _recover_source_reference(cached_rule, packet)
                     completed.append((index, cached_rule))
                 else:
                     requests.append({"rule": _compact_readiness_rule(original), "evidence_packet": packet})
@@ -1695,7 +1949,9 @@ class ExecutableReadinessCompleter:
             rules = []
             for rule in existing_rules:
                 normalized = _normalise_rule_contract(rule)
+                _normalise_field_evidence_references(normalized)
                 _normalise_final_evidence_states(normalized, corpus)
+                _recover_source_reference(normalized, self._evidence_packet(normalized, corpus))
                 rules.append(annotate_rule_contract(normalized))
             for rule in rules:
                 rule["execution"] = _project_execution(rule)
@@ -1724,13 +1980,32 @@ class ExecutableReadinessCompleter:
 
         conflict_entries: list[dict[str, Any]] = []
         ids = {str(rule.get("rule_id")): rule for rule in rules}
-        groups = {key: members for key, members in entity_rule_groups(final_graph).items() if len(members) > 1}
+        # Conflict analysis is meaningful only within a shared source
+        # package. The corpus can contain many independent policies that use
+        # the same generic entity (for example ``ENTITY`` or ``DATA``);
+        # comparing those rules creates false co-firing conflicts. Rules with
+        # no usable citation stay in one conservative unscoped group, while a
+        # rule citing multiple packages participates in each asserted scope.
+        all_rules_by_id = {str(rule.get("rule_id")): rule for rule in rules if rule.get("rule_id")}
+        scoped_groups: dict[str, list[str]] = {}
+        for entity, member_ids in entity_rule_groups(final_graph).items():
+            by_scope: dict[str, set[str]] = {}
+            for rule_id in member_ids:
+                roots = source_document_roots(all_rules_by_id.get(str(rule_id), {}))
+                scopes = roots or {"__unscoped__"}
+                for scope in scopes:
+                    by_scope.setdefault(scope, set()).add(str(rule_id))
+            for scope, scoped_ids in by_scope.items():
+                if len(scoped_ids) > 1:
+                    scoped_groups[f"{entity}::source:{scope}"] = sorted(scoped_ids)
+        groups = scoped_groups
 
         def outcome_variables(rule_id: str) -> set[str]:
             outcomes = ids[rule_id].get("outcomes", []) or []
             return {str(item.get("variable")) for item in outcomes if isinstance(item, Mapping) and item.get("variable")}
 
         def analyse_group(entity: str, member_ids: list[str]) -> list[dict[str, Any]]:
+            display_entity = entity.split("::source:", 1)[0]
             summaries = [{key: ids[rule_id].get(key) for key in ("rule_id", "condition_predicates", "condition_logic", "outcomes", "applicability_scope", "exceptions", "recommended_hit_policy")} for rule_id in member_ids]
             try:
                 max_rules_per_call = max(2, int(os.getenv("KG_CONFLICT_MAX_RULES_PER_CALL", "32")))
@@ -1749,9 +2024,25 @@ class ExecutableReadinessCompleter:
                     output_buckets.setdefault(variable, []).append(rule_id)
             overlapping_ids = {rule_id for bucket in output_buckets.values() if len(bucket) > 1 for rule_id in bucket}
             entries: list[dict[str, Any]] = []
+            if len(overlapping_ids) == 0:
+                # A source-scoped group whose rules write pairwise-disjoint
+                # variables is safe by construction. Do not spend a model
+                # call asking it to rediscover this fact, and do not create a
+                # broad unresolved group that would put every rule on the
+                # human queue.
+                return [{
+                    "entity": entity,
+                    "status": "non_conflict",
+                    "rule_ids": sorted(member_ids),
+                    "reasoning": "These rules have pairwise disjoint outcome variables, so simultaneous firing cannot assign contradictory values.",
+                    "resolution": "No conflict; preserve each rule's distinct output mapping.",
+                }]
             if len(member_ids) <= max_rules_per_call:
                 try:
-                    analyses = self.resolver.analyse_entity(entity, summaries) if self.resolver else []
+                    analyses = self.resolver.analyse_entity(
+                        display_entity,
+                        [item for item in summaries if str(item.get("rule_id")) in overlapping_ids],
+                    ) if self.resolver else []
                 except Exception as exc:
                     # No retry level below this one exists for this group --
                     # crashing the whole multi-hour run over one provider
@@ -1780,7 +2071,7 @@ class ExecutableReadinessCompleter:
                 def _call_bucket(batch_ids: list[str]) -> list[dict[str, Any]]:
                     try:
                         analyses = self.resolver.analyse_entity(
-                            entity,
+                            display_entity,
                             [item for item in summaries if str(item.get("rule_id")) in batch_ids],
                         ) if self.resolver else []
                     except Exception as exc:

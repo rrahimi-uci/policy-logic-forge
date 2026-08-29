@@ -43,6 +43,14 @@ export interface RuleDetail extends RuleRow {
   related_rules: string[];
   contract_issues: string[];
   execution: Record<string, any>;
+  workflow_semantics?: Record<string, any>;
+  review_route?: { route?: string; human_review_required?: boolean; reasons?: string[] };
+  sbvr_projection?: {
+    profile_type?: string;
+    conformance?: string;
+    concepts?: Record<string, unknown>[];
+    fact_types?: Record<string, unknown>[];
+  };
   recommended_hit_policy?: string;
   scope_basis?: string;
   applicability_scope: Record<string, unknown>;
