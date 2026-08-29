@@ -23,6 +23,12 @@ def test_agent_11_persists_valid_models_and_report(tmp_path):
     assert report["review_required_rules"] == 1
     assert (tmp_path / "out" / "compliance_decisions.dmn").is_file()
     assert (tmp_path / "out" / "compliance_workflows.bpmn").is_file()
+    assert (tmp_path / "out" / "compliance_reviews.cmmn").is_file()
+    assert (tmp_path / "out" / "semantic_vocabulary_profile.json").is_file()
+    assert report["bpmn_rule_count"] == 0
+    assert report["bpmn_omitted_rule_count"] == 1
+    assert len(report["source_graph_sha256"]) == 64
+    assert len(report["source_dags_sha256"]) == 64
     assert json.loads((tmp_path / "out" / "executable_model_report.json").read_text())["validation"] == "pass"
     # This fixture's rule has no predicate_id, so it is cleanly refused (not
     # an exception) by LExec compilation -- 0 compiled, 1 refused. That the

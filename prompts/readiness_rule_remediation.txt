@@ -10,8 +10,8 @@ Return JSON only:
       "rule_id": "exact supplied ID",
       "variables_to_add": [{{"name":"snake_case", "type":"boolean | enum | number | date | date_time | duration | string", "role":"input", "allowed_values":[]}}],
       "exceptions": [{{"predicate_id":"ex1", "variable":"declared or newly added variable", "operator":"== | != | > | >= | < | <= | in | not_in", "value":true, "value_type":"boolean | enum | number | date | date_time | duration | string | list | variable_reference"}}],
-      "exception_basis": "explicit_in_source | explicitly_none_in_source | unresolved_after_full_document_search",
-      "exception_verification": {{"status":"explicit_in_source | explicitly_none_in_source | unresolved", "evidence":[{{"chunk_path":"...", "section_id":"...", "source_text":"direct quote"}}], "unresolved_reason":null}},
+      "exception_basis": "explicit_in_source | explicitly_none_in_source | no_exception_cue_found_in_complete_search | unresolved_after_full_document_search",
+      "exception_verification": {{"status":"explicit_in_source | explicitly_none_in_source | no_exception_cue_found_in_complete_search | unresolved", "evidence":[{{"chunk_path":"...", "section_id":"...", "source_text":"direct quote"}}], "unresolved_reason":null}},
       "applicability_scope": {{"loan_types":[], "occupancy_types":[], "transaction_types":[]}},
       "scope_basis": "explicit | explicitly_universal_in_source | genuinely_unscoped | unresolved_after_source_review",
       "scope_derivation": {{"status":"explicit | explicitly_universal | genuinely_unscoped | unresolved", "evidence":[{{"chunk_path":"...", "section_id":"...", "source_text":"direct quote"}}], "unresolved_reason":null}}

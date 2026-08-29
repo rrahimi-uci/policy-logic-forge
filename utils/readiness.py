@@ -11,6 +11,7 @@ from copy import deepcopy
 from typing import Any, Iterable, Mapping
 
 from utils.rule_contract import ContractIssue, validate_rule_v2
+from utils.semantic_routing import classify_review_route
 
 CHECK_NAMES = {
     1: "typed_logic_and_variables",
@@ -182,6 +183,12 @@ def assess_rule_readiness(
         "pending_sections": pending_sections,
         "requires_review": bool(failed_sections or pending_sections),
         "status": "ready" if not failed_sections and not pending_sections else "review_required",
+        "review_route": classify_review_route(
+            reason
+            for value in checks.values()
+            for reason in value["reasons"]
+            if value["status"] == "fail"
+        ),
     }
 
 

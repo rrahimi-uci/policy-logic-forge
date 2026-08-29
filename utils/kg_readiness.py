@@ -13,11 +13,14 @@ import hashlib
 import re
 from typing import Any, Iterable, Mapping
 
+from utils.semantic_routing import classify_review_route
+
 
 CANONICAL_ENTITY_RE = re.compile(r"^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*$")
 FINAL_EXCEPTION_BASES = {
     "explicit_in_source",
     "explicitly_none_in_source",
+    "no_exception_cue_found_in_complete_search",
     "unresolved_after_full_document_search",
 }
 FINAL_SCOPE_BASES = {
@@ -306,6 +309,8 @@ def final_rule_issues(rule: Mapping[str, Any], entity_keys: Iterable[str]) -> li
         # for the "nothing found"/unresolved states, where there is no
         # positive citation to point to instead.
         issues.append({"requirement": "exceptions", "reason": "full-document search provenance is missing"})
+    if rule.get("exception_basis") == "no_exception_cue_found_in_complete_search" and not str(verification_map.get("corpus_sha256", "")).strip():
+        issues.append({"requirement": "exceptions", "reason": "complete exception search lacks a corpus digest"})
     if rule.get("exception_basis") == "unresolved_after_full_document_search" and not str(verification_map.get("unresolved_reason", "")).strip():
         issues.append({"requirement": "exceptions", "reason": "unresolved exception lacks a specific evidence limit"})
     elif rule.get("exception_basis") == "unresolved_after_full_document_search":
@@ -347,5 +352,6 @@ def mark_readiness(rule: Mapping[str, Any], issues: Iterable[Mapping[str, str]])
         "failed_requirements": failures,
         "review_reason": None if not failures else "; ".join(sorted({item.get("reason", "") for item in failures if item.get("reason")})),
     }
+    result["review_route"] = classify_review_route(failures)
     result["requires_review"] = bool(failures)
     return result

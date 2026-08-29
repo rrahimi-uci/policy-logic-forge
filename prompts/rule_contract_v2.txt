@@ -53,6 +53,7 @@ container MUST use this structure:
   "inference_reasoning": "why scope was inferred from the cited text",
   "responsible_party": "EXISTING_ENTITY_TYPE_ID",
   "counterparties": [],
+  "workflow_semantics": null,
   "exceptions": [],
   "exception_basis": "explicitly_none_in_source",
   "test_vectors": [
@@ -139,8 +140,11 @@ Rules:
    "not_found_in_chunk_recheck_needed"` whenever the provided chunk cannot
    establish the exception result. agent_07 must later replace it through a
    complete organized-source-document recheck. Final output may use only
-   `explicit_in_source`, `explicitly_none_in_source`, or a specifically
-   explained unresolved final state; the candidate state is forbidden.
+   `explicit_in_source`, `explicitly_none_in_source`,
+   `no_exception_cue_found_in_complete_search`, or a specifically explained
+   unresolved final state; the candidate state is forbidden. The no-cue state
+   requires the complete searched chunk count and corpus digest and must not be
+   described as an explicit statement in the source.
 6. `scope_basis: "explicitly_universal_in_source"` requires direct universal
    source wording. Do not infer universal scope from silence.
 7. Every test vector must be source-attested or derived from the source. Numeric
@@ -153,3 +157,12 @@ Rules:
     final readiness stage must use direct scope evidence, explicitly universal
     language, genuinely_unscoped after source review, or an explained
     unresolved state.
+11. `workflow_semantics` is optional and normally null. Populate it only when
+    the source directly states a prescriptive trigger and ordered process. Its
+    shape is `{"kind":"prescriptive_process","basis":"explicit_in_source",
+    "trigger_event":"...","actor_role":"EXISTING_ENTITY_TYPE_ID",
+    "ordered_steps":[{"step_id":"s1","name":"...","kind":"user_task |
+    service_task | business_rule_task | send_task | receive_task"}],
+    "evidence":[{"chunk_path":"...","section_id":"...","source_text":
+    "direct quote proving the order"}]}`. Use at least two ordered steps. Never
+    infer an order from graph dependencies or from a party plus an outcome.

@@ -8,6 +8,7 @@ from collections import Counter
 from copy import deepcopy
 from datetime import datetime, timezone
 import difflib
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -27,6 +28,7 @@ from utils.citations import (
     normalise_text_preserve_case,
     repair_by_anchors,
     repair_citation,
+    resolve_citation_span,
 )
 from utils.config import get_config
 from utils.kg_readiness import mark_readiness, source_document_index
@@ -379,37 +381,40 @@ class GroundingVerifier:
 
         records = []
         used_chars = 0
-        for index, ((chunk_path, section_id, quote), _) in enumerate(sorted(unique.items()), 1):
+        for (chunk_path, section_id, quote), _ in sorted(unique.items()):
             chunk = cls._chunk_for_path(corpus, chunk_path)
             chunk_text = str((chunk or {}).get("text", ""))
-            quote_found = bool(quote and chunk and _normalise_text(quote) in _normalise_text(chunk_text))
             original_quote = quote
-            repaired = None
-            if not quote_found and quote and chunk_text:
-                repaired = _repair_near_match(quote, chunk_text)
-                if repaired is not None:
-                    quote = repaired
-                    quote_found = True
+            span = resolve_citation_span(quote, chunk_text) if chunk else None
+            quote_found = span is not None
+            if span:
+                quote = str(span["source_text"])
             remaining = max(0, max_chars - used_chars)
             context = ""
             if remaining and chunk_text:
-                normal_quote = _normalise_text(quote)
-                normal_chunk = _normalise_text(chunk_text)
-                position = normal_chunk.find(normal_quote) if normal_quote else -1
-                # Character offsets in normalized text are approximate but
-                # sufficient to center a bounded context window.
+                position = int(span["start_offset"]) if span else -1
                 start = max(0, position - remaining // 3) if position >= 0 else 0
                 context = chunk_text[start:start + remaining]
                 used_chars += len(context)
+            evidence_material = "|".join((
+                chunk_path,
+                section_id,
+                str((chunk or {}).get("sha256", "")),
+                str((span or {}).get("start_offset", -1)),
+                str((span or {}).get("end_offset", -1)),
+            ))
             record = {
-                "evidence_id": f"E{index}",
+                "evidence_id": "EV-" + hashlib.sha256(evidence_material.encode()).hexdigest()[:16],
                 "chunk_path": chunk_path,
                 "section_id": section_id,
+                "chunk_sha256": (chunk or {}).get("sha256"),
                 "source_text": quote,
                 "source_text_found_in_chunk": quote_found,
+                "start_offset": (span or {}).get("start_offset"),
+                "end_offset": (span or {}).get("end_offset"),
                 "context": context,
             }
-            if repaired is not None:
+            if span and span.get("source_text_repaired"):
                 # Transparency/audit trail: a reviewer (or future analysis
                 # of the grounding report) can see this citation was
                 # corrected to a real corpus substring rather than accepted
@@ -680,8 +685,6 @@ class GroundingVerifier:
         """Verify derived contract fields structurally after source claims."""
         issues = validate_rule_v2(rule, entity_keys)
         default_reason = "Derived field is internally consistent with the uniform v2 rule contract."
-        default_verdict = "supported" if not issues else "insufficient_evidence"
-        default_bad_reason = "; ".join(f"{issue.path}: {issue.message}" for issue in issues) or default_reason
 
         logic_issues = [issue for issue in issues if issue.path == "condition_logic"]
         logic_verdict = "supported" if not logic_issues else "insufficient_evidence"
@@ -709,7 +712,26 @@ class GroundingVerifier:
                     "source prose."
                 )
             else:
-                verdict, reason = default_verdict, (default_reason if not issues else default_bad_reason)
+                field_path = str(claim.get("field_path", ""))
+                if claim_type == "execution":
+                    relevant_prefixes = ("condition_predicates", "condition_logic", "variables", "outcomes", "recommended_hit_policy", "execution")
+                else:
+                    relevant_prefixes = (field_path,)
+                relevant = [
+                    issue for issue in issues
+                    if any(
+                        prefix and (
+                            issue.path == prefix
+                            or issue.path.startswith(prefix + ".")
+                            or issue.path.startswith(prefix + "[")
+                        )
+                        for prefix in relevant_prefixes
+                    )
+                ]
+                verdict = "supported" if not relevant else "insufficient_evidence"
+                reason = default_reason if not relevant else "; ".join(
+                    f"{issue.path}: {issue.message}" for issue in relevant
+                )
             results.append({
                 **claim,
                 "verdict": verdict,
@@ -909,7 +931,6 @@ class GroundingVerifier:
                 and invalid_records == 0
                 and protocol["missing"] == 0
                 and protocol["duplicates"] == 0
-                and not failed_relationship_ids
             )
             rule["grounding"] = {
                 "status": "certified" if certified else "failed",
@@ -925,6 +946,7 @@ class GroundingVerifier:
                 "missing_claim_responses": protocol["missing"],
                 "duplicate_claim_responses": protocol["duplicates"],
                 "failed_relationship_ids": failed_relationship_ids,
+                "relationship_status": "failed" if failed_relationship_ids else "supported",
                 "claims": results,
                 "deterministic_claims": deterministic_results,
             }
@@ -938,8 +960,7 @@ class GroundingVerifier:
                     "reason": (
                         f"{counts['contradicted']} contradicted and {counts['insufficient_evidence']} insufficient claims; "
                         f"{invalid_records} evidence quotes not found in the cited corpus; "
-                        f"{protocol['missing']} missing and {protocol['duplicates']} duplicate verifier responses; "
-                        f"{len(failed_relationship_ids)} graph relationships failed independent verification"
+                        f"{protocol['missing']} missing and {protocol['duplicates']} duplicate verifier responses"
                     ),
                 }
                 prior_failures.append(grounding_failure)
@@ -989,6 +1010,8 @@ class GroundingVerifier:
             "total_rules": len(rules),
             "rules_certified": len(rules) - len(failures),
             "rules_failed": len(failures),
+            "rule_grounding_pass": not failures,
+            "relationship_grounding_pass": not relationship_failures,
             "total_claims": total_claims,
             "model_claims": len(model_results),
             "deterministic_claims": len(deterministic_results),
@@ -1025,7 +1048,9 @@ class GroundingVerifier:
         lines = [
             "# Knowledge Graph Grounding Certification", "",
             f"- Overall: {'PASS' if report.get('pass') else 'FAIL'}",
-            f"- Rules certified: {report.get('rules_certified')} / {report.get('total_rules')}",
+            f"- Independent rule grounding: {'PASS' if report.get('rule_grounding_pass') else 'FAIL'}",
+            f"- Rules independently certified: {report.get('rules_certified')} / {report.get('total_rules')}",
+            f"- Relationship grounding: {'PASS' if report.get('relationship_grounding_pass') else 'FAIL'}",
             f"- Claims supported: {report.get('supported_claims')} / {report.get('total_claims')}",
             f"- Contradicted claims: {report.get('contradicted_claims')}",
             f"- Insufficient-evidence claims: {report.get('insufficient_evidence_claims')}",

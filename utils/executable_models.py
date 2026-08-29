@@ -1,10 +1,10 @@
 """Fail-closed DMN 1.3 and BPMN 2.0 projections for extraction graphs.
 
 The extraction graph is not an executable semantics.  This exporter therefore
-emits a reviewable model for every rule, while marking rules that are not
-grounded or contain unsupported predicates as ``requiresReview``.  Unsupported
-predicates lower to a never-match DMN entry (``false``), rather than silently
-inventing behavior.
+emits a reviewable DMN model for every rule. BPMN is narrower: it is emitted
+only for source-explicit ordered workflow semantics, never inferred from graph
+dependency order. Unsupported predicates lower to a never-match DMN entry
+(``false``), rather than silently inventing behavior.
 """
 
 from __future__ import annotations
@@ -14,6 +14,8 @@ import re
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any, Mapping, Sequence
+
+from utils.semantic_routing import bpmn_eligibility
 
 DMN_NS = "https://www.omg.org/spec/DMN/20191111/MODEL/"
 BPMN_NS = "http://www.omg.org/spec/BPMN/20100524/MODEL"
@@ -110,27 +112,51 @@ def build_graph_dmn(graph: Mapping[str, Any], *, model_name: str = "Policy Logic
 
 
 def build_dags_bpmn(graph: Mapping[str, Any], dags: Mapping[str, Any], *, model_name: str = "Policy Logic Forge BPMN") -> bytes:
-    """Emit executable business-rule tasks following the dependency-DAG order."""
-    rules = {str(r.get("rule_id")): r for r in graph.get("business_rules", []) if isinstance(r, Mapping)}
-    root = ET.Element(f"{{{BPMN_NS}}}definitions", {"id": "definitions_compliance_graph", "targetNamespace": CTC_NS})
-    for dindex, dag in enumerate(dags.get("dags", []), 1):
-        process = ET.SubElement(root, f"{{{BPMN_NS}}}process", {"id": _id(dag.get("dag_id"), f"process_{dindex}"), "name": str(dag.get("dag_id")), "isExecutable": "true"})
-        start = ET.SubElement(process, f"{{{BPMN_NS}}}startEvent", {"id": f"start_{dindex}"})
+    """Emit only source-explicit workflows; dependency DAGs are not processes.
+
+    ``dags`` remains in the signature because it is a required upstream audit
+    artifact and older callers provide it. Its graph order is intentionally
+    not lowered to sequence flows: a dependency is not evidence that one
+    human or service task follows another in the policy's process.
+    """
+    del dags
+    rules = [r for r in graph.get("business_rules", []) if isinstance(r, Mapping)]
+    root = ET.Element(f"{{{BPMN_NS}}}definitions", {
+        "id": "definitions_compliance_graph", "name": model_name, "targetNamespace": CTC_NS,
+        "exporter": "policy-logic-forge", "exporterVersion": "explicit-workflow/2",
+    })
+    tag_by_kind = {
+        "business_rule_task": "businessRuleTask",
+        "user_task": "userTask",
+        "service_task": "serviceTask",
+        "send_task": "sendTask",
+        "receive_task": "receiveTask",
+    }
+    for dindex, rule in enumerate(rules, 1):
+        eligible, _ = bpmn_eligibility(rule)
+        if not eligible:
+            continue
+        rid = str(rule.get("rule_id"))
+        workflow = rule["workflow_semantics"]
+        process = ET.SubElement(root, f"{{{BPMN_NS}}}process", {
+            "id": _id(f"process_{rid}", f"process_{dindex}"),
+            "name": str(rule.get("rule_name") or rid), "isExecutable": "true",
+        })
+        process.set(f"{{{CTC_NS}}}ruleId", rid)
+        process.set(f"{{{CTC_NS}}}sourceRef", _source_ref(rule))
+        process.set(f"{{{CTC_NS}}}triggerEvent", str(workflow.get("trigger_event")))
+        process.set(f"{{{CTC_NS}}}actorRole", str(workflow.get("actor_role")))
+        start = ET.SubElement(process, f"{{{BPMN_NS}}}startEvent", {"id": f"start_{dindex}", "name": str(workflow.get("trigger_event"))})
         previous = start
-        order = list(dag.get("topological_order") or dag.get("rule_ids", []))
-        # A condensed cycle-group is an ordering barrier, not a lost rule.
-        # Expand its members deterministically and append any defensive misses.
-        for group in dag.get("cycle_groups", []):
-            members = [str(item) for item in group.get("rule_ids", [])]
-            if any(str(item) == str(group.get("group_id")) for item in order):
-                position = next(i for i, item in enumerate(order) if str(item) == str(group.get("group_id")))
-                order[position:position + 1] = members
-        order.extend(str(rid) for rid in dag.get("rule_ids", []) if str(rid) not in {str(item) for item in order})
-        for nindex, rid in enumerate(order, 1):
-            rule = rules.get(str(rid), {})
-            task = ET.SubElement(process, f"{{{BPMN_NS}}}businessRuleTask", {"id": _id(f"task_{rid}", f"task_{dindex}_{nindex}"), "name": str(rule.get("rule_name") or rid), "implementation": "##DMN"})
-            task.set(f"{{{CTC_NS}}}ruleId", str(rid)); task.set(f"{{{CTC_NS}}}decisionRef", _id(f"decision_{rid}", f"decision_{nindex}"))
-            task.set(f"{{{CTC_NS}}}requiresReview", str(bool(rule.get("requires_review", True))).lower()); task.set(f"{{{CTC_NS}}}sourceRef", _source_ref(rule))
+        for nindex, step in enumerate(workflow.get("ordered_steps", []), 1):
+            kind = str(step.get("kind"))
+            attributes = {"id": _id(f"step_{rid}_{step.get('step_id')}", f"task_{dindex}_{nindex}"), "name": str(step.get("name"))}
+            if kind == "business_rule_task":
+                attributes["implementation"] = "##DMN"
+            task = ET.SubElement(process, f"{{{BPMN_NS}}}{tag_by_kind[kind]}", attributes)
+            task.set(f"{{{CTC_NS}}}ruleId", rid)
+            if kind == "business_rule_task":
+                task.set(f"{{{CTC_NS}}}decisionRef", _id(f"decision_{rid}", f"decision_{nindex}"))
             ET.SubElement(process, f"{{{BPMN_NS}}}sequenceFlow", {"id": f"flow_{dindex}_{nindex}", "sourceRef": previous.get("id"), "targetRef": task.get("id")})
             previous = task
         end = ET.SubElement(process, f"{{{BPMN_NS}}}endEvent", {"id": f"end_{dindex}"})
@@ -138,7 +164,12 @@ def build_dags_bpmn(graph: Mapping[str, Any], dags: Mapping[str, Any], *, model_
     return ET.tostring(root, encoding="utf-8", xml_declaration=True)
 
 
-def validate_executable_models(dmn: bytes, bpmn: bytes, expected_rule_ids: Sequence[str]) -> list[str]:
+def validate_executable_models(
+    dmn: bytes,
+    bpmn: bytes,
+    expected_rule_ids: Sequence[str],
+    expected_bpmn_rule_ids: Sequence[str] = (),
+) -> list[str]:
     """Structural validation shared by CLI and tests; no engine is implied."""
     errors: list[str] = []
     try:
@@ -148,10 +179,11 @@ def validate_executable_models(dmn: bytes, bpmn: bytes, expected_rule_ids: Seque
     if droot.tag != f"{{{DMN_NS}}}definitions": errors.append("DMN root is not DMN 1.3 definitions")
     if broot.tag != f"{{{BPMN_NS}}}definitions": errors.append("BPMN root is not BPMN 2.0 definitions")
     d_ids = {node.get(f"{{{CTC_NS}}}ruleId") for node in droot.iter(f"{{{DMN_NS}}}decision")}
-    b_ids = {node.get(f"{{{CTC_NS}}}ruleId") for node in broot.iter(f"{{{BPMN_NS}}}businessRuleTask")}
+    b_ids = {node.get(f"{{{CTC_NS}}}ruleId") for node in broot.iter(f"{{{BPMN_NS}}}process")}
     expected = set(map(str, expected_rule_ids))
+    expected_bpmn = set(map(str, expected_bpmn_rule_ids))
     if d_ids != expected: errors.append(f"DMN rule coverage mismatch: {len(d_ids)} != {len(expected)}")
-    if not expected.issubset(b_ids): errors.append("BPMN does not reference every graph rule")
+    if b_ids != expected_bpmn: errors.append(f"BPMN eligibility coverage mismatch: {len(b_ids)} != {len(expected_bpmn)}")
     for flow in broot.iter(f"{{{BPMN_NS}}}sequenceFlow"):
         if not flow.get("sourceRef") or not flow.get("targetRef"): errors.append("BPMN sequenceFlow has missing endpoint")
     return errors

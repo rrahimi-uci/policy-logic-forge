@@ -277,6 +277,31 @@ def test_evidence_record_marks_a_repaired_citation_and_keeps_the_original_for_au
     assert record["original_source_text"] == NEAR_MATCH_CHUNK + " as required by policy."
 
 
+def test_evidence_record_has_stable_content_id_digest_and_exact_offsets():
+    chunk = "Heading\nA seller\tservicer must review the file.\nFooter"
+    rules = [{
+        "rule_id": "R1",
+        "source_reference": {
+            "chunk_path": "policy.txt", "section_id": "s1",
+            "source_text": "a seller servicer must review the file.",
+        },
+    }]
+    import hashlib
+    corpus = {"chunks": [{
+        "chunk_path": "policy.txt", "text": chunk,
+        "sha256": hashlib.sha256(chunk.encode()).hexdigest(),
+    }]}
+
+    first = GroundingVerifier._evidence_records(rules, corpus, max_chars=4000)[0]
+    second = GroundingVerifier._evidence_records(rules, corpus, max_chars=4000)[0]
+
+    assert first["evidence_id"] == second["evidence_id"]
+    assert first["evidence_id"].startswith("EV-")
+    assert chunk[first["start_offset"]:first["end_offset"]] == first["source_text"]
+    assert first["source_text"] == "A seller\tservicer must review the file."
+    assert first["chunk_sha256"] == corpus["chunks"][0]["sha256"]
+
+
 def test_a_rule_whose_only_flaw_is_an_imprecise_but_repairable_citation_still_certifies(tmp_path):
     organized = tmp_path / "organized" / "b2_3"
     organized.mkdir(parents=True)
@@ -491,6 +516,46 @@ def test_condition_logic_failure_does_not_fail_unrelated_test_vector():
 
     assert by_id["condition_logic"]["verdict"] == "insufficient_evidence"
     assert by_id["test_vector:0"]["verdict"] == "supported"
+
+
+def test_contract_issue_fails_only_the_derived_claims_that_depend_on_its_path():
+    rule = valid_rule()
+    rule["rule_type"] = "constraint"
+    rule["recommended_hit_policy"] = "NOT_A_POLICY"
+    rule["execution"] = {"targets": ["DMN"], "dmn": {}}
+    results = GroundingVerifier.deterministic_rule_claims(rule, entity_keys=["SELLER_SERVICER", "FANNIE_MAE"])
+    by_id = {r["claim_id"]: r for r in results}
+
+    assert by_id["execution"]["verdict"] == "insufficient_evidence"
+    assert all(result["verdict"] == "supported" for key, result in by_id.items() if key.startswith("variable:"))
+    assert by_id["rule_type"]["verdict"] == "supported"
+
+
+def test_failed_relationship_does_not_blanket_fail_independently_grounded_rules(tmp_path):
+    organized = _organized_corpus(tmp_path)
+    graph = graph_with_two_rules()
+
+    class RelationshipFailingResolver(SupportingResolver):
+        def verify(self, packets):
+            results = super().verify(packets)
+            for result in results:
+                if str(result["rule_id"]).startswith("@dependency:"):
+                    result["verdict"] = "insufficient_evidence"
+                    result["evidence_id"] = None
+                    result["supporting_quote"] = None
+                    result["reasoning"] = "The ordering relationship is not stated by the source."
+            return results
+
+    final_graph, report = GroundingVerifier(RelationshipFailingResolver()).verify_graph(
+        graph, organized, tmp_path / "output"
+    )
+
+    assert report["pass"] is False
+    assert report["rule_grounding_pass"] is True
+    assert report["relationship_grounding_pass"] is False
+    assert report["rules_certified"] == report["total_rules"] == 2
+    assert all(rule["grounding"]["status"] == "certified" for rule in final_graph["business_rules"])
+    assert any(rule["grounding"]["relationship_status"] == "failed" for rule in final_graph["business_rules"])
 
 
 def test_test_vector_with_no_inputs_or_outputs_is_insufficient():

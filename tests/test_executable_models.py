@@ -23,6 +23,20 @@ def _graph():
     ]}
 
 
+def _explicit_workflow():
+    return {
+        "kind": "prescriptive_process",
+        "basis": "explicit_in_source",
+        "trigger_event": "Application received",
+        "actor_role": "SELLER_SERVICER",
+        "ordered_steps": [
+            {"step_id": "review", "name": "Review application", "kind": "user_task"},
+            {"step_id": "decide", "name": "Apply eligibility decision", "kind": "business_rule_task"},
+        ],
+        "evidence": [{"chunk_path": "policy.txt", "section_id": "s1", "source_text": "After receipt, review the application and apply the eligibility decision."}],
+    }
+
+
 def test_graph_dmn_is_valid_and_unsupported_predicates_fail_closed():
     graph = _graph()
     document = build_graph_dmn(graph)
@@ -34,17 +48,25 @@ def test_graph_dmn_is_valid_and_unsupported_predicates_fail_closed():
     assert rows[1].find(f"{{{DMN_NS}}}inputEntry/{{{DMN_NS}}}text").text == "false"
 
 
-def test_bpmn_expands_cycle_groups_and_covers_every_rule():
+def test_bpmn_uses_only_explicit_workflow_order_and_omits_dependency_only_rules():
     graph = _graph()
+    graph["business_rules"][0]["responsible_party"] = "SELLER_SERVICER"
+    graph["business_rules"][0]["workflow_semantics"] = _explicit_workflow()
     dags = {"dags": [{"dag_id": "d1", "rule_ids": ["R-1", "R-2"],
                       "topological_order": ["d1_cycle_1"],
                       "cycle_groups": [{"group_id": "d1_cycle_1", "rule_ids": ["R-1", "R-2"]}]}]}
     dmn = build_graph_dmn(graph)
     bpmn = build_dags_bpmn(graph, dags)
-    assert validate_executable_models(dmn, bpmn, ["R-1", "R-2"]) == []
-    assert len(list(ET.fromstring(bpmn).iter(f"{{{BPMN_NS}}}businessRuleTask"))) == 2
+    assert validate_executable_models(dmn, bpmn, ["R-1", "R-2"], ["R-1"]) == []
+    root = ET.fromstring(bpmn)
+    assert len(list(root.iter(f"{{{BPMN_NS}}}process"))) == 1
+    assert len(list(root.iter(f"{{{BPMN_NS}}}userTask"))) == 1
+    assert len(list(root.iter(f"{{{BPMN_NS}}}businessRuleTask"))) == 1
 
 
-def test_validation_rejects_missing_rule_coverage():
+def test_validation_rejects_wrong_bpmn_eligibility_coverage():
     graph = _graph()
-    assert validate_executable_models(build_graph_dmn(graph), build_dags_bpmn(graph, {"dags": []}), ["R-1", "R-2"])
+    assert validate_executable_models(
+        build_graph_dmn(graph), build_dags_bpmn(graph, {"dags": []}),
+        ["R-1", "R-2"], ["R-1"],
+    )
