@@ -36,6 +36,7 @@ sys.path.insert(0, str(_ROOT))
 
 from utils.agent_names import AGENT_IDS, agent_spec, output_dir_name  # noqa: E402
 from utils.config import get_config  # noqa: E402
+from utils.pipeline_state import RESUMABLE_STAGES, next_stage_to_run, record_stage_result  # noqa: E402
 
 DOMAINS = [
     "nda_confidentiality", "privacy_policy", "mobile_app_privacy", "commercial_contracts",
@@ -267,6 +268,22 @@ class ExtractionPipeline:
     def run_agent_11(self) -> bool:
         return self._run("agent_11", [])
 
+    def _record_stage(self, stage_id: str, ok: bool) -> None:
+        """Best-effort resume-state bookkeeping (see ``utils/pipeline_state.py``).
+
+        No-ops when ``self.config`` was never set -- notably, orchestrator
+        unit tests build a bare ``ExtractionPipeline`` via ``object.__new__``
+        and set only the attributes each test needs, without running
+        ``__init__``.
+        """
+        config = getattr(self, "config", None)
+        if config is None:
+            return
+        record_stage_result(
+            config.get_pipeline_base_path(), stage_id,
+            ok=ok, exit_code=self._last_exit_codes.get(stage_id),
+        )
+
     def _review_only_readiness(self) -> bool:
         """Return true when readiness is structurally sound but still review-gated.
 
@@ -310,56 +327,104 @@ class ExtractionPipeline:
             and report.get("unexpected_claim_responses") == 0
         )
 
-    def run_all(self) -> bool:
+    def run_all(self, *, resume_from: str | None = None) -> bool:
+        """Run every canonical stage in order, optionally resuming partway through.
+
+        ``resume_from=None`` (the default) runs everything, identical to the
+        pre-resume behavior. When given, it must be one of
+        ``utils.pipeline_state.RESUMABLE_STAGES`` and skips every stage before
+        it. The agent_07 -> agent_08 -> agent_09 conditional loop is one
+        resumable unit (``"agent_07_09"``): resuming into it always re-enters
+        from agent_07, never mid-loop, since its own internal logic is
+        unchanged here.
+        """
+        if resume_from is not None and resume_from not in RESUMABLE_STAGES:
+            raise ValueError(
+                f"Unknown resume stage {resume_from!r}; expected one of: {', '.join(RESUMABLE_STAGES)}"
+            )
+        start_index = RESUMABLE_STAGES.index(resume_from) if resume_from else 0
+
+        def due(stage_id: str) -> bool:
+            return RESUMABLE_STAGES.index(stage_id) >= start_index
+
         start = datetime.now()
-        if not self.run_agent_01():
-            return False
-        if not self.run_agent_02():
-            return False
-        if not self.run_agent_03():
-            return False
-        self.run_agent_04()  # advisory; never blocks the pipeline
-        if not self.run_agent_05():
-            return False
-        if not self.run_agent_06():
-            return False
-
-        if not self.skip_optimize:
-            if not self.run_agent_07():
-                # agent_07 exits nonzero either on a hard invariant failure
-                # (unrecoverable here) or because rules need agent_08 remediation.
-                report_path = self.optimized_dir / "kg_readiness_report.json"
-                needs_remediation = False
-                if report_path.exists():
-                    try:
-                        report = json.loads(report_path.read_text())
-                        needs_remediation = bool(report.get("rules_requiring_review"))
-                    except (OSError, json.JSONDecodeError):
-                        pass
-                if not needs_remediation:
-                    print("\nSTOPPED: agent_07 invariant failure (not remediable by agent_08).")
-                    return False
-                print("\nagent_07 requested focused remediation -> running agent_08")
-                if not self.run_agent_08():
-                    if self._last_exit_codes.get("agent_08") != 3:
-                        return False
-                    print("agent_08 retained review-required rules; continuing fail-closed")
-                if not self.run_agent_07(reuse_conflicts=True):
-                    if self._last_exit_codes.get("agent_07") != 3 or not self._review_only_readiness():
-                        print("\nSTOPPED: readiness invariants still failing after remediation.")
-                        return False
-                    print("readiness remains review-gated; preserving review flags and continuing")
-
-        if not self.run_agent_09():
-            if self._last_exit_codes.get("agent_09") != 3 or not self._review_only_grounding():
-                print("\nSTOPPED: agent_09 grounding certification failed.")
+        if due("agent_01"):
+            ok = self.run_agent_01()
+            self._record_stage("agent_01", ok)
+            if not ok:
                 return False
-            print("grounding remains review-gated with complete response coverage; continuing fail-closed")
+        if due("agent_02"):
+            ok = self.run_agent_02()
+            self._record_stage("agent_02", ok)
+            if not ok:
+                return False
+        if due("agent_03"):
+            ok = self.run_agent_03()
+            self._record_stage("agent_03", ok)
+            if not ok:
+                return False
+        if due("agent_04"):
+            self.run_agent_04()  # advisory; never blocks the pipeline
+            self._record_stage("agent_04", True)
+        if due("agent_05"):
+            ok = self.run_agent_05()
+            self._record_stage("agent_05", ok)
+            if not ok:
+                return False
+        if due("agent_06"):
+            ok = self.run_agent_06()
+            self._record_stage("agent_06", ok)
+            if not ok:
+                return False
 
-        if not self.run_agent_10():
-            return False
-        if not self.run_agent_11():
-            return False
+        if due("agent_07_09"):
+            if not self.skip_optimize:
+                if not self.run_agent_07():
+                    # agent_07 exits nonzero either on a hard invariant failure
+                    # (unrecoverable here) or because rules need agent_08 remediation.
+                    report_path = self.optimized_dir / "kg_readiness_report.json"
+                    needs_remediation = False
+                    if report_path.exists():
+                        try:
+                            report = json.loads(report_path.read_text())
+                            needs_remediation = bool(report.get("rules_requiring_review"))
+                        except (OSError, json.JSONDecodeError):
+                            pass
+                    if not needs_remediation:
+                        print("\nSTOPPED: agent_07 invariant failure (not remediable by agent_08).")
+                        self._record_stage("agent_07_09", False)
+                        return False
+                    print("\nagent_07 requested focused remediation -> running agent_08")
+                    if not self.run_agent_08():
+                        if self._last_exit_codes.get("agent_08") != 3:
+                            self._record_stage("agent_07_09", False)
+                            return False
+                        print("agent_08 retained review-required rules; continuing fail-closed")
+                    if not self.run_agent_07(reuse_conflicts=True):
+                        if self._last_exit_codes.get("agent_07") != 3 or not self._review_only_readiness():
+                            print("\nSTOPPED: readiness invariants still failing after remediation.")
+                            self._record_stage("agent_07_09", False)
+                            return False
+                        print("readiness remains review-gated; preserving review flags and continuing")
+
+            if not self.run_agent_09():
+                if self._last_exit_codes.get("agent_09") != 3 or not self._review_only_grounding():
+                    print("\nSTOPPED: agent_09 grounding certification failed.")
+                    self._record_stage("agent_07_09", False)
+                    return False
+                print("grounding remains review-gated with complete response coverage; continuing fail-closed")
+            self._record_stage("agent_07_09", True)
+
+        if due("agent_10"):
+            ok = self.run_agent_10()
+            self._record_stage("agent_10", ok)
+            if not ok:
+                return False
+        if due("agent_11"):
+            ok = self.run_agent_11()
+            self._record_stage("agent_11", ok)
+            if not ok:
+                return False
 
         elapsed = datetime.now() - start
         print("\n" + "=" * 80)
@@ -409,7 +474,16 @@ def main():
     parser.add_argument("--skip-optimize", action="store_true", help="Skip agents agent_06 through agent_09 (optimization, readiness, remediation, grounding)")
     parser.add_argument("--agent", choices=list(AGENT_IDS), help="Run one canonical agent only")
     parser.add_argument("--step", choices=["1", "2", "3", "3.5", "4", "5", "5.5", "5.6", "5.7", "6"], help="Deprecated numeric stage selector; use --agent")
+    parser.add_argument("--resume", action="store_true", help="Resume from the last recorded stage in pipeline_run_state.json (auto-detected)")
+    parser.add_argument("--resume-from", choices=list(RESUMABLE_STAGES), default=None, help="Resume starting at this stage explicitly, overriding auto-detection")
     args = parser.parse_args()
+
+    if args.agent and args.step:
+        parser.error("--agent and --step cannot be used together")
+    if args.resume and args.resume_from:
+        parser.error("--resume and --resume-from cannot be used together")
+    if (args.resume or args.resume_from) and (args.agent or args.step):
+        parser.error("--resume/--resume-from cannot be combined with --agent/--step")
 
     source_dir = Path(args.dir)
     if not source_dir.is_absolute():
@@ -423,9 +497,22 @@ def main():
         max_workers=args.workers, skip_optimize=args.skip_optimize, batch_name=args.batch_name,
         pilot_batch_limit=args.pilot_batch_limit,
     )
-    if args.agent and args.step:
-        parser.error("--agent and --step cannot be used together")
-    ok = pipeline.run_agent(args.agent) if args.agent else pipeline.run_step(args.step) if args.step else pipeline.run_all()
+
+    resume_from = args.resume_from
+    if args.resume:
+        run_dir = pipeline.config.get_pipeline_base_path()
+        resume_from = next_stage_to_run(run_dir)
+        if resume_from is None:
+            print(f"\nRun already complete for batch '{pipeline.batch_name}' -- nothing to resume.")
+            sys.exit(0)
+        print(f"\nResuming from {resume_from} (auto-detected from {run_dir / 'pipeline_run_state.json'})")
+
+    if args.agent:
+        ok = pipeline.run_agent(args.agent)
+    elif args.step:
+        ok = pipeline.run_step(args.step)
+    else:
+        ok = pipeline.run_all(resume_from=resume_from)
     sys.exit(0 if ok else 1)
 
 
