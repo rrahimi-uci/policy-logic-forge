@@ -217,7 +217,22 @@ def test_agent_01_ignores_top_level_metadata_manifest(tmp_path, monkeypatch):
 
 
 def test_orchestrator_propagates_document_worker_profile():
-    assert _PERFORMANCE_ENV["KG_ORGANIZER_WORKERS"] == ("document_workers", 6)
+    assert _PERFORMANCE_ENV["KG_ORGANIZER_WORKERS"] == ("document_workers", 16)
+
+
+def test_orchestrator_fast_profile_keeps_stage_and_global_limits_aligned():
+    """Every subprocess inherits the measured safe 16-request ceiling."""
+    expected = {
+        "KG_LLM_CONCURRENCY": ("llm_concurrency", 16),
+        "KG_GLOBAL_LLM_CONCURRENCY_INITIAL": ("global_llm_concurrency_initial", 8),
+        "KG_GLOBAL_LLM_CONCURRENCY_MAX": ("global_llm_concurrency_max", 16),
+        "KG_READINESS_LLM_CONCURRENCY": ("readiness_llm_concurrency", 16),
+        "KG_REMEDIATION_LLM_CONCURRENCY": ("remediation_llm_concurrency", 16),
+        "KG_GROUNDING_LLM_CONCURRENCY": ("grounding_llm_concurrency", 16),
+        "KG_GROUNDING_RELATIONSHIPS_PER_REQUEST": ("grounding_relationships_per_request", 12),
+    }
+    for env_name, profile_entry in expected.items():
+        assert _PERFORMANCE_ENV[env_name] == profile_entry
 
 
 def test_mortgage_domain_is_supported_for_pdf_runs(tmp_path, monkeypatch):

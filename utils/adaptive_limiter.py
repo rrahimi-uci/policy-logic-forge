@@ -26,10 +26,10 @@ class AdaptiveRequestLimiter:
         self,
         state_file: str | Path,
         *,
-        initial_limit: int = 2,
-        maximum_limit: int = 8,
+        initial_limit: int = 8,
+        maximum_limit: int = 16,
         minimum_limit: int = 1,
-        success_window: int = 12,
+        success_window: int = 3,
         lease_seconds: float = 900,
         poll_seconds: float = 0.1,
     ) -> None:
@@ -50,10 +50,10 @@ class AdaptiveRequestLimiter:
             return None
         return cls(
             state_file,
-            initial_limit=int(os.getenv("KG_GLOBAL_LLM_CONCURRENCY_INITIAL", "2")),
-            maximum_limit=int(os.getenv("KG_GLOBAL_LLM_CONCURRENCY_MAX", "8")),
+            initial_limit=int(os.getenv("KG_GLOBAL_LLM_CONCURRENCY_INITIAL", "8")),
+            maximum_limit=int(os.getenv("KG_GLOBAL_LLM_CONCURRENCY_MAX", "16")),
             minimum_limit=int(os.getenv("KG_GLOBAL_LLM_CONCURRENCY_MIN", "1")),
-            success_window=int(os.getenv("KG_GLOBAL_LLM_SUCCESS_WINDOW", "12")),
+            success_window=int(os.getenv("KG_GLOBAL_LLM_SUCCESS_WINDOW", "3")),
             lease_seconds=float(os.getenv("KG_GLOBAL_LLM_LEASE_SECONDS", "900")),
             poll_seconds=float(os.getenv("KG_GLOBAL_LLM_POLL_SECONDS", "0.1")),
         )

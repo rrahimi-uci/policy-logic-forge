@@ -45,3 +45,22 @@ def test_acquire_reaps_lease_left_by_dead_worker(tmp_path):
     lease = limiter.acquire(timeout=1)
     assert lease.concurrency_limit == 1
     limiter.release(lease, success=True)
+
+
+def test_environment_defaults_match_fast_safe_pipeline_profile(tmp_path, monkeypatch):
+    monkeypatch.setenv("KG_GLOBAL_LLM_STATE_FILE", str(tmp_path / "limiter.sqlite3"))
+    for name in (
+        "KG_GLOBAL_LLM_CONCURRENCY_INITIAL",
+        "KG_GLOBAL_LLM_CONCURRENCY_MAX",
+        "KG_GLOBAL_LLM_CONCURRENCY_MIN",
+        "KG_GLOBAL_LLM_SUCCESS_WINDOW",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+    limiter = AdaptiveRequestLimiter.from_environment()
+
+    assert limiter is not None
+    assert limiter.initial_limit == 8
+    assert limiter.maximum_limit == 16
+    assert limiter.minimum_limit == 1
+    assert limiter.success_window == 3

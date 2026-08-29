@@ -976,7 +976,7 @@ class BusinessRulesExtractor:
         
         gate_size = max(1, int(os.getenv(
             "KG_LLM_CONCURRENCY",
-            str(min(max_workers, 8)),
+            str(min(max_workers, 16)),
         )))
         # Do not create dozens of workers that immediately block on the same
         # semaphore.  Python's semaphore wake-up order is not FIFO; with 40

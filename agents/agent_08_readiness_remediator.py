@@ -94,7 +94,7 @@ class JsonlCheckpoint:
 
 class OpenAIRemediationResolver:
     def __init__(self, api_key: str, model: str, reasoning_effort: str) -> None:
-        concurrency = max(1, int(os.getenv("KG_REMEDIATION_LLM_CONCURRENCY", "8")))
+        concurrency = max(1, int(os.getenv("KG_REMEDIATION_LLM_CONCURRENCY", "16")))
         self.concurrency = concurrency
         self.model = model
         self.reasoning_effort = reasoning_effort
@@ -398,7 +398,7 @@ class ReadinessRemediator:
         corpus["_token_index"] = _build_token_index(corpus["_search_index"])
         rules = [dict(rule) for rule in working.get("business_rules", []) if isinstance(rule, Mapping)]
         initial_review = sum(bool(rule.get("requires_review")) for rule in rules)
-        workers = max(1, int(os.getenv("KG_REMEDIATION_WORKERS", "16")))
+        workers = max(1, int(os.getenv("KG_REMEDIATION_WORKERS", "40")))
         rule_batch_size = max(1, int(os.getenv("KG_REMEDIATION_RULES_PER_REQUEST", "4")))
         pair_batch_size = max(1, int(os.getenv("KG_REMEDIATION_PAIRS_PER_REQUEST", "12")))
         passes = max(1, int(os.getenv("KG_REMEDIATION_MAX_PASSES", "2")))
@@ -436,7 +436,7 @@ class ReadinessRemediator:
                 checkpoint.put(key, result)
                 return result
 
-            api_workers = max(1, int(os.getenv("KG_REMEDIATION_LLM_CONCURRENCY", "4")))
+            api_workers = max(1, int(os.getenv("KG_REMEDIATION_LLM_CONCURRENCY", "16")))
             workers = min(workers, api_workers)
             with ThreadPoolExecutor(max_workers=min(workers, max(1, len(rule_batches))), thread_name_prefix="kg-remediate-rule") as executor:
                 futures = [executor.submit(resolve_rule_batch, batch) for batch in rule_batches]
@@ -476,7 +476,7 @@ class ReadinessRemediator:
                 checkpoint.put(key, result)
                 return result
 
-            api_workers = max(1, int(os.getenv("KG_REMEDIATION_LLM_CONCURRENCY", "4")))
+            api_workers = max(1, int(os.getenv("KG_REMEDIATION_LLM_CONCURRENCY", "16")))
             workers = min(workers, api_workers)
             with ThreadPoolExecutor(max_workers=min(workers, max(1, len(conflict_batches))), thread_name_prefix="kg-remediate-conflict") as executor:
                 futures = []
