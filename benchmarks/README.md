@@ -1,7 +1,7 @@
 # Benchmarks
 
-Legal- and privacy-domain NLP corpora used to evaluate the compliance-to-code
-extraction pipeline: clause extraction, data-practice classification, and
+Legal- and privacy-domain NLP corpora used to evaluate the Policy Logic Forge
+policy-logic-forge extraction pipeline: clause extraction, data-practice classification, and
 document-level inference against expert gold annotations.
 
 Nothing here is committed except the manifests, scripts, and this file —

@@ -11,7 +11,7 @@ from utils.lexec_ir import validate_ir
 
 
 DMN_NS = "https://www.omg.org/spec/DMN/20191111/MODEL/"
-DMN_PREFIX = "https://github.com/rrahimi-uci/compliance-to-code/dmn/"
+DMN_PREFIX = "https://github.com/rrahimi-uci/policy-logic-forge/dmn/"
 SUPPORTED_HIT_POLICIES = {"UNIQUE", "ANY", "PRIORITY", "COLLECT"}
 SAFE_ID = re.compile(r"^[A-Za-z_][A-Za-z0-9_.-]*$")
 
@@ -203,7 +203,7 @@ def build_dmn_document(ir: Mapping[str, Any], *, model_name: str = "LExec IR v1 
         "id": "definitions_lexec_ir_v1",
         "name": model_name,
         "namespace": DMN_PREFIX,
-        "exporter": "compliance-to-code",
+        "exporter": "policy-logic-forge",
         "exporterVersion": "lexec-ir/1",
     })
     input_symbols = {symbol_id: symbol for symbol_id, symbol in symbols.items() if symbol.get("role") == "input"}

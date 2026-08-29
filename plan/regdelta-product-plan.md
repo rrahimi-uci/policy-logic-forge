@@ -23,7 +23,7 @@ academic evaluation becomes a priority.
 
 ## 1. Goal
 
-Ship a "compare regulation versions" capability in compliance-to-code: given
+Ship a "compare regulation versions" capability in Policy Logic Forge: given
 an old and a revised version of a compliance document in a domain this
 pipeline already extracts, compile both, detect which rules and cases behave
 differently, generate concrete examples, quantify how many cases are

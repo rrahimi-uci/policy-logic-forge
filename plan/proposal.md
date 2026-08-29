@@ -3,7 +3,7 @@
 ## Executive summary
 
 This proposal narrows the research objective from a general business simulator
-to a problem that the current compliance-to-code system can support and that
+to a problem that the current Policy Logic Forge system can support and that
 open benchmarks can evaluate:
 
 > Given old and revised policy text plus a cohort of cases, compile both policy

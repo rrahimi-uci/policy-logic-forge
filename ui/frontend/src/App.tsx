@@ -118,12 +118,12 @@ export default function App() {
   };
   const openRule = (id: string) => { setRuleId(id); setView("rules"); };
 
-  if (loadingRuns) return <div className="app-loading"><div className="loading-brand">C2C</div><Loading label="Preparing the review workbench…" /></div>;
+  if (loadingRuns) return <div className="app-loading"><div className="loading-brand">PLF</div><Loading label="Preparing the review workbench…" /></div>;
 
   return <div className={`app-shell${navCompact ? " nav-compact" : ""}`}>
     <button className={`nav-scrim${menuOpen ? " visible" : ""}`} aria-label="Close navigation" onClick={() => setMenuOpen(false)} />
     <aside className={`sidebar${menuOpen ? " open" : ""}`}>
-      <div className="brand"><span className="brand-mark">C2C</span><div className="brand-copy"><strong>Review workbench</strong><small>Compliance-to-code</small></div></div>
+      <div className="brand"><span className="brand-mark">PLF</span><div className="brand-copy"><strong>Review workbench</strong><small>Policy Logic Forge</small></div></div>
       <nav aria-label="Primary navigation">
         {navItems.map(([id, label, icon]) => <button aria-current={view === id || (id === "rules" && ruleId) ? "page" : undefined} aria-label={label} className={view === id || (id === "rules" && ruleId) ? "nav-item active" : "nav-item"} key={id} onClick={() => navigate(id)} title={navCompact ? label : undefined}><Icon name={icon as IconName} /><span className="nav-label">{label}</span></button>)}
       </nav>
@@ -134,7 +134,7 @@ export default function App() {
     <main className="main">
       <header className="topbar">
         <button className="mobile-menu" aria-expanded={menuOpen} aria-label="Open navigation" onClick={() => setMenuOpen(true)}><Icon name="menu" /></button>
-        <div className="mobile-brand">C2C</div>
+        <div className="mobile-brand">PLF</div>
         <div className="run-picker"><label htmlFor="run-select">Active run</label><select id="run-select" value={selectedRun} onChange={(event) => selectRun(event.target.value)}>{runs.map((item) => <option key={item.run_id} value={item.run_id}>{item.run_id}</option>)}</select></div>
         <form className="global-search" onSubmit={(event) => { event.preventDefault(); if (searchQuery.trim()) setSearchOpen(true); }}>
           <Icon name="search" />

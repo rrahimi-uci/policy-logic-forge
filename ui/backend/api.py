@@ -177,7 +177,7 @@ def create_handler(service: ReviewService, static_root: str | Path | None = None
     static_dir = Path(static_root or Path(__file__).resolve().parents[1] / "frontend" / "dist").resolve()
 
     class Handler(BaseHTTPRequestHandler):
-        server_version = "C2CReview/1.0"
+        server_version = "PolicyLogicForgeReview/1.0"
 
         def log_message(self, format: str, *args: Any) -> None:
             if os.environ.get("C2C_UI_QUIET") != "1":
@@ -405,7 +405,7 @@ def _facets(rows: list[dict[str, Any]]) -> dict[str, dict[str, int]]:
 
 def serve(service: ReviewService, host: str = "127.0.0.1", port: int = 8787, static_root: str | Path | None = None) -> None:
     server = ThreadingHTTPServer((host, port), create_handler(service, static_root))
-    print(f"C2C review workbench listening on http://{host}:{port}")
+    print(f"Policy Logic Forge review workbench listening on http://{host}:{port}")
     try:
         server.serve_forever()
     except KeyboardInterrupt:

@@ -1,4 +1,4 @@
-# C2C review workbench
+# Policy Logic Forge review workbench
 
 See [`contracts.md`](contracts.md) for the normalized read-model, API, overlay,
 and comparison contracts. [`IMPLEMENTATION_STATUS.md`](IMPLEMENTATION_STATUS.md)

@@ -1,4 +1,4 @@
-# compliance-to-code
+# Policy Logic Forge
 
 Turns compliance policy text into a typed, source-grounded knowledge graph:
 every rule is extracted with structured conditions and outcomes,

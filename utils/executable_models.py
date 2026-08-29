@@ -17,7 +17,7 @@ from typing import Any, Mapping, Sequence
 
 DMN_NS = "https://www.omg.org/spec/DMN/20191111/MODEL/"
 BPMN_NS = "http://www.omg.org/spec/BPMN/20100524/MODEL"
-CTC_NS = "https://github.com/rrahimi-uci/compliance-to-code/executable/1"
+CTC_NS = "https://github.com/rrahimi-uci/policy-logic-forge/executable/1"
 ET.register_namespace("dmn", DMN_NS)
 ET.register_namespace("bpmn", BPMN_NS)
 ET.register_namespace("ctc", CTC_NS)
@@ -66,12 +66,12 @@ def _source_ref(rule: Mapping[str, Any]) -> str:
     return f"{ref.get('chunk_path', 'unresolved')}#{ref.get('section_id', 'unresolved')}"
 
 
-def build_graph_dmn(graph: Mapping[str, Any], *, model_name: str = "Compliance-to-Code DMN") -> bytes:
+def build_graph_dmn(graph: Mapping[str, Any], *, model_name: str = "Policy Logic Forge DMN") -> bytes:
     """Emit one DMN decision table per graph rule, preserving audit metadata."""
     rules = [r for r in graph.get("business_rules", []) if isinstance(r, Mapping)]
     root = ET.Element(f"{{{DMN_NS}}}definitions", {
         "id": "definitions_compliance_graph", "name": model_name,
-        "namespace": CTC_NS, "exporter": "compliance-to-code",
+        "namespace": CTC_NS, "exporter": "policy-logic-forge",
         "exporterVersion": "graph-projection/1",
     })
     for index, rule in enumerate(rules, 1):
@@ -109,7 +109,7 @@ def build_graph_dmn(graph: Mapping[str, Any], *, model_name: str = "Compliance-t
     return ET.tostring(root, encoding="utf-8", xml_declaration=True)
 
 
-def build_dags_bpmn(graph: Mapping[str, Any], dags: Mapping[str, Any], *, model_name: str = "Compliance-to-Code BPMN") -> bytes:
+def build_dags_bpmn(graph: Mapping[str, Any], dags: Mapping[str, Any], *, model_name: str = "Policy Logic Forge BPMN") -> bytes:
     """Emit executable business-rule tasks following the dependency-DAG order."""
     rules = {str(r.get("rule_id")): r for r in graph.get("business_rules", []) if isinstance(r, Mapping)}
     root = ET.Element(f"{{{BPMN_NS}}}definitions", {"id": "definitions_compliance_graph", "targetNamespace": CTC_NS})
