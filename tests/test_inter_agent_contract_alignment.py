@@ -59,6 +59,7 @@ FINAL_SCOPE_BASES = {
 }
 FINAL_EXCEPTION_BASES = {
     "explicit_in_source", "explicitly_none_in_source",
+    "no_exception_cue_found_in_complete_search",
     "unresolved_after_full_document_search",
 }
 

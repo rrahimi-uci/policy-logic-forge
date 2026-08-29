@@ -15,6 +15,7 @@ Required JSON shape:
   "entity_types": {{
     "ENTITY_NAME": {{
       "definition": "...",
+      "concept_kind": "actor_role|business_object|evidence_object|event|decision_variable|process",
       "attributes": ["...", "...", "...", "...", "..."],
       "examples": ["..."],
       "business_rules": ["..."]
@@ -31,6 +32,11 @@ Required JSON shape:
     }}
   }}
 }}
+
+`concept_kind` is semantic typing, not a topic label. People and organizations
+that can bear an obligation are `actor_role`; documents are `evidence_object`;
+activities are `process`; triggers are `event`; values used by decisions are
+`decision_variable`; other governed things are `business_object`.
 
 EXCERPTS:
 {sample_content}

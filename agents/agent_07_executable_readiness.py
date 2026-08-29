@@ -36,6 +36,7 @@ from utils.llm_client import create_llm_client
 from utils.prompt_manager import get_prompt_manager
 from utils.rule_contract import annotate_rule_contract
 from utils.rule_contract import EXCEPTION_BASES, SCOPE_BASES, validate_rule_v2
+from utils.semantic_routing import bpmn_eligibility
 
 # Completion fields that every downstream reader (kg_readiness.final_rule_issues,
 # this module's own searched_chunk_count/corpus_sha256 stamping) treats as a
@@ -216,6 +217,7 @@ _READINESS_RULE_FIELDS = (
     "versioning_status", "applicability_scope", "scope_basis", "inference_reasoning",
     "responsible_party", "counterparties", "exceptions", "exception_basis",
     "exception_verification", "scope_derivation", "source_reference", "test_vectors",
+    "workflow_semantics",
 )
 
 
@@ -236,16 +238,12 @@ def _compact_readiness_rule(rule: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _project_execution(rule: Mapping[str, Any]) -> dict[str, Any]:
-    """Mechanical projection; final readiness still requires evidence checks.
+    """Project decisions mechanically and workflows only from explicit order.
 
-    BPMN eligibility is domain-agnostic by design: it is keyed off whether the
-    rule has a named ``responsible_party`` (i.e. it can plausibly gate a
-    process step in someone's lane), not off ``rule_type``. ``rule_type`` is a
-    free-form string whose vocabulary each domain's extraction prompt defines
-    independently (compare mortgage's eligibility/constraint/... against
-    nda_confidentiality's confidentiality_scope/permitted_use/...), so gating
-    on a fixed set of rule_type strings silently produces zero BPMN targets
-    for every domain that doesn't happen to share mortgage's vocabulary.
+    A responsible party and an output make a decision assignable, but do not
+    establish a process. BPMN therefore requires source-evidenced
+    ``workflow_semantics``; absent or ambiguous workflows stay in DMN and may
+    be routed to CMMN review instead of being fabricated as a linear process.
     """
     variables = [item for item in rule.get("variables", []) if isinstance(item, Mapping)]
     inputs = [str(item.get("name")) for item in variables if item.get("role") in {"input", "derived"}]
@@ -254,9 +252,18 @@ def _project_execution(rule: Mapping[str, Any]) -> dict[str, Any]:
     execution: dict[str, Any] = {"targets": targets}
     if "DMN" in targets:
         execution["dmn"] = {"input_columns": inputs, "output_columns": outputs, "hit_policy": rule.get("recommended_hit_policy")}
-    if outputs and str(rule.get("responsible_party", "")).strip():
+    eligible, omission_reasons = bpmn_eligibility(rule, require_certified=False)
+    if eligible:
         targets.append("BPMN")
-        execution["bpmn"] = {"gateway_type": "exclusive", "lane": rule.get("responsible_party"), "true_path_outcome_variables": outputs}
+        workflow = rule["workflow_semantics"]
+        execution["bpmn"] = {
+            "lane": workflow.get("actor_role"),
+            "trigger_event": workflow.get("trigger_event"),
+            "ordered_steps": deepcopy(workflow.get("ordered_steps", [])),
+            "basis": workflow.get("basis"),
+        }
+    else:
+        execution["bpmn_omission_reasons"] = omission_reasons
     return execution
 
 
@@ -1528,10 +1535,15 @@ class ExecutableReadinessCompleter:
                 "referential_integrity": {"pass": not references, "evidence": f"{len(edges)} dependency edges checked; {len(references)} dangling references.", "violations": references},
             },
             "conflicts_and_dependencies": {"entities_checked": len(groups), "conflicts_found": len(conflicts), "dependency_chains_derived": len(chains), "conflict_examples": conflicts[:3], "non_conflict_examples": non_conflicts[:max(10, 3)], "conflict_example_shortfall": max(0, 3 - len(conflicts)), "non_conflict_example_shortfall": max(0, 3 - len(non_conflicts)), "cycles": cycles},
-            "exception_recheck": {"rules_starting_with_not_found_in_chunk_recheck_needed": initial_chunk_rechecks, "resolved_to_explicit_in_source": exception_bases.count("explicit_in_source"), "resolved_to_explicitly_none_in_source": exception_bases.count("explicitly_none_in_source"), "remaining_unresolved": exception_bases.count("unresolved_after_full_document_search"), "unresolved_rules": [{"rule_id": rule.get("rule_id"), "reason": (rule.get("exception_verification") or {}).get("unresolved_reason")} for rule in reviewed_rules if rule.get("exception_basis") == "unresolved_after_full_document_search"]},
+            "exception_recheck": {"rules_starting_with_not_found_in_chunk_recheck_needed": initial_chunk_rechecks, "resolved_to_explicit_in_source": exception_bases.count("explicit_in_source"), "resolved_to_explicitly_none_in_source": exception_bases.count("explicitly_none_in_source"), "resolved_to_no_cue_after_complete_search": exception_bases.count("no_exception_cue_found_in_complete_search"), "remaining_unresolved": exception_bases.count("unresolved_after_full_document_search"), "unresolved_rules": [{"rule_id": rule.get("rule_id"), "reason": (rule.get("exception_verification") or {}).get("unresolved_reason")} for rule in reviewed_rules if rule.get("exception_basis") == "unresolved_after_full_document_search"]},
             "scope_derivation": {"newly_populated_from_source_evidence": sum(bool(rule.get("applicability_scope", {}).get(key)) and not (before_scope.get(str(rule.get("rule_id"))) or {}).get(key) for rule in reviewed_rules for key in ("loan_types", "occupancy_types", "transaction_types")), "confirmed_explicitly_universal_in_source": scope_bases.count("explicitly_universal_in_source"), "confirmed_genuinely_unscoped": scope_bases.count("genuinely_unscoped"), "examples": examples},
             "rules_ready": sum(not rule.get("requires_review") for rule in reviewed_rules),
             "rules_requiring_review": len(unresolved),
+            "review_routes": {
+                route: sum((rule.get("review_route") or {}).get("route") == route for rule in reviewed_rules)
+                for route in ("none", "machine_repair", "case_management", "human_review")
+            },
+            "human_review_required_rules": sum(bool((rule.get("review_route") or {}).get("human_review_required")) for rule in reviewed_rules),
         }
         return final_graph, report
 

@@ -10,6 +10,8 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any, Iterable, Mapping
 
+from utils.semantic_routing import WORKFLOW_STEP_KINDS
+
 RULE_SCHEMA_VERSION = "2.0"
 VALUE_TYPES = {
     "number",
@@ -61,6 +63,7 @@ SCOPE_BASES = {
 EXCEPTION_BASES = {
     "explicit_in_source",
     "explicitly_none_in_source",
+    "no_exception_cue_found_in_complete_search",
     "not_found_in_chunk_recheck_needed",  # candidate-stage only
     "unresolved_after_full_document_search",
 }
@@ -476,6 +479,35 @@ def validate_rule_v2(
     """Return every v2 contract issue without mutating *rule*."""
 
     issues: list[ContractIssue] = []
+    workflow = rule.get("workflow_semantics")
+    if workflow is not None:
+        if not isinstance(workflow, Mapping):
+            _issue(issues, 2, "invalid_workflow_semantics", "workflow_semantics", "workflow_semantics must be null or an object.")
+        else:
+            if workflow.get("kind") != "prescriptive_process" or workflow.get("basis") != "explicit_in_source":
+                _issue(issues, 2, "unsupported_workflow_basis", "workflow_semantics", "A workflow must be a source-explicit prescriptive_process.")
+            for field in ("trigger_event", "actor_role"):
+                if not str(workflow.get(field, "")).strip():
+                    _issue(issues, 2, f"missing_workflow_{field}", f"workflow_semantics.{field}", f"{field} is required for BPMN.")
+            steps = workflow.get("ordered_steps")
+            if not isinstance(steps, list) or len(steps) < 2:
+                _issue(issues, 2, "insufficient_workflow_steps", "workflow_semantics.ordered_steps", "At least two ordered workflow steps are required.")
+            else:
+                seen = set()
+                for index, step in enumerate(steps):
+                    path = f"workflow_semantics.ordered_steps[{index}]"
+                    if not isinstance(step, Mapping):
+                        _issue(issues, 2, "invalid_workflow_step", path, "Workflow steps must be objects.")
+                        continue
+                    step_id = str(step.get("step_id", "")).strip()
+                    if not step_id or step_id in seen:
+                        _issue(issues, 2, "invalid_workflow_step_id", f"{path}.step_id", "Workflow step IDs must be non-empty and unique.")
+                    seen.add(step_id)
+                    if not str(step.get("name", "")).strip() or step.get("kind") not in WORKFLOW_STEP_KINDS:
+                        _issue(issues, 2, "invalid_workflow_step", path, "Workflow steps require a name and supported kind.")
+            evidence = workflow.get("evidence")
+            if not isinstance(evidence, list) or not evidence:
+                _issue(issues, 7, "missing_workflow_evidence", "workflow_semantics.evidence", "Source-explicit workflow order requires direct evidence.")
     variables = _validate_variables(rule, issues)
     predicate_ids = _validate_predicates(rule.get("condition_predicates"), variables, "condition_predicates", issues)
 

@@ -40,6 +40,74 @@ def normalise_text_preserve_case(value: Any) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
+def _normalised_text_with_source_offsets(value: Any) -> tuple[str, list[int]]:
+    """Normalize text while retaining an offset map into the original value."""
+
+    source = str(value or "")
+    output: list[str] = []
+    offsets: list[int] = []
+    whitespace_pending: int | None = None
+    for source_index, character in enumerate(source):
+        normalized = unicodedata.normalize("NFKC", character)
+        normalized = normalized.replace("\u00ad", "").replace("’", "'").replace("‘", "'")
+        normalized = normalized.replace("“", '"').replace("”", '"').casefold()
+        for item in normalized:
+            if item.isspace():
+                if output and whitespace_pending is None:
+                    whitespace_pending = source_index
+                continue
+            if whitespace_pending is not None:
+                output.append(" ")
+                offsets.append(whitespace_pending)
+                whitespace_pending = None
+            output.append(item)
+            offsets.append(source_index)
+    return "".join(output), offsets
+
+
+def resolve_citation_span(quote: str, chunk_text: str) -> dict[str, Any] | None:
+    """Resolve a citation to an exact source substring and stable offsets.
+
+    Matching may tolerate Unicode, quote, case, or whitespace normalization,
+    and may use the existing conservative repair strategies. The returned text
+    is always sliced from ``chunk_text`` itself, so ``start_offset`` and
+    ``end_offset`` are exact and independently reproducible.
+    """
+
+    if not quote or not chunk_text:
+        return None
+    exact_start = chunk_text.find(quote)
+    if exact_start >= 0:
+        return {
+            "source_text": quote,
+            "start_offset": exact_start,
+            "end_offset": exact_start + len(quote),
+            "source_text_repaired": False,
+        }
+    candidates = [(quote, False)]
+    repaired = repair_citation(quote, chunk_text)
+    if repaired and normalise_text(repaired) != normalise_text(quote):
+        candidates.append((repaired, True))
+    elif repaired:
+        candidates.append((repaired, repaired != quote))
+    normal_chunk, offsets = _normalised_text_with_source_offsets(chunk_text)
+    for candidate, was_repaired in candidates:
+        normal_candidate = normalise_text(candidate)
+        position = normal_chunk.find(normal_candidate)
+        if position < 0 or not normal_candidate or not offsets:
+            continue
+        start = offsets[position]
+        end = offsets[position + len(normal_candidate) - 1] + 1
+        exact_text = chunk_text[start:end]
+        return {
+            "source_text": exact_text,
+            "start_offset": start,
+            "end_offset": end,
+            "source_text_repaired": was_repaired or exact_text != quote,
+        }
+    return None
+
+
 # A citation is only auto-repaired when the model's claimed source_text is
 # almost entirely (not just partially) one contiguous run of real corpus
 # text: found empirically (see _repair_near_match's docstring) that this
@@ -164,5 +232,4 @@ def repair_citation(quote: str, chunk_text: str) -> str | None:
         # would silently return the wrong span. Fail closed instead.
         return None
     return cased_chunk[match.b : match.b + match.size]
-
 

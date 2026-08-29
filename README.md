@@ -59,12 +59,12 @@ silently inherited):
   operator/value-type aliases, so a structurally clean rule could still carry
   stale "invalid operator" errors. `agent_07` now re-validates after
   normalization.
-- **P6** — BPMN eligibility was gated on a hardcoded, mortgage-shaped
-  `rule_type` set (`process`/`validation`/`compliance`/`exception`). None of
-  this repo's 5 domains use that vocabulary (see each domain's
-  `business_rules_extraction_compact.txt`), so every rule would have silently
-  gotten zero BPMN targets. Now gated on a domain-agnostic signal
-  (`responsible_party` set + at least one output variable).
+- **P6** — BPMN eligibility was first gated on a hardcoded, mortgage-shaped
+  `rule_type` set and later over-corrected to `responsible_party` plus an output
+  variable. Neither establishes process order. BPMN now requires a grounded,
+  source-explicit trigger, actor role, direct evidence, and at least two ordered
+  workflow steps. Rules without those semantics remain in DMN and record their
+  BPMN omission reasons instead of becoming invented linear workflows.
 
 ## Quickstart
 

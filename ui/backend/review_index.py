@@ -31,7 +31,7 @@ STAGES: tuple[dict[str, Any], ...] = (
     {"id": "agent_08", "name": "Readiness remediation", "directory": "agent_06-optimized", "artifacts": ["agent_08_checkpoint.jsonl", "agent_08_remediation_report.json"], "embedded": True},
     {"id": "agent_09", "name": "Grounding verifier", "directory": "agent_06-optimized", "artifacts": ["agent_09_grounding_checkpoint.jsonl", "kg_grounding_report.json"], "embedded": True},
     {"id": "agent_10", "name": "DAG generator", "directory": "agent_10-dag-generation", "artifacts": ["dependency_dags.json"]},
-    {"id": "agent_11", "name": "Executable model generator", "directory": "agent_11-executable-models", "artifacts": ["compliance_decisions.dmn", "compliance_workflows.bpmn", "executable_model_report.json"]},
+    {"id": "agent_11", "name": "Semantic model generator", "directory": "agent_11-executable-models", "artifacts": ["compliance_decisions.dmn", "compliance_workflows.bpmn", "compliance_reviews.cmmn", "semantic_vocabulary_profile.json", "executable_model_report.json"]},
 )
 
 

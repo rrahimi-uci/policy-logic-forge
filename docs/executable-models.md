@@ -1,7 +1,8 @@
-# Mortgage DMN/BPMN export
+# Semantic DMN/BPMN/CMMN export
 
-`cli/generate_executable_models.py` creates review-aware DMN 1.3 and BPMN 2.0
-artifacts from Agent 06's optimized graph and Agent 10's dependency DAGs:
+`cli/generate_executable_models.py` creates review-aware DMN 1.3, BPMN 2.0,
+CMMN 1.1, and an SBVR-aligned vocabulary profile from Agent 06's optimized
+graph and Agent 10's dependency artifact:
 
 ```bash
 PYTHONPATH=. .venv/bin/python cli/generate_executable_models.py \
@@ -10,9 +11,21 @@ PYTHONPATH=. .venv/bin/python cli/generate_executable_models.py \
   --output-dir pipeline-output/e2e-mortgage-20260827/agent_10-dag-generation/executable-models
 ```
 
-The exporter is deliberately fail-closed. Every graph rule receives a DMN
-decision and every DAG rule receives a BPMN `businessRuleTask`, but each model
-retains `ctc:requiresReview`, `ctc:groundingStatus`, and `ctc:sourceRef`. An
-unsupported predicate becomes a never-match `false` input entry; it is not
-silently approximated. The generated report is structural validation only and
-does not certify source correctness or replace an independent DMN engine.
+The exporter is deliberately fail-closed:
+
+- Every graph rule receives a DMN decision retaining review, grounding, and
+  source metadata. An unsupported predicate becomes a never-match `false`
+  input entry; it is not silently approximated.
+- BPMN is emitted only for a review-free, grounding-certified rule with
+  `workflow_semantics` that directly evidences a trigger, actor role, and two
+  or more ordered source steps. Dependency-DAG order is never treated as
+  process order. Omitted rules and reasons are listed in the report.
+- CMMN cases represent evidence-resolution and human-review routes. Purely
+  mechanical repair findings do not enter the human queue.
+- `semantic_vocabulary_profile.json` preserves explicit concept kinds and
+  flags unresolved typing. It is an SBVR-aligned pipeline profile, not a claim
+  of full SBVR interchange conformance.
+
+`executable_model_report.json` includes hashes of both source artifacts so a
+consumer can detect stale generated models. Structural validation does not
+certify source correctness or replace an independent DMN engine.

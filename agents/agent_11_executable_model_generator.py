@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import sys
 from pathlib import Path
 
@@ -16,6 +17,8 @@ from utils.executable_models import (  # noqa: E402
     validate_executable_models,
 )
 from utils.lexec_compile import build_compilation_report, build_proof_records, compile_and_prove  # noqa: E402
+from utils.semantic_artifacts import build_review_cmmn, build_sbvr_profile, validate_review_cmmn  # noqa: E402
+from utils.semantic_routing import bpmn_eligibility, bpmn_rule_ids  # noqa: E402
 
 
 def _lower_and_prove(graph: dict, output_dir: Path, *, document_id: str) -> dict | None:
@@ -56,13 +59,26 @@ def generate(input_graph: Path, dags_file: Path, output_dir: Path) -> dict:
     dags = json.loads(dags_file.read_text(encoding="utf-8"))
     dmn = build_graph_dmn(graph, model_name="Policy Logic Forge executable decisions")
     bpmn = build_dags_bpmn(graph, dags, model_name="Policy Logic Forge executable workflows")
+    cmmn = build_review_cmmn(graph)
+    sbvr_profile = build_sbvr_profile(graph)
     rule_ids = [str(rule.get("rule_id")) for rule in graph.get("business_rules", [])]
-    errors = validate_executable_models(dmn, bpmn, rule_ids)
+    eligible_bpmn_ids = bpmn_rule_ids(graph)
+    cmmn_rule_ids = {
+        str(rule.get("rule_id"))
+        for rule in graph.get("business_rules", [])
+        if isinstance(rule, dict)
+        and isinstance(rule.get("review_route"), dict)
+        and rule["review_route"].get("route") in {"case_management", "human_review"}
+    }
+    errors = validate_executable_models(dmn, bpmn, rule_ids, sorted(eligible_bpmn_ids))
+    errors.extend(validate_review_cmmn(cmmn, cmmn_rule_ids))
     if errors:
         raise ValueError("; ".join(errors))
     output_dir.mkdir(parents=True, exist_ok=True)
     (output_dir / "compliance_decisions.dmn").write_bytes(dmn)
     (output_dir / "compliance_workflows.bpmn").write_bytes(bpmn)
+    (output_dir / "compliance_reviews.cmmn").write_bytes(cmmn)
+    (output_dir / "semantic_vocabulary_profile.json").write_text(json.dumps(sbvr_profile, indent=2) + "\n", encoding="utf-8")
     # input_graph is .../<batch>/agent_06-optimized/optimized_compliance_knowledge_graph.json;
     # its batch directory is a more meaningful IR document_id than the
     # (often batch-agnostic) output directory name.
@@ -74,8 +90,28 @@ def generate(input_graph: Path, dags_file: Path, output_dir: Path) -> dict:
         "source_dags": str(dags_file),
         "rule_count": len(rule_ids),
         "review_required_rules": sum(bool(rule.get("requires_review", True)) for rule in graph.get("business_rules", [])),
+        "human_review_required_rules": sum(
+            bool(route.get("human_review_required"))
+            for rule in graph.get("business_rules", [])
+            if isinstance(rule, dict)
+            for route in [rule.get("review_route")]
+            if isinstance(route, dict)
+        ),
+        "bpmn_rule_count": len(eligible_bpmn_ids),
+        "bpmn_omitted_rule_count": len(rule_ids) - len(eligible_bpmn_ids),
+        "bpmn_omissions": {
+            str(rule.get("rule_id")): bpmn_eligibility(rule)[1]
+            for rule in graph.get("business_rules", [])
+            if isinstance(rule, dict) and not bpmn_eligibility(rule)[0]
+        },
+        "cmmn_case_count": len(cmmn_rule_ids),
+        "sbvr_profile_unresolved_concepts": len(sbvr_profile["unresolved_concept_ids"]),
+        "source_graph_sha256": hashlib.sha256(input_graph.read_bytes()).hexdigest(),
+        "source_dags_sha256": hashlib.sha256(dags_file.read_bytes()).hexdigest(),
         "dmn_file": "compliance_decisions.dmn",
         "bpmn_file": "compliance_workflows.bpmn",
+        "cmmn_file": "compliance_reviews.cmmn",
+        "sbvr_profile_file": "semantic_vocabulary_profile.json",
         "validation": "pass",
         "lexec_compilation": compilation_report,
     }
@@ -97,7 +133,12 @@ def main() -> int:
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         print(f"ERROR: executable model generation failed: {exc}", flush=True)
         return 2
-    print(f"Generated DMN/BPMN for {report['rule_count']} rules in {output}", flush=True)
+    print(
+        f"Generated DMN for {report['rule_count']} rules, BPMN for "
+        f"{report['bpmn_rule_count']} explicit workflows, and "
+        f"{report['cmmn_case_count']} review cases in {output}",
+        flush=True,
+    )
     print(f"Review-required rules retained: {report['review_required_rules']}", flush=True)
     return 0
 
