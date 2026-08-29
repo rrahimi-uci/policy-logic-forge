@@ -21,7 +21,11 @@ from the middle).
 from difflib import SequenceMatcher
 from types import SimpleNamespace
 
-from agents.agent_03_rules_extractor import BusinessRulesExtractor, bridge_exact_span
+from agents.agent_03_rules_extractor import (
+    TRUSTED_POSITION_RATIO,
+    BusinessRulesExtractor,
+    bridge_exact_span,
+)
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -244,9 +248,14 @@ def test_unbridgeable_fuzzy_match_falls_back_to_existing_lenient_acceptance(tmp_
 
     extractor._verify_source_references(str(tmp_path))
 
-    assert rule["reference_verified"] is True
-    assert rule["reference_verification_note"] == "ok"
+    assert rule["reference_verified"] is True, "must not newly reject what previously passed"
+    # The note distinguishes this lenient, non-verbatim acceptance from an
+    # exact one ("ok"). It reaches this path only after both recovery searches
+    # failed, so there is no better-located chunk text to cite and the model's
+    # own wording is deliberately kept.
+    assert rule["reference_verification_note"] == "ok_lenient_unrecovered"
     assert "source_text_bridged" not in rule["source_reference"]
+    assert "source_text_rewritten_from_chunk" not in rule["source_reference"]
     assert rule["source_reference"]["source_text"] == quote, "unbridged text must be left as-is"
 
 
@@ -308,3 +317,60 @@ def test_bridging_never_produces_text_outside_the_chunk(tmp_path):
     ref = rule["source_reference"]
     assert ref["source_text"] in " ".join(words)
     assert " ".join(words[ref["start_word_position"]:ref["end_word_position"]]) == ref["source_text"]
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Write-back: when verification LOCATES the real passage, the citation must
+# become the chunk's own words. The model's quote is a search key for finding
+# the passage, not the evidence itself -- keeping its drifted transcription is
+# what produced ~570 non-verbatim citations in a real mortgage graph, each
+# correctly rejected hours later by agent_09's exact-substring requirement.
+# ─────────────────────────────────────────────────────────────────────────
+
+def test_trusted_positions_rewrite_the_citation_with_the_chunks_own_words(tmp_path):
+    """High-confidence positions + a drifted transcription => cite the chunk."""
+    chunk = "The lender must obtain and review the executed lease agreement before the loan is delivered"
+    (tmp_path / "doc.txt").write_text(chunk, encoding="utf-8")
+    words = chunk.split()
+    # Same span, one word paraphrased -- high ratio, but not a real substring.
+    quote = "The lender must obtain and review the executed lease contract before the loan is delivered"
+    ratio = SequenceMatcher(None, quote.lower(), chunk.lower()).ratio()
+    assert ratio >= TRUSTED_POSITION_RATIO, "fixture must sit in the trusted band"
+    assert quote not in chunk, "fixture must not already be verbatim"
+
+    rule = _rule_with_reference("R-WB", quote, 0, len(words))
+    extractor = _extractor()
+    extractor.all_entity_types = {"E": {"business_rules": [rule]}}
+
+    extractor._verify_source_references(str(tmp_path))
+
+    ref = rule["source_reference"]
+    assert rule["reference_verified"] is True
+    # Asserts the OUTCOME, not which repair path produced it: whether the
+    # pre-existing exact-span bridge or the new write-back handled this, a
+    # citation the pipeline calls verified must be literal chunk text.
+    assert ref["source_text"] in chunk, "verified citation must be a literal substring"
+    assert "lease contract" not in ref["source_text"], "model's paraphrase must not survive"
+    assert rule["reference_verification_note"] != "ok_lenient_unrecovered"
+
+
+def test_untrusted_positions_are_not_copied_from(tmp_path):
+    """Below the trusted ratio the positions are not evidence of location, so
+    the chunk text at them must NOT be copied over the model's quote -- that
+    would replace a possibly-correct quote with text from the wrong span."""
+    chunk = "Alpha beta gamma delta epsilon. " * 4 + "The servicer must remit funds within five days."
+    (tmp_path / "doc.txt").write_text(chunk, encoding="utf-8")
+    quote = "The servicer must remit funds within five days."
+    # Point the positions at the WRONG span (the filler at the start).
+    rule = _rule_with_reference("R-UT", quote, 0, 5)
+    extractor = _extractor()
+    extractor.all_entity_types = {"E": {"business_rules": [rule]}}
+
+    extractor._verify_source_references(str(tmp_path))
+
+    ref = rule["source_reference"]
+    # Recovery relocated it; the citation must be real text containing the
+    # claim, never the unrelated filler sitting at the stated positions.
+    assert rule["reference_verified"] is True
+    assert "Alpha beta gamma delta epsilon" not in ref["source_text"]
+    assert ref["source_text"] in chunk

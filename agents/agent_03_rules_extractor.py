@@ -35,6 +35,17 @@ def _print(msg):
     print(msg, flush=True)
 
 
+# Above this fuzzy ratio the model's stated word positions are treated as
+# reliably pointing at the right passage, so the chunk's own text at those
+# positions is copied over the model's transcription. Below it the positions
+# are not trusted and the whole-chunk recovery search runs instead. 0.5 (the
+# historical acceptance floor) is deliberately NOT used here: at that
+# similarity a match can be coincidental on common words, and copying from a
+# wrongly-located span would replace a possibly-correct quote with genuinely
+# wrong text.
+TRUSTED_POSITION_RATIO = 0.75
+
+
 def bridge_exact_span(
     source_text: str,
     words: list,
@@ -1575,7 +1586,21 @@ class BusinessRulesExtractor:
                         ref['source_text_bridged'] = True
                         matched_at_positions = True
                         bridged = True
-                if not matched_at_positions and ratio >= 0.5:
+                if not matched_at_positions and ratio >= TRUSTED_POSITION_RATIO:
+                    # The stated positions are close enough to trust that they
+                    # point at the right passage, but the model's transcription
+                    # of it drifted. Cite what the chunk actually says: the
+                    # model's wording was only ever a search key for locating
+                    # the passage, never the evidence itself. Keeping it is
+                    # what put ~570 non-verbatim citations into a real mortgage
+                    # graph, each correctly rejected hours later by agent_09,
+                    # which requires a literal source substring. Below this
+                    # ratio the positions are NOT trustworthy enough to copy
+                    # from, so fall through to the whole-chunk recovery search,
+                    # which locates the passage on its own evidence instead.
+                    ref['source_text'] = ' '.join(words[start_pos:end_pos])
+                    ref['source_text_rewritten_from_chunk'] = True
+                    ref['text_match_score'] = round(ratio, 3)
                     matched_at_positions = True
 
             if matched_at_positions:
@@ -1597,6 +1622,14 @@ class BusinessRulesExtractor:
                             ref['source_text'] = exact_text
                             ratio = 1.0
                             note = 'ok_recovered_and_bridged_exact_span'
+                        else:
+                            # Located the passage but could not bridge it to an
+                            # exact span. Same principle as above: cite the
+                            # chunk's own words rather than a transcription we
+                            # have just measured to be inexact.
+                            ref['source_text'] = ' '.join(words[new_start:new_end])
+                            ref['source_text_rewritten_from_chunk'] = True
+                            note = 'ok_recovered_and_rewritten_from_chunk'
                     ref['start_word_position'] = new_start
                     ref['end_word_position'] = new_end
                     ref['text_match_score'] = round(ratio, 3)
@@ -1621,6 +1654,20 @@ class BusinessRulesExtractor:
                     recovered += 1
                     verified += 1
                     return
+
+            # Last resort, unchanged in effect from before this file gained
+            # write-back: a >=0.5 fuzzy match at the stated positions is still
+            # accepted rather than newly rejecting a rule that previously
+            # passed. Reached only when both recovery searches above failed,
+            # so there is no better-located text to cite -- the model's own
+            # wording is kept, and the sub-1.0 text_match_score is what tells a
+            # reviewer (and agent_09) that it is not a verbatim quote.
+            if positions_valid and source_text and ratio >= 0.5:
+                ref['text_match_score'] = round(ratio, 3)
+                rule['reference_verified'] = True
+                rule['reference_verification_note'] = 'ok_lenient_unrecovered'
+                verified += 1
+                return
 
             # All recovery attempts failed
             issues = []
