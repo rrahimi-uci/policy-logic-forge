@@ -17,6 +17,7 @@ from typing import Any, Mapping, Protocol
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from utils.citations import normalise_text, repair_citation
 from utils.config import get_config
 from utils.kg_readiness import (
     CANONICAL_ENTITY_RE,
@@ -838,6 +839,73 @@ def _normalise_rule_contract(rule: dict[str, Any]) -> dict[str, Any]:
     return rule
 
 
+def _verify_completion_evidence(rule: dict[str, Any], corpus: Mapping[str, Any]) -> None:
+    """Verify -- and where possible repair -- the citations agent_07's own
+    completion resolver invents, in place.
+
+    agent_03 verifies every citation it produces against the corpus
+    (_verify_source_references), which is why its source_reference citations
+    measure ~98% verbatim on a real mortgage run. The completion resolver
+    used here produces NEW citations for exception_verification.evidence and
+    scope_derivation.evidence, and nothing verified them: the same run
+    measured those at 29% and 25% non-verbatim respectively -- 346 citations,
+    the single largest source of the invalid evidence agent_09 later rejects,
+    hours downstream and far from the cause.
+
+    Repairs use the same corpus-anchored strategies agent_09 applies
+    (utils.citations), so a repaired citation is always literal chunk text
+    and never the resolver's paraphrase. A citation that cannot be repaired
+    is left exactly as-is rather than dropped: removing it would silently
+    change which rules look evidence-backed, and agent_09 still independently
+    rejects it. This only ever makes a citation more faithful to the source.
+    """
+    chunk_text_by_path: dict[str, str] = {
+        str(chunk.get("chunk_path", "")): str(chunk.get("text", ""))
+        for chunk in corpus.get("chunks", [])
+        if isinstance(chunk, Mapping)
+    }
+
+    def _chunk_for(path: str) -> str | None:
+        if not path:
+            return None
+        direct = chunk_text_by_path.get(path)
+        if direct is not None:
+            return direct
+        # Same suffix tolerance agent_09's _chunk_for_path uses, and only
+        # when it is unambiguous.
+        candidates = [
+            text for known, text in chunk_text_by_path.items()
+            if known.endswith(path) or path.endswith(known)
+        ]
+        return candidates[0] if len(candidates) == 1 else None
+
+    for parent_field in ("exception_verification", "scope_derivation"):
+        parent = rule.get(parent_field)
+        if not isinstance(parent, dict):
+            continue
+        for evidence_field in ("evidence", "source_evidence"):
+            entries = parent.get(evidence_field)
+            if not isinstance(entries, list):
+                continue
+            for entry in entries:
+                if not isinstance(entry, dict):
+                    continue
+                quote = entry.get("source_text") or entry.get("quote") or entry.get("text")
+                chunk_text = _chunk_for(str(entry.get("chunk_path") or ""))
+                if not quote or not chunk_text:
+                    continue
+                if normalise_text(quote) in normalise_text(chunk_text):
+                    continue
+                repaired = repair_citation(str(quote), chunk_text)
+                if repaired is None:
+                    continue
+                key = "source_text" if entry.get("source_text") else (
+                    "quote" if entry.get("quote") else "text"
+                )
+                entry[key] = repaired
+                entry["source_text_repaired"] = True
+
+
 def _report_markdown(report: Mapping[str, Any]) -> str:
     corpus = report["invariants"]["corpus_integrity"]
     lines = ["# Sections added", ""]
@@ -1151,6 +1219,7 @@ class ExecutableReadinessCompleter:
                 rule["applicability_scope"] = {}
             for key in ("loan_types", "occupancy_types", "transaction_types"):
                 rule["applicability_scope"].setdefault(key, [])
+            _verify_completion_evidence(rule, corpus)
             rule = _normalise_rule_contract(rule)
             # Re-validate against the now-normalised values. agent_03 stamped
             # contract_issues/requires_review against the raw model output at
