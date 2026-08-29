@@ -72,7 +72,7 @@ Two facts drive everything below:
 
    ```bash
    PYTHONPATH=. .venv/bin/python cli/generate_executable_models.py \
-     --graph pipeline-output/e2e-privacy-20260826/agent_06-optimized/optimized_compliance_knowledge_graph.json \
+     --graph pipeline-output/e2e-privacy-20260826/agent_06-07-08-09-optimized/optimized_compliance_knowledge_graph.json \
      --dags pipeline-output/e2e-privacy-20260826/agent_10-dag-generation/dependency_dags.json \
      --output-dir pipeline-output/e2e-privacy-20260826/agent_10-dag-generation/executable-models
    ```
@@ -91,7 +91,7 @@ extracted from the real Fannie Mae Selling Guide text already in
 `compliance-files/mortgage/Fannie-Mae.pdf`.
 
 **`R-120-004`** ("Primary Mortgage Insurance for High-LTV Conventional First
-Mortgages"), from `agent_06-optimized/optimized_compliance_knowledge_graph.json`:
+Mortgages"), from `agent_06-07-08-09-optimized/optimized_compliance_knowledge_graph.json`:
 
 - source citation: *B7-1-01, Provision of Mortgage Insurance (04/02/2025)*
 - `requires_review: false` — already clean and executable-eligible today

@@ -3,7 +3,20 @@
 import re
 from pathlib import Path
 
-from utils.agent_names import AGENT_IDS, PIPELINE_AGENTS, output_dir_name
+from utils.agent_names import (
+    AGENT_IDS,
+    CANONICAL_STAGE_NUMBERS,
+    LEGACY_STEP_ALIASES,
+    LEGACY_OPTIMIZED_OUTPUT_DIR,
+    OPTIMIZED_OUTPUT_DIR,
+    output_dir_names,
+    PIPELINE_AGENTS,
+    PIPELINE_STAGE_COUNT,
+    agent_id_for_stage,
+    output_dir_name,
+    stage_label,
+    stage_number,
+)
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -11,6 +24,30 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 def test_agent_ids_are_sequential_and_zero_padded():
     assert AGENT_IDS == tuple(f"agent_{index:02d}" for index in range(1, 12))
+    assert PIPELINE_STAGE_COUNT == len(AGENT_IDS) == 11
+    assert CANONICAL_STAGE_NUMBERS == tuple(str(index) for index in range(1, 12))
+
+
+def test_canonical_stage_numbers_map_directly_to_agent_ids():
+    assert [agent_id_for_stage(stage) for stage in CANONICAL_STAGE_NUMBERS] == list(AGENT_IDS)
+    assert agent_id_for_stage("07") == "agent_07"
+    assert stage_number("agent_11") == 11
+    assert stage_label("agent_09") == "Stage 09/11 · agent_09 · Grounding Verifier"
+
+
+def test_invalid_canonical_stage_number_is_rejected():
+    import pytest
+
+    with pytest.raises(ValueError, match="expected an integer from 1 to 11"):
+        agent_id_for_stage("5.7")
+    with pytest.raises(ValueError, match="expected an integer from 1 to 11"):
+        agent_id_for_stage(12)
+
+
+def test_legacy_step_aliases_are_explicitly_separate_from_canonical_stages():
+    assert LEGACY_STEP_ALIASES["5.7"] == "agent_09"
+    assert LEGACY_STEP_ALIASES["6"] == "agent_10"
+    assert "11" not in LEGACY_STEP_ALIASES
 
 
 def test_every_agent_identifier_resolves_to_its_current_module():
@@ -25,17 +62,21 @@ def test_pipeline_output_directories_use_current_agent_identifiers():
     assert output_dir_name("agent_03") == "agent_03-rules"
     assert output_dir_name("agent_04") == "agent_04-validation"
     assert output_dir_name("agent_05") == "agent_05-rules-with-entities"
-    assert output_dir_name("agent_06") == "agent_06-optimized"
-    assert output_dir_name("agent_07") == "agent_06-optimized"
-    assert output_dir_name("agent_08") == "agent_06-optimized"
-    assert output_dir_name("agent_09") == "agent_06-optimized"
+    assert output_dir_name("agent_06") == "agent_06-07-08-09-optimized"
+    assert output_dir_name("agent_07") == "agent_06-07-08-09-optimized"
+    assert output_dir_name("agent_08") == "agent_06-07-08-09-optimized"
+    assert output_dir_name("agent_09") == "agent_06-07-08-09-optimized"
+    assert OPTIMIZED_OUTPUT_DIR == "agent_06-07-08-09-optimized"
+    assert output_dir_names("agent_06") == (OPTIMIZED_OUTPUT_DIR, LEGACY_OPTIMIZED_OUTPUT_DIR)
+    assert output_dir_names("agent_10") == ("agent_10-dag-generation",)
     assert output_dir_name("agent_10") == "agent_10-dag-generation"
     assert output_dir_name("agent_11") == "agent_11-executable-models"
 
 
 def test_cli_advertises_canonical_agent_selector():
     cli_text = (PROJECT_ROOT / "cli" / "extract.py").read_text()
-    assert 'parser.add_argument("--agent"' in cli_text
+    assert 'selector.add_argument("--agent"' in cli_text
+    assert 'selector.add_argument("--stage"' in cli_text
     for identifier in AGENT_IDS:
         assert identifier in cli_text
 

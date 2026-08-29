@@ -67,7 +67,7 @@ def service(tmp_path: Path) -> ReviewService:
     pipeline = tmp_path / "pipeline-output"
     make_run(pipeline)
     second = make_run(pipeline, "fixture-run-2")
-    optimized = second / "agent_06-optimized" / "optimized_compliance_knowledge_graph.json"
+    optimized = second / "agent_06-07-08-09-optimized" / "optimized_compliance_knowledge_graph.json"
     payload = json.loads(optimized.read_text())
     payload["business_rules"][0]["description"] = "Collect email for account support after consent."
     payload["dependency_details"]["dependencies"][0]["rationale"] = "before after consent"

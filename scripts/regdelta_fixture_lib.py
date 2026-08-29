@@ -15,6 +15,15 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any, Mapping
 
+# Keep this tiny fixture builder dependency-free so it remains runnable with
+# the system Python used by repository shell scripts.  The runtime's canonical
+# value lives in ``utils.agent_names``; the second entry preserves reads from
+# historical bundles produced before the directory rename.
+OPTIMIZED_OUTPUT_DIR_NAMES = (
+    "agent_06-07-08-09-optimized",
+    "agent_06-optimized",
+)
+
 
 def clean_rule_ids(rules: dict[str, dict[str, Any]]) -> list[str]:
     return sorted(rule_id for rule_id, rule in rules.items() if not rule.get("requires_review"))
@@ -45,8 +54,17 @@ def apply_edit(rule: dict[str, Any], edit: Mapping[str, Any]) -> None:
             ref["source_text"] = ref["source_text"].replace(old_text, new_text)
 
 
+def _optimized_graph_path(source_batch: Path) -> Path:
+    """Resolve the current or legacy shared optimized-stage directory."""
+    for directory_name in OPTIMIZED_OUTPUT_DIR_NAMES:
+        candidate = source_batch / directory_name / "optimized_compliance_knowledge_graph.json"
+        if candidate.is_file():
+            return candidate
+    return source_batch / OPTIMIZED_OUTPUT_DIR_NAMES[0] / "optimized_compliance_knowledge_graph.json"
+
+
 def build(source_batch: Path, out_dir: Path, edits: list[dict[str, Any]]) -> None:
-    graph = json.loads((source_batch / "agent_06-optimized" / "optimized_compliance_knowledge_graph.json").read_text(encoding="utf-8"))
+    graph = json.loads(_optimized_graph_path(source_batch).read_text(encoding="utf-8"))
     rules = {rule["rule_id"]: rule for rule in graph["business_rules"]}
     clean_ids = clean_rule_ids(rules)
     dependents, edges = direct_dependents(source_batch / "agent_10-dag-generation" / "dependency_dags.json", set(clean_ids))

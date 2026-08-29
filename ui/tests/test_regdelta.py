@@ -69,8 +69,8 @@ def test_diff_against_the_real_checked_in_mortgage_tier1_fixture():
 
 def _write_run(root: Path, run_id: str, rules: list[dict], edges: list[tuple[str, str]] | None = None) -> None:
     run_dir = root / run_id
-    (run_dir / "agent_06-optimized").mkdir(parents=True)
-    (run_dir / "agent_06-optimized" / "optimized_compliance_knowledge_graph.json").write_text(json.dumps({"business_rules": rules}), encoding="utf-8")
+    (run_dir / "agent_06-07-08-09-optimized").mkdir(parents=True)
+    (run_dir / "agent_06-07-08-09-optimized" / "optimized_compliance_knowledge_graph.json").write_text(json.dumps({"business_rules": rules}), encoding="utf-8")
     if edges is not None:
         (run_dir / "agent_10-dag-generation").mkdir(parents=True)
         dag = {"dags": [{"dag_id": "d1", "edges": [{"source_rule_id": s, "target_rule_id": t} for s, t in edges]}]}
@@ -113,3 +113,15 @@ def test_diff_covers_the_whole_population_and_uses_the_old_sides_dag(runs_root: 
 def test_diff_raises_for_an_unknown_run(runs_root: Path):
     with pytest.raises(KeyError):
         RegDeltaRuns(runs_root).diff("run-old", "no-such-run")
+
+
+def test_regdelta_reads_legacy_shared_optimized_directory(runs_root: Path):
+    legacy_run = runs_root / "legacy-run"
+    canonical = legacy_run / "agent_06-07-08-09-optimized"
+    canonical.mkdir(parents=True)
+    (canonical / "optimized_compliance_knowledge_graph.json").write_text(json.dumps({"business_rules": []}), encoding="utf-8")
+    canonical.rename(legacy_run / "agent_06-optimized")
+
+    runs = RegDeltaRuns(runs_root)
+    assert {item["run_id"] for item in runs.list_runs()} == {"legacy-run", "run-old", "run-new"}
+    assert runs._graph("legacy-run") == {"business_rules": []}

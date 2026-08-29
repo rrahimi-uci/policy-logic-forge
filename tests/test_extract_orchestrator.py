@@ -1,8 +1,13 @@
 import json
 from pathlib import Path
 
-from cli.extract import ExtractionPipeline, _PERFORMANCE_ENV
+from cli.extract import ExtractionPipeline, _PERFORMANCE_ENV, _parse_stage_arg
 from utils.pipeline_state import RESUMABLE_STAGES
+
+
+def test_stage_argument_accepts_display_number_with_or_without_zero_padding():
+    assert _parse_stage_arg("7") == "7"
+    assert _parse_stage_arg("07") == "7"
 
 
 def test_review_only_readiness_is_non_blocking_but_fail_closed(tmp_path):
@@ -127,6 +132,25 @@ def test_readiness_verification_reuses_remediated_conflicts(monkeypatch):
 
     assert pipeline.run_agent_07(reuse_conflicts=True)
     assert observed == {"agent_id": "agent_07", "extra_env": {"KG_READINESS_SKIP_CONFLICTS": "true"}}
+
+
+def test_canonical_stage_selector_dispatches_by_agent_number(monkeypatch):
+    pipeline = object.__new__(ExtractionPipeline)
+    observed = []
+    monkeypatch.setattr(pipeline, "run_agent", lambda agent_id: observed.append(agent_id) or True)
+
+    assert pipeline.run_stage("7") is True
+    assert observed == ["agent_07"]
+
+
+def test_legacy_step_selector_remains_explicit_compatibility_alias(monkeypatch, capsys):
+    pipeline = object.__new__(ExtractionPipeline)
+    observed = []
+    monkeypatch.setattr(pipeline, "run_agent", lambda agent_id: observed.append(agent_id) or True)
+
+    assert pipeline.run_step("5.7") is True
+    assert observed == ["agent_09"]
+    assert "Legacy --step 5.7 maps to Stage 09/11 · agent_09" in capsys.readouterr().out
 
 
 def test_initial_readiness_analysis_does_not_reuse_conflicts(monkeypatch):

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CompareResult, Diagnostic, DocumentRecord, Evidence, RegDeltaPairSummary, RegDeltaReport, RegDeltaRunSummary, Relationship, RuleDetail, RuleRow, RunSummary, Stage, SearchResult } from "./types";
 import { addComment, addDecision, addLabel, compare, fetchAllRelationships, fetchAllRules, fetchDiagnostics, fetchDocuments, fetchEvidenceList, fetchRegDeltaDiff, fetchRegDeltaPairs, fetchRegDeltaRunDiff, fetchRegDeltaRuns, fetchRule, fetchRules, fetchSavedViews, saveView, search } from "./api";
-import { formatDate, formatNumber, percent, runOption, stageProgress, statusLabel, statusTone } from "./utils";
+import { formatDate, formatNumber, percent, runOption, stageLabel, stageNumber, stageProgress, statusLabel, statusTone, PIPELINE_STAGE_COUNT } from "./utils";
 
 export function Badge({ value, label, tone }: { value: string | null | undefined; label?: string; tone?: "good" | "warn" | "bad" | "neutral" }) {
   return <span className={`badge badge-${tone || statusTone(value)}`}>{label || statusLabel(value)}</span>;
@@ -21,7 +21,7 @@ export function Loading({ label = "Loading review data…" }: { label?: string }
 
 export function StageFlow({ stages, onStage }: { stages: Stage[]; onStage?: (stage: Stage) => void }) {
   if (!stages.length) return <div className="empty-state">No stage status snapshots are available.</div>;
-  return <div className="stage-flow" aria-label="Pipeline stage flow"><ol className="stage-stepper">{stages.map((stage, index) => <li className={`stage-step step-${statusTone(stage.status)}`} key={stage.stage_id}><button onClick={() => onStage?.(stage)} disabled={!onStage} aria-label={`Open ${stage.stage_id.replace("agent_", "Agent ")} ${stage.name}`}><span className="stage-number">{String(index + 1).padStart(2, "0")}</span><span className="stage-copy"><strong>{stage.name}</strong><small>{statusLabel(stage.status)}</small></span><span className="stage-state" aria-hidden="true" /></button></li>)}</ol></div>;
+  return <div className="stage-flow" aria-label="Pipeline stage flow"><ol className="stage-stepper">{stages.map((stage) => { const label = stageLabel(stage.stage_id, stage.name); return <li className={`stage-step step-${statusTone(stage.status)}`} key={stage.stage_id}><button onClick={() => onStage?.(stage)} disabled={!onStage} aria-label={`Open ${label}`}><span className="stage-number">{stageNumber(stage.stage_id)}/{PIPELINE_STAGE_COUNT}</span><span className="stage-copy"><strong>{label}</strong><small>{statusLabel(stage.status)}</small></span><span className="stage-state" aria-hidden="true" /></button></li>; })}</ol></div>;
 }
 
 export function Overview({ run, stages, onStage, onView }: { run: RunSummary; stages: Stage[]; onStage: (stage: Stage) => void; onView: (view: string) => void }) {

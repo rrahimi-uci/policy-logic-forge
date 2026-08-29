@@ -5,7 +5,7 @@ pipeline output. See scripts/regdelta_fixture_lib.py for the shared build
 logic every per-domain fixture script uses.
 
 Reads:
-  pipeline-output/e2e-mortgage-20260827/agent_06-optimized/optimized_compliance_knowledge_graph.json
+  pipeline-output/e2e-mortgage-20260827/agent_06-07-08-09-optimized/optimized_compliance_knowledge_graph.json
   pipeline-output/e2e-mortgage-20260827/agent_10-dag-generation/dependency_dags.json
 
 Writes (checked in, so the fixture is reproducible without pipeline-output/,

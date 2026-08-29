@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from utils.regdelta_engine import diff_graphs
+from utils.agent_names import output_dir_names
 
 
 def _read_json(path: Path) -> Any:
@@ -126,10 +127,13 @@ class RegDeltaRuns:
         self._cache: dict[tuple[str, str], dict[str, Any]] = {}
 
     def _graph(self, run_id: str) -> dict[str, Any]:
-        path = self.pipeline_root / run_id / "agent_06-optimized" / "optimized_compliance_knowledge_graph.json"
-        if not path.is_file():
-            raise KeyError(f"run {run_id!r} has no agent_06 output at {path}")
-        return _read_json(path)
+        run_dir = self.pipeline_root / run_id
+        for directory_name in output_dir_names("agent_06"):
+            path = run_dir / directory_name / "optimized_compliance_knowledge_graph.json"
+            if path.is_file():
+                return _read_json(path)
+        canonical_path = run_dir / output_dir_names("agent_06")[0] / "optimized_compliance_knowledge_graph.json"
+        raise KeyError(f"run {run_id!r} has no agent_06 output at {canonical_path}")
 
     def list_runs(self) -> list[dict[str, Any]]:
         """Runs with at least agent_06 output -- candidates for a run-pair diff."""
@@ -139,8 +143,8 @@ class RegDeltaRuns:
         for path in sorted(self.pipeline_root.iterdir()):
             if not path.is_dir() or path.name.startswith("."):
                 continue
-            graph_path = path / "agent_06-optimized" / "optimized_compliance_knowledge_graph.json"
-            if graph_path.is_file():
+            graph_path = next((path / name / "optimized_compliance_knowledge_graph.json" for name in output_dir_names("agent_06") if (path / name / "optimized_compliance_knowledge_graph.json").is_file()), None)
+            if graph_path is not None:
                 items.append({"run_id": path.name, "has_dag": (path / "agent_10-dag-generation" / "dependency_dags.json").is_file()})
         return items
 

@@ -4,19 +4,21 @@ Extraction orchestrator: compliance documents -> a grounding-certified,
 DMN/BPMN-ready knowledge graph.
 
 This is a lean, single-batch orchestrator by design (see README.md "Scope").
-It runs the eleven canonical agents in order, streaming each subprocess's output:
+It runs the eleven canonical stages in order, streaming each subprocess's
+output.  The stage number and agent identifier are deliberately identical:
+Stage 01/11 is ``agent_01`` through Stage 11/11, ``agent_11``:
 
-  agent_01  Document Organizer       chunk raw documents
-  agent_02  Entity Extractor         entities & relationships
-  agent_03  Rules Extractor           business rules (v2 contract)
-  agent_04  Rule Validator             advisory quality pass (non-blocking)
-  agent_05  Rules+Entities Merger      first complete knowledge graph
-  agent_06  KG Optimizer               dedup + dependency analysis
-  agent_07  Executable Readiness       four-invariant gate; DMN/BPMN projection
-  agent_08  Readiness Remediator       focused fix-up (only if agent_07 requests it)
-  agent_09  Grounding Verifier         independent claim-level certification
-  agent_10  Dependency DAG Generator   100%-coverage DAG partition of the graph
-  agent_11  Executable Model Generator  DMN 1.3 and BPMN 2.0 projection
+  01/11  agent_01  Document Organizer        chunk raw documents
+  02/11  agent_02  Entity Extractor          entities & relationships
+  03/11  agent_03  Rules Extractor           business rules (v2 contract)
+  04/11  agent_04  Rule Validator             advisory quality pass (non-blocking)
+  05/11  agent_05  Rules+Entities Merger      first complete knowledge graph
+  06/11  agent_06  KG Optimizer               dedup + dependency analysis
+  07/11  agent_07  Executable Readiness       four-invariant gate; DMN/BPMN projection
+  08/11  agent_08  Readiness Remediator       focused fix-up (only if agent_07 requests it)
+  09/11  agent_09  Grounding Verifier         independent claim-level certification
+  10/11  agent_10  Dependency DAG Generator   100%-coverage DAG partition of the graph
+  11/11  agent_11  Executable Model Generator  DMN 1.3 and BPMN 2.0 projection
 
 Each agent subprocess shares an adaptive API-concurrency limiter (see
 utils/adaptive_limiter.py) via KG_GLOBAL_LLM_STATE_FILE, so running multiple
@@ -34,7 +36,15 @@ from pathlib import Path
 _ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_ROOT))
 
-from utils.agent_names import AGENT_IDS, agent_spec, output_dir_name  # noqa: E402
+from utils.agent_names import (  # noqa: E402
+    AGENT_IDS,
+    CANONICAL_STAGE_NUMBERS,
+    LEGACY_STEP_ALIASES,
+    agent_id_for_stage,
+    agent_spec,
+    output_dir_name,
+    stage_label,
+)
 from utils.config import get_config  # noqa: E402
 from utils.pipeline_state import RESUMABLE_STAGES, next_stage_to_run, record_stage_result  # noqa: E402
 
@@ -42,6 +52,18 @@ DOMAINS = [
     "nda_confidentiality", "privacy_policy", "mobile_app_privacy", "commercial_contracts",
     "deonticbench", "mortgage",
 ]
+
+
+def _parse_stage_arg(value: str) -> str:
+    """Normalize ``--stage 7`` and ``--stage 07`` to the same value."""
+
+    try:
+        normalized = str(int(value))
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("stage must be an integer from 1 to 11") from exc
+    if normalized not in CANONICAL_STAGE_NUMBERS:
+        raise argparse.ArgumentTypeError("stage must be an integer from 1 to 11")
+    return normalized
 
 # Env vars every agent subprocess inherits, mapped from pipeline.performance in
 # config.json. Kept as a flat table (name -> (config_key, fallback)) so a new
@@ -139,6 +161,7 @@ class ExtractionPipeline:
         print(f"  source:       {source_dir}")
         print(f"  batch name:   {self.batch_name}")
         print(f"  target rules: {target_rules}")
+        print(f"  stages:       Stage 01/{len(AGENT_IDS)} -> Stage {len(AGENT_IDS):02d}/{len(AGENT_IDS)} (agent_01 -> agent_{len(AGENT_IDS):02d})")
         if pilot_batch_limit is not None:
             print(f"  ⚠ pilot batch limit: {pilot_batch_limit} (NOT a full-coverage run)")
         print(f"  output:       {self.config.get_pipeline_base_path()}")
@@ -171,7 +194,7 @@ class ExtractionPipeline:
     ) -> bool:
         spec = agent_spec(agent_id)
         print("\n" + "=" * 80)
-        print(f"{agent_id}: {spec.role}")
+        print(stage_label(agent_id))
         print("=" * 80)
         cmd = [sys.executable, str(_ROOT / "agents" / spec.module)] + args
         print(f"$ {' '.join(cmd)}\n", flush=True)
@@ -246,7 +269,7 @@ class ExtractionPipeline:
 
     def run_agent_06(self) -> bool:
         if self.skip_optimize:
-            print("\nagent_06: Knowledge Graph Optimizer -- SKIPPED (--skip-optimize)")
+            print(f"\n{stage_label('agent_06')} -- SKIPPED (--skip-optimize)")
             return True
         return self._run("agent_06", [])
 
@@ -450,17 +473,24 @@ class ExtractionPipeline:
         return dispatch[agent_id]()
 
     def run_step(self, step: str) -> bool:
-        """Run a legacy numeric stage selector for backwards compatibility."""
+        """Run a legacy selector without changing its historical meaning."""
 
-        legacy_steps = {
-            "1": "agent_01", "2": "agent_02", "3": "agent_03", "3.5": "agent_04",
-            "4": "agent_05", "5": "agent_06", "5.5": "agent_07", "5.6": "agent_08",
-            "5.7": "agent_09", "6": "agent_10",
-        }
-        if step not in legacy_steps:
-            print(f"Invalid step: {step}. Valid agents: {', '.join(AGENT_IDS)}")
+        if step not in LEGACY_STEP_ALIASES:
+            valid = ", ".join(LEGACY_STEP_ALIASES)
+            print(f"Invalid legacy step: {step}. Valid legacy steps: {valid}; use --stage or --agent")
             return False
-        return self.run_agent(legacy_steps[step])
+        print(f"Legacy --step {step} maps to {stage_label(LEGACY_STEP_ALIASES[step])}")
+        return self.run_agent(LEGACY_STEP_ALIASES[step])
+
+    def run_stage(self, stage: str) -> bool:
+        """Run one canonical, one-based pipeline stage."""
+
+        try:
+            agent_id = agent_id_for_stage(stage)
+        except ValueError as exc:
+            print(exc)
+            return False
+        return self.run_agent(agent_id)
 
 
 def main():
@@ -471,19 +501,23 @@ def main():
     parser.add_argument("--target-rules", type=int, default=30, help="Target business rules agent_03 tries to extract per batch (default: 30). Does NOT bound chunk/batch coverage -- see --pilot-batch-limit for that.")
     parser.add_argument("--pilot-batch-limit", type=int, default=None, help="Cap the number of word-balanced batches agent_03 processes, for a cheap smoke run. Omit for full coverage (default): every organized chunk is read whole and every batch is processed. A capped run is never corpus coverage.")
     parser.add_argument("--workers", type=int, default=None, help="Local scheduling workers (default: config.json pipeline.max_workers)")
-    parser.add_argument("--skip-optimize", action="store_true", help="Skip agents agent_06 through agent_09 (optimization, readiness, remediation, grounding)")
-    parser.add_argument("--agent", choices=list(AGENT_IDS), help="Run one canonical agent only")
-    parser.add_argument("--step", choices=["1", "2", "3", "3.5", "4", "5", "5.5", "5.6", "5.7", "6"], help="Deprecated numeric stage selector; use --agent")
+    parser.add_argument("--skip-optimize", action="store_true", help="Skip agents agent_06 through agent_08 (optimization, readiness, remediation); independent agent_09 grounding still runs")
+    selector = parser.add_mutually_exclusive_group()
+    selector.add_argument("--agent", choices=list(AGENT_IDS), help="Run one canonical agent only (for example: agent_07)")
+    selector.add_argument("--stage", type=_parse_stage_arg, choices=list(CANONICAL_STAGE_NUMBERS), help="Run one canonical pipeline stage (1–11; Stage 07 maps to agent_07)")
+    selector.add_argument("--step", choices=list(LEGACY_STEP_ALIASES), help="Deprecated legacy selector; use --stage or --agent (fractional aliases retain historical meanings)")
     parser.add_argument("--resume", action="store_true", help="Resume from the last recorded stage in pipeline_run_state.json (auto-detected)")
     parser.add_argument("--resume-from", choices=list(RESUMABLE_STAGES), default=None, help="Resume starting at this stage explicitly, overriding auto-detection")
     args = parser.parse_args()
 
-    if args.agent and args.step:
-        parser.error("--agent and --step cannot be used together")
+    # --agent/--stage/--step are already mutually exclusive via `selector`
+    # above; --resume/--resume-from are a separate pair of flags (resuming
+    # doesn't select a single stage the way --agent/--stage/--step do), so
+    # their exclusivity is enforced here instead.
     if args.resume and args.resume_from:
         parser.error("--resume and --resume-from cannot be used together")
-    if (args.resume or args.resume_from) and (args.agent or args.step):
-        parser.error("--resume/--resume-from cannot be combined with --agent/--step")
+    if (args.resume or args.resume_from) and (args.agent or args.stage or args.step):
+        parser.error("--resume/--resume-from cannot be combined with --agent/--stage/--step")
 
     source_dir = Path(args.dir)
     if not source_dir.is_absolute():
@@ -509,6 +543,8 @@ def main():
 
     if args.agent:
         ok = pipeline.run_agent(args.agent)
+    elif args.stage:
+        ok = pipeline.run_stage(args.stage)
     elif args.step:
         ok = pipeline.run_step(args.step)
     else:

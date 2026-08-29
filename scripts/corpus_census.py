@@ -5,7 +5,7 @@ docs/theory_coverage.md and docs/expressiveness_census.md. Use
 ``--manifest-out`` with an explicit run label and scope note to retain a
 metadata-only, content-addressed run record alongside the reports.
 
-    python3 scripts/corpus_census.py pipeline-output/*/agent_06-optimized/optimized_compliance_knowledge_graph.json
+    python3 scripts/corpus_census.py pipeline-output/*/agent_06-07-08-09-optimized/optimized_compliance_knowledge_graph.json
     python3 scripts/corpus_census.py --check-subset boolean,number,enum <graph.json>...
 
 No API key, no network: this is pure aggregation over already-extracted v2

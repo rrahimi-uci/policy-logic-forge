@@ -19,7 +19,7 @@ import {
 import { Icon, type IconName } from "./icons";
 import { NewRunWizard, PipelineMonitor } from "./pipeline";
 import type { RunSummary, Stage } from "./types";
-import { navItems } from "./utils";
+import { navItems, stageLabel } from "./utils";
 
 type View = "runs" | "overview" | "queue" | "rules" | "evidence" | "graph" | "compare" | "regdelta" | "diagnostics" | "stage" | "new-run" | "job";
 
@@ -160,7 +160,7 @@ export default function App() {
         {view === "overview" && <Overview run={run} stages={stages} onStage={(selected) => { setStage(selected); setView("stage"); }} onView={navigate} />}
         {view === "stage" && stage && <div className="view-stack">
           <button className="back-link" onClick={() => setView("overview")}>← Back to overview</button>
-          <section className="hero"><div><p className="eyebrow">Stage detail</p><h1>{stage.stage_id.replace("agent_", "Agent ")} · {stage.name}</h1><p className="muted">{stage.directory}</p></div><Badge value={stage.status} /></section>
+          <section className="hero"><div><p className="eyebrow">Stage detail</p><h1>{stageLabel(stage.stage_id, stage.name)}</h1><p className="muted">{stage.directory}</p></div><Badge value={stage.status} /></section>
           <section className="panel"><StageFlow stages={stages} onStage={setStage} /><div className="section-divider" /><h2>Artifacts</h2><div className="artifact-list">{stage.artifacts.map((artifact) => <div className="artifact-row" key={artifact.path}><div><span className="mono">{artifact.path}</span><small>{artifact.size_bytes.toLocaleString()} bytes</small></div><div className="artifact-actions"><Badge value="present" /><button className="button secondary" onClick={() => void fetchArtifact(selectedRun, artifact.path).then((payload) => setRawArtifact({ path: payload.path, content: payload.content, truncated: payload.truncated, size_bytes: payload.size_bytes })).catch((reason) => setError(String(reason)))}>View raw</button></div></div>)}</div>{rawArtifact && <div className="raw-artifact"><div className="panel-heading compact"><div><p className="eyebrow">Read-only raw artifact</p><h3>{rawArtifact.path}</h3></div><button className="icon-button" aria-label="Close raw artifact" onClick={() => setRawArtifact(null)}><Icon name="close" /></button></div>{rawArtifact.truncated && <p className="callout warning">Showing the first 2 MB of {rawArtifact.size_bytes?.toLocaleString()} bytes. Download the canonical artifact for the complete file.</p>}<pre className="code-block raw-block">{rawArtifact.content}</pre></div>}</section>
           <section className="panel"><h2>Stage diagnostics</h2>{stage.diagnostics?.length ? stage.diagnostics.map((item) => <div className="diagnostic-row" key={item.diagnostic_id}><Badge value={item.severity} /><span>{item.message}</span></div>) : <div className="empty-state compact">No stage-scoped diagnostics.</div>}</section>
         </div>}
