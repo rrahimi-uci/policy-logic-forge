@@ -81,6 +81,77 @@ def _safe_dict(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
+def _sbvr_rule_projection(raw: Mapping[str, Any]) -> dict[str, Any]:
+    """Build a provenance-labelled SBVR-aligned view for one rule.
+
+    The canonical SBVR profile is emitted by Agent 11. The read model also
+    exposes this small per-rule projection so reviewers can understand a
+    compliance package without opening the global profile. Names are kept as
+    contract terms and every displayed concept records its basis; generated
+    labels are never presented as source quotations.
+    """
+    field_evidence = _safe_dict(raw.get("field_evidence"))
+
+    def evidence_for(field: str) -> list[dict[str, Any]]:
+        return [item for item in _safe_list(field_evidence.get(field)) if isinstance(item, dict)]
+
+    concepts: list[dict[str, Any]] = []
+    responsible = str(raw.get("responsible_party") or "").strip()
+    if responsible:
+        concepts.append({
+            "concept_id": responsible,
+            "preferred_term": responsible.replace("_", " ").title(),
+            "concept_kind": "actor_role",
+            "basis": "rule_contract",
+            "source_evidence": evidence_for("responsible_party"),
+        })
+    for party in _safe_list(raw.get("counterparties")):
+        value = str(party or "").strip()
+        if value and value not in {item["concept_id"] for item in concepts}:
+            concepts.append({
+                "concept_id": value,
+                "preferred_term": value.replace("_", " ").title(),
+                "concept_kind": "actor_role",
+                "basis": "rule_contract",
+                "source_evidence": evidence_for("counterparties"),
+            })
+    for variable in _safe_list(raw.get("variables")):
+        if not isinstance(variable, dict):
+            continue
+        value = str(variable.get("name") or "").strip()
+        if not value or value in {item["concept_id"] for item in concepts}:
+            continue
+        concepts.append({
+            "concept_id": value,
+            "preferred_term": value.replace("_", " ").title(),
+            "concept_kind": "decision_variable",
+            "role": str(variable.get("role") or "unknown"),
+            "basis": "rule_contract",
+            "source_evidence": evidence_for("variables"),
+        })
+
+    outcomes = [item for item in _safe_list(raw.get("outcomes")) if isinstance(item, dict)]
+    source_ref = raw.get("source_reference")
+    source_evidence = [item for item in _safe_list(source_ref) if isinstance(item, dict)]
+    if isinstance(source_ref, dict):
+        source_evidence = [source_ref]
+    fact_types = [{
+        "fact_type_id": str(raw.get("rule_id") or "rule"),
+        "subject_concept": responsible or None,
+        "verb_term": str(raw.get("rule_name") or raw.get("rule_type") or "policy decision").replace("_", " ").casefold(),
+        "object_concepts": [str(item.get("variable")) for item in outcomes if str(item.get("variable") or "").strip()],
+        "basis": "rule_contract",
+        "grounding_status": _safe_dict(raw.get("grounding")).get("status", "unverified"),
+        "source_evidence": source_evidence,
+    }]
+    return {
+        "profile_type": "sbvr_aligned_rule_projection",
+        "conformance": "derived_from_rule_contract",
+        "concepts": concepts,
+        "fact_types": fact_types,
+    }
+
+
 def _slug(value: str) -> str:
     return re.sub(r"[^a-zA-Z0-9_.-]+", "-", value).strip("-") or "run"
 
@@ -205,6 +276,8 @@ class ReviewIndex:
     def queue(self, name: str) -> list[dict[str, Any]]:
         if name == "requires_review":
             return [r for r in self.rules if r["requires_review"]]
+        if name == "human_review":
+            return [r for r in self.rules if (r.get("review_route") or {}).get("human_review_required") is True]
         if name == "grounding_failed":
             return [r for r in self.rules if r["grounding_status"] in {"failed", "insufficient", "contradicted"}]
         if name == "readiness_failed":
@@ -365,9 +438,12 @@ def _build_rules(optimized: Mapping[str, Any], run_id: str, artifact_path: str) 
             for index, record in enumerate(_safe_list(records)):
                 if isinstance(record, dict):
                     evidence.append(_evidence_record(evidence_id=f"{raw.get('rule_id','unknown')}:{field_path}:{index}", run_id=run_id, rule_id=str(raw.get("rule_id", "")), field_path=field_path, value=record, source=record))
-        source_ref = _safe_dict(raw.get("source_reference"))
-        if source_ref:
-            evidence.insert(0, _evidence_record(evidence_id=f"{raw.get('rule_id','unknown')}:source_reference", run_id=run_id, rule_id=str(raw.get("rule_id", "")), field_path="source_reference", value=source_ref, source=source_ref))
+        source_value = raw.get("source_reference")
+        source_refs = [item for item in _safe_list(source_value) if isinstance(item, dict)]
+        if isinstance(source_value, dict):
+            source_refs = [source_value]
+        for index, source_ref in enumerate(source_refs):
+            evidence.insert(0, _evidence_record(evidence_id=f"{raw.get('rule_id','unknown')}:source_reference:{index}", run_id=run_id, rule_id=str(raw.get("rule_id", "")), field_path="source_reference", value=source_ref, source=source_ref))
         deduped: dict[str, dict[str, Any]] = {stable_hash({k: e.get(k) for k in ("field_path", "chunk_path", "section_id", "quote")}): e for e in evidence}
         machine_status = _status_from_rule(raw)
         structural = {k: raw.get(k) for k in ("rule_id", "rule_name", "rule_type", "description", "condition_predicates", "condition_logic", "outcomes", "variables", "recommended_hit_policy", "responsible_party", "exceptions", "mandatory", "risk_level")}
@@ -392,7 +468,7 @@ def _build_rules(optimized: Mapping[str, Any], run_id: str, artifact_path: str) 
             "grounding_status": grounding.get("status") or "unknown",
             "grounding_counts": _safe_dict(grounding.get("counts")),
             "confidence_score": raw.get("confidence_score"),
-            "source_reference": source_ref,
+            "source_reference": source_value if isinstance(source_value, (dict, list)) else {},
             "field_evidence": _safe_dict(raw.get("field_evidence")),
             "evidence": list(deduped.values()),
             "condition_predicates": _safe_list(raw.get("condition_predicates")),
@@ -402,6 +478,13 @@ def _build_rules(optimized: Mapping[str, Any], run_id: str, artifact_path: str) 
             "related_rules": _safe_list(raw.get("related_rules")),
             "contract_issues": _safe_list(raw.get("contract_issues")),
             "execution": _safe_dict(raw.get("execution")),
+            # Keep the source-explicit workflow contract in the read model so
+            # the UI can distinguish a real BPMN projection from a simple
+            # decision.  This is intentionally the normalized contract, not
+            # a UI-specific complexity guess.
+            "workflow_semantics": _safe_dict(raw.get("workflow_semantics")),
+            "review_route": _safe_dict(raw.get("review_route")),
+            "sbvr_projection": _sbvr_rule_projection(raw),
             "recommended_hit_policy": raw.get("recommended_hit_policy"),
             "scope_basis": raw.get("scope_basis"),
             "applicability_scope": _safe_dict(raw.get("applicability_scope")),
@@ -547,6 +630,11 @@ def _build_summary(*, run_id: str, source_dir: Path, stages: list[dict[str, Any]
     grounding = Counter(r["grounding_status"] for r in rules)
     conflicts = [r for r in relationships if r["kind"] == "conflict"]
     unresolved_conflicts = [r for r in conflicts if r["status"] == "unresolved"]
+    human_review_rules = [
+        r for r in rules
+        if isinstance(r.get("review_route"), Mapping)
+        and r["review_route"].get("human_review_required") is True
+    ]
     metadata = _safe_dict(optimized.get("metadata"))
     grounding_metadata = _safe_dict(metadata.get("grounding_certification"))
     corpus_hash = _safe_dict(optimized.get("corpus_manifest")).get("corpus_sha256") or metadata.get("corpus_sha256") or grounding_metadata.get("corpus_sha256")
@@ -566,6 +654,8 @@ def _build_summary(*, run_id: str, source_dir: Path, stages: list[dict[str, Any]
         "error_count": sum(d["severity"] == "error" for d in diagnostics),
         "warning_count": sum(d["severity"] == "warning" for d in diagnostics),
         "review_queue_count": sum(r["requires_review"] for r in rules),
+        "human_review_required_rules": len(human_review_rules),
+        "human_review_rate": round(len(human_review_rules) / max(1, len(rules)) * 100, 2),
         "unresolved_conflict_count": len(unresolved_conflicts),
         "rule_status_counts": dict(statuses),
         "readiness_counts": dict(readiness),
@@ -576,7 +666,7 @@ def _build_summary(*, run_id: str, source_dir: Path, stages: list[dict[str, Any]
         "optimized_graph_sha256": certified_hash,
         "model": metadata.get("model_used"),
         "reasoning_effort": metadata.get("reasoning_effort"),
-        "queues": {"requires_review": statuses.get("requires_review", 0), "grounding_failed": sum(r["grounding_status"] in {"failed", "insufficient", "contradicted"} for r in rules), "readiness_failed": sum(r["readiness_status"] in {"failed", "requires_review", "review"} for r in rules), "unresolved_conflicts": len({rid for rel in unresolved_conflicts for rid in rel["rule_ids"]})},
+        "queues": {"requires_review": statuses.get("requires_review", 0), "human_review": len(human_review_rules), "grounding_failed": sum(r["grounding_status"] in {"failed", "insufficient", "contradicted"} for r in rules), "readiness_failed": sum(r["readiness_status"] in {"failed", "requires_review", "review"} for r in rules), "unresolved_conflicts": len({rid for rel in unresolved_conflicts for rid in rel["rule_ids"]})},
     }
 
 

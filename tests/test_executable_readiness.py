@@ -4,7 +4,7 @@ from copy import deepcopy
 from importlib import import_module
 
 from tests.test_rule_contract import valid_rule
-from utils.kg_readiness import derive_dependency_chains, referential_integrity_issues
+from utils.kg_readiness import derive_dependency_chains, referential_integrity_issues, source_document_roots
 from utils.rule_contract import validate_rule_v2
 
 
@@ -17,6 +17,9 @@ conflict_batch_groups = readiness_module._conflict_batch_groups
 compact_readiness_rule = readiness_module._compact_readiness_rule
 normalise_final_evidence_states = readiness_module._normalise_final_evidence_states
 normalise_conflict_entries = readiness_module._normalise_conflict_entries
+recover_source_reference = readiness_module._recover_source_reference
+normalise_field_evidence_references = readiness_module._normalise_field_evidence_references
+is_deferred_contract_issue = readiness_module._is_deferred_contract_issue
 
 
 class Resolver:
@@ -86,6 +89,75 @@ def test_completion_emits_ready_dmn_rules_and_required_report(tmp_path):
     # decision rules stay in DMN and record why BPMN was conservatively omitted.
     assert all(rule["execution"]["targets"] == ["DMN"] for rule in final_graph["business_rules"])
     assert all("workflow_semantics is absent" in rule["execution"]["bpmn_omission_reasons"] for rule in final_graph["business_rules"])
+    assert all(rule["requires_review"] is False for rule in final_graph["business_rules"])
+
+
+def test_source_document_roots_use_only_citation_metadata():
+    rule = valid_rule()
+    assert source_document_roots(rule) == {"B2-1-01"}
+    rule["description"] = "A fabricated description mentioning another-site"
+    assert source_document_roots(rule) == {"B2-1-01"}
+    rule["source_reference"] = [
+        rule["source_reference"],
+        {"chunk_path": "another-site/002.txt", "section_id": "S2"},
+    ]
+    assert source_document_roots(rule) == {"B2-1-01", "another-site"}
+
+
+def test_source_reference_recovery_requires_a_clear_lexical_winner():
+    rule = {"rule_name": "Email retention", "description": "Retain account email for thirty days."}
+    packet = {"candidate_passages": [
+        {"chunk_path": "site-a/retention.txt", "section_id": "Retention", "text": "Retain account email for thirty days.", "anchor_hits": 4},
+        {"chunk_path": "site-b/retention.txt", "section_id": "Retention", "text": "Retain account address for seven days.", "anchor_hits": 1},
+    ]}
+    assert recover_source_reference(rule, packet) is True
+    assert rule["source_reference"]["chunk_path"] == "site-a/retention.txt"
+    assert rule["source_reference"]["reference_verified"] is False
+
+
+def test_source_reference_recovery_stays_fail_closed_for_ambiguous_candidates():
+    rule = {"rule_name": "Email retention", "description": "Retain account email for thirty days."}
+    packet = {"candidate_passages": [
+        {"chunk_path": "site-a/retention.txt", "section_id": "Retention", "text": "Retain account email for thirty days.", "anchor_hits": 4},
+        {"chunk_path": "site-b/retention.txt", "section_id": "Retention", "text": "Retain account email for thirty days.", "anchor_hits": 4},
+    ]}
+    assert recover_source_reference(rule, packet) is False
+    assert "source_reference" not in rule
+
+
+def test_conflicts_are_scoped_to_shared_source_packages(tmp_path):
+    organized = tmp_path / "organized"
+    (organized / "policy-a").mkdir(parents=True)
+    (organized / "policy-b").mkdir(parents=True)
+    (organized / "policy-a" / "001.txt").write_text("A seller servicer must limit pools to three.")
+    (organized / "policy-b" / "001.txt").write_text("A seller servicer must limit pools to three.")
+    first = valid_rule()
+    second = deepcopy(first)
+    second["rule_id"] = "BR-2"
+    second["rule_name"] = "The independent policy decision"
+    for rule, root in ((first, "policy-a"), (second, "policy-b")):
+        rule["source_reference"]["chunk_path"] = f"{root}/001.txt"
+        for records in rule["field_evidence"].values():
+            for record in records:
+                record["chunk_path"] = f"{root}/001.txt"
+    graph = {
+        "business_rules": [first, second],
+        "entity_types": {"SELLER_SERVICER": {}, "FANNIE_MAE": {}},
+        "relationships": [],
+        "dependency_details": {"dependencies": []},
+    }
+    calls = []
+
+    class RecordingResolver(Resolver):
+        def analyse_entity(self, entity, rules):
+            calls.append([item["rule_id"] for item in rules])
+            return super().analyse_entity(entity, rules)
+
+    final_graph, _report = ExecutableReadinessCompleter(RecordingResolver()).complete(
+        graph, graph, str(organized)
+    )
+    assert calls == []
+    assert final_graph["dependency_details"]["conflicts"] == []
     assert all(rule["requires_review"] is False for rule in final_graph["business_rules"])
 
 
@@ -246,7 +318,7 @@ def test_a_persistently_rejected_rule_is_flagged_not_crashed(tmp_path):
     assert report["rules_requiring_review"] == 1
 
 
-def test_a_rejected_conflict_analysis_marks_that_entity_unresolved_not_crashed(tmp_path):
+def test_disjoint_conflict_analysis_skips_rejected_entity_call(tmp_path):
     organized = tmp_path / "organized" / "B2-1-01"
     organized.mkdir(parents=True)
     (organized / "001.txt").write_text("A seller servicer must limit pools to three.")
@@ -260,12 +332,13 @@ def test_a_rejected_conflict_analysis_marks_that_entity_unresolved_not_crashed(t
         baseline, baseline, str(tmp_path / "organized")
     )
 
-    # No crash; the rejected entity's conflict analysis degrades to the
-    # same "unresolved, manual review required" entry an empty response
-    # already produces, and the run completes for every other rule.
+    # The two rules write different output variables, so conflict analysis is
+    # mechanically complete and the rejected resolver is never needed.
     assert final_graph["business_rules"]
     conflicts = final_graph["dependency_details"]["conflicts"]
-    assert any(entry["status"] == "unresolved" for entry in conflicts)
+    assert conflicts
+    assert all(entry["status"] == "non_conflict" for entry in conflicts)
+    assert report["rules_requiring_review"] == 0
 
 
 def test_dangling_reference_fails_the_invariant_without_silent_removal():
@@ -604,6 +677,34 @@ def test_scope_with_direct_evidence_promotes_unresolved_dimension_state():
     assert "resolution_note" in rule["scope_derivation"]
 
 
+def test_invalid_variable_roles_are_repaired_from_rule_usage():
+    rule = valid_rule()
+    rule["variables"][0]["role"] = "condition"
+    rule["variables"][-1]["role"] = "result"
+    normalise_rule_contract(rule)
+    roles = {item["name"]: item["role"] for item in rule["variables"]}
+    assert roles[rule["condition_predicates"][0]["variable"]] == "input"
+    assert roles[rule["outcomes"][0]["variable"]] == "output"
+
+
+def test_malformed_field_evidence_is_removed_but_field_stays_reviewable():
+    rule = valid_rule()
+    rule["field_evidence"]["exceptions"] = [{"chunk_path": "a.txt", "section_id": "S1"}]
+    normalise_field_evidence_references(rule)
+    assert rule["field_evidence"]["exceptions"] == []
+    assert is_deferred_contract_issue(
+        {"code": "missing_field_evidence"}, rule
+    ) is True
+
+
+def test_source_backed_unconditional_assertion_is_deferred_not_pipeline_failure():
+    rule = valid_rule()
+    rule["condition_predicates"] = []
+    rule["condition_logic"] = {"all": []}
+    assert is_deferred_contract_issue({"code": "missing_condition_predicates"}, rule) is True
+    assert is_deferred_contract_issue({"code": "empty_condition_logic_branch"}, rule) is True
+
+
 def test_equivalent_boolean_and_enum_conflict_is_non_conflict():
     first = valid_rule()
     first["outcomes"][0]["value"] = "eligible"
@@ -619,6 +720,27 @@ def test_equivalent_boolean_and_enum_conflict_is_non_conflict():
 
     assert normalized[0]["status"] == "non_conflict"
     assert "equivalent" in normalized[0]["reasoning"]
+
+
+def test_unresolved_group_is_split_and_disjoint_pairs_are_not_review_blockers():
+    first = valid_rule()
+    second = deepcopy(first)
+    second["rule_id"] = "BR-2"
+    second["outcomes"][0]["variable"] = "secondary_output"
+    second["variables"][-1]["name"] = "secondary_output"
+    third = deepcopy(first)
+    third["rule_id"] = "BR-3"
+    third["outcomes"][0]["variable"] = "tertiary_output"
+    third["variables"][-1]["name"] = "tertiary_output"
+
+    normalized = normalise_conflict_entries(
+        [{"entity": "E", "rule_ids": ["BR-1", "BR-2", "BR-3"], "status": "unresolved", "reasoning": "ambiguous", "resolution": ""}],
+        {"BR-1": first, "BR-2": second, "BR-3": third},
+    )
+
+    assert len(normalized) == 3
+    assert all(entry["status"] == "non_conflict" for entry in normalized)
+    assert all(len(entry["rule_ids"]) == 2 for entry in normalized)
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -940,6 +1062,34 @@ def test_uncovered_pairs_use_mechanical_disjoint_proof_before_falling_back_to_un
     overlapping_pair = by_pair[("BR-1", "BR-3")]
     assert overlapping_pair["status"] == "unresolved"
     assert "share an outcome variable" in overlapping_pair["reasoning"]
+
+
+def test_fully_disjoint_conflict_group_skips_model_call(tmp_path):
+    organized = tmp_path / "organized" / "B2-1-01"
+    organized.mkdir(parents=True)
+    (organized / "001.txt").write_text("A seller servicer must limit pools to three.")
+    first = valid_rule()
+    second = deepcopy(first)
+    second["rule_id"] = "BR-2"
+    second["outcomes"][0]["variable"] = "secondary_output"
+    second["variables"][-1]["name"] = "secondary_output"
+    graph = {
+        "business_rules": [first, second],
+        "entity_types": {"SELLER_SERVICER": {}, "FANNIE_MAE": {}},
+        "relationships": [],
+        "dependency_details": {"dependencies": []},
+    }
+
+    class FailingResolver(Resolver):
+        def analyse_entity(self, entity, rules):
+            raise AssertionError("pairwise-disjoint groups must not call the model")
+
+    final_graph, _report = ExecutableReadinessCompleter(FailingResolver()).complete(
+        graph, graph, str(tmp_path / "organized")
+    )
+    assert final_graph["dependency_details"]["conflicts"]
+    assert all(entry["status"] == "non_conflict" for entry in final_graph["dependency_details"]["conflicts"])
+    assert all(rule["requires_review"] is False for rule in final_graph["business_rules"])
 
 
 def test_large_entity_group_dispatches_its_output_variable_buckets_concurrently(tmp_path, monkeypatch):

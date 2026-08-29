@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { CompareView, connectedRuleIds, DiagnosticsView, DocumentsView, ErrorNotice, GraphView, layeredRuleLayout, Loading, MetricCard, Overview, RegDeltaView, RuleTableView, RuleWorkbench, SearchOverlay, shouldRenderBpmn, StageFlow, wrapNodeText } from "./components";
+import { CompareView, connectedRuleIds, DiagnosticsView, DocumentsView, ErrorNotice, ExecutableRepresentations, GraphView, layeredRuleLayout, Loading, MetricCard, Overview, RegDeltaView, RuleTableView, RuleWorkbench, SearchOverlay, shouldRenderBpmn, StageFlow, wrapNodeText } from "./components";
 import type { RegDeltaReport, RuleDetail, RunSummary, Stage } from "./types";
 import * as api from "./api";
 
@@ -9,7 +9,7 @@ vi.mock("./api", async () => {
   return { ...actual, fetchRules: vi.fn(), fetchAllRules: vi.fn(), fetchAllRelationships: vi.fn(), fetchRule: vi.fn(), fetchDocuments: vi.fn(), fetchEvidenceList: vi.fn(), fetchSavedViews: vi.fn(), saveView: vi.fn(), fetchRelationships: vi.fn(), fetchDiagnostics: vi.fn(), search: vi.fn(), compare: vi.fn(), addComment: vi.fn(), addDecision: vi.fn(), addLabel: vi.fn(), fetchRegDeltaPairs: vi.fn(), fetchRegDeltaDiff: vi.fn(), fetchRegDeltaRuns: vi.fn(), fetchRegDeltaRunDiff: vi.fn() };
 });
 
-const run: RunSummary = { run_id: "privacy-run", source_dir: "/tmp/run", status: "requires_review", stage_count: 2, completed_stage_count: 1, rule_count: 2, document_count: 1, evidence_count: 2, relationship_count: 1, diagnostic_count: 1, error_count: 1, warning_count: 0, review_queue_count: 1, unresolved_conflict_count: 0, rule_status_counts: { certified: 1, requires_review: 1 }, readiness_counts: {}, grounding_counts: {}, metadata: {}, queues: { requires_review: 1, grounding_failed: 1, readiness_failed: 1, unresolved_conflicts: 0 } };
+const run: RunSummary = { run_id: "privacy-run", source_dir: "/tmp/run", status: "requires_review", stage_count: 2, completed_stage_count: 1, rule_count: 2, document_count: 1, evidence_count: 2, relationship_count: 1, diagnostic_count: 1, error_count: 1, warning_count: 0, review_queue_count: 1, human_review_required_rules: 1, human_review_rate: 50, unresolved_conflict_count: 0, rule_status_counts: { certified: 1, requires_review: 1 }, readiness_counts: {}, grounding_counts: {}, metadata: {}, queues: { requires_review: 1, human_review: 1, grounding_failed: 1, readiness_failed: 1, unresolved_conflicts: 0 } };
 const stages: Stage[] = [{ stage_id: "agent_01", name: "Organizer", directory: "agent_01", status: "completed", embedded: false, checkpoint_records: 0, artifacts: [{ name: "x.json", path: "x.json", size_bytes: 2, present: true }] }, { stage_id: "agent_02", name: "Entities", directory: "agent_02", status: "missing", embedded: false, checkpoint_records: 0, artifacts: [] }];
 const detail: RuleDetail = { rule_id: "r1", rule_name: "Retention rule", rule_type: "retention", risk_level: "high", mandatory: true, requires_review: true, readiness_status: "failed", grounding_status: "failed", confidence_score: 72, machine_status: "requires_review", structural_hash: "abc", evidence_hash: "def", description: "Keep data for the stated period.", review_reason: "Missing evidence", readiness_failures: ["source"], grounding_counts: {}, source_reference: { chunk_path: "doc/chunk.txt", section_id: "Privacy", source_text: "Keep data for 30 days." }, field_evidence: {}, evidence: [{ evidence_id: "e1", rule_id: "r1", field_path: "outcomes", chunk_path: "doc/chunk.txt", section_id: "Privacy", quote: "Keep data for 30 days.", source_text: "Keep data for 30 days.", verdict: "supported" }], condition_predicates: [{ variable: "x", operator: "==", value: true }], condition_logic: {}, outcomes: [{ variable: "retention_days", value: 30 }], variables: [{ name: "x", role: "input" }, { name: "retention_days", role: "output" }], related_rules: [], contract_issues: ["missing field"], execution: { targets: ["DMN"], dmn: { hit_policy: "UNIQUE", input_columns: ["x"], output_columns: ["retention_days"] }, bpmn: { gateway_type: "exclusive", lane: "FIRST_PARTY", true_path_outcome_variables: ["retention_days"] } }, recommended_hit_policy: "UNIQUE", scope_basis: "explicit", applicability_scope: {}, responsible_party: "FIRST_PARTY", counterparties: [], exceptions: [], inference_reasoning: "source", test_vectors: [], relationships: [], review: { comments: [], decisions: [], labels: [] } };
 
@@ -57,17 +57,30 @@ describe("review workbench components", () => {
     expect(links).toEqual(["r2"]);
   });
 
-  it("only renders BPMN projections for rules with workflow complexity", () => {
+  it("only renders BPMN projections for source-explicit multi-step workflows", () => {
     expect(shouldRenderBpmn(detail)).toBe(false);
-    expect(shouldRenderBpmn({ ...detail, condition_predicates: [{ variable: "x" }, { variable: "y" }] })).toBe(true);
-    expect(shouldRenderBpmn({ ...detail, exceptions: [{ reason: "override" }] })).toBe(true);
-    expect(shouldRenderBpmn({ ...detail, relationships: [{ relationship_id: "r1-r2", kind: "dependency", source_rule_id: "r1", target_rule_id: "r2", rule_ids: ["r1", "r2"], status: "supported" }] })).toBe(true);
+    expect(shouldRenderBpmn({ ...detail, condition_predicates: [{ variable: "x" }, { variable: "y" }] })).toBe(false);
+    expect(shouldRenderBpmn({ ...detail, workflow_semantics: { kind: "prescriptive_process", basis: "explicit_in_source", trigger_event: "account submitted", actor_role: "FIRST_PARTY", evidence: [{ chunk_path: "doc/chunk.txt", section_id: "Privacy", source_text: "When submitted, verify then retain." }], ordered_steps: [{ step_id: "verify", name: "Verify", kind: "user_task" }, { step_id: "retain", name: "Retain", kind: "service_task" }] } })).toBe(true);
+  });
+
+  it("organizes DMN and CMMN in tabs and omits BPMN for an obvious decision", () => {
+    const { container } = render(<ExecutableRepresentations rule={detail} />);
+    const scope = within(container);
+    expect(scope.getByRole("tab", { name: /DMN/ })).toHaveAttribute("aria-selected", "true");
+    expect(scope.getByRole("tab", { name: /CMMN/ })).toBeInTheDocument();
+    expect(scope.getByRole("tab", { name: /SBVR/ })).toBeInTheDocument();
+    expect(scope.queryByRole("tab", { name: /BPMN/ })).not.toBeInTheDocument();
+    fireEvent.click(scope.getByRole("tab", { name: /CMMN/ }));
+    expect(scope.getByRole("tabpanel", { name: "CMMN review case" })).toHaveTextContent("No review case");
+    fireEvent.click(scope.getByRole("tab", { name: /SBVR/ }));
+    expect(scope.getByRole("tabpanel", { name: "SBVR vocabulary" })).toHaveTextContent("Typed vocabulary");
   });
 
   it("renders stage flow and overview actions", () => {
     const onView = vi.fn();
     render(<Overview run={run} stages={stages} onStage={vi.fn()} onView={onView} />);
     expect(screen.getByText("privacy-run")).toBeInTheDocument();
+    expect(screen.getByText("Human-review queue")).toBeInTheDocument();
     fireEvent.click(screen.getByText("Open diagnostics")); expect(onView).toHaveBeenCalledWith("diagnostics");
     render(<StageFlow stages={stages} onStage={vi.fn()} />); expect(screen.getAllByLabelText("Pipeline stage flow").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Agent 01/11 · Organizer").length).toBeGreaterThan(0);
@@ -114,12 +127,14 @@ describe("review workbench components", () => {
 
   it("renders documents, graph, and diagnostics", async () => {
     render(<DocumentsView runId="r" onError={vi.fn()} />); await waitFor(() => expect(screen.getByText("doc/chunk.txt")).toBeInTheDocument()); fireEvent.click(screen.getByRole("tab", { name: "Evidence links" })); await waitFor(() => expect(screen.getByText("r1 · outcomes")).toBeInTheDocument());
-    render(<GraphView runId="r" onError={vi.fn()} />); await waitFor(() => expect(screen.getByTestId("layered-rule-graph")).toBeInTheDocument());
-    fireEvent.click(screen.getByRole("button", { name: "Select rule r1" }));
-    await waitFor(() => expect(screen.getByText("DMN decision table")).toBeInTheDocument());
-    expect(document.querySelectorAll(".executable-grid.dmn-only").length).toBeGreaterThan(0);
-    expect(document.querySelector(".rule-node.selected")).toBeTruthy();
-    expect(document.querySelector(".rule-node.downstream")).toBeTruthy();
+    const { container: graphContainer } = render(<GraphView runId="r" onError={vi.fn()} />); const graphScope = within(graphContainer);
+    await waitFor(() => expect(graphScope.getByTestId("layered-rule-graph")).toBeInTheDocument());
+    fireEvent.click(graphScope.getByRole("button", { name: "Select rule r1" }));
+    await waitFor(() => expect(graphScope.getByRole("tab", { name: /DMN/ })).toBeInTheDocument());
+    expect(graphScope.queryByRole("tab", { name: /BPMN/ })).not.toBeInTheDocument();
+    expect(graphScope.getByRole("tabpanel", { name: "DMN decision table" })).toBeInTheDocument();
+    expect(graphContainer.querySelector(".rule-node.selected")).toBeTruthy();
+    expect(graphContainer.querySelector(".rule-node.downstream")).toBeTruthy();
     render(<DiagnosticsView runId="r" onError={vi.fn()} />); await waitFor(() => expect(screen.getByText("Missing source")).toBeInTheDocument());
   });
 
