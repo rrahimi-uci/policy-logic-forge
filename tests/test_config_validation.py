@@ -41,17 +41,19 @@ def test_default_profile_is_parallel_but_has_bounded_stall_recovery() -> None:
     performance = config["pipeline"]["performance"]
 
     assert config["pipeline"]["max_workers"] == 40
-    assert performance["llm_concurrency"] == 4
+    assert config["pipeline"]["document_workers"] == 16
+    assert performance["llm_concurrency"] == 16
     assert performance["reasoning_max_completion_tokens"] == 24576
     assert performance["readiness_rules_per_request"] == 8
     assert performance["readiness_max_evidence_chars"] == 12000
     assert performance["remediation_rules_per_request"] == 8
     assert performance["remediation_max_conflict_pairs"] == 5000
-    assert performance["global_llm_concurrency_initial"] == 2
-    assert performance["global_llm_concurrency_max"] == 4
-    assert performance["remediation_llm_concurrency"] == 4
-    assert performance["grounding_llm_concurrency"] == 4
-    assert performance["grounding_relationships_per_request"] == 48
+    assert performance["global_llm_concurrency_initial"] == 8
+    assert performance["global_llm_concurrency_max"] == 16
+    assert performance["global_llm_success_window"] == 3
+    assert performance["remediation_llm_concurrency"] == 16
+    assert performance["grounding_llm_concurrency"] == 16
+    assert performance["grounding_relationships_per_request"] == 12
     assert config["openai"]["rate_limiting"]["timeout"] == 300
     assert performance["global_llm_lease_seconds"] == 900
     assert performance["llm_watchdog_margin"] == 30

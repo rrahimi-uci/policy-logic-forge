@@ -165,9 +165,9 @@ class LLMClient:
         # failures.  Keep executor parallelism independent from bounded
         # in-flight API concurrency; callers can tune the latter per run.
         try:
-            gate_size = max(1, int(concurrency if concurrency is not None else os.getenv("KG_LLM_CONCURRENCY", "2")))
+            gate_size = max(1, int(concurrency if concurrency is not None else os.getenv("KG_LLM_CONCURRENCY", "16")))
         except (TypeError, ValueError):
-            gate_size = 2
+            gate_size = 16
         self._adaptive_limiter = AdaptiveRequestLimiter.from_environment()
         self._request_gate = threading.BoundedSemaphore(gate_size)
 

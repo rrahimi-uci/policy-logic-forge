@@ -100,12 +100,16 @@ cp benchmarks/contract-nli-source-docs/*.txt compliance-files/nda_confidentialit
 python3 cli/extract.py --dir nda_confidentiality --domain nda_confidentiality --target-rules 20
 ```
 
-The default runtime profile is tuned for bounded throughput: 40 scheduling
-workers, up to 32 concurrent remediation/grounding requests, a 300-second
-request and lease bound, a 30-second watchdog margin, and a 10-second
-connection backoff. Operators can override these values through the `KG_*`
-environment variables exported by `cli/extract.py` (for example,
-`KG_GROUNDING_LLM_CONCURRENCY` or `KG_OPENAI_TIMEOUT`).
+The default runtime profile is tuned for fast, provider-safe throughput: 40
+scheduling workers, 16 in-flight API requests (the shared adaptive limiter
+starts at 8 and ramps to 16), and 16 document workers. Stage pools can queue
+up to 40 tasks while the request gate bounds provider work. Requests have a
+300-second timeout, a 900-second shared lease,
+a 30-second watchdog margin, and a 10-second connection backoff. Grounding uses
+12 relationship packets per request to keep prompts bounded. Operators can
+override these values through the `KG_*` environment variables exported by
+`cli/extract.py` (for example, `KG_GROUNDING_LLM_CONCURRENCY` or
+`KG_OPENAI_TIMEOUT`).
 
 Output lands under `pipeline-output/<batch-name>/`:
 

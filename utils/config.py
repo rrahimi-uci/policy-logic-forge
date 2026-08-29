@@ -342,7 +342,7 @@ class Config:
 
     def get_document_workers(self) -> int:
         """Get safe concurrent document subprocesses for standard CLI runs."""
-        return max(1, int(self.get('pipeline.document_workers', 6)))
+        return max(1, int(self.get('pipeline.document_workers', 16)))
 
     def get_performance_profile(self) -> dict:
         """Return the centralized throughput/resilience profile."""
