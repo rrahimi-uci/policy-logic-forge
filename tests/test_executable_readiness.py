@@ -90,6 +90,89 @@ def test_completion_emits_ready_dmn_rules_and_required_report(tmp_path):
 
 
 # ─────────────────────────────────────────────────────────────────────────
+# _verify_completion_evidence: agent_03 verifies every citation it produces
+# against the corpus (measured ~98% verbatim on a real mortgage run); the
+# completion resolver here invents NEW citations for
+# exception_verification.evidence and scope_derivation.evidence, and nothing
+# verified them -- measured 29% and 25% non-verbatim respectively on that
+# same run, 346 citations, the single largest source of invalid evidence
+# agent_09 rejects hours later. These tests confirm agent_07 now closes that
+# gap the same way agent_03 already does for source_reference.
+# ─────────────────────────────────────────────────────────────────────────
+
+CITATION_CHUNK = (
+    "The lender must obtain and review the executed lease agreement between the "
+    "borrower and the third-party solar provider before the loan is delivered "
+    "to Fannie Mae for purchase or securitization."
+)
+
+
+def test_scope_derivation_evidence_drift_is_repaired_from_the_corpus(tmp_path):
+    organized = tmp_path / "organized" / "B2-1-01"
+    organized.mkdir(parents=True)
+    (organized / "001.txt").write_text(CITATION_CHUNK, encoding="utf-8")
+
+    class DriftingScopeResolver(Resolver):
+        def complete_rule(self, rule, corpus):
+            completion = super().complete_rule(rule, corpus)
+            completion["scope_derivation"]["evidence"] = [{
+                "chunk_path": "B2-1-01/001.txt", "section_id": "B2-1-01",
+                # Real opening and closing; the middle is paraphrased --
+                # exactly the drift PR #80 measured as the dominant real
+                # failure mode.
+                "source_text": (
+                    "The lender must obtain and review the executed lease agreement between the "
+                    "borrower and the solar company before closing "
+                    "to Fannie Mae for purchase or securitization."
+                ),
+            }]
+            return completion
+
+    baseline = graph_with_two_rules()
+    final_graph, _ = ExecutableReadinessCompleter(DriftingScopeResolver()).complete(
+        baseline, baseline, str(tmp_path / "organized")
+    )
+
+    for rule in final_graph["business_rules"]:
+        evidence = rule["scope_derivation"]["evidence"][0]
+        assert evidence["source_text"] == CITATION_CHUNK
+        assert evidence["source_text"] in CITATION_CHUNK
+        assert evidence["source_text_repaired"] is True
+        assert "solar company" not in evidence["source_text"], "resolver's paraphrase must not survive"
+
+
+def test_unrelated_exception_evidence_is_left_as_is_not_dropped(tmp_path):
+    """A citation with no real relationship to the chunk cannot be repaired
+    without fabricating evidence -- it must be left exactly as-is (agent_09
+    still independently rejects it), never silently removed."""
+    organized = tmp_path / "organized" / "B2-1-01"
+    organized.mkdir(parents=True)
+    (organized / "001.txt").write_text(CITATION_CHUNK, encoding="utf-8")
+    unrelated = "This sentence has no real relationship to the cited passage at all."
+
+    class UnrelatedExceptionResolver(Resolver):
+        def complete_rule(self, rule, corpus):
+            completion = super().complete_rule(rule, corpus)
+            completion["exception_basis"] = "explicit_in_source"
+            completion["exceptions"] = [{"variable": "price_differential_amount", "operator": "==", "value": 1}]
+            completion["exception_verification"]["status"] = "explicit_in_source"
+            completion["exception_verification"]["evidence"] = [{
+                "chunk_path": "B2-1-01/001.txt", "section_id": "B2-1-01", "source_text": unrelated,
+            }]
+            return completion
+
+    baseline = graph_with_two_rules()
+    final_graph, _ = ExecutableReadinessCompleter(UnrelatedExceptionResolver()).complete(
+        baseline, baseline, str(tmp_path / "organized")
+    )
+
+    for rule in final_graph["business_rules"]:
+        evidence = rule["exception_verification"]["evidence"][0]
+        assert evidence["source_text"] == unrelated, "unrepairable citation must be left exactly as-is"
+        assert "source_text_repaired" not in evidence
+
+
+# ─────────────────────────────────────────────────────────────────────────
 # Resilience to a provider rejecting one rule's/entity's request outright
 # (real case: OpenAI's content-policy filter flagged one rule's prompt
 # among ~2600 on a real NDA run, crashing the entire multi-hour run and

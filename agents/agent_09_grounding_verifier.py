@@ -19,6 +19,15 @@ from typing import Any, Iterable, Mapping, Protocol
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from agents.agent_08_readiness_remediator import JsonlCheckpoint, _stable_hash
+from utils.citations import (
+    MAX_ANCHOR_SPAN_EXPANSION,
+    MIN_REPAIR_CHARS,
+    MIN_REPAIR_COVERAGE,
+    normalise_text,
+    normalise_text_preserve_case,
+    repair_by_anchors,
+    repair_citation,
+)
 from utils.config import get_config
 from utils.kg_readiness import mark_readiness, source_document_index
 from utils.llm_client import create_llm_client
@@ -63,152 +72,14 @@ MODEL_CLAIM_TYPES = {
 # definitive boolean outcome) that are worth keeping in front of a reviewer.
 
 
-def _normalise_text(value: Any) -> str:
-    text = unicodedata.normalize("NFKC", str(value or ""))
-    text = text.replace("\u00ad", "").replace("’", "'").replace("‘", "'")
-    text = text.replace("“", '"').replace("”", '"')
-    return re.sub(r"\s+", " ", text).strip().casefold()
-
-
-def _normalise_text_preserve_case(value: Any) -> str:
-    """Identical to _normalise_text minus the final .casefold().
-
-    Same character-level transforms (NFKC, quote unification, whitespace
-    collapse), so the result stays index-aligned with _normalise_text's
-    output for the same input -- a span found by matching against the
-    casefolded string can be sliced out of this one unchanged, recovering
-    the source's real casing/punctuation instead of a downcased copy.
-    """
-    text = unicodedata.normalize("NFKC", str(value or ""))
-    text = text.replace("­", "").replace("’", "'").replace("‘", "'")
-    text = text.replace("“", '"').replace("”", '"')
-    return re.sub(r"\s+", " ", text).strip()
-
-
-# A citation is only auto-repaired when the model's claimed source_text is
-# almost entirely (not just partially) one contiguous run of real corpus
-# text: found empirically (see _repair_near_match's docstring) that this
-# bar cleanly separates "the model paraphrased a boundary/word or two but
-# the real quote is genuinely there" from "the model summarized/fabricated
-# most of this and only a short, possibly-coincidental phrase overlaps."
-MIN_REPAIR_COVERAGE = 0.9
-MIN_REPAIR_CHARS = 40
-
-# Anchor recovery (the second, broader strategy below). The extraction agent
-# is reliable at identifying WHERE a passage is and unreliable at
-# TRANSCRIBING it -- so its first and last few words are used only as
-# pointers into the real chunk, and everything between them is taken from
-# the corpus rather than from the model. Tried longest-anchor-first; a
-# shorter anchor is more likely to match by coincidence, so it is only a
-# fallback. The span expansion cap is what keeps a coincidental tail match
-# from silently widening a citation into surrounding paragraphs.
-ANCHOR_WORD_SIZES = (6, 5, 4)
-MAX_ANCHOR_SPAN_EXPANSION = 2.0
-
-
-def _repair_by_anchors(quote: str, chunk_text: str) -> str | None:
-    """Recover a citation by treating the model's first/last few words as
-    pointers into `chunk_text` and returning the REAL text between them.
-
-    Complements _repair_near_match's single-contiguous-run strategy, which
-    by construction only recovers a citation whose drift is at its edges.
-    This one recovers the far more common real failure: the model located
-    the right passage but compressed or paraphrased its MIDDLE. Because the
-    middle is taken from the corpus and never from the model, a citation
-    repaired this way cannot carry the model's paraphrase forward -- the
-    drifted wording is discarded, not blessed.
-
-    Measured on a real mortgage run (479 citations that failed an exact
-    match and whose chunk resolved): the contiguous strategy alone recovers
-    ~24%, this one recovers 45%, and the recovered spans stay tight against
-    what was claimed (median 1.09x the claimed length, p90 1.62x) rather
-    than ballooning. The residual ~54% is genuinely unrecoverable
-    deterministically: mostly heavy compression where the tail anchor is
-    absent or implausibly distant, plus a smaller set citing the wrong
-    chunk entirely -- both correctly left to fail closed.
-    """
-    normal_quote = _normalise_text(quote)
-    normal_chunk = _normalise_text(chunk_text)
-    if not normal_quote or not normal_chunk:
-        return None
-    words = normal_quote.split()
-    if len(words) < 2 * min(ANCHOR_WORD_SIZES):
-        # Too short to split into two non-overlapping anchors; a single
-        # short phrase is exactly the coincidental-match case to avoid.
-        return None
-    cased_chunk = _normalise_text_preserve_case(chunk_text)
-    if len(cased_chunk) != len(normal_chunk):
-        # Casefold changed the string length for some character, so the two
-        # normalised strings are no longer index-aligned and slicing the
-        # cased one at the casefolded one's offsets would return the wrong
-        # span. Fail closed, same as _repair_near_match.
-        return None
-    for size in ANCHOR_WORD_SIZES:
-        if len(words) < 2 * size:
-            continue
-        head = " ".join(words[:size])
-        tail = " ".join(words[-size:])
-        start = normal_chunk.find(head)
-        if start == -1:
-            continue
-        # Search for the tail only AFTER the head so the recovered span can
-        # never run backwards, and take the first such occurrence so a
-        # repeated phrase later in the chunk cannot stretch the span.
-        tail_at = normal_chunk.find(tail, start + len(head))
-        if tail_at == -1:
-            continue
-        end = tail_at + len(tail)
-        if end - start > MAX_ANCHOR_SPAN_EXPANSION * len(normal_quote):
-            continue
-        return cased_chunk[start:end]
-    return None
-
-
-def _repair_near_match(quote: str, chunk_text: str) -> str | None:
-    """If `quote` isn't a verbatim substring of `chunk_text` but a genuine,
-    near-total (>=MIN_REPAIR_COVERAGE) contiguous run of it is, return that
-    real substring (in the chunk's own casing) instead of the model's
-    possibly-imprecise wording. Return None if no such run exists.
-
-    This never invents text: the repaired citation is always a literal
-    substring the corpus actually contains, never the model's paraphrase --
-    so even if the model's original wording had drifted from the source in
-    some way, the repaired citation cannot, by construction. It just
-    recognises that a real citation is present when the model got the
-    exact word boundaries slightly wrong, instead of discarding it outright.
-
-    Confirmed against a real run: of 583 evidence citations that failed an
-    exact match, splitting them by longest-contiguous-match coverage of the
-    claimed quote showed a clean bimodal split -- roughly a quarter were
-    >=90% covered by one real contiguous run (a boundary/word-level miss,
-    safe to repair), while the rest were 70% or less (a genuine paraphrase
-    or compression of multiple sentences, where discarding the unmatched
-    tail would mean guessing at what the model meant instead of reporting
-    what the corpus actually says -- left for a human or a real
-    re-verification, not silently patched).
-    """
-    normal_quote = _normalise_text(quote)
-    normal_chunk = _normalise_text(chunk_text)
-    if not normal_quote or not normal_chunk:
-        return None
-    matcher = difflib.SequenceMatcher(None, normal_quote, normal_chunk, autojunk=False)
-    match = matcher.find_longest_match(0, len(normal_quote), 0, len(normal_chunk))
-    if match.size < MIN_REPAIR_CHARS or match.size / len(normal_quote) < MIN_REPAIR_COVERAGE:
-        # Edge-drift recovery does not apply. Fall back to anchor recovery,
-        # which handles the much more common middle-drift case. Ordered this
-        # way deliberately: the contiguous strategy returns exactly the real
-        # run the model almost transcribed, while anchors return the real
-        # span BETWEEN two pointers -- a strictly wider claim, so it is only
-        # used when the tighter strategy cannot answer.
-        return _repair_by_anchors(quote, chunk_text)
-    cased_chunk = _normalise_text_preserve_case(chunk_text)
-    if len(cased_chunk) != len(normal_chunk):
-        # Casefold changed the string length for some character (rare, but
-        # real for a few non-ASCII letters) -- the two strings are no longer
-        # index-aligned, so slicing cased_chunk at normal_chunk's offsets
-        # would silently return the wrong span. Fail closed instead.
-        return None
-    return cased_chunk[match.b : match.b + match.size]
+# Citation verification/repair lives in utils.citations so agent_07 (which
+# CREATES citations in its completion resolver) and this module (which
+# CERTIFIES them) cannot drift apart. Names kept private here for callers
+# and tests that already import them.
+_normalise_text = normalise_text
+_normalise_text_preserve_case = normalise_text_preserve_case
+_repair_by_anchors = repair_by_anchors
+_repair_near_match = repair_citation
 
 
 def _iter_references(value: Any) -> Iterable[Mapping[str, Any]]:
