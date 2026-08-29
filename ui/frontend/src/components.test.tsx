@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { CompareView, connectedRuleIds, DiagnosticsView, DocumentsView, ErrorNotice, GraphView, layeredRuleLayout, Loading, MetricCard, Overview, RegDeltaView, RuleTableView, RuleWorkbench, SearchOverlay, StageFlow, wrapNodeText } from "./components";
+import { CompareView, connectedRuleIds, DiagnosticsView, DocumentsView, ErrorNotice, GraphView, layeredRuleLayout, Loading, MetricCard, Overview, RegDeltaView, RuleTableView, RuleWorkbench, SearchOverlay, shouldRenderBpmn, StageFlow, wrapNodeText } from "./components";
 import type { RegDeltaReport, RuleDetail, RunSummary, Stage } from "./types";
 import * as api from "./api";
 
@@ -57,6 +57,13 @@ describe("review workbench components", () => {
     expect(links).toEqual(["r2"]);
   });
 
+  it("only renders BPMN projections for rules with workflow complexity", () => {
+    expect(shouldRenderBpmn(detail)).toBe(false);
+    expect(shouldRenderBpmn({ ...detail, condition_predicates: [{ variable: "x" }, { variable: "y" }] })).toBe(true);
+    expect(shouldRenderBpmn({ ...detail, exceptions: [{ reason: "override" }] })).toBe(true);
+    expect(shouldRenderBpmn({ ...detail, relationships: [{ relationship_id: "r1-r2", kind: "dependency", source_rule_id: "r1", target_rule_id: "r2", rule_ids: ["r1", "r2"], status: "supported" }] })).toBe(true);
+  });
+
   it("renders stage flow and overview actions", () => {
     const onView = vi.fn();
     render(<Overview run={run} stages={stages} onStage={vi.fn()} onView={onView} />);
@@ -107,7 +114,8 @@ describe("review workbench components", () => {
     render(<DocumentsView runId="r" onError={vi.fn()} />); await waitFor(() => expect(screen.getByText("doc/chunk.txt")).toBeInTheDocument()); fireEvent.click(screen.getByRole("tab", { name: "Evidence links" })); await waitFor(() => expect(screen.getByText("r1 · outcomes")).toBeInTheDocument());
     render(<GraphView runId="r" onError={vi.fn()} />); await waitFor(() => expect(screen.getByTestId("layered-rule-graph")).toBeInTheDocument());
     fireEvent.click(screen.getByRole("button", { name: "Select rule r1" }));
-    await waitFor(() => expect(screen.getByText("DMN decision table · BPMN workflow")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("DMN decision table")).toBeInTheDocument());
+    expect(document.querySelectorAll(".executable-grid.dmn-only").length).toBeGreaterThan(0);
     expect(document.querySelector(".rule-node.selected")).toBeTruthy();
     expect(document.querySelector(".rule-node.downstream")).toBeTruthy();
     render(<DiagnosticsView runId="r" onError={vi.fn()} />); await waitFor(() => expect(screen.getByText("Missing source")).toBeInTheDocument());
