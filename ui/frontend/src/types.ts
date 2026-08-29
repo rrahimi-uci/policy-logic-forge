@@ -78,6 +78,8 @@ export interface RunSummary {
   error_count: number;
   warning_count: number;
   review_queue_count: number;
+  human_review_required_rules?: number;
+  human_review_rate?: number;
   unresolved_conflict_count: number;
   rule_status_counts: Record<string, number>;
   readiness_counts: Record<string, number>;

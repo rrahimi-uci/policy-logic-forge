@@ -274,6 +274,8 @@ class ReviewIndex:
     def queue(self, name: str) -> list[dict[str, Any]]:
         if name == "requires_review":
             return [r for r in self.rules if r["requires_review"]]
+        if name == "human_review":
+            return [r for r in self.rules if (r.get("review_route") or {}).get("human_review_required") is True]
         if name == "grounding_failed":
             return [r for r in self.rules if r["grounding_status"] in {"failed", "insufficient", "contradicted"}]
         if name == "readiness_failed":
@@ -604,6 +606,11 @@ def _build_summary(*, run_id: str, source_dir: Path, stages: list[dict[str, Any]
     grounding = Counter(r["grounding_status"] for r in rules)
     conflicts = [r for r in relationships if r["kind"] == "conflict"]
     unresolved_conflicts = [r for r in conflicts if r["status"] == "unresolved"]
+    human_review_rules = [
+        r for r in rules
+        if isinstance(r.get("review_route"), Mapping)
+        and r["review_route"].get("human_review_required") is True
+    ]
     metadata = _safe_dict(optimized.get("metadata"))
     grounding_metadata = _safe_dict(metadata.get("grounding_certification"))
     corpus_hash = _safe_dict(optimized.get("corpus_manifest")).get("corpus_sha256") or metadata.get("corpus_sha256") or grounding_metadata.get("corpus_sha256")
@@ -623,6 +630,8 @@ def _build_summary(*, run_id: str, source_dir: Path, stages: list[dict[str, Any]
         "error_count": sum(d["severity"] == "error" for d in diagnostics),
         "warning_count": sum(d["severity"] == "warning" for d in diagnostics),
         "review_queue_count": sum(r["requires_review"] for r in rules),
+        "human_review_required_rules": len(human_review_rules),
+        "human_review_rate": round(len(human_review_rules) / max(1, len(rules)) * 100, 2),
         "unresolved_conflict_count": len(unresolved_conflicts),
         "rule_status_counts": dict(statuses),
         "readiness_counts": dict(readiness),
@@ -633,7 +642,7 @@ def _build_summary(*, run_id: str, source_dir: Path, stages: list[dict[str, Any]
         "optimized_graph_sha256": certified_hash,
         "model": metadata.get("model_used"),
         "reasoning_effort": metadata.get("reasoning_effort"),
-        "queues": {"requires_review": statuses.get("requires_review", 0), "grounding_failed": sum(r["grounding_status"] in {"failed", "insufficient", "contradicted"} for r in rules), "readiness_failed": sum(r["readiness_status"] in {"failed", "requires_review", "review"} for r in rules), "unresolved_conflicts": len({rid for rel in unresolved_conflicts for rid in rel["rule_ids"]})},
+        "queues": {"requires_review": statuses.get("requires_review", 0), "human_review": len(human_review_rules), "grounding_failed": sum(r["grounding_status"] in {"failed", "insufficient", "contradicted"} for r in rules), "readiness_failed": sum(r["readiness_status"] in {"failed", "requires_review", "review"} for r in rules), "unresolved_conflicts": len({rid for rel in unresolved_conflicts for rid in rel["rule_ids"]})},
     }
 
 
