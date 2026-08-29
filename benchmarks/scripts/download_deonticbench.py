@@ -62,7 +62,7 @@ def request_json(url: str) -> dict:
     last_error: Exception | None = None
     for attempt in range(RETRIES):
         try:
-            request = Request(url, headers={"User-Agent": "compliance-to-code/deonticbench"})
+            request = Request(url, headers={"User-Agent": "policy-logic-forge/deonticbench"})
             with urlopen(request, timeout=120) as response:
                 return json.load(response)
         except (HTTPError, URLError, TimeoutError, json.JSONDecodeError) as exc:
@@ -78,7 +78,7 @@ def download_file(url: str, destination: Path) -> None:
     last_error: Exception | None = None
     for attempt in range(RETRIES):
         try:
-            request = Request(url, headers={"User-Agent": "compliance-to-code/deonticbench"})
+            request = Request(url, headers={"User-Agent": "policy-logic-forge/deonticbench"})
             with urlopen(request, timeout=300) as response, partial.open("wb") as handle:
                 shutil.copyfileobj(response, handle, length=1 << 20)
             partial.replace(destination)

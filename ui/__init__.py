@@ -1,1 +1,1 @@
-"""Compliance-to-code review workbench package."""
+"""Policy Logic Forge review workbench package."""

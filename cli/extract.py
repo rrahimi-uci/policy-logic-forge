@@ -127,7 +127,7 @@ class ExtractionPipeline:
             self._perf_env[env_name] = os.getenv(env_name, str(value))
 
         print("=" * 80)
-        print(f"compliance-to-code: extraction pipeline")
+        print(f"policy-logic-forge: extraction pipeline")
         print(f"  domain:       {domain}")
         print(f"  source:       {source_dir}")
         print(f"  batch name:   {self.batch_name}")

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft-07/schema#",
-  "description": "Legal/privacy NLP benchmark corpora used to evaluate the compliance-to-code extraction pipeline.",
+  "description": "Legal/privacy NLP benchmark corpora used to evaluate the Policy Logic Forge extraction pipeline.",
   "datasets": [
     {
       "id": "cuad",

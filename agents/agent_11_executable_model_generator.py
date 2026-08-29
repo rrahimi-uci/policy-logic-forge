@@ -54,8 +54,8 @@ def generate(input_graph: Path, dags_file: Path, output_dir: Path) -> dict:
     """Generate and validate both artifacts, returning the persisted report."""
     graph = json.loads(input_graph.read_text(encoding="utf-8"))
     dags = json.loads(dags_file.read_text(encoding="utf-8"))
-    dmn = build_graph_dmn(graph, model_name="Compliance-to-Code executable decisions")
-    bpmn = build_dags_bpmn(graph, dags, model_name="Compliance-to-Code executable workflows")
+    dmn = build_graph_dmn(graph, model_name="Policy Logic Forge executable decisions")
+    bpmn = build_dags_bpmn(graph, dags, model_name="Policy Logic Forge executable workflows")
     rule_ids = [str(rule.get("rule_id")) for rule in graph.get("business_rules", [])]
     errors = validate_executable_models(dmn, bpmn, rule_ids)
     if errors:

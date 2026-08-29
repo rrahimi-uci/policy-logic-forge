@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/rrahimi-uci/compliance-to-code/plan/lexec-ir-v1.schema.json",
+  "$id": "https://github.com/rrahimi-uci/policy-logic-forge/plan/lexec-ir-v1.schema.json",
   "title": "LEXEC compiler intermediate representation v1",
   "type": "object",
   "additionalProperties": false,

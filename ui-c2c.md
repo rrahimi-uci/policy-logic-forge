@@ -1,8 +1,8 @@
-# UI C2C: Review, Validation, and Observability Workbench
+# Policy Logic Forge UI: Review, Validation, and Observability Workbench
 
 ## Objective
 
-Build an interactive workspace on top of the existing compliance-to-code
+Build an interactive workspace on top of the existing Policy Logic Forge
 pipeline so reviewers can inspect runs, validate outputs, trace every artifact
 back to source evidence, compare runs, and record review decisions without
 changing the pipeline's canonical artifacts.
