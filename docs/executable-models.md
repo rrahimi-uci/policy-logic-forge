@@ -6,7 +6,7 @@ graph and Agent 10's dependency artifact:
 
 ```bash
 PYTHONPATH=. .venv/bin/python cli/generate_executable_models.py \
-  --graph pipeline-output/e2e-mortgage-20260827/agent_06-optimized/optimized_compliance_knowledge_graph.json \
+  --graph pipeline-output/e2e-mortgage-20260827/agent_06-07-08-09-optimized/optimized_compliance_knowledge_graph.json \
   --dags pipeline-output/e2e-mortgage-20260827/agent_10-dag-generation/dependency_dags.json \
   --output-dir pipeline-output/e2e-mortgage-20260827/agent_10-dag-generation/executable-models
 ```

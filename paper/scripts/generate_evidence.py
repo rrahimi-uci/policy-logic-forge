@@ -10,6 +10,15 @@ import re
 from pathlib import Path
 from typing import Any
 
+# This script is intentionally runnable with the system Python from
+# ``paper/scripts/build_paper.sh``.  Keep path resolution stdlib-only rather
+# than importing the runtime's ``utils`` package (which has optional dotenv
+# configuration dependencies).
+OPTIMIZED_OUTPUT_DIR_NAMES = (
+    "agent_06-07-08-09-optimized",
+    "agent_06-optimized",
+)
+
 
 def _read_json(path: Path) -> dict[str, Any]:
     value = json.loads(path.read_text(encoding="utf-8"))
@@ -48,6 +57,15 @@ def _tex_percent(numerator: Any, denominator: Any) -> str:
     return f"{100 * numerator / denominator:.1f}"
 
 
+def _optimized_artifact(bundle: Path, filename: str) -> Path:
+    """Resolve a current bundle artifact while retaining legacy-read support."""
+    for directory_name in OPTIMIZED_OUTPUT_DIR_NAMES:
+        candidate = bundle / directory_name / filename
+        if candidate.is_file():
+            return candidate
+    return bundle / OPTIMIZED_OUTPUT_DIR_NAMES[0] / filename
+
+
 def _verify_optional_bundle(repo_root: Path, observation: dict[str, Any], sources: dict[str, Any], bundle_rel: str) -> None:
     """Verify the local non-redistributable bundle when it is available."""
     bundle = repo_root / bundle_rel
@@ -63,8 +81,8 @@ def _verify_optional_bundle(repo_root: Path, observation: dict[str, Any], source
         if actual != expected:
             raise ValueError(f"source artifact hash mismatch for {path}: {actual} != {expected}")
     coverage = _read_json(bundle / "agent_03-rules/chunk_coverage.json")
-    readiness = _read_json(bundle / "agent_06-optimized/kg_readiness_report.json")
-    grounding = _read_json(bundle / "agent_06-optimized/kg_grounding_report.json")
+    readiness = _read_json(_optimized_artifact(bundle, "kg_readiness_report.json"))
+    grounding = _read_json(_optimized_artifact(bundle, "kg_grounding_report.json"))
     dag_report = (bundle / "agent_10-dag-generation/dag_generation_report.md").read_text(encoding="utf-8")
     rules_match = re.search(r"Total rules:\s+(\d+)", dag_report)
     dag_match = re.search(r"DAGs generated:\s+(\d+)", dag_report)

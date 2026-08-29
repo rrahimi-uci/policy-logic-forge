@@ -19,7 +19,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
-from utils.agent_names import stage_number
+from utils.agent_names import output_dir_names, stage_number
 
 
 STAGES: tuple[dict[str, Any], ...] = (
@@ -28,10 +28,10 @@ STAGES: tuple[dict[str, Any], ...] = (
     {"id": "agent_03", "name": "Rules extractor", "directory": "agent_03-rules", "artifacts": ["compliance_rules_with_entities.json", "batch_results.jsonl", "chunk_coverage.json"]},
     {"id": "agent_04", "name": "Rule validator", "directory": "agent_04-validation", "artifacts": ["validation_report.json"]},
     {"id": "agent_05", "name": "Rules with entities", "directory": "agent_05-rules-with-entities", "artifacts": ["compliance_knowledge_graph.json"]},
-    {"id": "agent_06", "name": "Knowledge graph optimizer", "directory": "agent_06-optimized", "artifacts": ["optimized_compliance_knowledge_graph.json", "kg_readiness_report.json", "kg_grounding_report.json"]},
-    {"id": "agent_07", "name": "Executable readiness", "directory": "agent_06-optimized", "artifacts": ["agent_07_rule_checkpoint.jsonl"], "embedded": True},
-    {"id": "agent_08", "name": "Readiness remediation", "directory": "agent_06-optimized", "artifacts": ["agent_08_checkpoint.jsonl", "agent_08_remediation_report.json"], "embedded": True},
-    {"id": "agent_09", "name": "Grounding verifier", "directory": "agent_06-optimized", "artifacts": ["agent_09_grounding_checkpoint.jsonl", "kg_grounding_report.json"], "embedded": True},
+    {"id": "agent_06", "name": "Knowledge graph optimizer", "directory": "agent_06-07-08-09-optimized", "artifacts": ["optimized_compliance_knowledge_graph.json", "kg_readiness_report.json", "kg_grounding_report.json"]},
+    {"id": "agent_07", "name": "Executable readiness", "directory": "agent_06-07-08-09-optimized", "artifacts": ["agent_07_rule_checkpoint.jsonl"], "embedded": True},
+    {"id": "agent_08", "name": "Readiness remediation", "directory": "agent_06-07-08-09-optimized", "artifacts": ["agent_08_checkpoint.jsonl", "agent_08_remediation_report.json"], "embedded": True},
+    {"id": "agent_09", "name": "Grounding verifier", "directory": "agent_06-07-08-09-optimized", "artifacts": ["agent_09_grounding_checkpoint.jsonl", "kg_grounding_report.json"], "embedded": True},
     {"id": "agent_10", "name": "DAG generator", "directory": "agent_10-dag-generation", "artifacts": ["dependency_dags.json"]},
     {"id": "agent_11", "name": "Semantic model generator", "directory": "agent_11-executable-models", "artifacts": ["compliance_decisions.dmn", "compliance_workflows.bpmn", "compliance_reviews.cmmn", "semantic_vocabulary_profile.json", "executable_model_report.json"]},
 )
@@ -151,13 +151,13 @@ class ReviewIndex:
         diagnostics: list[dict[str, Any]] = []
 
         stages = _build_stages(source_dir, diagnostics)
-        optimized_path = source_dir / "agent_06-optimized" / "optimized_compliance_knowledge_graph.json"
+        optimized_path = _resolve_stage_directory(source_dir, "agent_06") / "optimized_compliance_knowledge_graph.json"
         optimized, error = _read_json(optimized_path)
         if error:
             diagnostics.append(_diagnostic("error", "indexer", error, str(optimized_path.relative_to(source_dir))))
         optimized = _safe_dict(optimized)
         rules = _build_rules(optimized, run_id, str(optimized_path.relative_to(source_dir)))
-        relationships = _build_relationships(optimized, source_dir, run_id)
+        relationships = _build_relationships(optimized, source_dir, run_id, optimized_artifact_path=str(optimized_path.relative_to(source_dir)))
         documents = _build_documents(source_dir, run_id, diagnostics)
         evidence = _build_evidence(rules, run_id)
         _add_grounding_diagnostics(rules, diagnostics)
@@ -278,7 +278,7 @@ def build_review_index(run_dir: str | Path, output_dir: str | Path | None = None
 def _build_stages(source_dir: Path, diagnostics: list[dict[str, Any]]) -> list[dict[str, Any]]:
     stages: list[dict[str, Any]] = []
     for spec in STAGES:
-        directory = source_dir / spec["directory"]
+        directory = _resolve_stage_directory(source_dir, spec["id"])
         artifacts: list[dict[str, Any]] = []
         for name in spec["artifacts"]:
             path = directory / name
@@ -304,8 +304,24 @@ def _build_stages(source_dir: Path, diagnostics: list[dict[str, Any]]) -> list[d
                 mtimes.append((directory / Path(artifact["path"]).name).stat().st_mtime)
             except OSError:
                 continue
-        stages.append({"stage_id": spec["id"], "stage_number": stage_number(spec["id"]), "name": spec["name"], "directory": spec["directory"], "status": status, "embedded": bool(spec.get("embedded")), "artifacts": artifacts, "checkpoint_records": checkpoint_records, "started_at": datetime.fromtimestamp(min(mtimes), timezone.utc).isoformat() if mtimes else None, "finished_at": datetime.fromtimestamp(max(mtimes), timezone.utc).isoformat() if mtimes else None, "input_counts": {}, "output_counts": {"artifact_files": len(artifacts), "checkpoint_records": checkpoint_records}, "warning_count": 0, "failure_count": 0, "primary_artifacts": [artifact["path"] for artifact in artifacts]})
+        stages.append({"stage_id": spec["id"], "stage_number": stage_number(spec["id"]), "name": spec["name"], "directory": directory.name, "status": status, "embedded": bool(spec.get("embedded")), "artifacts": artifacts, "checkpoint_records": checkpoint_records, "started_at": datetime.fromtimestamp(min(mtimes), timezone.utc).isoformat() if mtimes else None, "finished_at": datetime.fromtimestamp(max(mtimes), timezone.utc).isoformat() if mtimes else None, "input_counts": {}, "output_counts": {"artifact_files": len(artifacts), "checkpoint_records": checkpoint_records}, "warning_count": 0, "failure_count": 0, "primary_artifacts": [artifact["path"] for artifact in artifacts]})
     return stages
+
+
+def _resolve_stage_directory(source_dir: Path, identifier: str) -> Path:
+    """Resolve a stage directory, preferring the canonical current name.
+
+    The pipeline writes the shared optimized stages to
+    ``agent_06-07-08-09-optimized``.  Existing runs may still use the former
+    ``agent_06-optimized`` name, so readers accept that path as a compatibility
+    fallback without ever writing new output there.
+    """
+
+    for directory_name in output_dir_names(identifier):
+        candidate = source_dir / directory_name
+        if candidate.exists():
+            return candidate
+    return source_dir / output_dir_names(identifier)[0]
 
 
 def _checkpoint_count(directory: Path, names: Iterable[str]) -> int:
@@ -402,7 +418,13 @@ def _build_rules(optimized: Mapping[str, Any], run_id: str, artifact_path: str) 
     return rows
 
 
-def _build_relationships(optimized: Mapping[str, Any], source_dir: Path, run_id: str) -> list[dict[str, Any]]:
+def _build_relationships(
+    optimized: Mapping[str, Any],
+    source_dir: Path,
+    run_id: str,
+    *,
+    optimized_artifact_path: str,
+) -> list[dict[str, Any]]:
     details = _safe_dict(optimized.get("dependency_details"))
     relationships: list[dict[str, Any]] = []
     # The optimized graph also carries entity-type relationship definitions.
@@ -411,19 +433,19 @@ def _build_relationships(optimized: Mapping[str, Any], source_dir: Path, run_id:
     for name, raw in _safe_dict(optimized.get("relationships")).items():
         if not isinstance(raw, dict):
             continue
-        relationships.append({"relationship_id": f"entity:{name}", "kind": "entity_relationship", "entity": str(name), "source_entity": raw.get("source_entity"), "target_entity": raw.get("target_entity"), "rule_ids": [], "status": "defined", "rationale": raw.get("definition", ""), "impact": raw.get("cardinality", ""), "examples": _safe_list(raw.get("examples")), "business_rules": _safe_list(raw.get("business_rules")), "artifact_path": "agent_06-optimized/optimized_compliance_knowledge_graph.json"})
+        relationships.append({"relationship_id": f"entity:{name}", "kind": "entity_relationship", "entity": str(name), "source_entity": raw.get("source_entity"), "target_entity": raw.get("target_entity"), "rule_ids": [], "status": "defined", "rationale": raw.get("definition", ""), "impact": raw.get("cardinality", ""), "examples": _safe_list(raw.get("examples")), "business_rules": _safe_list(raw.get("business_rules")), "artifact_path": optimized_artifact_path})
     for index, raw in enumerate(_safe_list(details.get("dependencies"))):
         if not isinstance(raw, dict):
             continue
         source = str(raw.get("source_rule_id") or raw.get("from_rule_id") or "")
         target = str(raw.get("target_rule_id") or raw.get("to_rule_id") or "")
-        relationships.append({"relationship_id": f"dependency:{source}:{target}:{index}", "kind": "dependency", "source_rule_id": source, "target_rule_id": target, "rule_ids": [source, target], "dependency_type": raw.get("dependency_type", "related"), "status": "supported" if raw.get("structurally_supported") else "inferred", "confidence": raw.get("confidence"), "strength": raw.get("strength"), "rationale": raw.get("rationale", ""), "impact": raw.get("impact", ""), "artifact_path": "agent_06-optimized/optimized_compliance_knowledge_graph.json"})
+        relationships.append({"relationship_id": f"dependency:{source}:{target}:{index}", "kind": "dependency", "source_rule_id": source, "target_rule_id": target, "rule_ids": [source, target], "dependency_type": raw.get("dependency_type", "related"), "status": "supported" if raw.get("structurally_supported") else "inferred", "confidence": raw.get("confidence"), "strength": raw.get("strength"), "rationale": raw.get("rationale", ""), "impact": raw.get("impact", ""), "artifact_path": optimized_artifact_path})
     for index, raw in enumerate(_safe_list(details.get("conflicts"))):
         if not isinstance(raw, dict):
             continue
         ids = [str(rid) for rid in _safe_list(raw.get("rule_ids"))]
         conflict_status = raw.get("status", "unknown")
-        relationships.append({"relationship_id": f"conflict:{raw.get('entity','unknown')}:{index}", "kind": "conflict" if conflict_status in {"conflict", "unresolved"} else "conflict_candidate", "entity": raw.get("entity"), "rule_ids": ids, "source_rule_id": ids[0] if ids else None, "target_rule_id": ids[1] if len(ids) > 1 else None, "status": conflict_status, "rationale": raw.get("reasoning", ""), "resolution": raw.get("resolution", ""), "artifact_path": "agent_06-optimized/optimized_compliance_knowledge_graph.json"})
+        relationships.append({"relationship_id": f"conflict:{raw.get('entity','unknown')}:{index}", "kind": "conflict" if conflict_status in {"conflict", "unresolved"} else "conflict_candidate", "entity": raw.get("entity"), "rule_ids": ids, "source_rule_id": ids[0] if ids else None, "target_rule_id": ids[1] if len(ids) > 1 else None, "status": conflict_status, "rationale": raw.get("reasoning", ""), "resolution": raw.get("resolution", ""), "artifact_path": optimized_artifact_path})
     dags_path = source_dir / "agent_10-dag-generation" / "dependency_dags.json"
     dags, _ = _read_json(dags_path)
     for dag in _safe_list(_safe_dict(dags).get("dags")):

@@ -23,7 +23,7 @@ source chunks, so the reviewer has to reconstruct the story manually.
 | Area | Current evidence in repo | UI implication |
 | --- | --- | --- |
 | Stage progression | `agent_01` through `agent_10` outputs under `pipeline-output/<batch>/` | We can build a stage-aware run overview without changing the core pipeline. |
-| Run summaries | `agent_01-organized-documents/_processing_results.json`, `agent_04-validation/validation_report.json`, `agent_06-optimized/kg_readiness_report.json`, `agent_06-optimized/kg_grounding_report.json`, `agent_10-dag-generation/dependency_dags.json` | Each stage already has machine-readable status and metrics. |
+| Run summaries | `agent_01-organized-documents/_processing_results.json`, `agent_04-validation/validation_report.json`, `agent_06-07-08-09-optimized/kg_readiness_report.json`, `agent_06-07-08-09-optimized/kg_grounding_report.json`, `agent_10-dag-generation/dependency_dags.json` | Each stage already has machine-readable status and metrics. |
 | Rule-level review state | `requires_review`, `review_reason`, `contract_issues`, `readiness`, `grounding` on each rule in `optimized_compliance_knowledge_graph.json` | A rule review queue can be derived directly from canonical graph output. |
 | Source traceability | `source_reference`, `field_evidence`, `scope_derivation`, `exception_verification`, document chunk paths, quoted source text | Side-by-side source-to-rule review is feasible immediately. |
 | Execution projections | `execution.dmn`, `execution.bpmn`, `recommended_hit_policy` per rule | DMN/BPMN review can start as projection inspection before full compiler assets are integrated. |

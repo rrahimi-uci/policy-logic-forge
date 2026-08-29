@@ -49,19 +49,23 @@ LEGACY_STEP_ALIASES = {
     "5.7": "agent_09", "6": "agent_10",
 }
 
-# Stages 7–9 operate in place on agent_06's optimized graph.  The explicit
-# aliases document that storage contract while keeping every directory name
-# canonical and zero-padded.
+# Stages 7–9 operate in place on agent_06's optimized graph.  The shared
+# directory name makes that storage contract visible at a glance: all four
+# stages contribute to the same optimized graph and its derived checkpoints.
+OPTIMIZED_OUTPUT_DIR = "agent_06-07-08-09-optimized"
+LEGACY_OPTIMIZED_OUTPUT_DIR = "agent_06-optimized"
+OPTIMIZED_OUTPUT_DIR_NAMES = (OPTIMIZED_OUTPUT_DIR, LEGACY_OPTIMIZED_OUTPUT_DIR)
+
 PIPELINE_OUTPUT_DIRS = {
     "agent_01": "agent_01-organized-documents",
     "agent_02": "agent_02-entities",
     "agent_03": "agent_03-rules",
     "agent_04": "agent_04-validation",
     "agent_05": "agent_05-rules-with-entities",
-    "agent_06": "agent_06-optimized",
-    "agent_07": "agent_06-optimized",
-    "agent_08": "agent_06-optimized",
-    "agent_09": "agent_06-optimized",
+    "agent_06": OPTIMIZED_OUTPUT_DIR,
+    "agent_07": OPTIMIZED_OUTPUT_DIR,
+    "agent_08": OPTIMIZED_OUTPUT_DIR,
+    "agent_09": OPTIMIZED_OUTPUT_DIR,
     "agent_10": "agent_10-dag-generation",
     "agent_11": "agent_11-executable-models",
 }
@@ -117,3 +121,17 @@ def output_dir_name(identifier: str) -> str:
 
     agent_spec(identifier)
     return PIPELINE_OUTPUT_DIRS[identifier]
+
+
+def output_dir_names(identifier: str) -> tuple[str, ...]:
+    """Return canonical and read-only legacy directory names for an agent.
+
+    New pipeline runs always write to :func:`output_dir_name`.  Readers use
+    this helper so retained historical bundles under ``agent_06-optimized``
+    remain reviewable after the clearer shared-directory rename.
+    """
+
+    canonical = output_dir_name(identifier)
+    if identifier in {"agent_06", "agent_07", "agent_08", "agent_09"}:
+        return (canonical, LEGACY_OPTIMIZED_OUTPUT_DIR)
+    return (canonical,)

@@ -7,6 +7,9 @@ from utils.agent_names import (
     AGENT_IDS,
     CANONICAL_STAGE_NUMBERS,
     LEGACY_STEP_ALIASES,
+    LEGACY_OPTIMIZED_OUTPUT_DIR,
+    OPTIMIZED_OUTPUT_DIR,
+    output_dir_names,
     PIPELINE_AGENTS,
     PIPELINE_STAGE_COUNT,
     agent_id_for_stage,
@@ -59,10 +62,13 @@ def test_pipeline_output_directories_use_current_agent_identifiers():
     assert output_dir_name("agent_03") == "agent_03-rules"
     assert output_dir_name("agent_04") == "agent_04-validation"
     assert output_dir_name("agent_05") == "agent_05-rules-with-entities"
-    assert output_dir_name("agent_06") == "agent_06-optimized"
-    assert output_dir_name("agent_07") == "agent_06-optimized"
-    assert output_dir_name("agent_08") == "agent_06-optimized"
-    assert output_dir_name("agent_09") == "agent_06-optimized"
+    assert output_dir_name("agent_06") == "agent_06-07-08-09-optimized"
+    assert output_dir_name("agent_07") == "agent_06-07-08-09-optimized"
+    assert output_dir_name("agent_08") == "agent_06-07-08-09-optimized"
+    assert output_dir_name("agent_09") == "agent_06-07-08-09-optimized"
+    assert OPTIMIZED_OUTPUT_DIR == "agent_06-07-08-09-optimized"
+    assert output_dir_names("agent_06") == (OPTIMIZED_OUTPUT_DIR, LEGACY_OPTIMIZED_OUTPUT_DIR)
+    assert output_dir_names("agent_10") == ("agent_10-dag-generation",)
     assert output_dir_name("agent_10") == "agent_10-dag-generation"
     assert output_dir_name("agent_11") == "agent_11-executable-models"
 
