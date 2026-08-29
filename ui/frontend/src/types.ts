@@ -264,3 +264,33 @@ export interface RegDeltaRunSummary {
   run_id: string;
   has_dag: boolean;
 }
+
+export interface Job {
+  id: string;
+  created_at: string;
+  started_at?: string | null;
+  finished_at?: string | null;
+  status: "queued" | "running" | "succeeded" | "failed" | "cancelled";
+  kind: "full" | "resume";
+  domain: string;
+  batch_name: string;
+  source_dir: string;
+  upload_id?: string | null;
+  resume_from_stage?: string | null;
+  target_rules?: number | null;
+  skip_optimize: boolean;
+  pid?: number | null;
+  exit_code?: number | null;
+  log_path: string;
+  error?: string | null;
+  /** Next resumable stage id, computed server-side; not a stored column. */
+  resume_hint: string | null;
+}
+
+export interface UploadResult {
+  upload_id: string;
+  domain: string;
+  dir: string;
+  file_count: number;
+  total_bytes: number;
+}
