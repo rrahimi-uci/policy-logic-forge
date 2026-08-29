@@ -834,6 +834,8 @@ class GroundingVerifier:
             f"{len(batches)} batches, {workers} workers",
             flush=True,
         )
+        api_workers = max(1, int(os.getenv("KG_GROUNDING_LLM_CONCURRENCY", "4")))
+        workers = min(workers, api_workers)
         with ThreadPoolExecutor(max_workers=min(workers, max(1, len(batches))), thread_name_prefix="kg-grounding") as executor:
             futures = [executor.submit(verify_batch, batch) for batch in batches]
             for future in as_completed(futures):
@@ -1010,6 +1012,27 @@ class GroundingVerifier:
             "total_rules": len(rules),
             "rules_certified": len(rules) - len(failures),
             "rules_failed": len(failures),
+            # Keep the strict quality-hold count separate from the operational
+            # human queue.  A rule with evidence gaps remains fail-closed and
+            # review-required, but only a positive contradiction (or an
+            # explicit human finding) should consume scarce human-review
+            # capacity.
+            "rules_requiring_review": sum(bool(rule.get("requires_review")) for rule in rules),
+            "review_required_rate": round(
+                sum(bool(rule.get("requires_review")) for rule in rules) / max(1, len(rules)) * 100, 2
+            ),
+            "human_review_required_rules": sum(
+                bool((rule.get("review_route") or {}).get("human_review_required"))
+                for rule in rules
+            ),
+            "human_review_rate": round(
+                sum(bool((rule.get("review_route") or {}).get("human_review_required")) for rule in rules)
+                / max(1, len(rules)) * 100,
+                2,
+            ),
+            "review_route_counts": dict(Counter(
+                (rule.get("review_route") or {}).get("route", "none") for rule in rules
+            )),
             "rule_grounding_pass": not failures,
             "relationship_grounding_pass": not relationship_failures,
             "total_claims": total_claims,
@@ -1050,6 +1073,11 @@ class GroundingVerifier:
             f"- Overall: {'PASS' if report.get('pass') else 'FAIL'}",
             f"- Independent rule grounding: {'PASS' if report.get('rule_grounding_pass') else 'FAIL'}",
             f"- Rules independently certified: {report.get('rules_certified')} / {report.get('total_rules')}",
+            f"- Quality-hold rules (fail-closed): {report.get('rules_requiring_review')} / {report.get('total_rules')} "
+            f"({report.get('review_required_rate')}%)",
+            f"- Human-review queue: {report.get('human_review_required_rules')} / {report.get('total_rules')} "
+            f"({report.get('human_review_rate')}%)",
+            f"- Review routes: {report.get('review_route_counts')}",
             f"- Relationship grounding: {'PASS' if report.get('relationship_grounding_pass') else 'FAIL'}",
             f"- Claims supported: {report.get('supported_claims')} / {report.get('total_claims')}",
             f"- Contradicted claims: {report.get('contradicted_claims')}",

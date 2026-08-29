@@ -325,7 +325,12 @@ class KnowledgeGraphOptimizer:
         import math
 
         chunks = [rules[i:i + batch_size] for i in range(0, len(rules), batch_size)]
-        workers = min(self.max_workers, len(chunks))
+        # Match the worker pool to the API gate.  A large executor full of
+        # blocked threads can starve later chunks because semaphore wake-ups
+        # are not FIFO, producing hour-long tail latency on an otherwise
+        # healthy provider.
+        api_gate = max(1, int(os.getenv("KG_LLM_CONCURRENCY", str(self.max_workers))))
+        workers = min(self.max_workers, api_gate, len(chunks))
         print(
             f"📦 Large rule set detected - deduplication uses {len(chunks)} chunks "
             f"of ≤{batch_size} rules ({workers} workers)", flush=True
@@ -726,7 +731,8 @@ class KnowledgeGraphOptimizer:
             batches.append(batch)
         
         # Step 1: Analyze within-batch dependencies (parallelised)
-        workers = min(self.max_workers, num_batches)
+        api_gate = max(1, int(os.getenv("KG_LLM_CONCURRENCY", str(self.max_workers))))
+        workers = min(self.max_workers, api_gate, num_batches)
         print(f"\n📦 Step 1: Analyzing within-batch dependencies ({num_batches} batches, {workers} workers)...", flush=True)
 
         def _call_within_batch(args):
@@ -776,7 +782,7 @@ class KnowledgeGraphOptimizer:
             else:
                 stride = len(pairs) / max_pairs
                 pairs = [pairs[min(len(pairs) - 1, int(i * stride))] for i in range(max_pairs)]
-        cross_workers = min(self.max_workers, len(pairs)) if pairs else 1
+        cross_workers = min(self.max_workers, api_gate, len(pairs)) if pairs else 1
         print(f"\n📦 Step 2: Analyzing cross-batch dependencies ({len(pairs)} pairs, {cross_workers} workers)...", flush=True)
         print(f"   (Checking if rules in one batch depend on rules in another batch)", flush=True)
 

@@ -46,22 +46,28 @@ DOMAINS = [
 # config.json. Kept as a flat table (name -> (config_key, fallback)) so a new
 # knob only needs one line here, matching the source pipeline's convention.
 _PERFORMANCE_ENV = {
-    "KG_LLM_CONCURRENCY": ("llm_concurrency", 16),
+    # Keep API concurrency deliberately below the document worker count.  The
+    # reasoning model uses long-lived sockets and a 40-way burst can exhaust
+    # the provider/client connection pool before adaptive limiting reacts.
+    "KG_LLM_CONCURRENCY": ("llm_concurrency", 4),
     # Agent 01 has a separate document-level worker pool.  Propagate the
     # configured value instead of accidentally using the request concurrency
     # (which can overload the provider on large corpora).
     "KG_ORGANIZER_WORKERS": ("document_workers", 6),
     "KG_REASONING_MAX_COMPLETION_TOKENS": ("reasoning_max_completion_tokens", 24576),
-    "KG_GLOBAL_LLM_CONCURRENCY_INITIAL": ("global_llm_concurrency_initial", 8),
-    "KG_GLOBAL_LLM_CONCURRENCY_MAX": ("global_llm_concurrency_max", 16),
+    "KG_GLOBAL_LLM_CONCURRENCY_INITIAL": ("global_llm_concurrency_initial", 2),
+    "KG_GLOBAL_LLM_CONCURRENCY_MAX": ("global_llm_concurrency_max", 4),
     "KG_GLOBAL_LLM_CONCURRENCY_MIN": ("global_llm_concurrency_min", 1),
     "KG_GLOBAL_LLM_SUCCESS_WINDOW": ("global_llm_success_window", 3),
-    "KG_GLOBAL_LLM_LEASE_SECONDS": ("global_llm_lease_seconds", 300),
+    # Must cover the LLM watchdog (timeout * SDK attempts + margin), otherwise
+    # a slow but still-live request expires and is counted twice by the shared
+    # limiter, recreating the overload this limiter is meant to prevent.
+    "KG_GLOBAL_LLM_LEASE_SECONDS": ("global_llm_lease_seconds", 900),
     "KG_GLOBAL_LLM_POLL_SECONDS": ("global_llm_poll_seconds", 0.1),
     "KG_LLM_WATCHDOG_MARGIN": ("llm_watchdog_margin", 30),
     "KG_BATCH_CONNECTION_BACKOFF_SECONDS": ("batch_connection_backoff_seconds", 10),
     "KG_READINESS_WORKERS": ("readiness_workers", 40),
-    "KG_READINESS_LLM_CONCURRENCY": ("readiness_llm_concurrency", 16),
+    "KG_READINESS_LLM_CONCURRENCY": ("readiness_llm_concurrency", 4),
     "KG_READINESS_RULES_PER_REQUEST": ("readiness_rules_per_request", 8),
     "KG_READINESS_MAX_EVIDENCE_CHARS": ("readiness_max_evidence_chars", 12000),
     "KG_REMEDIATION_WORKERS": ("remediation_workers", 40),
@@ -71,7 +77,7 @@ _PERFORMANCE_ENV = {
     "KG_REMEDIATION_MAX_CONFLICT_PAIRS": ("remediation_max_conflict_pairs", 5000),
     "KG_REMEDIATION_MAX_PASSES": ("remediation_max_passes", 3),
     "KG_GROUNDING_WORKERS": ("grounding_workers", 40),
-    "KG_GROUNDING_LLM_CONCURRENCY": ("grounding_llm_concurrency", 8),
+    "KG_GROUNDING_LLM_CONCURRENCY": ("grounding_llm_concurrency", 4),
     "KG_GROUNDING_RULES_PER_REQUEST": ("grounding_rules_per_request", 4),
     "KG_GROUNDING_CLAIMS_PER_REQUEST": ("grounding_claims_per_request", 48),
     "KG_GROUNDING_RELATIONSHIPS_PER_REQUEST": ("grounding_relationships_per_request", 48),

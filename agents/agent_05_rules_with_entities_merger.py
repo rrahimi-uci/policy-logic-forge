@@ -141,6 +141,36 @@ class KnowledgeEnricher:
                     rule['entity_or_relationship'] = canonical
                     remapped += 1
 
+        # A rule can reference a legitimate canonical party that agent_02 did
+        # not emit as a top-level entity (the mortgage run exposed
+        # DU_RISK_ASSESSMENT and QUALITY_CONTROL_REVIEW).  Preserve graph
+        # referential integrity by adding an explicitly marked placeholder;
+        # this is not a synthesized domain definition and remains visible for
+        # later enrichment/review.
+        def _camel_to_snake(value: str) -> str:
+            value = _re.sub(r"(.)([A-Z][a-z]+)", r"\1_\2", value)
+            value = _re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", value)
+            return _re.sub(r"[^A-Za-z0-9]+", "_", value).strip("_").upper()
+
+        referenced = []
+        for rule in all_rules:
+            referenced.extend([rule.get("responsible_party"), *(rule.get("counterparties") or [])])
+        for reference in referenced:
+            if not isinstance(reference, str) or not reference.strip():
+                continue
+            canonical = _camel_to_snake(reference)
+            if not canonical or canonical in self.entity_types or not _re.fullmatch(r"[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*", canonical):
+                continue
+            self.entity_types[canonical] = {
+                "name": canonical,
+                "type": "REFERENCED_ENTITY",
+                "description": "Referenced by an extracted rule; no standalone entity definition was returned by agent_02.",
+                "key_attributes": [],
+                "examples": [],
+                "provenance": {"basis": "rule_reference", "source": "agent_03"},
+            }
+            print(f"   ✓ Added referenced-entity placeholder: {canonical}", flush=True)
+
         self.business_rules = all_rules
         print(f"   ✓ Extracted {len(all_rules)} business rules from nested structure", flush=True)
         print(f"      ({len([r for r in all_rules if r.get('entity_type') == 'entity'])} entity rules, {len([r for r in all_rules if r.get('entity_type') == 'relationship'])} relationship rules)", flush=True)

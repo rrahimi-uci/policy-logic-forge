@@ -436,6 +436,8 @@ class ReadinessRemediator:
                 checkpoint.put(key, result)
                 return result
 
+            api_workers = max(1, int(os.getenv("KG_REMEDIATION_LLM_CONCURRENCY", "4")))
+            workers = min(workers, api_workers)
             with ThreadPoolExecutor(max_workers=min(workers, max(1, len(rule_batches))), thread_name_prefix="kg-remediate-rule") as executor:
                 futures = [executor.submit(resolve_rule_batch, batch) for batch in rule_batches]
                 for future in as_completed(futures):
@@ -474,6 +476,8 @@ class ReadinessRemediator:
                 checkpoint.put(key, result)
                 return result
 
+            api_workers = max(1, int(os.getenv("KG_REMEDIATION_LLM_CONCURRENCY", "4")))
+            workers = min(workers, api_workers)
             with ThreadPoolExecutor(max_workers=min(workers, max(1, len(conflict_batches))), thread_name_prefix="kg-remediate-conflict") as executor:
                 futures = []
                 for batch in conflict_batches:

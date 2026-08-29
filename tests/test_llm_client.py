@@ -9,7 +9,7 @@ import pytest
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from utils.llm_client import LLMClient, create_llm_client  # noqa: E402
+from utils.llm_client import LLMClient, LLMCompletionError, create_llm_client  # noqa: E402
 from utils import llm_client as lc  # noqa: E402
 
 
@@ -134,3 +134,17 @@ class TestChatCompletionParams:
         # Constructing with no key must not raise (no OpenAI() built yet).
         client = create_llm_client(model="gpt-4o-mini")
         assert client._client is None
+
+    @allure.title("Provider failure metadata survives the wrapper")
+    def test_completion_error_preserves_original_status(self):
+        client, mock = self._client_with_mock("gpt-4o-mini")
+        provider_error = RuntimeError("connection reset by peer")
+        provider_error.status_code = 503
+        mock.chat.completions.create.side_effect = provider_error
+
+        with pytest.raises(LLMCompletionError) as caught:
+            client.chat_completion([{"role": "user", "content": "hi"}], max_tokens=8)
+
+        assert caught.value.status_code == 503
+        assert caught.value.error_type == "RuntimeError"
+        assert caught.value.__cause__ is provider_error

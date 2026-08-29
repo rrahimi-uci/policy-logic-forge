@@ -1,5 +1,6 @@
 from concurrent.futures import ThreadPoolExecutor
 import time
+import time
 
 from utils.adaptive_limiter import AdaptiveRequestLimiter
 
@@ -29,3 +30,18 @@ def test_adaptive_limit_increases_after_success_and_halves_on_throttle(tmp_path)
     snapshot = limiter.snapshot()
     assert snapshot["current_limit"] == 1
     assert snapshot["total_throttled"] == 1
+
+
+def test_acquire_reaps_lease_left_by_dead_worker(tmp_path):
+    limiter = AdaptiveRequestLimiter(
+        tmp_path / "limiter.sqlite3", initial_limit=1, maximum_limit=1, poll_seconds=0.01,
+    )
+    with limiter._connect() as connection:
+        connection.execute(
+            "INSERT INTO limiter_leases VALUES (?, ?, ?, ?)",
+            ("dead-worker", 999999999, time.time(), time.time() + 900),
+        )
+
+    lease = limiter.acquire(timeout=1)
+    assert lease.concurrency_limit == 1
+    limiter.release(lease, success=True)

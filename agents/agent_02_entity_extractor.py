@@ -234,13 +234,43 @@ class ComplianceEntityRelationshipAgent:
         """
         try:
             print(f"  → Calling {self.extraction_model} model for extraction...")
-            
-            response = self.client.chat_completion(
-                messages=[{"role": "user", "content": prompt}],
-                temperature=self.config.get_entity_extractor_temperature(),
-                max_tokens=self.config.get_entity_extractor_max_tokens(),
-                reasoning_effort=self.reasoning_effort
-            )
+
+            # The entity pass is a small number of high-value requests, so a
+            # transient provider reset must not abort the entire 1,185-page
+            # run.  Retry transport failures here (before JSON parsing) with a
+            # bounded exponential cooldown.  Parse/contract errors still fail
+            # immediately and remain visible to the caller.
+            attempts = max(1, int(os.getenv("KG_ENTITY_REQUEST_ATTEMPTS", "3")))
+            response = None
+            for attempt in range(1, attempts + 1):
+                try:
+                    response = self.client.chat_completion(
+                        messages=[{"role": "user", "content": prompt}],
+                        temperature=self.config.get_entity_extractor_temperature(),
+                        max_tokens=self.config.get_entity_extractor_max_tokens(),
+                        reasoning_effort=self.reasoning_effort
+                    )
+                    break
+                except Exception as exc:
+                    if attempt >= attempts:
+                        raise
+                    text = str(exc).casefold()
+                    transport = any(marker in text for marker in (
+                        "connection", "timeout", "timed out", "socket", "readerror",
+                    ))
+                    if not transport:
+                        raise
+                    base = max(1, int(os.getenv("KG_ENTITY_CONNECTION_BACKOFF_SECONDS", "10")))
+                    delay = min(60, base * (2 ** (attempt - 1)))
+                    print(
+                        f"  ⚠️ Entity extraction transport failure on attempt "
+                        f"{attempt}/{attempts}; retrying in {delay}s: {exc}",
+                        flush=True,
+                    )
+                    time.sleep(delay)
+
+            if response is None:
+                raise RuntimeError("Entity extraction returned no response")
             
             # Extract the response content
             content = response.choices[0].message.content

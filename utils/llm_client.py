@@ -19,6 +19,22 @@ from openai import OpenAI
 from utils.adaptive_limiter import AdaptiveRequestLimiter
 
 
+class LLMCompletionError(Exception):
+    """Preserve provider failure metadata across the pipeline boundary.
+
+    Agents intentionally catch a normal ``Exception`` so this remains
+    backwards-compatible, but retaining the original error/status lets retry
+    and backpressure policy distinguish transport failures from prompt or
+    validation failures instead of parsing a lossy string wrapper.
+    """
+
+    def __init__(self, message: str, *, original: BaseException) -> None:
+        super().__init__(message)
+        self.original = original
+        self.status_code = getattr(original, "status_code", None)
+        self.error_type = type(original).__name__
+
+
 def _build_keepalive_http_client(timeout):
     """Build an httpx client with TCP keep-alive enabled.
 
@@ -337,7 +353,10 @@ class LLMClient:
             # it before the caller's bounded batch retry constructs a fresh
             # transport; otherwise retries repeat the same dead socket.
             self._reset_client()
-            raise Exception(f"LLM completion failed: {str(e)}")
+            raise LLMCompletionError(
+                f"LLM completion failed: {str(e)}",
+                original=e,
+            ) from e
 
         if lease is not None and self._adaptive_limiter is not None:
             snapshot = self._adaptive_limiter.release(

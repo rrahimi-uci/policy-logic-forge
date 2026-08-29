@@ -974,13 +974,24 @@ class BusinessRulesExtractor:
         print(f"📡 Starting extraction (this may take several minutes)...", flush=True)
         print(f"   Progress will be shown as batches complete.\n", flush=True)
         
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            gate_size = max(1, int(os.getenv(
-                "KG_LLM_CONCURRENCY",
-                str(min(max_workers, 8)),
-            )))
+        gate_size = max(1, int(os.getenv(
+            "KG_LLM_CONCURRENCY",
+            str(min(max_workers, 8)),
+        )))
+        # Do not create dozens of workers that immediately block on the same
+        # semaphore.  Python's semaphore wake-up order is not FIFO; with 40
+        # workers and a four-request gate, later batches can starve for tens of
+        # minutes even though the provider is healthy.  Matching executor
+        # width to the gate keeps queue order bounded and makes batch latency
+        # reflect the actual API schedule.
+        executor_workers = min(max_workers, gate_size)
+        with ThreadPoolExecutor(max_workers=executor_workers) as executor:
             self._request_gate = threading.BoundedSemaphore(gate_size)
-            print(f"   ✓ API concurrency gate: {gate_size} in-flight requests", flush=True)
+            print(
+                f"   ✓ API concurrency gate: {gate_size} in-flight requests "
+                f"({executor_workers} workers)",
+                flush=True,
+            )
             # Submit all batch extraction tasks
             future_to_batch = {
                 executor.submit(self.extract_batch, prompt, batch_num): batch_num
@@ -1261,6 +1272,14 @@ class BusinessRulesExtractor:
             # the rule's name/description/conditions/consequences carry
             # enough signal for re-classification, and this keeps the call
             # cheap regardless of orphan count.
+            def _compact_value(value: Any, limit: int) -> str:
+                """Serialize structured rule fields without slicing mappings."""
+                if value is None:
+                    return ""
+                if not isinstance(value, str):
+                    value = json.dumps(value, ensure_ascii=False, sort_keys=True)
+                return value[:limit]
+
             orphan_payload = []
             for kind, bucket, _idx, rule in orphans:
                 orphan_payload.append({
@@ -1268,8 +1287,11 @@ class BusinessRulesExtractor:
                     "rule_name": rule.get("rule_name", ""),
                     "current_bucket": bucket,
                     "current_kind": kind,
-                    "description": (rule.get("description") or "")[:400],
-                    "conditions": (rule.get("conditions") or "")[:200],
+                    "description": _compact_value(rule.get("description"), 400),
+                    "conditions": _compact_value(
+                        rule.get("conditions", rule.get("condition_predicates")),
+                        200,
+                    ),
                     "entity_or_relationship_hint": rule.get("entity_or_relationship", ""),
                 })
 
