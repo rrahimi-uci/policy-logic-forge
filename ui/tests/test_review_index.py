@@ -22,7 +22,7 @@ def make_run(root: Path, name: str = "fixture-run") -> Path:
         ("agent_03-rules", "compliance_rules_with_entities.json"),
         ("agent_04-validation", "validation_report.json"),
         ("agent_05-rules-with-entities", "compliance_knowledge_graph.json"),
-        ("agent_06-optimized", "kg_readiness_report.json"),
+        ("agent_06-07-08-09-optimized", "kg_readiness_report.json"),
         ("agent_10-dag-generation", "dependency_dags.json"),
     ]:
         _write(run / directory / filename, {})
@@ -53,11 +53,11 @@ def make_run(root: Path, name: str = "fixture-run") -> Path:
         "related_rules": [],
     }
     optimized = {"metadata": {"model_used": "gpt-5.6-luna", "reasoning_effort": "high"}, "business_rules": [rule], "relationships": {"RULE_LINK": {"source_entity": "FIRST_PARTY", "target_entity": "INFORMATION_TYPE", "definition": "links an operator to information", "cardinality": "one-to-many", "examples": ["operator links data"], "business_rules": ["retain the association"]}}, "dependency_details": {"dependencies": [{"source_rule_id": "r1", "target_rule_id": "r2", "dependency_type": "sequential", "confidence": 70, "structurally_supported": True, "rationale": "before", "impact": "ordering"}], "conflicts": [{"entity": "EMAIL", "rule_ids": ["r1", "r2"], "status": "unresolved", "reasoning": "overlap", "resolution": ""}]}, "corpus_manifest": {"corpus_sha256": "corpus"}}
-    _write(run / "agent_06-optimized" / "optimized_compliance_knowledge_graph.json", optimized)
+    _write(run / "agent_06-07-08-09-optimized" / "optimized_compliance_knowledge_graph.json", optimized)
     _write(run / "agent_01-organized-documents" / "site" / "privacy.txt", "not json")
     (run / "agent_01-organized-documents" / "site" / "privacy.txt").write_text("We collect your email.", encoding="utf-8")
     (run / "agent_03-rules" / "batch_results.jsonl").write_text('{"rule_id":"r1"}\n', encoding="utf-8")
-    (run / "agent_06-optimized" / "agent_07_rule_checkpoint.jsonl").write_text('{"rule_id":"r1"}\n', encoding="utf-8")
+    (run / "agent_06-07-08-09-optimized" / "agent_07_rule_checkpoint.jsonl").write_text('{"rule_id":"r1"}\n', encoding="utf-8")
     _write(run / "agent_04-validation" / "validation_report.json", {"failures": [{"rule_id": "r1", "check": "completeness", "issue": "missing field", "recommendation": "fix"}], "warnings": [{"check": "scope", "issue": "scope warning"}]})
     _write(run / "agent_10-dag-generation" / "dependency_dags.json", {"dags": [{"dag_id": "dag_1", "rule_ids": ["r1", "r2"], "edges": [{"source": "r1", "target": "r2"}], "is_acyclic": True}]})
     return run
@@ -96,6 +96,21 @@ def test_review_index_uses_the_same_canonical_agent_sequence_as_the_pipeline() -
     assert [stage.get("id") for stage in STAGES] == [f"agent_{number:02d}" for number in range(1, 12)]
 
 
+def test_index_reads_legacy_shared_optimized_directory(tmp_path: Path) -> None:
+    """Retained pre-rename bundles remain readable after new runs switch names."""
+    run = make_run(tmp_path)
+    canonical = run / "agent_06-07-08-09-optimized"
+    legacy = run / "agent_06-optimized"
+    canonical.rename(legacy)
+
+    index = ReviewIndex.from_directory(run)
+
+    optimized_stage = next(item for item in index.stages if item["stage_id"] == "agent_06")
+    assert optimized_stage["directory"] == "agent_06-optimized"
+    assert index.rules[0]["artifact_path"] == "agent_06-optimized/optimized_compliance_knowledge_graph.json"
+    assert index.relationships[0]["artifact_path"] == "agent_06-optimized/optimized_compliance_knowledge_graph.json"
+
+
 def test_index_treats_an_explicit_null_status_field_as_unknown_not_none(tmp_path: Path) -> None:
     """Real pipeline output can carry an explicit `"risk_level": null` for a
     rule the extraction agent left unclassified (confirmed against the real
@@ -106,7 +121,7 @@ def test_index_treats_an_explicit_null_status_field_as_unknown_not_none(tmp_path
     calls `.replaceAll()` on them) with a full white-screen render failure.
     """
     run = make_run(tmp_path)
-    graph_path = run / "agent_06-optimized" / "optimized_compliance_knowledge_graph.json"
+    graph_path = run / "agent_06-07-08-09-optimized" / "optimized_compliance_knowledge_graph.json"
     graph = json.loads(graph_path.read_text())
     rule = graph["business_rules"][0]
     rule["risk_level"] = None

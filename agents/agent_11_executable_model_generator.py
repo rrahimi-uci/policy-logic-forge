@@ -79,7 +79,7 @@ def generate(input_graph: Path, dags_file: Path, output_dir: Path) -> dict:
     (output_dir / "compliance_workflows.bpmn").write_bytes(bpmn)
     (output_dir / "compliance_reviews.cmmn").write_bytes(cmmn)
     (output_dir / "semantic_vocabulary_profile.json").write_text(json.dumps(sbvr_profile, indent=2) + "\n", encoding="utf-8")
-    # input_graph is .../<batch>/agent_06-optimized/optimized_compliance_knowledge_graph.json;
+    # input_graph is .../<batch>/agent_06-07-08-09-optimized/optimized_compliance_knowledge_graph.json;
     # its batch directory is a more meaningful IR document_id than the
     # (often batch-agnostic) output directory name.
     document_id = input_graph.resolve().parents[1].name or "lexec-ir"

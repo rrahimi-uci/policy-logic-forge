@@ -106,10 +106,11 @@ environment variables exported by `cli/extract.py` (for example,
 
 Output lands under `pipeline-output/<batch-name>/`:
 
-- `agent_06-optimized/optimized_compliance_knowledge_graph.json` — the final,
+- `agent_06-07-08-09-optimized/optimized_compliance_knowledge_graph.json` — the final,
   grounding-certified knowledge graph.
-- `agent_06-optimized/kg_readiness_report.{json,md}` and
-  `kg_grounding_report.{json,md}` — the four-invariant self-report and the
+- `agent_06-07-08-09-optimized/kg_readiness_report.{json,md}` and
+  `agent_06-07-08-09-optimized/kg_grounding_report.{json,md}` — the
+  four-invariant self-report and the
   independent claim-level certification.
 - `agent_10-dag-generation/dependency_dags.json` — every rule partitioned into
   one or more dependency DAGs, with an explicit, checked coverage guarantee.
@@ -136,10 +137,12 @@ or `--agent agent_NN` when selecting by identifier:
 | 11/11 | `agent_11` | DMN/BPMN/CMMN model generation |
 
 Stages 07–09 intentionally write reports into the shared
-`agent_06-optimized/` directory because they operate on the same optimized
+`agent_06-07-08-09-optimized/` directory because they operate on the same optimized
 graph. Their stage IDs and checkpoints remain distinct. The deprecated
 `--step` option is retained only for older scripts; its fractional aliases do
-not define the current pipeline numbering.
+not define the current pipeline numbering. Readers also accept the former
+`agent_06-optimized/` name for retained historical bundles; new runs always
+write the descriptive shared-directory name above.
 
 Run a single stage with `--stage 9` or a single agent with `--agent agent_09`
 (for example, to re-run grounding certification). `--skip-optimize` skips
