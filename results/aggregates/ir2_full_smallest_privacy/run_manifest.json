@@ -14,7 +14,7 @@
     "graph_count": 1,
     "graphs": [
       {
-        "path": "pipeline-output/full-smallest-privacy-20260825/agent_05_optimized/optimized_compliance_knowledge_graph.json",
+        "path": "pipeline-output/full-smallest-privacy-20260825/agent_06-optimized/optimized_compliance_knowledge_graph.json",
         "bytes": 134838,
         "sha256": "bbfb2c493780dab778f12f37eac40ce6d8f0e2799045571dfb9bd6357339cfb7"
       }

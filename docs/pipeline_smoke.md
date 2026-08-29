@@ -36,7 +36,9 @@ KG_ENTITY_SAMPLE_CHARS=800 \
 
 ## Observed result
 
-The run completed stages 1, 2, 3, 3.5, 4, and 6 successfully: 12 chunks,
-17 entity types, 23 relationships, 5 source-verified rules, zero validation
-failures, and 5/5 DAG coverage with zero cycles. The retained manifest records
-the input/output hashes and explicitly labels the run as a smoke test.
+The run completed canonical stages `01/11`, `02/11`, `03/11`, `04/11`,
+`05/11`, and `10/11` successfully (Agent 06–09 were intentionally skipped):
+12 chunks, 17 entity types, 23 relationships, 5 source-verified rules, zero
+validation failures, and 5/5 DAG coverage with zero cycles. The retained
+manifest records the input/output hashes and explicitly labels the run as a
+smoke test.

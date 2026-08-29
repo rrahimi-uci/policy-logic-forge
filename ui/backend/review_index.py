@@ -19,6 +19,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
+from utils.agent_names import stage_number
+
 
 STAGES: tuple[dict[str, Any], ...] = (
     {"id": "agent_01", "name": "Document organizer", "directory": "agent_01-organized-documents", "artifacts": ["_processing_results.json"]},
@@ -255,7 +257,7 @@ class ReviewIndex:
         _write_json(destination / "run_summary.json", self.run_summary)
         _write_json(destination / "stage_index.json", self.stages)
         _write_json(destination / "run_manifest.json", {"run_id": self.run_id, "batch_name": self.run_id, "source_dir": self.run_summary["source_dir"], "status": self.run_summary["status"], "generated_at": self.run_summary["generated_at"], "executed_agents": [stage["stage_id"] for stage in self.stages if stage["status"] != "missing"], "stages": self.stages, "corpus_sha256": self.run_summary.get("corpus_sha256"), "optimized_graph_sha256": self.run_summary.get("optimized_graph_sha256"), "model": self.run_summary.get("model"), "reasoning_effort": self.run_summary.get("reasoning_effort"), "metadata": self.run_summary.get("metadata", {})})
-        _write_json(destination / "stage_status.json", [{key: stage.get(key) for key in ("stage_id", "name", "status", "started_at", "finished_at", "input_counts", "output_counts", "warning_count", "failure_count", "checkpoint_records", "primary_artifacts", "artifacts")} for stage in self.stages])
+        _write_json(destination / "stage_status.json", [{key: stage.get(key) for key in ("stage_id", "stage_number", "name", "status", "started_at", "finished_at", "input_counts", "output_counts", "warning_count", "failure_count", "checkpoint_records", "primary_artifacts", "artifacts")} for stage in self.stages])
         _write_json(destination / "diagnostics.json", self.diagnostics)
         _write_json(destination / "comparison_keys.json", self.comparison_keys)
         _write_jsonl(destination / "rule_index.jsonl", self.rules)
@@ -302,7 +304,7 @@ def _build_stages(source_dir: Path, diagnostics: list[dict[str, Any]]) -> list[d
                 mtimes.append((directory / Path(artifact["path"]).name).stat().st_mtime)
             except OSError:
                 continue
-        stages.append({"stage_id": spec["id"], "name": spec["name"], "directory": spec["directory"], "status": status, "embedded": bool(spec.get("embedded")), "artifacts": artifacts, "checkpoint_records": checkpoint_records, "started_at": datetime.fromtimestamp(min(mtimes), timezone.utc).isoformat() if mtimes else None, "finished_at": datetime.fromtimestamp(max(mtimes), timezone.utc).isoformat() if mtimes else None, "input_counts": {}, "output_counts": {"artifact_files": len(artifacts), "checkpoint_records": checkpoint_records}, "warning_count": 0, "failure_count": 0, "primary_artifacts": [artifact["path"] for artifact in artifacts]})
+        stages.append({"stage_id": spec["id"], "stage_number": stage_number(spec["id"]), "name": spec["name"], "directory": spec["directory"], "status": status, "embedded": bool(spec.get("embedded")), "artifacts": artifacts, "checkpoint_records": checkpoint_records, "started_at": datetime.fromtimestamp(min(mtimes), timezone.utc).isoformat() if mtimes else None, "finished_at": datetime.fromtimestamp(max(mtimes), timezone.utc).isoformat() if mtimes else None, "input_counts": {}, "output_counts": {"artifact_files": len(artifacts), "checkpoint_records": checkpoint_records}, "warning_count": 0, "failure_count": 0, "primary_artifacts": [artifact["path"] for artifact in artifacts]})
     return stages
 
 

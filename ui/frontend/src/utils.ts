@@ -48,6 +48,19 @@ export function stageProgress(stages: Stage[]): number {
   return percent(stages.filter((stage) => stage.status.startsWith("completed")).length, stages.length);
 }
 
+export const PIPELINE_STAGE_COUNT = 11;
+
+/** Return the canonical two-digit stage number encoded by an agent id. */
+export function stageNumber(stageId: string): string {
+  const match = /^agent_(\d+)$/.exec(stageId);
+  return match ? match[1].padStart(2, "0") : "??";
+}
+
+/** Keep stage labels aligned with the backend's agent_NN identifiers. */
+export function stageLabel(stageId: string, name: string): string {
+  return `Agent ${stageNumber(stageId)}/${PIPELINE_STAGE_COUNT} · ${name}`;
+}
+
 export function queueRows(rows: RuleRow[], queue: string): RuleRow[] {
   if (queue === "all") return rows;
   if (queue === "requires_review") return rows.filter((row) => row.requires_review);

@@ -84,6 +84,7 @@ export interface RunSummary {
 
 export interface Stage {
   stage_id: string;
+  stage_number?: number;
   name: string;
   directory: string;
   status: string;

@@ -1,10 +1,9 @@
-"""Canonical identifiers for the eleven agents in this repository.
+"""Canonical identifiers and numbering for the eleven pipeline agents.
 
-The numeric stage labels used by the original pipeline included fractional
-stages (3.5, 5.5, 5.6, and 5.7).  The repository now uses one stable,
-zero-padded identifier everywhere instead: ``agent_01`` through ``agent_11``.
-Keeping the mapping here prevents subprocess dispatch, output directories,
-checkpoints, and documentation from drifting apart again.
+The public pipeline contract is one sequence: Stage 01/11 is ``agent_01``
+and Stage 11/11 is ``agent_11``.  Keeping the sequence, display labels,
+output directories, and the legacy CLI aliases in one module prevents the
+orchestrator, review UI, checkpoints, and documentation from drifting apart.
 """
 
 from __future__ import annotations
@@ -37,6 +36,18 @@ PIPELINE_AGENTS: tuple[AgentSpec, ...] = (
 
 AGENT_BY_ID = {spec.identifier: spec for spec in PIPELINE_AGENTS}
 AGENT_IDS = tuple(spec.identifier for spec in PIPELINE_AGENTS)
+PIPELINE_STAGE_COUNT = len(PIPELINE_AGENTS)
+CANONICAL_STAGE_NUMBERS = tuple(str(index) for index in range(1, PIPELINE_STAGE_COUNT + 1))
+
+# These aliases are intentionally isolated from the canonical numbering.  A
+# prior release exposed a ten-stage selector with fractional stages; callers
+# using that interface must keep receiving the same agent, but new commands
+# should use ``--stage 1``–``--stage 11`` or ``--agent agent_01``–``agent_11``.
+LEGACY_STEP_ALIASES = {
+    "1": "agent_01", "2": "agent_02", "3": "agent_03", "3.5": "agent_04",
+    "4": "agent_05", "5": "agent_06", "5.5": "agent_07", "5.6": "agent_08",
+    "5.7": "agent_09", "6": "agent_10",
+}
 
 # Stages 7–9 operate in place on agent_06's optimized graph.  The explicit
 # aliases document that storage contract while keeping every directory name
@@ -64,6 +75,41 @@ def agent_spec(identifier: str) -> AgentSpec:
     except KeyError as exc:
         valid = ", ".join(AGENT_IDS)
         raise ValueError(f"Unknown agent {identifier!r}; expected one of: {valid}") from exc
+
+
+def agent_id_for_stage(stage: str | int) -> str:
+    """Resolve a canonical integer stage number to its agent identifier.
+
+    Stage numbers are one-based and intentionally map directly to the
+    zero-padded agent identifier (for example, ``7`` → ``agent_07``).
+    """
+
+    value = str(stage).strip()
+    try:
+        number = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            f"Invalid stage {stage!r}; expected an integer from 1 to {PIPELINE_STAGE_COUNT}"
+        ) from exc
+    if not 1 <= number <= PIPELINE_STAGE_COUNT:
+        raise ValueError(
+            f"Invalid stage {stage!r}; expected an integer from 1 to {PIPELINE_STAGE_COUNT}"
+        )
+    return AGENT_IDS[number - 1]
+
+
+def stage_number(identifier: str) -> int:
+    """Return the one-based canonical stage number for an agent identifier."""
+
+    agent_spec(identifier)
+    return int(identifier.rsplit("_", 1)[1])
+
+
+def stage_label(identifier: str) -> str:
+    """Return the user-facing label shared by CLI logs and documentation."""
+
+    spec = agent_spec(identifier)
+    return f"Stage {stage_number(identifier):02d}/{PIPELINE_STAGE_COUNT} · {identifier} · {spec.role}"
 
 
 def output_dir_name(identifier: str) -> str:
