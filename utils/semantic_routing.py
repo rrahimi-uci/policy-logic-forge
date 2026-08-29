@@ -9,6 +9,7 @@ review task.
 
 from __future__ import annotations
 
+import re
 from typing import Any, Iterable, Mapping
 
 
@@ -95,10 +96,28 @@ def classify_review_route(issues: Iterable[Mapping[str, Any]]) -> dict[str, Any]
     findings = [dict(item) for item in issues]
     if not findings:
         return {"route": "none", "human_review_required": False, "reasons": []}
-    text = " ".join(str(item.get("reason", "")).casefold() for item in findings)
-    human = any(item.get("human_review_required") is True for item in findings) or any(
-        marker in text for marker in ("contradicted", "source conflict", "legal ambiguity", "policy owner decision")
-    )
+    def is_material_grounding_conflict(issue: Mapping[str, Any]) -> bool:
+        """Detect a positive grounding contradiction without false positives.
+
+        Agent 09 reports grounding counts in a compact sentence such as
+        ``"0 contradicted and 3 insufficient claims"``.  The old substring
+        check treated the word ``contradicted`` as a human-judgment signal even
+        when its count was zero, routing every ordinary evidence gap into the
+        human queue.  Parse that structured count first; retain the broader
+        marker check for free-form findings (for example, a source conflict
+        raised by Agent 06/07).
+        """
+        if issue.get("human_review_required") is True:
+            return True
+        if str(issue.get("requirement", "")) == "grounding":
+            reason = str(issue.get("reason", "")).casefold()
+            match = re.search(r"(?:^|\s)(\d+)\s+contradicted\b", reason)
+            if match:
+                return int(match.group(1)) > 0
+        reason = str(issue.get("reason", "")).casefold()
+        return any(marker in reason for marker in ("source conflict", "legal ambiguity", "policy owner decision"))
+
+    human = any(is_material_grounding_conflict(item) for item in findings)
     requirements = {str(item.get("requirement", "")) for item in findings}
     machine_only = requirements <= {"contract", "execution", "naming", "test_vectors"} and not any(
         item.get("evidence_limited") is True for item in findings

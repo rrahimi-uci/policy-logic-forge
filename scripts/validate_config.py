@@ -67,6 +67,7 @@ def validate_config(config: Mapping[str, Any], *, source: str = "config") -> lis
         "rules_extractor.batch_size",
         "rules_extractor.target_words_per_batch",
         "openai.rate_limiting.timeout",
+        "pipeline.performance.global_llm_lease_seconds",
     ):
         _positive_number(config, path, errors)
 

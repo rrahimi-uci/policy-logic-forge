@@ -90,6 +90,11 @@ def generate(input_graph: Path, dags_file: Path, output_dir: Path) -> dict:
         "source_dags": str(dags_file),
         "rule_count": len(rule_ids),
         "review_required_rules": sum(bool(rule.get("requires_review", True)) for rule in graph.get("business_rules", [])),
+        "review_required_rate": round(
+            sum(bool(rule.get("requires_review", True)) for rule in graph.get("business_rules", []))
+            / max(1, len(rule_ids)) * 100,
+            2,
+        ),
         "human_review_required_rules": sum(
             bool(route.get("human_review_required"))
             for rule in graph.get("business_rules", [])
@@ -97,6 +102,24 @@ def generate(input_graph: Path, dags_file: Path, output_dir: Path) -> dict:
             for route in [rule.get("review_route")]
             if isinstance(route, dict)
         ),
+        "human_review_rate": round(
+            sum(
+                bool(route.get("human_review_required"))
+                for rule in graph.get("business_rules", [])
+                if isinstance(rule, dict)
+                for route in [rule.get("review_route")]
+                if isinstance(route, dict)
+            )
+            / max(1, len(rule_ids)) * 100,
+            2,
+        ),
+        "review_route_counts": {
+            route: sum(
+                ((rule.get("review_route") or {}).get("route") or "none") == route
+                for rule in graph.get("business_rules", [])
+            )
+            for route in ("none", "machine_repair", "case_management", "human_review")
+        },
         "bpmn_rule_count": len(eligible_bpmn_ids),
         "bpmn_omitted_rule_count": len(rule_ids) - len(eligible_bpmn_ids),
         "bpmn_omissions": {
@@ -139,7 +162,12 @@ def main() -> int:
         f"{report['cmmn_case_count']} review cases in {output}",
         flush=True,
     )
-    print(f"Review-required rules retained: {report['review_required_rules']}", flush=True)
+    print(
+        f"Quality-hold rules retained: {report['review_required_rules']} "
+        f"({report['review_required_rate']}%); human-review queue: "
+        f"{report['human_review_required_rules']} ({report['human_review_rate']}%)",
+        flush=True,
+    )
     return 0
 
 

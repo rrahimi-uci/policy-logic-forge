@@ -63,6 +63,23 @@ IGNORED_FIELD_REASONS = {
     "grounding": "AUDIT_STATUS_NOT_EXECUTABLE", "requires_review": "AUDIT_STATUS_NOT_EXECUTABLE", "review_reason": "AUDIT_STATUS_NOT_EXECUTABLE",
     "reference_verified": "AUDIT_STATUS_NOT_EXECUTABLE", "reference_verification_note": "AUDIT_STATUS_NOT_EXECUTABLE",
     "contract_issues": "AUDIT_STATUS_NOT_EXECUTABLE", "readiness": "AUDIT_STATUS_NOT_EXECUTABLE",
+    # Operational routing and explicit BPMN process semantics are consumed by
+    # the DMN/BPMN/CMMN exporters, not by the compact LExec decision IR. Keep
+    # them visible as audit metadata instead of rejecting every otherwise
+    # lowerable rule as an unclassified field.
+    "review_route": "AUDIT_STATUS_NOT_EXECUTABLE", "workflow_semantics": "AUDIT_STATUS_NOT_EXECUTABLE",
+    # Legacy/derived scope summaries are retained for provenance and review,
+    # but the canonical v2 applicability_scope above is the only scope shape
+    # lowered into an executable predicate.
+    "applicability_scope_legacy": "AUDIT_STATUS_NOT_EXECUTABLE",
+    "applicability_scope_summary": "AUDIT_STATUS_NOT_EXECUTABLE",
+    "applicability_scope_contract": "AUDIT_STATUS_NOT_EXECUTABLE",
+    "applicability_scope_detail": "AUDIT_STATUS_NOT_EXECUTABLE",
+    "rule_id_alias": "AUDIT_STATUS_NOT_EXECUTABLE",
+    # A singular legacy prose condition is superseded by
+    # condition_predicates/condition_logic, just like the plural legacy
+    # conditions field classified above.
+    "condition": "NON_EXECUTABLE_METADATA",
 }
 HEX64 = re.compile(r"^[a-f0-9]{64}$")
 IDENTIFIER = re.compile(r"^[a-z][a-z0-9_]*$")

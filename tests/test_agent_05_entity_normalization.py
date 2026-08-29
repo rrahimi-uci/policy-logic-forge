@@ -136,6 +136,19 @@ class TestEntityNameNormalization:
         })
         assert enricher.business_rules[0]["entity_or_relationship"] == "FINANCIAL_INSTITUTION"
 
+    def test_unknown_canonical_party_reference_gets_provenance_placeholder(self, tmp_path):
+        rule = _make_rule("R-REF")
+        rule["responsible_party"] = "LENDER"
+        rule["counterparties"] = ["DU_RISK_ASSESSMENT"]
+        enricher = _load_enricher(tmp_path, {
+            "Financial Institution": {"business_rules": [rule]},
+        })
+
+        assert "DU_RISK_ASSESSMENT" in enricher.entity_types
+        placeholder = enricher.entity_types["DU_RISK_ASSESSMENT"]
+        assert placeholder["type"] == "REFERENCED_ENTITY"
+        assert placeholder["provenance"]["basis"] == "rule_reference"
+
     def test_trailing_whitespace_stripped(self, tmp_path):
         """Leading/trailing whitespace is stripped before comparison."""
         enricher = _load_enricher(tmp_path, {

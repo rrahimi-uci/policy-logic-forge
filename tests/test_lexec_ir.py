@@ -118,6 +118,23 @@ def test_non_executable_annotations_are_accounted_for_not_dropped():
     assert validate_ir(ir) == []
 
 
+def test_exporter_operational_metadata_is_accounted_for_as_audit_fields():
+    rule = _rule(
+        review_route={"route": "case_management"},
+        workflow_semantics={"kind": "prescriptive_process"},
+        applicability_scope_legacy={"legacy": "mortgage"},
+        rule_id_alias="legacy-r-active-pii",
+    )
+    ir = lower_graph([rule], source_sha256=SOURCE_HASH)
+    assert ir["rules"]
+    ignored = {entry["field"]: entry["reason"] for entry in ir["ignored_fields"]}
+    assert ignored["review_route"] == "AUDIT_STATUS_NOT_EXECUTABLE"
+    assert ignored["workflow_semantics"] == "AUDIT_STATUS_NOT_EXECUTABLE"
+    assert ignored["applicability_scope_legacy"] == "AUDIT_STATUS_NOT_EXECUTABLE"
+    assert ignored["rule_id_alias"] == "AUDIT_STATUS_NOT_EXECUTABLE"
+    assert validate_ir(ir) == []
+
+
 def test_invalid_ir_cross_reference_is_detected():
     ir = lower_graph([_rule()], source_sha256=SOURCE_HASH)
     broken = deepcopy(ir)

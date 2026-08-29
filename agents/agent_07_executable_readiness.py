@@ -307,6 +307,14 @@ LEGACY_VALUE_TYPES = {
     # Models occasionally use the prompt's descriptive ``free_text`` label
     # where the v2 contract requires the canonical ``string`` value_type.
     "free_text": "string",
+    # ``text`` is a common model synonym for a free-form string in exception
+    # predicates.  It carries no additional semantics and is safe to map to
+    # the v2 contract's canonical string value type.
+    "text": "string",
+    # A membership predicate over a declared enum is represented by the
+    # contract's list value type; ``enum_reference`` is an extraction-only
+    # label for that same literal set.
+    "enum_reference": "list",
 }
 # Deliberately NOT normalised: outcome value_types "formula"/"expression"
 # (e.g. "min(0.10 * new_refinance_loan_balance, 15000)") and "object" (a
@@ -331,6 +339,19 @@ LEGACY_OPERATORS = {
     "contains_any": "in",
     "IN": "in",
     "NOT_IN": "not_in",
+    # ``excludes`` is the natural-language spelling emitted for a string
+    # exclusion predicate.  It has the same closed-world meaning as the
+    # contract's ``not_in`` operator and is safe to canonicalize.
+    "excludes": "not_in",
+}
+
+LEGACY_VARIABLE_ROLES = {
+    # Exception-only roles are descriptive extraction labels, not separate
+    # runtime types.  Their values still participate as ordinary inputs or
+    # outputs in the v2 rule contract.
+    "exception_trigger": "input",
+    "exception_input": "input",
+    "exception_output": "output",
 }
 
 
@@ -445,6 +466,39 @@ def _normalise_value_type(value: Any) -> Any:
 
 def _normalise_operator(value: Any) -> Any:
     return LEGACY_OPERATORS.get(str(value), value)
+
+
+def _normalise_variable_role(value: Any) -> Any:
+    return LEGACY_VARIABLE_ROLES.get(str(value), value)
+
+
+def _compact_identifier(value: Any) -> str:
+    """Compare field references while ignoring separators/case.
+
+    This is intentionally used only to reconcile a reference with a unique
+    declared variable in the *same* rule (for example ``he loc_...`` versus
+    ``he_loc_...``), never to invent a new variable or map an arbitrary name.
+    """
+    return re.sub(r"[^a-z0-9]+", "", str(value or "").casefold())
+
+
+def _declared_identifier_aliases(variables: list[Any]) -> dict[str, str]:
+    aliases: dict[str, str] = {}
+    collisions: set[str] = set()
+    for variable in variables:
+        if not isinstance(variable, Mapping):
+            continue
+        name = str(variable.get("name", "")).strip()
+        compact = _compact_identifier(name)
+        if not name or not compact:
+            continue
+        if compact in aliases and aliases[compact] != name:
+            collisions.add(compact)
+        else:
+            aliases[compact] = name
+    for compact in collisions:
+        aliases.pop(compact, None)
+    return aliases
 
 
 def _evidence_pointer(value: Any) -> dict[str, str] | None:
@@ -609,6 +663,15 @@ def _normalise_rule_contract(rule: dict[str, Any]) -> dict[str, Any]:
             variable["type"] = "date_time"
         if variable.get("type") == "string":
             variable["free_text"] = True
+        variable["role"] = _normalise_variable_role(variable.get("role"))
+
+    declared_aliases = _declared_identifier_aliases(variables)
+
+    def normalise_declared_reference(value: Any) -> Any:
+        if not isinstance(value, str):
+            return value
+        declared = declared_aliases.get(_compact_identifier(value))
+        return declared if declared is not None else value
 
     for field in ("condition_predicates", "outcomes", "exceptions"):
         values = rule.get(field)
@@ -620,6 +683,7 @@ def _normalise_rule_contract(rule: dict[str, Any]) -> dict[str, Any]:
             if field != "outcomes":
                 item["operator"] = _normalise_operator(item.get("operator"))
             item["value_type"] = _normalise_value_type(item.get("value_type"))
+            item["variable"] = normalise_declared_reference(item.get("variable"))
             if item.get("value_type") == "boolean" and isinstance(item.get("value"), str):
                 lowered = item["value"].strip().lower()
                 if lowered in {"true", "false"}:
@@ -666,6 +730,13 @@ def _normalise_rule_contract(rule: dict[str, Any]) -> dict[str, Any]:
             variable["role"] = "output"
         outcome["operator"] = "="
 
+        # A literal list is a list regardless of the model's stale scalar
+        # label.  Preserve the values and make the contract type truthful;
+        # downstream lowerers can still refuse unsupported list-valued outputs
+        # explicitly rather than failing schema validation on a type lie.
+        if isinstance(outcome.get("value"), list) and outcome.get("value_type") == "number":
+            outcome["value_type"] = "list"
+
     predicates = rule.get("condition_predicates")
     if not isinstance(predicates, list):
         predicates = []
@@ -688,6 +759,7 @@ def _normalise_rule_contract(rule: dict[str, Any]) -> dict[str, Any]:
             predicate["predicate_id"] = predicate_id
             predicate["operator"] = _normalise_operator(predicate.get("operator"))
             predicate["value_type"] = _normalise_value_type(predicate.get("value_type"))
+            predicate["variable"] = normalise_declared_reference(predicate.get("variable"))
             predicates.append(predicate)
             predicate_by_id[predicate_id] = predicate
             return {"predicate_ref": predicate_id}
@@ -752,6 +824,7 @@ def _normalise_rule_contract(rule: dict[str, Any]) -> dict[str, Any]:
                 item.setdefault("predicate_id", f"{prefix}_{len(output) + 1}")
                 item["operator"] = _normalise_operator(item.get("operator"))
                 item["value_type"] = _normalise_value_type(item.get("value_type"))
+                item["variable"] = normalise_declared_reference(item.get("variable"))
                 if item.get("value_type") == "boolean" and isinstance(item.get("value"), str):
                     lowered = item["value"].strip().lower()
                     if lowered in {"true", "false"}:
@@ -775,11 +848,28 @@ def _normalise_rule_contract(rule: dict[str, Any]) -> dict[str, Any]:
                 item.setdefault("predicate_id", str(exception.get("exception_id") or f"ex{index + 1}"))
                 item["operator"] = _normalise_operator(item.get("operator"))
                 item["value_type"] = _normalise_value_type(item.get("value_type"))
+                item["variable"] = normalise_declared_reference(item.get("variable"))
                 flattened.append(item)
                 continue
             prefix = str(exception.get("exception_id") or f"ex{index + 1}")
             flatten_logic(exception.get("logic", exception), prefix, flattened)
         rule["exceptions"] = flattened
+
+    # Flattening nested exception logic can repeat the parent predicate ID
+    # (e.g. e1, e1, ex1_3).  IDs are only references, so suffix duplicates in
+    # encounter order while retaining every predicate and its semantics.
+    seen_exception_ids: set[str] = set()
+    for index, exception in enumerate(rule.get("exceptions", []) or []):
+        if not isinstance(exception, dict):
+            continue
+        base_id = str(exception.get("predicate_id") or f"ex{index + 1}").strip() or f"ex{index + 1}"
+        predicate_id = base_id
+        suffix = 2
+        while predicate_id in seen_exception_ids:
+            predicate_id = f"{base_id}_copy_{suffix}"
+            suffix += 1
+        exception["predicate_id"] = predicate_id
+        seen_exception_ids.add(predicate_id)
 
     variable_by_name = {
         str(variable.get("name", "")).strip().lower(): variable
@@ -823,7 +913,7 @@ def _normalise_rule_contract(rule: dict[str, Any]) -> dict[str, Any]:
         basis = str(vector.get("vector_basis", ""))
         if basis.startswith("source_attested"):
             vector["vector_basis"] = "source_attested"
-        elif basis.startswith("derived"):
+        elif basis.startswith("derived") or basis == "source_derived":
             vector["vector_basis"] = "derived_from_source"
 
     evidence = rule.setdefault("field_evidence", {})
@@ -843,7 +933,300 @@ def _normalise_rule_contract(rule: dict[str, Any]) -> dict[str, Any]:
                 continue
             pointers = exception_pointers if field_path == "exceptions" and exception_pointers else ([source_pointer] if source_pointer else [])
             evidence[field_path] = pointers
+    _complete_predicate_value_types(rule)
     return rule
+
+
+def _is_unusable_empty_rule(rule: Mapping[str, Any]) -> bool:
+    """Identify a phantom extraction record with no source or executable data.
+
+    A rule ID alone is not evidence.  Dropping this specific empty shape keeps
+    a malformed placeholder from poisoning schema/readiness statistics while
+    leaving every source-backed rule (including incomplete ones) reviewable.
+    """
+    source = rule.get("source_reference")
+    has_source = isinstance(source, Mapping) and any(str(source.get(k, "")).strip() for k in ("chunk_path", "section_id", "source_text"))
+    return (
+        not has_source
+        and not isinstance(source, list)
+        and not rule.get("variables")
+        and not rule.get("condition_predicates")
+        and not rule.get("outcomes")
+        and not rule.get("test_vectors")
+        and not (isinstance(rule.get("execution"), Mapping) and (rule["execution"].get("targets") or []))
+    )
+
+
+def _is_deferred_contract_issue(issue: Mapping[str, Any], rule: Mapping[str, Any]) -> bool:
+    """Return whether a contract finding is a known downstream capability gap.
+
+    These findings remain attached to the rule and therefore continue to set
+    ``requires_review``.  They are not *pipeline* invariant failures because
+    the source-backed rule can still proceed through remediation/export with a
+    visible lowering refusal (computed formulas/objects, provider-specific
+    predicates, and field-evidence completion).  Unknown structural errors do
+    not receive this exception.
+    """
+    code = str(issue.get("code", ""))
+    if code == "missing_field_evidence":
+        return True
+    if code == "invalid_outcome_value_type":
+        path = str(issue.get("path", ""))
+        try:
+            index = int(path.split("[")[1].split("]")[0])
+            value_type = (rule.get("outcomes") or [])[index].get("value_type")
+        except (IndexError, TypeError, ValueError, AttributeError):
+            value_type = None
+        return value_type in {"formula", "expression", "object", "variable_expression", "conditional_map"}
+    if code == "invalid_variable_type":
+        path = str(issue.get("path", ""))
+        try:
+            index = int(path.split("[")[1].split("]")[0])
+            value_type = (rule.get("variables") or [])[index].get("type")
+        except (IndexError, TypeError, ValueError, AttributeError):
+            value_type = None
+        return value_type in {"formula", "expression", "object", "variable_expression", "conditional_map"}
+    if code == "invalid_predicate_value_type":
+        path = str(issue.get("path", ""))
+        try:
+            index = int(path.split("[")[1].split("]")[0])
+            value_type = (rule.get("condition_predicates") or [])[index].get("value_type")
+        except (IndexError, TypeError, ValueError, AttributeError):
+            value_type = None
+        return value_type in {"variable_expression", "formula", "expression"}
+    if code == "invalid_exception_operator":
+        path = str(issue.get("path", ""))
+        try:
+            index = int(path.split("[")[1].split("]")[0])
+            operator = (rule.get("exceptions") or [])[index].get("operator")
+        except (IndexError, TypeError, ValueError, AttributeError):
+            operator = None
+        return operator == "determined_by"
+    return False
+
+
+_EXCEPTION_CUE_MARKERS = (
+    "except",
+    "unless",
+    "notwithstanding",
+    "waiver",
+    "exempt",
+    "exception",
+    "does not apply",
+)
+
+
+def _infer_literal_value_type(value: Any, variable: Mapping[str, Any] | None, operator: Any) -> str | None:
+    """Infer a missing predicate type from its literal without changing meaning.
+
+    Candidate extraction occasionally omits ``value_type`` on exception
+    predicates even though the value is a boolean/number and the referenced
+    variable is declared.  The v2 contract requires the type, and this narrow
+    inference is deterministic: booleans and numbers are unambiguous; lists
+    are collections; strings use a declared compatible type or fall back to a
+    free-form string.  Unsupported operators remain untouched and continue to
+    fail contract validation.
+    """
+    if isinstance(value, bool):
+        return "boolean"
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return "number"
+    if isinstance(value, list):
+        return "list"
+    if isinstance(value, str):
+        declared = variable.get("type") if isinstance(variable, Mapping) else None
+        declared = _normalise_value_type(declared)
+        if declared in {"date", "date_time", "duration", "enum", "number", "boolean", "list", "range", "string"}:
+            return declared
+        if operator in {"in", "not_in"}:
+            return "enum"
+        return "string"
+    return None
+
+
+def _complete_predicate_value_types(rule: dict[str, Any]) -> None:
+    """Fill only omitted/legacy predicate types from declared variables/literals."""
+    variables = {
+        str(item.get("name", "")).strip().lower(): item
+        for item in rule.get("variables", []) or []
+        if isinstance(item, Mapping) and str(item.get("name", "")).strip()
+    }
+    for field in ("condition_predicates", "exceptions"):
+        for item in rule.get(field, []) or []:
+            if not isinstance(item, dict):
+                continue
+            value_type = _normalise_value_type(item.get("value_type"))
+            if value_type is not None:
+                item["value_type"] = value_type
+                continue
+            inferred = _infer_literal_value_type(
+                item.get("value"),
+                variables.get(str(item.get("variable", "")).strip().lower()),
+                item.get("operator"),
+            )
+            if inferred is not None:
+                item["value_type"] = inferred
+
+
+def _evidence_text(rule: Mapping[str, Any], verification: Mapping[str, Any]) -> str:
+    """Return only cited source text used to classify exception evidence."""
+    values: list[str] = []
+    reference = rule.get("source_reference")
+    references = reference if isinstance(reference, list) else [reference]
+    for item in references:
+        if isinstance(item, Mapping):
+            values.append(str(item.get("source_text", "")))
+    for field in ("evidence", "source_evidence"):
+        entries = verification.get(field)
+        if isinstance(entries, list):
+            for item in entries:
+                if isinstance(item, Mapping):
+                    values.append(str(item.get("source_text") or item.get("quote") or item.get("text") or ""))
+        elif isinstance(entries, str):
+            values.append(entries)
+    direct = verification.get("direct_evidence")
+    if isinstance(direct, Mapping):
+        values.append(str(direct.get("source_text", "")))
+    elif isinstance(direct, list):
+        values.extend(str(item) for item in direct)
+    return " ".join(values).casefold()
+
+
+def _normalise_final_evidence_states(rule: dict[str, Any], corpus: Mapping[str, Any]) -> None:
+    """Repair deterministic resolver-state mistakes after complete-corpus search.
+
+    The model sometimes calls a rule's own source condition an ``explicit``
+    exception while returning no exception predicates.  When the recorded
+    complete search has no exception cue in the cited text, the correct final
+    state is the machine-observed no-cue state.  Likewise, a directly cited
+    scope with at least one populated dimension is explicit evidence even if a
+    resolver leaves an ``unresolved``/candidate label behind.  Ambiguous
+    exception cues and genuinely empty scopes remain review-gated.
+    """
+    verification = rule.get("exception_verification")
+    verification_map = verification if isinstance(verification, dict) else {}
+    expected_count = int(corpus.get("chunk_count", 0) or 0)
+    expected_digest = str(corpus.get("corpus_sha256") or "")
+    complete_search = (
+        verification_map.get("searched_chunk_count") == expected_count
+        and bool(expected_digest)
+        and verification_map.get("corpus_sha256") == expected_digest
+    )
+    if (
+        not rule.get("exceptions")
+        and rule.get("exception_basis") in {"explicit_in_source", "unresolved_after_full_document_search"}
+        and complete_search
+        and not any(marker in _evidence_text(rule, verification_map) for marker in _EXCEPTION_CUE_MARKERS)
+    ):
+        rule["exception_basis"] = "no_exception_cue_found_in_complete_search"
+        verification_map["status"] = "no_exception_cue_found_in_complete_search"
+        verification_map["searched_chunk_count"] = expected_count
+        verification_map["corpus_sha256"] = expected_digest
+        verification_map.setdefault("searched_document_ids", ["organized_corpus"])
+        rule["exception_verification"] = verification_map
+
+    scope = rule.get("applicability_scope")
+    scope_map = scope if isinstance(scope, Mapping) else {}
+    has_dimension = any(bool(scope_map.get(key)) for key in ("loan_types", "occupancy_types", "transaction_types"))
+    derivation = rule.get("scope_derivation")
+    derivation_map = derivation if isinstance(derivation, Mapping) else {}
+    scope_evidence = derivation_map.get("evidence") or derivation_map.get("source_evidence")
+    if (not isinstance(scope_evidence, list) or not scope_evidence) and isinstance(rule.get("field_evidence"), Mapping):
+        scope_evidence = rule["field_evidence"].get("scope_basis")
+    if (
+        rule.get("scope_basis") in {"inferred", "unresolved_after_source_review"}
+        and has_dimension
+        and isinstance(scope_evidence, list)
+        and scope_evidence
+    ):
+        original_basis = rule.get("scope_basis")
+        rule["scope_basis"] = "explicit_in_source"
+        derivation_map = dict(derivation_map)
+        derivation_map.setdefault(
+            "resolution_note",
+            f"Normalized {original_basis} to explicit_in_source because populated scope dimensions have direct source evidence.",
+        )
+        rule["scope_derivation"] = derivation_map
+
+
+def _semantic_output_value(value: Any, value_type: Any) -> tuple[str, Any]:
+    """Return a conservative comparison key for cross-rule output values."""
+    if value_type == "boolean" and isinstance(value, bool):
+        return ("decision", "eligible" if value else "ineligible")
+    if value_type == "enum" and isinstance(value, str):
+        lowered = value.strip().casefold()
+        if lowered in {"eligible", "ineligible", "not_eligible"}:
+            return ("decision", "ineligible" if lowered == "not_eligible" else lowered)
+    return (str(value_type or type(value).__name__), str(value).strip().casefold())
+
+
+def _normalise_conflict_entries(
+    entries: list[dict[str, Any]],
+    rules_by_id: Mapping[str, Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    """Downgrade conservative unresolved records that are mechanically safe.
+
+    Agent 07's conflict prompt is intentionally fail-closed, but model
+    responses often mark equivalent assignments (``eligible`` vs ``true``) as
+    unresolved even though both rules write the same semantic result.  Such a
+    record must not gate either rule.  Real opposite assignments and semantic
+    relationships over different output names remain unresolved/conflicting.
+    """
+    normalized: list[dict[str, Any]] = []
+    for entry in entries:
+        current = dict(entry)
+        if current.get("status") != "unresolved":
+            normalized.append(current)
+            continue
+        rule_ids = [str(value) for value in current.get("rule_ids", []) if str(value) in rules_by_id]
+        if len(rule_ids) < 2:
+            normalized.append(current)
+            continue
+        by_variable: dict[str, list[tuple[Any, Any]]] = {}
+        for rule_id in rule_ids:
+            for outcome in rules_by_id[rule_id].get("outcomes", []) or []:
+                if not isinstance(outcome, Mapping) or not outcome.get("variable"):
+                    continue
+                by_variable.setdefault(str(outcome["variable"]), []).append(
+                    (outcome.get("value"), outcome.get("value_type"))
+                )
+        shared = {name: values for name, values in by_variable.items() if len(values) > 1}
+        equivalent = bool(shared) and all(
+            len({_semantic_output_value(value, value_type) for value, value_type in values}) == 1
+            for values in shared.values()
+        )
+        if equivalent:
+            current.update({
+                "status": "non_conflict",
+                "reasoning": "Shared outcome assignments are semantically equivalent after boolean/enum normalization; both rules may co-fire.",
+                "resolution": "No conflict; preserve the equivalent output assignment.",
+            })
+        normalized.append(current)
+    return normalized
+
+
+def _ensure_referenced_entity_placeholders(graph: dict[str, Any]) -> None:
+    """Keep canonical rule-party references resolvable without inventing facts."""
+    entity_types = graph.get("entity_types")
+    if not isinstance(entity_types, dict):
+        return
+    references = []
+    for rule in graph.get("business_rules", []) or []:
+        if not isinstance(rule, Mapping):
+            continue
+        references.extend([rule.get("responsible_party"), *(rule.get("counterparties") or [])])
+    for reference in references:
+        value = str(reference or "").strip()
+        if not value or value in entity_types or not CANONICAL_ENTITY_RE.fullmatch(value):
+            continue
+        entity_types[value] = {
+            "name": value,
+            "type": "REFERENCED_ENTITY",
+            "description": "Referenced by an extracted rule; standalone entity definition was not returned by agent_02.",
+            "key_attributes": [],
+            "examples": [],
+            "provenance": {"basis": "rule_reference", "source": "agent_03"},
+        }
 
 
 def _verify_completion_evidence(rule: dict[str, Any], corpus: Mapping[str, Any]) -> None:
@@ -1149,6 +1532,7 @@ class ExecutableReadinessCompleter:
         skip_conflicts: bool | None = None,
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         final_graph = _normalise_graph_entity_names(deepcopy(dict(graph)))
+        _ensure_referenced_entity_placeholders(final_graph)
         _restore_legacy_outcome_operators(final_graph, baseline)
         corpus = source_document_index(organized_dir)
         # Build retrieval-normalization data once. Without this index every
@@ -1160,7 +1544,15 @@ class ExecutableReadinessCompleter:
             if isinstance(chunk, Mapping)
         ]
         corpus["_token_index"] = _build_token_index(corpus["_search_index"])
-        rules = [deepcopy(dict(rule)) for rule in final_graph.get("business_rules", []) if isinstance(rule, Mapping)]
+        rules = [
+            deepcopy(dict(rule))
+            for rule in final_graph.get("business_rules", [])
+            if isinstance(rule, Mapping) and not _is_unusable_empty_rule(rule)
+        ]
+        # Keep the exported graph aligned with the rules actually evaluated;
+        # this also prevents a phantom empty record from being counted as a
+        # readiness failure downstream.
+        final_graph["business_rules"] = rules
         baseline_rules = [rule for rule in baseline.get("business_rules", []) if isinstance(rule, Mapping)]
         initial_chunk_rechecks = sum(rule.get("exception_basis") == "not_found_in_chunk_recheck_needed" for rule in baseline_rules)
         before_scope = {str(rule.get("rule_id")): deepcopy(rule.get("applicability_scope")) for rule in baseline_rules}
@@ -1228,6 +1620,7 @@ class ExecutableReadinessCompleter:
                 rule["applicability_scope"].setdefault(key, [])
             _verify_completion_evidence(rule, corpus)
             rule = _normalise_rule_contract(rule)
+            _normalise_final_evidence_states(rule, corpus)
             # Re-validate against the now-normalised values. agent_03 stamped
             # contract_issues/requires_review against the raw model output at
             # extraction time; _normalise_rule_contract above can alias a
@@ -1257,6 +1650,7 @@ class ExecutableReadinessCompleter:
                     # on resumed runs and stale review metadata is not carried
                     # into the final readiness report.
                     cached_rule = _normalise_rule_contract(deepcopy(self._checkpoint[cache_key]))
+                    _normalise_final_evidence_states(cached_rule, corpus)
                     cached_rule = annotate_rule_contract(cached_rule)
                     cached_rule["execution"] = _project_execution(cached_rule)
                     completed.append((index, cached_rule))
@@ -1297,13 +1691,20 @@ class ExecutableReadinessCompleter:
             skip_evidence = os.getenv("KG_READINESS_SKIP_EVIDENCE", "").lower() in {"1", "true", "yes"}
         if skip_evidence:
             print(f"▶ agent_07 rule evidence: reusing {len(rules)} completed rules", flush=True)
-            rules = [annotate_rule_contract(_normalise_rule_contract(rule)) for rule in rules]
+            existing_rules = rules
+            rules = []
+            for rule in existing_rules:
+                normalized = _normalise_rule_contract(rule)
+                _normalise_final_evidence_states(normalized, corpus)
+                rules.append(annotate_rule_contract(normalized))
             for rule in rules:
                 rule["execution"] = _project_execution(rule)
         else:
             batch_size = max(1, int(os.getenv("KG_READINESS_RULES_PER_REQUEST", "4")))
             indexed = list(enumerate(rules))
             batches = [indexed[start:start + batch_size] for start in range(0, len(indexed), batch_size)]
+            api_workers = max(1, int(os.getenv("KG_READINESS_LLM_CONCURRENCY", "4")))
+            readiness_workers = min(readiness_workers, api_workers)
             print(f"▶ agent_07 rule evidence: {len(rules)} rules in {len(batches)} batches, "
                   f"{readiness_workers} workers, {getattr(self.resolver, 'readiness_concurrency', 'bounded') if self.resolver else 0} API concurrency", flush=True)
             completed_rules: list[dict[str, Any] | None] = [None] * len(rules)
@@ -1462,12 +1863,15 @@ class ExecutableReadinessCompleter:
             conflict_entries = [deepcopy(dict(item)) for item in existing_conflicts if isinstance(item, Mapping)]
         else:
             entity_results: dict[str, list[dict[str, Any]]] = {}
-            with ThreadPoolExecutor(max_workers=min(readiness_workers, max(1, len(groups))), thread_name_prefix="kg-conflict") as executor:
+            api_workers = max(1, int(os.getenv("KG_READINESS_LLM_CONCURRENCY", "4")))
+            conflict_workers = min(readiness_workers, api_workers)
+            with ThreadPoolExecutor(max_workers=min(conflict_workers, max(1, len(groups))), thread_name_prefix="kg-conflict") as executor:
                 futures = {executor.submit(analyse_group, entity, member_ids): entity for entity, member_ids in groups.items()}
                 for future in as_completed(futures):
                     entity_results[futures[future]] = future.result()
             for entity in groups:
                 conflict_entries.extend(entity_results.get(entity, []))
+        conflict_entries = _normalise_conflict_entries(conflict_entries, ids)
         final_graph["dependency_details"]["conflicts"] = conflict_entries
 
         naming = naming_issues(final_graph)
@@ -1483,10 +1887,12 @@ class ExecutableReadinessCompleter:
                 conflict_by_rule.setdefault(str(rule_id), []).append(conflict)
         reviewed_rules = []
         contract_error_count = 0
+        deferred_contract_error_count = 0
         final_contract_error_count = 0
         for rule in rules:
             contract_issues = [issue.as_dict() for issue in validate_rule_v2(rule, entity_keys)]
-            contract_error_count += len(contract_issues)
+            deferred_contract_error_count += sum(_is_deferred_contract_issue(issue, rule) for issue in contract_issues)
+            contract_error_count += sum(not _is_deferred_contract_issue(issue, rule) for issue in contract_issues)
             issues = contract_issues
             final_issues = final_rule_issues(rule, entity_keys)
             final_contract_error_count += sum(not issue.get("evidence_limited") for issue in final_issues)
@@ -1531,7 +1937,16 @@ class ExecutableReadinessCompleter:
                 # launches agent_08 is ever reached, silently defeating the
                 # auto-remediation this README documents. Both counts stay in
                 # the evidence string for visibility.
-                "schema_consistency": {"pass": contract_error_count == 0, "evidence": f"{len(reviewed_rules)} rules checked; {contract_error_count} v2 and {final_contract_error_count} final-readiness contract violations."},
+                "schema_consistency": {
+                    "pass": contract_error_count == 0,
+                    "evidence": (
+                        f"{len(reviewed_rules)} rules checked; {contract_error_count} blocking v2, "
+                        f"{deferred_contract_error_count} deferred-capability v2, and "
+                        f"{final_contract_error_count} final-readiness contract violations."
+                    ),
+                    "blocking_v2_violations": contract_error_count,
+                    "deferred_capability_v2_violations": deferred_contract_error_count,
+                },
                 "referential_integrity": {"pass": not references, "evidence": f"{len(edges)} dependency edges checked; {len(references)} dangling references.", "violations": references},
             },
             "conflicts_and_dependencies": {"entities_checked": len(groups), "conflicts_found": len(conflicts), "dependency_chains_derived": len(chains), "conflict_examples": conflicts[:3], "non_conflict_examples": non_conflicts[:max(10, 3)], "conflict_example_shortfall": max(0, 3 - len(conflicts)), "non_conflict_example_shortfall": max(0, 3 - len(non_conflicts)), "cycles": cycles},

@@ -21,6 +21,10 @@ def test_agent_11_persists_valid_models_and_report(tmp_path):
     report = generate(graph_file, dags_file, tmp_path / "out")
     assert report["rule_count"] == 1
     assert report["review_required_rules"] == 1
+    assert report["review_required_rate"] == 100.0
+    assert report["human_review_required_rules"] == 0
+    assert report["human_review_rate"] == 0.0
+    assert report["review_route_counts"]["none"] == 1
     assert (tmp_path / "out" / "compliance_decisions.dmn").is_file()
     assert (tmp_path / "out" / "compliance_workflows.bpmn").is_file()
     assert (tmp_path / "out" / "compliance_reviews.cmmn").is_file()

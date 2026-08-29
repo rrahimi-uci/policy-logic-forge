@@ -15,6 +15,8 @@ normalise_rule_contract = readiness_module._normalise_rule_contract
 evidence_pointer = readiness_module._evidence_pointer
 conflict_batch_groups = readiness_module._conflict_batch_groups
 compact_readiness_rule = readiness_module._compact_readiness_rule
+normalise_final_evidence_states = readiness_module._normalise_final_evidence_states
+normalise_conflict_entries = readiness_module._normalise_conflict_entries
 
 
 class Resolver:
@@ -500,6 +502,125 @@ def test_unsupported_computed_outcome_value_types_are_deliberately_not_normalise
     assert any(issue.code == "invalid_outcome_value_type" for issue in issues)
 
 
+def test_deferred_computed_outcomes_do_not_block_readiness_remediation(tmp_path):
+    organized = tmp_path / "organized" / "B2-1-01"
+    organized.mkdir(parents=True)
+    (organized / "001.txt").write_text("A seller servicer must limit pools to three.")
+    graph = graph_with_two_rules()
+    graph["business_rules"][0]["outcomes"][0].update({
+        "value": "min(0.10 * balance, 15000)",
+        "value_type": "expression",
+    })
+
+    final_graph, report = ExecutableReadinessCompleter().complete(
+        graph, graph, str(tmp_path / "organized")
+    )
+
+    assert report["invariants"]["schema_consistency"]["pass"] is True
+    assert report["invariants"]["schema_consistency"]["deferred_capability_v2_violations"] >= 1
+    assert final_graph["business_rules"][0]["requires_review"] is True
+
+
+def test_missing_exception_value_type_is_inferred_from_literal():
+    rule = valid_rule()
+    rule["exceptions"] = [{
+        "predicate_id": "ex1", "variable": "x", "operator": "==", "value": True,
+    }]
+
+    normalise_rule_contract(rule)
+
+    assert rule["exceptions"][0]["value_type"] == "boolean"
+    assert not any(issue.code == "invalid_exception_value_type" for issue in validate_rule_v2(rule, {"SELLER_SERVICER", "FANNIE_MAE"}))
+
+
+def test_legacy_exception_operator_vector_basis_and_role_aliases_are_canonicalized():
+    rule = valid_rule()
+    rule["variables"].append({"name": "exception_flag", "type": "boolean", "role": "exception_trigger"})
+    rule["exceptions"] = [{
+        "predicate_id": "ex1", "variable": "exception_flag", "operator": "excludes",
+        "value": "manual", "value_type": "text",
+    }]
+    rule["test_vectors"][0]["vector_basis"] = "source_derived"
+
+    normalise_rule_contract(rule)
+
+    assert rule["exceptions"][0]["operator"] == "not_in"
+    assert rule["exceptions"][0]["value_type"] == "string"
+    assert rule["variables"][-1]["role"] == "input"
+    assert rule["test_vectors"][0]["vector_basis"] == "derived_from_source"
+
+
+def test_duplicate_exception_ids_are_suffixed_without_dropping_predicates():
+    rule = valid_rule()
+    rule["exceptions"] = [
+        {"predicate_id": "e1", "variable": "x", "operator": "==", "value": 1, "value_type": "number"},
+        {"predicate_id": "e1", "variable": "x", "operator": "==", "value": 2, "value_type": "number"},
+    ]
+
+    normalise_rule_contract(rule)
+
+    assert [item["predicate_id"] for item in rule["exceptions"]] == ["e1", "e1_copy_2"]
+    assert [item["value"] for item in rule["exceptions"]] == [1, 2]
+    assert not any(issue.code == "duplicate_exception_predicate_id" for issue in validate_rule_v2(rule, {"SELLER_SERVICER", "FANNIE_MAE"}))
+
+
+def test_typo_equivalent_outcome_reference_is_reconciled_to_declared_variable():
+    rule = valid_rule()
+    rule["variables"][-1]["name"] = "he_loc_subordinate_financing_permitted"
+    rule["outcomes"][0]["variable"] = "he loc_subordinate financing permitted"
+
+    normalise_rule_contract(rule)
+
+    assert rule["outcomes"][0]["variable"] == "he_loc_subordinate_financing_permitted"
+    assert not any(issue.code == "undefined_outcome_variable" for issue in validate_rule_v2(rule, {"SELLER_SERVICER", "FANNIE_MAE"}))
+
+
+def test_complete_no_cue_search_promotes_empty_explicit_exception_state():
+    rule = valid_rule()
+    rule["exceptions"] = []
+    rule["exception_basis"] = "explicit_in_source"
+    rule["exception_verification"] = {
+        "status": "verified", "searched_chunk_count": 2, "corpus_sha256": "digest",
+        "evidence": [],
+    }
+    rule["source_reference"]["source_text"] = "A seller servicer must report the amount."
+
+    normalise_final_evidence_states(rule, {"chunk_count": 2, "corpus_sha256": "digest"})
+
+    assert rule["exception_basis"] == "no_exception_cue_found_in_complete_search"
+    assert rule["exception_verification"]["status"] == "no_exception_cue_found_in_complete_search"
+
+
+def test_scope_with_direct_evidence_promotes_unresolved_dimension_state():
+    rule = valid_rule()
+    rule["scope_basis"] = "unresolved_after_source_review"
+    rule["applicability_scope"] = {"loan_types": ["conventional"], "occupancy_types": [], "transaction_types": []}
+    rule["scope_derivation"] = {"evidence": [{"chunk_path": "a.txt", "section_id": "S1", "source_text": "conventional"}]}
+    rule["field_evidence"]["scope_basis"] = [{"chunk_path": "a.txt", "section_id": "S1", "source_text": "conventional"}]
+
+    normalise_final_evidence_states(rule, {"chunk_count": 1, "corpus_sha256": "digest"})
+
+    assert rule["scope_basis"] == "explicit_in_source"
+    assert "resolution_note" in rule["scope_derivation"]
+
+
+def test_equivalent_boolean_and_enum_conflict_is_non_conflict():
+    first = valid_rule()
+    first["outcomes"][0]["value"] = "eligible"
+    first["outcomes"][0]["value_type"] = "enum"
+    second = deepcopy(first)
+    second["rule_id"] = "BR-2"
+    second["outcomes"][0]["value"] = True
+    second["outcomes"][0]["value_type"] = "boolean"
+    rules = {"BR-1": first, "BR-2": second}
+    entries = [{"entity": "E", "rule_ids": ["BR-1", "BR-2"], "status": "unresolved", "reasoning": "ambiguous", "resolution": ""}]
+
+    normalized = normalise_conflict_entries(entries, rules)
+
+    assert normalized[0]["status"] == "non_conflict"
+    assert "equivalent" in normalized[0]["reasoning"]
+
+
 # ─────────────────────────────────────────────────────────────────────────
 # exception_basis / scope_basis: a free-text explanation instead of an enum
 # member must be coerced to the unresolved final state, not left as a raw v2
@@ -775,6 +896,7 @@ def test_uncovered_pairs_use_mechanical_disjoint_proof_before_falling_back_to_un
     third = deepcopy(first)
     third["rule_id"] = "BR-3"
     third["rule_name"] = "A rule sharing BR-1's outcome variable"
+    third["outcomes"][0]["value"] = 2
     # third keeps `first`'s outcome variable, so (BR-1, BR-3) genuinely overlaps.
 
     graph = {

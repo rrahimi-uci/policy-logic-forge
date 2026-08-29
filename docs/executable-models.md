@@ -21,7 +21,13 @@ The exporter is deliberately fail-closed:
   or more ordered source steps. Dependency-DAG order is never treated as
   process order. Omitted rules and reasons are listed in the report.
 - CMMN cases represent evidence-resolution and human-review routes. Purely
-  mechanical repair findings do not enter the human queue.
+  mechanical repair findings do not enter the human queue. The exported report
+  deliberately separates the fail-closed `review_required_rules` quality-hold
+  count from `human_review_required_rules`: evidence gaps remain visible and
+  prevent executable promotion, while only positive contradictions or explicit
+  judgment findings enter the human queue. This avoids treating a summary such
+  as `0 contradicted and 3 insufficient claims` as a contradiction. The two
+  rates are emitted as `review_required_rate` and `human_review_rate`.
 - `semantic_vocabulary_profile.json` preserves explicit concept kinds and
   flags unresolved typing. It is an SBVR-aligned pipeline profile, not a claim
   of full SBVR interchange conformance.

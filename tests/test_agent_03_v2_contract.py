@@ -147,6 +147,44 @@ def test_agent_three_coerces_non_object_rule_candidates_for_fail_closed_review()
     assert rules[0]["raw_model_rule"] == "rule_88_stlouis_contact_purpose_limitation"
 
 
+def test_entity_coverage_serializes_structured_conditions_for_orphan_prompt():
+    """Coverage repair must accept v2 predicate objects, not only strings."""
+
+    class _Client:
+        def chat_completion(self, **kwargs):
+            assert "loan_age_months" in kwargs["messages"][0]["content"]
+            return SimpleNamespace(
+                choices=[SimpleNamespace(message=SimpleNamespace(
+                    content='{"mappings": [{"rule_id": "orphan-1", "kind": "DROP", "name": ""}]}'
+                ))]
+            )
+
+    extractor = object.__new__(BusinessRulesExtractor)
+    extractor.entity_definitions = {"MORTGAGE_LOAN": {}}
+    extractor.relationship_definitions = {}
+    extractor.all_entity_types = {
+        "UNKNOWN_BUCKET": {"business_rules": [{
+            "rule_id": "orphan-1",
+            "rule_name": "Age rule",
+            "description": "A loan has an age limit",
+            "condition_predicates": [{"variable": "loan_age_months", "operator": "<=", "value": 6}],
+        }]}
+    }
+    extractor.all_relationships = {}
+    extractor.client = _Client()
+    extractor.reasoning_effort = "high"
+    extractor.global_config = SimpleNamespace(
+        get_rules_max_tokens=lambda: 128,
+        get_rules_temperature=lambda: 0.0,
+    )
+
+    stats = extractor.validate_entity_coverage(max_retries=1)
+
+    assert stats["orphans_initial"] == 1
+    assert stats["dropped"] == 1
+    assert stats["remaining"] == 0
+
+
 def test_agent_three_checkpoint_fingerprint_changes_with_source_content():
     batches = [[{"path": "chunk.txt", "chunk_index": 0, "content": "old source"}]]
     original = BusinessRulesExtractor._checkpoint_fingerprint(batches)

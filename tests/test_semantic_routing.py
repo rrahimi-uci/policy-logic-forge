@@ -50,6 +50,29 @@ def test_review_route_keeps_fail_closed_status_but_reserves_human_queue_for_judg
     assert classify_review_route([])["route"] == "none"
 
 
+def test_zero_grounding_contradictions_stay_in_case_management():
+    """A zero count in Agent 09's summary must not trigger human review."""
+    case = mark_readiness({}, [{
+        "requirement": "grounding",
+        "reason": "0 contradicted and 3 insufficient claims; 0 evidence quotes not found",
+    }])
+    assert case["requires_review"] is True
+    assert case["review_route"] == {
+        "route": "case_management",
+        "human_review_required": False,
+        "reasons": ["0 contradicted and 3 insufficient claims; 0 evidence quotes not found"],
+    }
+
+
+def test_positive_grounding_contradiction_enters_human_review():
+    human = mark_readiness({}, [{
+        "requirement": "grounding",
+        "reason": "2 contradicted and 1 insufficient claims",
+    }])
+    assert human["review_route"]["route"] == "human_review"
+    assert human["review_route"]["human_review_required"] is True
+
+
 def test_complete_negative_exception_search_is_ready_without_claiming_source_said_none():
     rule = {
         "applicability_scope": {"loan_types": [], "occupancy_types": [], "transaction_types": []},

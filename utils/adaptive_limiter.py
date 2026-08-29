@@ -91,6 +91,34 @@ class AdaptiveRequestLimiter:
                 (self.initial_limit, time.time()),
             )
 
+    @staticmethod
+    def _process_alive(process_id: int) -> bool:
+        """Return whether a local lease owner still exists.
+
+        A Ctrl-C or worker crash cannot run ``release``.  Waiting for the full
+        lease lifetime after that is both surprising and, on a resumed run,
+        equivalent to a deadlock.  ``kill(pid, 0)`` is a portable, non-
+        destructive liveness probe; permission errors mean the process exists
+        but is not inspectable and therefore must be retained.
+        """
+        try:
+            os.kill(int(process_id), 0)
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            return True
+        except (OSError, ValueError):
+            return False
+        return True
+
+    def _reap_dead_leases(self, connection: sqlite3.Connection) -> int:
+        """Remove leases whose owning local process has exited."""
+        rows = connection.execute("SELECT token, process_id FROM limiter_leases").fetchall()
+        stale = [token for token, process_id in rows if not self._process_alive(process_id)]
+        if stale:
+            connection.executemany("DELETE FROM limiter_leases WHERE token = ?", ((token,) for token in stale))
+        return len(stale)
+
     def acquire(self, timeout: float | None = None) -> RequestLease:
         started = time.monotonic()
         deadline = None if timeout is None else started + max(0.0, timeout)
@@ -101,6 +129,7 @@ class AdaptiveRequestLimiter:
             with self._connect() as connection:
                 connection.execute("BEGIN IMMEDIATE")
                 connection.execute("DELETE FROM limiter_leases WHERE expires_at <= ?", (now,))
+                self._reap_dead_leases(connection)
                 current_limit, backoff_until = connection.execute(
                     "SELECT current_limit, backoff_until FROM limiter_state WHERE id = 1"
                 ).fetchone()
