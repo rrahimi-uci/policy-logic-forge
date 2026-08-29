@@ -17,10 +17,11 @@ import {
   StageFlow,
 } from "./components";
 import { Icon, type IconName } from "./icons";
+import { NewRunWizard, PipelineMonitor } from "./pipeline";
 import type { RunSummary, Stage } from "./types";
 import { navItems, stageLabel } from "./utils";
 
-type View = "runs" | "overview" | "queue" | "rules" | "evidence" | "graph" | "compare" | "regdelta" | "diagnostics" | "stage";
+type View = "runs" | "overview" | "queue" | "rules" | "evidence" | "graph" | "compare" | "regdelta" | "diagnostics" | "stage" | "new-run" | "job";
 
 const viewLabels: Record<View, string> = {
   runs: "Runs",
@@ -33,6 +34,8 @@ const viewLabels: Record<View, string> = {
   regdelta: "Regulatory change impact",
   diagnostics: "Diagnostics",
   stage: "Stage detail",
+  "new-run": "Start new run",
+  job: "Run monitor",
 };
 
 export default function App() {
@@ -41,6 +44,7 @@ export default function App() {
   const [view, setView] = useState<View>("overview");
   const [queue, setQueue] = useState<string | undefined>();
   const [ruleId, setRuleId] = useState<string | undefined>();
+  const [activeJobId, setActiveJobId] = useState<string | undefined>();
   const [stage, setStage] = useState<Stage | undefined>();
   const [rawArtifact, setRawArtifact] = useState<{ path: string; content: string; truncated?: boolean; size_bytes?: number } | null>(null);
   const [stages, setStages] = useState<Stage[]>([]);
@@ -117,6 +121,7 @@ export default function App() {
     setMenuOpen(false);
   };
   const openRule = (id: string) => { setRuleId(id); setView("rules"); };
+  const openJob = (jobId: string) => { setActiveJobId(jobId); setView("job"); };
 
   if (loadingRuns) return <div className="app-loading"><div className="loading-brand">PLF</div><Loading label="Preparing the review workbench…" /></div>;
 
@@ -148,8 +153,10 @@ export default function App() {
       <div className="context-bar"><span>{viewLabels[view]}</span>{run && <><b aria-hidden="true">/</b><strong>{run.run_id}</strong></>}</div>
       {error && <div className="main-error"><ErrorNotice message={error} onRetry={() => { setError(""); void loadRuns(true); }} /><button className="error-dismiss" aria-label="Dismiss error" onClick={() => setError("")}><Icon name="close" /></button></div>}
 
-      {!run ? (view === "regdelta" ? <div className="content"><RegDeltaView onError={setError} /></div> : <div className="empty-state spacious"><strong>No pipeline runs found</strong><span>Place a completed or in-progress bundle under <span className="mono">pipeline-output/</span>, then refresh.</span></div>) : <div className="content">
+      {!run ? (view === "regdelta" ? <div className="content"><RegDeltaView onError={setError} /></div> : view === "new-run" ? <div className="content"><NewRunWizard onJobStarted={openJob} onError={setError} /></div> : view === "job" ? <div className="content">{activeJobId ? <PipelineMonitor jobId={activeJobId} onRunReady={() => void loadRuns(true)} onResumed={openJob} /> : <div className="empty-state">No active job selected.</div>}</div> : <div className="empty-state spacious"><strong>No pipeline runs found</strong><span>Place a completed or in-progress bundle under <span className="mono">pipeline-output/</span>, then refresh.</span></div>) : <div className="content">
         {view === "runs" && <RunsView runs={runs} onSelect={selectRun} />}
+        {view === "new-run" && <NewRunWizard onJobStarted={openJob} onError={setError} />}
+        {view === "job" && activeJobId && <PipelineMonitor jobId={activeJobId} onRunReady={() => void loadRuns(true)} onResumed={openJob} />}
         {view === "overview" && <Overview run={run} stages={stages} onStage={(selected) => { setStage(selected); setView("stage"); }} onView={navigate} />}
         {view === "stage" && stage && <div className="view-stack">
           <button className="back-link" onClick={() => setView("overview")}>← Back to overview</button>

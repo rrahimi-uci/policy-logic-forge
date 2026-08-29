@@ -1,4 +1,8 @@
+import json
+from pathlib import Path
+
 from cli.extract import ExtractionPipeline, _PERFORMANCE_ENV, _parse_stage_arg
+from utils.pipeline_state import RESUMABLE_STAGES
 
 
 def test_stage_argument_accepts_display_number_with_or_without_zero_padding():
@@ -235,3 +239,118 @@ def test_mortgage_domain_is_supported_for_pdf_runs(tmp_path, monkeypatch):
     assert pipeline.domain == "mortgage"
     assert pipeline.run_agent_01() is True
     assert calls == [("agent_01", [str(source), str(pipeline.organized_dir), "--files", "guide.pdf"])]
+
+
+def _stub_all_agents(pipeline, monkeypatch, calls: list[str]) -> None:
+    """Stub every ``run_agent_NN`` to record its call and succeed.
+
+    ``skip_optimize`` is left ``False`` and ``run_agent_07`` is stubbed to
+    return ``True`` so the agent_07/08/09 conditional block always takes its
+    straight-through path (agent_08 is never entered) -- resume behavior is
+    what's under test here, not the remediation branching already covered
+    elsewhere in this file.
+    """
+    pipeline.skip_optimize = False
+    pipeline._last_exit_codes = {}
+    pipeline.optimized_dir = Path("optimized")
+    pipeline.dag_dir = Path("dag")
+    for name in (
+        "run_agent_01", "run_agent_02", "run_agent_03", "run_agent_04",
+        "run_agent_05", "run_agent_06", "run_agent_07", "run_agent_09",
+        "run_agent_10", "run_agent_11",
+    ):
+        monkeypatch.setattr(pipeline, name, lambda name=name, **_kwargs: calls.append(name) or True)
+
+
+_FULL_RUN_ORDER = [
+    "run_agent_01", "run_agent_02", "run_agent_03", "run_agent_04", "run_agent_05",
+    "run_agent_06", "run_agent_07", "run_agent_09", "run_agent_10", "run_agent_11",
+]
+
+
+def test_run_all_default_resume_from_none_runs_every_stage(monkeypatch):
+    pipeline = object.__new__(ExtractionPipeline)
+    calls: list[str] = []
+    _stub_all_agents(pipeline, monkeypatch, calls)
+    assert pipeline.run_all() is True
+    assert calls == _FULL_RUN_ORDER
+
+
+def test_run_all_resume_from_first_stage_matches_full_run(monkeypatch):
+    pipeline = object.__new__(ExtractionPipeline)
+    calls: list[str] = []
+    _stub_all_agents(pipeline, monkeypatch, calls)
+    assert pipeline.run_all(resume_from="agent_01") is True
+    assert calls == _FULL_RUN_ORDER
+
+
+def test_run_all_resume_from_agent_06_skips_earlier_stages(monkeypatch):
+    pipeline = object.__new__(ExtractionPipeline)
+    calls: list[str] = []
+    _stub_all_agents(pipeline, monkeypatch, calls)
+    assert pipeline.run_all(resume_from="agent_06") is True
+    assert calls == ["run_agent_06", "run_agent_07", "run_agent_09", "run_agent_10", "run_agent_11"]
+
+
+def test_run_all_resume_from_agent_07_09_reenters_whole_conditional_block(monkeypatch):
+    pipeline = object.__new__(ExtractionPipeline)
+    calls: list[str] = []
+    _stub_all_agents(pipeline, monkeypatch, calls)
+    assert pipeline.run_all(resume_from="agent_07_09") is True
+    assert calls == ["run_agent_07", "run_agent_09", "run_agent_10", "run_agent_11"]
+
+
+def test_run_all_resume_from_last_stage_only_calls_that_stage(monkeypatch):
+    pipeline = object.__new__(ExtractionPipeline)
+    calls: list[str] = []
+    _stub_all_agents(pipeline, monkeypatch, calls)
+    assert pipeline.run_all(resume_from="agent_11") is True
+    assert calls == ["run_agent_11"]
+
+
+def test_run_all_rejects_unknown_resume_stage(monkeypatch):
+    pipeline = object.__new__(ExtractionPipeline)
+    calls: list[str] = []
+    _stub_all_agents(pipeline, monkeypatch, calls)
+    try:
+        pipeline.run_all(resume_from="agent_07")  # not a resumable unit id
+    except ValueError as exc:
+        assert "agent_07" in str(exc)
+    else:
+        raise AssertionError("expected ValueError for an unresumable stage id")
+    assert calls == []
+
+
+def test_run_all_resume_wiring_writes_pipeline_run_state_file(tmp_path, monkeypatch):
+    """End-to-end check that ``run_all`` actually calls into ``pipeline_state``.
+
+    Builds a real ``ExtractionPipeline`` (not the bare ``object.__new__``
+    stub used above) so ``self.config`` is populated, then verifies a full
+    run records every stage as ok and that a subsequent resumed run from
+    ``agent_07_09`` only re-invokes that unit onward.
+    """
+    monkeypatch.chdir(tmp_path)
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "doc.txt").write_text("hello", encoding="utf-8")
+    pipeline = ExtractionPipeline(
+        source_dir=source, domain="deonticbench", target_rules=30,
+        max_workers=40, skip_optimize=True, batch_name="resume-wiring-test",
+    )
+    calls: list[str] = []
+    for name in (
+        "run_agent_01", "run_agent_02", "run_agent_03", "run_agent_04",
+        "run_agent_05", "run_agent_06", "run_agent_09", "run_agent_10", "run_agent_11",
+    ):
+        monkeypatch.setattr(pipeline, name, lambda name=name, **_kwargs: calls.append(name) or True)
+
+    assert pipeline.run_all() is True
+    state_path = pipeline.config.get_pipeline_base_path() / "pipeline_run_state.json"
+    assert state_path.is_file()
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    for stage in RESUMABLE_STAGES:
+        assert state["stages"][stage]["ok"] is True
+
+    calls.clear()
+    assert pipeline.run_all(resume_from="agent_07_09") is True
+    assert calls == ["run_agent_09", "run_agent_10", "run_agent_11"]

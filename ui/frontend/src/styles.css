@@ -613,3 +613,12 @@ td small { display: block; margin-top: 4px; color: var(--muted); }
   .graph-status { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
   .graph-help-grid { grid-template-columns: 1fr; }
 }
+
+/* Ingest: new run wizard and job monitor */
+.wizard-form { display: grid; gap: 14px; max-width: 560px; }
+.wizard-form label { display: grid; gap: 6px; color: var(--muted-strong); font-size: 11px; font-weight: 750; }
+.wizard-form .checkbox-label { display: flex; flex-direction: row; align-items: center; gap: 8px; }
+.wizard-form .checkbox-label input { width: 16px; min-height: 16px; padding: 0; }
+.job-actions { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+.log-tail { margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--line); }
+.log-block { max-height: 320px; border-color: #263650; background: var(--navy); color: #cfdcf4; }
