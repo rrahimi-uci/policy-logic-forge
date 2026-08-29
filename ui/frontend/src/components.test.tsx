@@ -70,6 +70,8 @@ describe("review workbench components", () => {
     expect(screen.getByText("privacy-run")).toBeInTheDocument();
     fireEvent.click(screen.getByText("Open diagnostics")); expect(onView).toHaveBeenCalledWith("diagnostics");
     render(<StageFlow stages={stages} onStage={vi.fn()} />); expect(screen.getAllByLabelText("Pipeline stage flow").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Agent 01/11 · Organizer").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("01/11").length).toBeGreaterThan(0);
   });
 
   it("filters and opens the rule table", async () => {

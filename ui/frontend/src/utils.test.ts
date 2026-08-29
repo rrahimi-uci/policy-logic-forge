@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatDate, formatNumber, navItems, percent, queueRows, runOption, stageProgress, statusLabel, statusTone } from "./utils";
+import { formatDate, formatNumber, navItems, percent, queueRows, runOption, stageLabel, stageNumber, stageProgress, statusLabel, statusTone } from "./utils";
 
 describe("review workbench utilities", () => {
   it("formats values and preserves invalid dates for auditability", () => {
@@ -39,5 +39,12 @@ describe("review workbench utilities", () => {
     expect(stageProgress([{ status: "completed" }, { status: "missing" }] as any)).toBe(50);
     expect(runOption({ run_id: "run", rule_count: 2 } as any)).toBe("run · 2 rules");
     expect(navItems.length).toBe(9);
+  });
+
+  it("derives the displayed pipeline number from the canonical agent id", () => {
+    expect(stageNumber("agent_01")).toBe("01");
+    expect(stageNumber("agent_11")).toBe("11");
+    expect(stageNumber("unexpected")).toBe("??");
+    expect(stageLabel("agent_09", "Grounding verifier")).toBe("Agent 09/11 · Grounding verifier");
   });
 });

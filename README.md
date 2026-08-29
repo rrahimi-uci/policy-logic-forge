@@ -114,11 +114,38 @@ Output lands under `pipeline-output/<batch-name>/`:
 - `agent_10-dag-generation/dependency_dags.json` — every rule partitioned into
   one or more dependency DAGs, with an explicit, checked coverage guarantee.
 
-Run a single agent with `--agent` (e.g. `--agent agent_09` to re-run only
-grounding certification), or `--skip-optimize` to skip
-`agent_06`–`agent_09` entirely and go straight from the merged graph to
+### Numbering contract
+
+The pipeline has one canonical sequence of eleven stages. The stage number and
+agent identifier are the same value, so `Stage 09/11` always means
+`agent_09` (grounding verification). Use `--stage N` when selecting by number
+or `--agent agent_NN` when selecting by identifier:
+
+| Stage | Agent | Responsibility |
+| --- | --- | --- |
+| 01/11 | `agent_01` | Document organization |
+| 02/11 | `agent_02` | Entity and relationship extraction |
+| 03/11 | `agent_03` | Business-rule extraction |
+| 04/11 | `agent_04` | Advisory rule validation |
+| 05/11 | `agent_05` | Rules/entities merge |
+| 06/11 | `agent_06` | Knowledge-graph optimization |
+| 07/11 | `agent_07` | Executable-readiness gate |
+| 08/11 | `agent_08` | Readiness remediation |
+| 09/11 | `agent_09` | Independent grounding verification |
+| 10/11 | `agent_10` | Dependency-DAG generation |
+| 11/11 | `agent_11` | DMN/BPMN/CMMN model generation |
+
+Stages 07–09 intentionally write reports into the shared
+`agent_06-optimized/` directory because they operate on the same optimized
+graph. Their stage IDs and checkpoints remain distinct. The deprecated
+`--step` option is retained only for older scripts; its fractional aliases do
+not define the current pipeline numbering.
+
+Run a single stage with `--stage 9` or a single agent with `--agent agent_09`
+(for example, to re-run grounding certification). `--skip-optimize` skips
+`agent_06`–`agent_08`; independent `agent_09` grounding still runs before
 `agent_10` DAG generation. The deprecated numeric `--step` selector remains
-accepted for backwards compatibility.
+accepted for backwards compatibility and prints the canonical stage it maps to.
 
 Readiness exit code 3 is a review signal, not a subprocess crash. The full
 orchestrator runs remediation, then continues to independent grounding and DAG

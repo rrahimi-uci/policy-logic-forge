@@ -5,7 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from ui.backend.review_index import ReviewIndex, build_review_index, stable_hash
+from ui.backend.review_index import STAGES, ReviewIndex, build_review_index, stable_hash
+from utils.agent_names import AGENT_IDS
 
 
 def _write(path: Path, value: object) -> None:
@@ -81,11 +82,18 @@ def test_index_normalizes_artifacts_and_queues(tmp_path: Path) -> None:
     assert index.search("collect your email", kind="evidence")[0]["kind"] == "evidence"
     assert index.rules[0]["evidence"][0]["evidence_id"] == index.evidence[0]["evidence_id"]
     assert index.stages[0]["primary_artifacts"] == ["agent_01-organized-documents/_processing_results.json"]
+    assert index.stages[0]["stage_number"] == 1
+    assert next(item for item in index.stages if item["stage_id"] == "agent_11")["stage_number"] == 11
     assert "output_counts" in index.stages[0]
     assert index.get_rule("unknown") is None
     assert stable_hash({"a": 1}) == stable_hash({"a": 1})
     with pytest.raises(KeyError):
         index.queue("nope")
+
+
+def test_review_index_uses_the_same_canonical_agent_sequence_as_the_pipeline() -> None:
+    assert tuple(stage["id"] for stage in STAGES) == AGENT_IDS
+    assert [stage.get("id") for stage in STAGES] == [f"agent_{number:02d}" for number in range(1, 12)]
 
 
 def test_index_treats_an_explicit_null_status_field_as_unknown_not_none(tmp_path: Path) -> None:
