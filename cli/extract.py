@@ -4,21 +4,22 @@ Extraction orchestrator: compliance documents -> a grounding-certified,
 DMN/BPMN-ready knowledge graph.
 
 This is a lean, single-batch orchestrator by design (see README.md "Scope").
-It runs the eleven canonical stages in order, streaming each subprocess's
+It runs the twelve canonical stages in order, streaming each subprocess's
 output.  The stage number and agent identifier are deliberately identical:
-Stage 01/11 is ``agent_01`` through Stage 11/11, ``agent_11``:
+Stage 01/12 is ``agent_01`` through Stage 12/12, ``agent_12``:
 
-  01/11  agent_01  Document Organizer        chunk raw documents
-  02/11  agent_02  Entity Extractor          entities & relationships
-  03/11  agent_03  Rules Extractor           business rules (v2 contract)
-  04/11  agent_04  Rule Validator             advisory quality pass (non-blocking)
-  05/11  agent_05  Rules+Entities Merger      first complete knowledge graph
-  06/11  agent_06  KG Optimizer               dedup + dependency analysis
-  07/11  agent_07  Executable Readiness       four-invariant gate; DMN/BPMN projection
-  08/11  agent_08  Readiness Remediator       focused fix-up (only if agent_07 requests it)
-  09/11  agent_09  Grounding Verifier         independent claim-level certification
-  10/11  agent_10  Dependency DAG Generator   100%-coverage DAG partition of the graph
-  11/11  agent_11  Executable Model Generator  DMN 1.3 and BPMN 2.0 projection
+  01/12  agent_01  Document Organizer        chunk raw documents
+  02/12  agent_02  Entity Extractor          entities & relationships
+  03/12  agent_03  Rules Extractor           business rules (v2 contract)
+  04/12  agent_04  Rule Validator             advisory quality pass (non-blocking)
+  05/12  agent_05  Rules+Entities Merger      first complete knowledge graph
+  06/12  agent_06  KG Optimizer               dedup + dependency analysis
+  07/12  agent_07  Executable Readiness       four-invariant gate; DMN/BPMN projection
+  08/12  agent_08  Readiness Remediator       focused fix-up (only if agent_07 requests it)
+  09/12  agent_09  Grounding Verifier         independent claim-level certification
+  10/12  agent_10  Dependency DAG Generator   100%-coverage DAG partition of the graph
+  11/12  agent_11  Executable Model Generator  DMN 1.3 and BPMN 2.0 projection
+  12/12  agent_12  Business Knowledge Report    self-contained HTML report
 
 Each agent subprocess shares an adaptive API-concurrency limiter (see
 utils/adaptive_limiter.py) via KG_GLOBAL_LLM_STATE_FILE, so running multiple
@@ -69,9 +70,9 @@ def _parse_stage_arg(value: str) -> str:
     try:
         normalized = str(int(value))
     except ValueError as exc:
-        raise argparse.ArgumentTypeError("stage must be an integer from 1 to 11") from exc
+        raise argparse.ArgumentTypeError(f"stage must be an integer from 1 to {len(AGENT_IDS)}") from exc
     if normalized not in CANONICAL_STAGE_NUMBERS:
-        raise argparse.ArgumentTypeError("stage must be an integer from 1 to 11")
+        raise argparse.ArgumentTypeError(f"stage must be an integer from 1 to {len(AGENT_IDS)}")
     return normalized
 
 
@@ -397,6 +398,10 @@ class ExtractionPipeline:
     def run_agent_11(self) -> bool:
         return self._run("agent_11", [])
 
+    def run_agent_12(self) -> bool:
+        """Generate the self-contained business knowledge report."""
+        return self._run("agent_12", [])
+
     def _review_only_readiness(self) -> bool:
         """Return true when readiness is structurally sound but still review-gated.
 
@@ -496,6 +501,8 @@ class ExtractionPipeline:
             return False
         if not self.run_agent_11():
             return False
+        if not self.run_agent_12():
+            return False
 
         elapsed = datetime.now() - start
         print("\n" + "=" * 80)
@@ -513,7 +520,7 @@ class ExtractionPipeline:
             "agent_05": self.run_agent_05, "agent_06": self.run_agent_06,
             "agent_07": self.run_agent_07, "agent_08": self.run_agent_08,
             "agent_09": self.run_agent_09, "agent_10": self.run_agent_10,
-            "agent_11": self.run_agent_11,
+            "agent_11": self.run_agent_11, "agent_12": self.run_agent_12,
         }
         if agent_id not in dispatch:
             print(f"Invalid agent: {agent_id}. Valid: {', '.join(AGENT_IDS)}")
@@ -583,7 +590,7 @@ def main():
                               "go to stderr instead so stdout stays machine-parseable.")
     selector = parser.add_mutually_exclusive_group()
     selector.add_argument("--agent", choices=list(AGENT_IDS), help="Run one canonical agent only (for example: agent_07)")
-    selector.add_argument("--stage", type=_parse_stage_arg, choices=list(CANONICAL_STAGE_NUMBERS), help="Run one canonical pipeline stage (1–11; Stage 07 maps to agent_07)")
+    selector.add_argument("--stage", type=_parse_stage_arg, choices=list(CANONICAL_STAGE_NUMBERS), help="Run one canonical pipeline stage (1–12; Stage 07 maps to agent_07 and Stage 12 maps to agent_12)")
     selector.add_argument("--step", choices=list(LEGACY_STEP_ALIASES), help="Deprecated legacy selector; use --stage or --agent (fractional aliases retain historical meanings)")
     selector.add_argument("--stages", type=_parse_stages_arg, metavar="RANGE",
                            help="Run multiple canonical stages in order, e.g. '3-6', '3,5,7', or '3-6,9,11' "
