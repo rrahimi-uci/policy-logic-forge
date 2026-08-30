@@ -125,7 +125,7 @@ def test_run_metrics_totals_sum_across_stages():
 
 def test_run_metrics_to_dict_and_write_json_round_trip(tmp_path):
     run = RunMetrics(batch_name="b", domain="nda_confidentiality", source_dir="/src", config={"target_rules": 20})
-    stage = run.stage("agent_01", "Stage 01/11 · agent_01 · Document Organizer")
+    stage = run.stage("agent_01", "Stage 01/12 · agent_01 · Document Organizer")
     stage.start()
     stage.finish(status=PASS, exit_code=0)
     run.finish(overall_status=PASS)
@@ -141,7 +141,7 @@ def test_run_metrics_to_dict_and_write_json_round_trip(tmp_path):
 
 
 def test_stage_pending_status_has_no_duration():
-    stage = StageMetrics(stage_id="agent_11", label="Stage 11/11")
+    stage = StageMetrics(stage_id="agent_11", label="Stage 11/12")
     assert stage.status == PENDING
     assert stage.duration_seconds is None
 

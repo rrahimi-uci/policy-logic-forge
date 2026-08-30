@@ -13,13 +13,13 @@ real DMN/BPMN/CMMN/SBVR examples — see [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
 ## What's here
 
-**The extraction pipeline** — eleven canonical agents, `agent_01` through
-`agent_11` (document organization → entity/relationship extraction →
+**The extraction pipeline** — twelve canonical agents, `agent_01` through
+`agent_12` (document organization → entity/relationship extraction →
 business-rule extraction → validation → merge → deduplication + dependency
 analysis → four-invariant executable-readiness gate → focused remediation →
 independent grounding certification → dependency DAG generation → DMN/BPMN/
-CMMN model generation). A lean CLI orchestrator (`cli/extract.py`) runs them
-in order.
+CMMN model generation → self-contained business knowledge report). A lean CLI
+orchestrator (`cli/extract.py`) runs them in order.
 
 **RegDelta** — a rule-change/version differential-execution engine layered on
 top: compile old and new versions of a policy to LExec IR, align rules,
@@ -117,24 +117,25 @@ Output lands under `pipeline-output/<batch-name>/`:
 
 ### Numbering contract
 
-The pipeline has one canonical sequence of eleven stages. The stage number and
-agent identifier are the same value, so `Stage 09/11` always means
+The pipeline has one canonical sequence of twelve stages. The stage number and
+agent identifier are the same value, so `Stage 09/12` always means
 `agent_09` (grounding verification). Use `--stage N` when selecting by number
 or `--agent agent_NN` when selecting by identifier:
 
 | Stage | Agent | Responsibility |
 | --- | --- | --- |
-| 01/11 | `agent_01` | Document organization |
-| 02/11 | `agent_02` | Entity and relationship extraction |
-| 03/11 | `agent_03` | Business-rule extraction |
-| 04/11 | `agent_04` | Advisory rule validation |
-| 05/11 | `agent_05` | Rules/entities merge |
-| 06/11 | `agent_06` | Knowledge-graph optimization |
-| 07/11 | `agent_07` | Executable-readiness gate |
-| 08/11 | `agent_08` | Readiness remediation |
-| 09/11 | `agent_09` | Independent grounding verification |
-| 10/11 | `agent_10` | Dependency-DAG generation |
-| 11/11 | `agent_11` | DMN/BPMN/CMMN model generation |
+| 01/12 | `agent_01` | Document organization |
+| 02/12 | `agent_02` | Entity and relationship extraction |
+| 03/12 | `agent_03` | Business-rule extraction |
+| 04/12 | `agent_04` | Advisory rule validation |
+| 05/12 | `agent_05` | Rules/entities merge |
+| 06/12 | `agent_06` | Knowledge-graph optimization |
+| 07/12 | `agent_07` | Executable-readiness gate |
+| 08/12 | `agent_08` | Readiness remediation |
+| 09/12 | `agent_09` | Independent grounding verification |
+| 10/12 | `agent_10` | Dependency-DAG generation |
+| 11/12 | `agent_11` | DMN/BPMN/CMMN model generation |
+| 12/12 | `agent_12` | Self-contained business knowledge report |
 
 Stages 07–09 intentionally write reports into the shared
 `agent_06-07-08-09-optimized/` directory because they operate on the same optimized
@@ -144,9 +145,8 @@ not define the current pipeline numbering. Readers also accept the former
 `agent_06-optimized/` name for retained historical bundles; new runs always
 write the descriptive shared-directory name above.
 
-Agent 12 is a post-pipeline presentation stage and is intentionally not added
-to the canonical extraction numbering contract. Generate it for an existing
-batch with:
+Agent 12 is the post-pipeline presentation stage and is part of the canonical
+extraction numbering contract. Generate it for an existing batch with:
 
 ```bash
 KG_BATCH_NAME=my-batch KG_DOMAIN=privacy_policy \
@@ -158,7 +158,7 @@ Optional `--graph`, `--dags`, `--models-dir`, `--organized-dir`, and
 
 Run a single stage with `--stage 9` or a single agent with `--agent agent_09`
 (for example, to re-run grounding certification), or multiple stages in one
-invocation with `--stages 7-9` (also accepts a list or a mix, e.g. `3,5,7`).
+invocation with `--stages 7-12` (also accepts a list or a mix, e.g. `3,5,7`).
 `--skip-optimize` skips `agent_06`–`agent_08`; independent `agent_09`
 grounding still runs before `agent_10` DAG generation. There is no separate
 `--resume` flag: re-running only the remaining stage(s) against the same
@@ -180,7 +180,7 @@ still stop the run.
 ## Structure
 
 ```text
-cli/extract.py              `agent_01`–`agent_11` orchestrator
+cli/extract.py              `agent_01`–`agent_12` orchestrator
 agents/                     one zero-padded module per extraction agent plus Agent 12 report layer
 utils/                      config, LLM client, adaptive rate limiter,
                             rule contract + validator, readiness/grounding

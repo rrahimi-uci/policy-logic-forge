@@ -1,7 +1,7 @@
 # CLI reference: `cli/extract.py`
 
 `cli/extract.py` is the extraction pipeline's orchestrator: it runs the
-eleven canonical agents (`agent_01`–`agent_11`) against a source-document
+twelve canonical agents (`agent_01`–`agent_12`) against a source-document
 directory and writes a grounding-certified, DMN/BPMN-ready knowledge graph
 under `pipeline-output/<batch-name>/`. This document is the complete,
 stand-alone reference for running it — commands, options, configuration,
@@ -39,7 +39,7 @@ cp /path/to/your/*.txt compliance-files/nda_confidentiality/
 python3 cli/extract.py --dir nda_confidentiality --domain nda_confidentiality --target-rules 20
 ```
 
-This runs all eleven stages in order against
+This runs all twelve stages in order against
 `compliance-files/nda_confidentiality/`, writing to
 `pipeline-output/nda_confidentiality/` (the batch name defaults to `--dir`'s
 basename). You'll see a configuration panel, a live stage-by-stage progress
@@ -65,13 +65,13 @@ cli/extract.py --dir DIR --domain DOMAIN [options] [selector]
 | `--skip-optimize` | no | Skip `agent_06`–`agent_08` (KG optimization, readiness, remediation). Independent `agent_09` grounding still runs before `agent_10` DAG generation. |
 | `--keep-going` | no | With `--stages`, run every selected stage even after an earlier one fails, instead of stopping at the first failure. No effect on a single-stage selector or a full run — see [Selecting stages](#selecting-stages). |
 | `--output {text,json}` | no | `text` (default): the polished interactive display below. `json`: line-delimited JSON events on stdout for automation — see [Output modes](#output-modes). |
-| `--agent AGENT_ID` | no* | Run exactly one agent by canonical id (`agent_01`–`agent_11`). |
-| `--stage N` | no* | Run exactly one stage by number (`1`–`11`; accepts `7` or `07`). Same agent as `--agent agent_07`. |
+| `--agent AGENT_ID` | no* | Run exactly one agent by canonical id (`agent_01`–`agent_12`). |
+| `--stage N` | no* | Run exactly one stage by number (`1`–`12`; accepts `7` or `07`). Same agent as `--agent agent_07`. |
 | `--stages RANGE` | no* | Run **multiple** stages in order — a range, a list, or a mix: `3-6`, `3,5,7`, `3-6,9,11`. See [Selecting stages](#selecting-stages). |
 | `--step ALIAS` | no* | Deprecated legacy selector (`1`, `3.5`, `5.7`, ...) from a prior ten-stage numbering. Prints the canonical stage it maps to. Prefer `--stage`/`--agent`. |
 
 \* `--agent`, `--stage`, `--stages`, and `--step` are mutually exclusive. Omit
-all four to run the full 11-stage pipeline (`run_all`).
+all four to run the full 12-stage pipeline (`run_all`).
 
 Run `python3 cli/extract.py --help` for the same reference from the tool
 itself, including the full per-stage summary table baked into its
@@ -115,9 +115,13 @@ Four ways to choose what runs, from broadest to narrowest:
 python3 cli/extract.py --dir nda_confidentiality --domain nda_confidentiality \
   --batch-name nda-2026 --stages 7-9
 
-# Re-run just DAG generation and model generation (10, 11):
+# Re-run DAG/model generation and the report (10, 11, 12):
 python3 cli/extract.py --dir nda_confidentiality --domain nda_confidentiality \
-  --batch-name nda-2026 --stages 10,11
+  --batch-name nda-2026 --stages 10-12
+
+# Generate the self-contained Agent 12 report from an existing completed bundle:
+python3 cli/extract.py --dir nda_confidentiality --domain nda_confidentiality \
+  --batch-name nda-2026 --stage 12
 
 # Non-contiguous: re-validate (4) and re-certify grounding (9) only:
 python3 cli/extract.py --dir nda_confidentiality --domain nda_confidentiality \
@@ -135,7 +139,7 @@ at the first problem:
 
 ```bash
 python3 cli/extract.py --dir nda_confidentiality --domain nda_confidentiality \
-  --batch-name nda-2026 --stages 7-11 --keep-going
+  --batch-name nda-2026 --stages 7-12 --keep-going
 ```
 
 **Reuse an existing batch's output**: `--stages`/`--stage`/`--agent` all
@@ -150,7 +154,8 @@ failure.
 
 **Numbering contract**: the stage number and agent identifier are always the
 same value — `--stage 9` and `--agent agent_09` run the identical thing
-(`agent_09`, independent grounding verification). See
+(`agent_09`, independent grounding verification). `--stage 12` and
+`--agent agent_12` generate the report from the completed Agent 11 bundle. See
 [README.md's numbering contract](../README.md#numbering-contract) for the
 full stage table.
 

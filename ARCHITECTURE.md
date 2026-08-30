@@ -1,7 +1,7 @@
 # Architecture
 
 This document describes how Policy Logic Forge is put together: the
-eleven-agent extraction pipeline, the shared services and compiler layer
+twelve-agent extraction pipeline, the shared services and compiler layer
 underneath it, the RegDelta differential-execution engine layered on top,
 and how configuration and prompts flow through all of it. For setup and CLI
 usage, see [`README.md`](README.md).
@@ -13,7 +13,7 @@ source-grounded knowledge graph, then optionally compares two versions of
 that graph to report what actually changed. There are three moving parts:
 
 - **The extraction pipeline** (`agents/`, orchestrated by `cli/extract.py`)
-  — eleven agents run in a fixed sequence, each consuming the previous
+  — twelve agents run in a fixed sequence, each consuming the previous
   stage's output and writing its own artifacts under
   `pipeline-output/<batch>/`.
 - **Shared services and the compiler layer** (`utils/`) — configuration,
@@ -106,23 +106,24 @@ Two things worth noticing immediately:
    `agents/` or `cli/extract.py` imports from `utils/regdelta_engine.py` or
    its dependencies.
 
-## 2. The eleven-agent pipeline
+## 2. The twelve-agent pipeline
 
 ### 2.1 Stage responsibilities
 
 | Stage | Agent | Responsibility | Primary output |
 | --- | --- | --- | --- |
-| 01/11 | `agent_01` | Document organization | `agent_01-organized-documents/` |
-| 02/11 | `agent_02` | Entity and relationship extraction | `agent_02-entities/` |
-| 03/11 | `agent_03` | Business-rule extraction | `agent_03-rules/` |
-| 04/11 | `agent_04` | Advisory rule validation | `agent_04-validation/` |
-| 05/11 | `agent_05` | Rules/entities merge | `agent_05-rules-with-entities/` |
-| 06/11 | `agent_06` | Knowledge-graph optimization (dedup + dependency analysis) | `agent_06-07-08-09-optimized/optimized_compliance_knowledge_graph.json` |
-| 07/11 | `agent_07` | Executable-readiness gate (four invariants) | readiness report, embedded in the shared optimized directory |
-| 08/11 | `agent_08` | Readiness remediation (only if agent_07 requests it) | focused rule fix-ups |
-| 09/11 | `agent_09` | Independent grounding verification | claim-level certification |
-| 10/11 | `agent_10` | Dependency-DAG generation, 100%-coverage guarantee | `agent_10-dag-generation/dependency_dags.json` |
-| 11/11 | `agent_11` | DMN/BPMN/CMMN/SBVR generation + LExec compile | `agent_11-executable-models/` |
+| 01/12 | `agent_01` | Document organization | `agent_01-organized-documents/` |
+| 02/12 | `agent_02` | Entity and relationship extraction | `agent_02-entities/` |
+| 03/12 | `agent_03` | Business-rule extraction | `agent_03-rules/` |
+| 04/12 | `agent_04` | Advisory rule validation | `agent_04-validation/` |
+| 05/12 | `agent_05` | Rules/entities merge | `agent_05-rules-with-entities/` |
+| 06/12 | `agent_06` | Knowledge-graph optimization (dedup + dependency analysis) | `agent_06-07-08-09-optimized/optimized_compliance_knowledge_graph.json` |
+| 07/12 | `agent_07` | Executable-readiness gate (four invariants) | readiness report, embedded in the shared optimized directory |
+| 08/12 | `agent_08` | Readiness remediation (only if agent_07 requests it) | focused rule fix-ups |
+| 09/12 | `agent_09` | Independent grounding verification | claim-level certification |
+| 10/12 | `agent_10` | Dependency-DAG generation, 100%-coverage guarantee | `agent_10-dag-generation/dependency_dags.json` |
+| 11/12 | `agent_11` | DMN/BPMN/CMMN/SBVR generation + LExec compile | `agent_11-executable-models/` |
+| 12/12 | `agent_12` | Self-contained business knowledge report | `agent_12-business-knowledge-report/business_knowledge_report.html` |
 
 Stages 07–09 share one directory (`agent_06-07-08-09-optimized/`) because
 they all read and write the same optimized graph; their stage IDs and
@@ -168,6 +169,9 @@ sequenceDiagram
 
     CLI->>A10: run_agent_10() DAG, run_agent_11() models
     A10->>FS: dependency_dags.json + DMN/BPMN/CMMN/SBVR + lexec_ir.json
+
+    CLI->>A12: run_agent_12() business knowledge report
+    A12->>FS: business_knowledge_report.html + manifest
 
     CLI-->>Op: COMPLETE — optimized graph, DAGs, executable models
 ```
@@ -468,6 +472,7 @@ flowchart TB
     classDef regdelta fill:#ffe4e6,stroke:#be123c,color:#881337,stroke-width:1px
 
     A11["agent_11_executable_model_generator.py"]:::pipeline
+    A12["agent_12_business_knowledge_report.py"]:::pipeline
 
     EM["executable_models.py<br/>(real DMN + BPMN emitter)"]:::core
     SA["semantic_artifacts.py<br/>(real CMMN + SBVR emitter)"]:::core
@@ -479,6 +484,7 @@ flowchart TB
 
     A11 --> EM
     A11 --> SA
+    A12 --> SA
     A11 -->|"proof-checked path"| LC
     LC --> IR
     LC --> SMT
@@ -913,7 +919,7 @@ it, and empty `refusals`/`ignored_fields` arrays for a rule this simple.
 
 ```text
 cli/                         orchestrators
-  extract.py                   agent_01–agent_11 pipeline runner
+  extract.py                   agent_01–agent_12 pipeline runner
   generate_executable_models.py  regenerate DMN/BPMN from an existing graph + DAGs
 agents/                      one zero-padded module per pipeline agent
 utils/                       shared services, compiler/proof layer, RegDelta engine
@@ -948,12 +954,15 @@ pipeline-output/<batch>/
 │   └── agent_0{7,8,9}_*_checkpoint.jsonl
 ├── agent_10-dag-generation/
 │   └── dependency_dags.json
-└── agent_11-executable-models/
-    ├── compliance_decisions.dmn
-    ├── compliance_workflows.bpmn
-    ├── compliance_reviews.cmmn
-    ├── semantic_vocabulary_profile.json
-    └── lexec_ir.json, compilation_report.json, proof_records.json
+├── agent_11-executable-models/
+│   ├── compliance_decisions.dmn
+│   ├── compliance_workflows.bpmn
+│   ├── compliance_reviews.cmmn
+│   ├── semantic_vocabulary_profile.json
+│   └── lexec_ir.json, compilation_report.json, proof_records.json
+└── agent_12-business-knowledge-report/
+    ├── business_knowledge_report.html
+    └── business_knowledge_report_manifest.json
 ```
 
 ## 8. Testing

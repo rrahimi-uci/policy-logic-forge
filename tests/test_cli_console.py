@@ -12,8 +12,8 @@ def _sample_run() -> RunMetrics:
         batch_name="demo", domain="nda_confidentiality", source_dir="/src",
         config={"target_rules": 20, "model": "gpt-5.6-luna"},
     )
-    run.stage("agent_01", "Stage 01/11 · agent_01 · Document Organizer")
-    run.stage("agent_02", "Stage 02/11 · agent_02 · Entity Extractor")
+    run.stage("agent_01", "Stage 01/12 · agent_01 · Document Organizer")
+    run.stage("agent_02", "Stage 02/12 · agent_02 · Entity Extractor")
     return run
 
 
