@@ -1172,3 +1172,64 @@ def test_oversized_conflict_coverage_fails_closed_without_pair_expansion(monkeyp
     member_ids = [f"BR-{index}" for index in range(500)]
 
     assert conflict_candidate_pairs(member_ids, set(member_ids), 32) is None
+
+
+def test_set_and_source_text_aliases_normalise_to_v2_types():
+    rule = valid_rule()
+    rule["condition_predicates"][0].update(
+        value=["condo", "co-op"], value_type="set", operator="in"
+    )
+    rule["variables"][0].update(name="property_type", type="enum", allowed_values=["condo", "co-op"])
+    rule["condition_predicates"][0]["variable"] = "property_type"
+    rule["exceptions"] = [{
+        "predicate_id": "e1", "variable": "property_type", "operator": "==",
+        "value": "source wording", "value_type": "source_text",
+    }]
+
+    normalise_rule_contract(rule)
+    issues = validate_rule_v2(rule, {"SELLER_SERVICER", "FANNIE_MAE"})
+
+    assert rule["condition_predicates"][0]["value_type"] == "list"
+    assert rule["exceptions"][0]["value_type"] == "string"
+    assert not any(issue.code in {"invalid_predicate_value_type", "invalid_exception_value_type"} for issue in issues)
+
+
+def test_variable_reference_outcome_adds_typed_output_declaration():
+    rule = valid_rule()
+    rule["outcomes"].append({
+        "variable": "total_qualifying_income", "operator": "=",
+        "value": "price_differential_amount", "value_type": "variable_reference",
+    })
+
+    normalise_rule_contract(rule)
+    issues = validate_rule_v2(rule, {"SELLER_SERVICER", "FANNIE_MAE"})
+    output = next(item for item in rule["variables"] if item["name"] == "total_qualifying_income")
+
+    assert output["type"] == "number"
+    assert output["role"] == "output"
+    assert not any(issue.code == "undefined_outcome_variable" for issue in issues)
+
+
+def test_positional_predicate_reference_reconciles_descriptive_predicate_id():
+    rule = valid_rule()
+    rule["condition_predicates"].append({
+        "predicate_id": "property_type", "variable": "price_differential_amount",
+        "operator": "==", "value": 100, "value_type": "number",
+    })
+    rule["condition_logic"] = {"any": [{"predicate_ref": "p1"}, {"predicate_ref": "p2"}]}
+
+    normalise_rule_contract(rule)
+    issues = validate_rule_v2(rule, {"SELLER_SERVICER", "FANNIE_MAE"})
+
+    assert not any(issue.code == "unknown_predicate_reference" for issue in issues)
+
+
+def test_missing_vectors_are_deferred_for_source_backed_rules():
+    rule = valid_rule()
+    rule["test_vectors"] = []
+
+    normalise_rule_contract(rule)
+    issues = validate_rule_v2(rule, {"SELLER_SERVICER", "FANNIE_MAE"})
+    missing = next(issue for issue in issues if issue.code == "missing_test_vectors")
+
+    assert is_deferred_contract_issue(missing.as_dict(), rule)
