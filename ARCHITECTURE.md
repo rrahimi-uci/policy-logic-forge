@@ -178,7 +178,256 @@ DAG generation once all four readiness invariants pass; affected rules
 remain `requires_review: true` in the final artifacts rather than blocking
 the run. A structural invariant failure (not remediable) still stops it.
 
-### 2.3 Resume and checkpointing
+### 2.3 Detailed stage reference
+
+Each agent runs as its own subprocess (`ExtractionPipeline._run`,
+`cli/extract.py`); the orchestration semantics in **Failure semantics**
+below refer to the OS exit code that subprocess returns, not a Python
+exception.
+
+#### `agent_01` — Document Organizer
+
+| | |
+| --- | --- |
+| **File** | `agents/agent_01_document_organizer.py` |
+| **Purpose** | Converts heterogeneous source documents (PDF, DOCX, Markdown, CSV, XLSX, TXT) into structurally chunked `.txt` files that mirror each source document's own table-of-contents/header hierarchy — not fixed-size splitting. |
+| **Inputs** | Raw files under the run's source directory, filtered to a supported-extension set. |
+| **Outputs** | `agent_01-organized-documents/<document_stem>/<section_path…>/<chunk_title>.txt` (metadata header + content) per chunk; per-document `_metadata.json` (`source_file, total_chunks, chunk_methods, structure[]`); run-level `_processing_results.json` (`total_files, processed, failed, total_chunks, chunker_tools_used, chunk_size_stats`). |
+| **Concurrency** | Documents are chunked concurrently via a thread pool (`KG_ORGANIZER_WORKERS`, default 32, capped to file count) — safe because each document's output folder is independent. |
+| **Failure semantics** | Plain success/failure per file; the orchestrator hard-blocks the pipeline if the stage as a whole fails. |
+
+##### Key logic
+
+- A tool registry dispatches by file type: `MarkdownChunker`, `CSVChunker`, `ExcelChunker`, `DocxChunker`, plus built-in PDF/TXT handling (PDF chunking is TOC/bookmark-based, with OCR fallback via `pytesseract`/`pdf2image` for scanned pages).
+- Before writing, any pre-existing output folder for a document is deleted (`shutil.rmtree`) — chunking is LLM-assisted and non-deterministic, so stale chunks from a prior run would otherwise be glob-matched by every downstream agent.
+- Chunk filenames are de-duplicated on title collision by appending the chunk id, since chunk titles are model-generated and can repeat within a section.
+
+#### `agent_02` — Entity Extractor
+
+| | |
+| --- | --- |
+| **File** | `agents/agent_02_entity_extractor.py` |
+| **Purpose** | Iteratively catalogs domain entity types and relationships (not rules) across up to `n_iterations` refinement passes, accumulating discoveries rather than replacing them each pass. |
+| **Inputs** | Every organized `.txt` chunk from `agent_01`. |
+| **Outputs** | `entity_types_and_relationships.json` — `entity_types`, `relationships`, `iteration`, `optimization_summary`, `final_quality_analysis`; an intermediate `entity_iteration_checkpoint.json` after every pass. |
+| **Failure semantics** | No special exit codes; raises on `n_iterations < 1` or invalid LLM JSON. Hard-blocks the pipeline. |
+
+##### Key logic
+
+- Each iteration samples a representative, evenly distributed subset of documents (default 8 docs / 1,200 chars each), shifted by a rotating offset per pass so successive iterations see different corpus windows, then merges new findings into the accumulated catalog (never overwrites it).
+- `entity_extractor.n_iterations` defaults to **3**; `entity_min_iterations` defaults to **2**. Early stop (`entity_early_stop`, on by default) fires only once `iteration ≥ min_iterations` **and** either no new entities/relationships were found this pass, or a quality-score target is met. In practice, the quality-score gate is a fixed placeholder (always 85/100) — early stop is driven almost entirely by new-item count plateauing at zero, not by the quality target.
+
+#### `agent_03` — Rules Extractor
+
+| | |
+| --- | --- |
+| **File** | `agents/agent_03_rules_extractor.py`, contract in `utils/rule_contract.py` |
+| **Purpose** | Extracts individual business rules as structured "v2 contract" objects — typed predicates, variables, and outcomes with exact source citations — batching the corpus into word-balanced batches with per-batch checkpointing. |
+| **Inputs** | Organized chunks (`agent_01`) plus the entity catalog (`agent_02`, used to validate `responsible_party`/`counterparties`). |
+| **Outputs** | `compliance_rules_with_entities.json`, keyed by `entity_types`/`relationships`, each carrying a nested `business_rules[]` list. |
+| **Checkpointing** | Batches are appended to a JSONL checkpoint keyed by a content fingerprint (SHA-256 of batch text); a checkpoint whose fingerprint no longer matches current content — because the source changed — is rejected as stale, never silently reused. |
+| **Failure semantics** | A malformed rule candidate is retained with `requires_review: true` rather than dropped. Hard-blocks the pipeline on stage failure. |
+
+##### Key logic
+
+- Batches are **word-balanced**, not fixed-file-count: oversized files are re-split at word boundaries with overlap, then bin-packed toward `target_words_per_batch`.
+- `bridge_exact_span` repairs LLM-quoted source text that isn't an exact substring of the source (e.g. the model silently drops an inline aside), by locating the true matching word span and rebuilding the quote verbatim — required downstream because `agent_09`'s grounding verifier needs literal substrings.
+- Every candidate is run through `annotate_rule_contract`, which never discards an invalid rule — it attaches `contract_issues[]` and sets `requires_review: true` on any error-severity issue instead.
+
+**v2 rule contract — top-level fields** (`utils/rule_contract.py`):
+
+| Field | Notes |
+| --- | --- |
+| `condition_predicates[]` | `predicate_id, variable, operator (==, !=, >, >=, <, <=, in, not_in), value, value_type` |
+| `condition_logic` | Boolean tree over predicate refs (`all`/`any`/`predicate_ref`) |
+| `outcomes[]` | `variable, operator="=", value, value_type` |
+| `variables[]` | `name, type, role (input\|derived\|output), unit?, allowed_range?, allowed_values?` |
+| `scope_basis` | One of `explicit`, `explicit_in_source`, `explicitly_none_in_source`, `explicitly_universal_in_source`, `genuinely_unscoped`, `inferred`, `unresolved_after_source_review` |
+| `exceptions[]`, `exception_basis` | Same shape as predicates; 5-value basis enum |
+| `source_reference`, `field_evidence` | Chunk path, section id, exact quoted source text |
+| `test_vectors[]` | Input/output example pairs for the rule |
+
+**Example** (`tests/test_rule_contract.py`):
+
+```python
+"condition_predicates": [{
+    "predicate_id": "p1", "variable": "price_differential_amount",
+    "operator": ">=", "value": "designated_threshold_amount",
+    "value_type": "variable_reference",
+}],
+"condition_logic": {"predicate_ref": "p1"},
+"outcomes": [{"variable": "maximum_number_of_pools", "operator": "=", "value": 3, "value_type": "number"}],
+"scope_basis": "inferred",
+"inference_reasoning": "The cited section is within the conventional-loan chapter.",
+"responsible_party": "SELLER_SERVICER", "counterparties": ["FANNIE_MAE"],
+"exception_basis": "explicitly_none_in_source",
+```
+
+#### `agent_04` — Rule Validator
+
+| | |
+| --- | --- |
+| **File** | `agents/agent_04_rule_validator.py` |
+| **Purpose** | Runs five heuristic quality checks over `agent_03`'s rules and writes a standalone report. **Advisory only — never gates or modifies pipeline data.** |
+| **Inputs** | `compliance_rules_with_entities.json`; optionally the organized source directory. |
+| **Outputs** | `validation_report.json` — `passed[], warnings[], failures[], corrections[], statistics{passed_count, warning_count, failure_count, avg_confidence}`. |
+| **Failure semantics** | None that matter — `main()` always exits 0. `cli/extract.py` calls it as `self.run_agent_04()  # advisory; never blocks the pipeline` and discards the return value. |
+
+##### Key logic — the five checks, and how heuristic each really is
+
+1. Confidence score presence/threshold (flag if `< 70`).
+2. Numeric-threshold consistency — regex-extracted numbers on shared key terms (`credit score`, `ltv`, `dti`, …).
+3. Field completeness against the v2 required-field list.
+4. Cross-rule contradiction detection — **a documented placeholder**; the code comment states a full implementation would use an LLM, and it never actually flags anything today.
+5. Source-reference verification — samples up to 10 rules and checks only that a `source_reference` exists, not that it is textually correct.
+
+Its findings are never read by any other agent or by the orchestrator's control flow.
+
+#### `agent_05` — Rules/Entities Merger
+
+| | |
+| --- | --- |
+| **File** | `agents/agent_05_rules_with_entities_merger.py` |
+| **Purpose** | Flattens `agent_03`'s entity/relationship-nested rule structure into one top-level rule list, cross-references each rule's entity/relationship reference to `agent_02`'s canonical names, and attaches inline entity/relationship definitions to each rule. |
+| **Inputs** | `entity_types_and_relationships.json` (`agent_02`) + `compliance_rules_with_entities.json` (`agent_03`). |
+| **Outputs** | `compliance_knowledge_graph.json` — `metadata`, `entity_types`, `relationships`, flat `business_rules[]`, `statistics{total_entities, total_relationships, total_rules, rules_by_entity, rules_by_type}`. |
+| **Failure semantics** | No special exit codes; hard-blocks the pipeline on failure. |
+
+##### Key logic
+
+- Builds a case/whitespace/hyphen-insensitive canonical-name lookup over `agent_02`'s entity/relationship keys, and remaps any rule whose reference resolves but differs in spelling (e.g. `"Financial Institution"` → `"FINANCIAL_INSTITUTION"`).
+- If a rule references a party `agent_02` never emitted as a top-level entity, a placeholder entity is synthesized and explicitly marked as such — never silently dropped, never silently invented as an unmarked definition.
+
+#### `agent_06` — Knowledge Graph Optimizer
+
+| | |
+| --- | --- |
+| **File** | `agents/agent_06_knowledge_graph_optimizer.py` |
+| **Purpose** | Conservatively deduplicates truly-identical rules and derives a dependency/conflict edge graph between rules, both LLM-driven, then deterministically enforces `rule_id`/`rule_name` uniqueness on the result. |
+| **Inputs** | `compliance_knowledge_graph.json` (`agent_05`). |
+| **Outputs** | `optimized_compliance_knowledge_graph.json` — `optimization_summary{deduplication, dependency_analysis}`, `business_rules`, `deduplication_details`, `dependency_details{dependencies, dependency_chains, conflicts}`. This directory is then shared and overwritten in place by `agent_07`–`agent_09`. |
+| **Failure semantics** | A chunk-level dedup failure is caught and that chunk's rules are retained unchanged, rather than failing the whole stage. `--skip-optimize` skips `agent_06`–`agent_08` entirely. |
+
+##### Key logic
+
+- **Deduplication** is LLM-based and batched (default 25 rules/batch): cross-*chunk* merges are intentionally never inferred — "a missed merge is safer than combining rules whose numeric scope or source differs." Both `source_reference` **and** `field_evidence` are merged onto the surviving primary rule (a real fixed defect: dropping the duplicate's `field_evidence` previously caused downstream `corpus_integrity` invariant failures).
+- **Dependency analysis** is separately LLM-based, looking for prerequisite/sequential/conditional/complementary/contradictory/override relationships between rules.
+- A deterministic guard, `dependency_has_structural_support`, checks whether two rules in a claimed dependency edge share *any* variable name at all. This is deliberately weak — it exists only to catch the clearest false positives, not to replace independent verification. On a real mortgage-domain run, `agent_09`'s independent grounding pass found **44% of dependency/conflict claims did not actually hold up structurally** — the reason a second, independent verification stage exists at all.
+- `utils/kg_readiness.py` is **not** used by `agent_06`; its deterministic primitives (cited-section tracking, naming/referential-integrity checks) first come into play in `agent_07`.
+
+#### `agent_07` — Executable Readiness
+
+| | |
+| --- | --- |
+| **File** | `agents/agent_07_executable_readiness.py`, deterministic core in `utils/kg_readiness.py` |
+| **Purpose** | Completes every rule's evidence-dependent fields (exceptions, applicability scope, workflow eligibility, hit policy) via bounded LLM evidence retrieval over the full corpus, then validates the graph against four deterministic invariants. |
+| **Inputs** | Baseline graph (`agent_05`, for corpus-citation comparison), optimized graph (`agent_06`), organized corpus. |
+| **Outputs** | Overwrites the optimized graph; writes `corpus_manifest.json`, `kg_readiness_report.{json,md}` — `invariants{…}`, `rules_ready`, `rules_requiring_review`, `review_routes`, `human_review_required_rules`. |
+| **Exit codes** | **0** — all invariants pass, no rule needs review. **2** — any invariant fails; unrecoverable, hard pipeline stop. **3** — all invariants pass but at least one rule needs review; a deliberate *data-quality*, not *process-failure*, signal. |
+
+**The four invariants, precisely:**
+
+| Invariant | What it checks |
+| --- | --- |
+| `corpus_integrity` | Every cited-section addition/removal between the baseline and final graph has an explicit reason string. |
+| `naming_consistency` | Zero entity-key naming violations against a canonical `^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*$` pattern. |
+| `schema_consistency` | Zero **blocking** v2-contract violations. Deliberately gated on blocking errors alone, not evidence/provenance gaps — folding those in previously made this invariant fail on every run with any review-required rule, pre-empting `agent_08` remediation before it could run. |
+| `referential_integrity` | Zero dependency edges pointing at a `rule_id` that doesn't exist. |
+
+##### Key logic
+
+- Evidence retrieval builds an inverted token index (words, path tokens, exception markers like "except"/"unless"/"notwithstanding") over the organized corpus *before* any LLM call, so the search record can prove the whole corpus was inspected.
+- Each `(rule, evidence packet)` pair is fingerprinted (SHA-256) and checkpointed to JSONL; a resumed run rejects checkpoint rows whose rule no longer exists or whose recorded corpus hash doesn't match.
+
+#### `agent_08` — Readiness Remediator
+
+| | |
+| --- | --- |
+| **File** | `agents/agent_08_readiness_remediator.py` |
+| **Purpose** | Re-requests LLM completion for **only** the specific fields that caused an `agent_07` exceptions/scope failure — never a full re-extraction — and separately re-resolves unresolved rule conflicts. |
+| **Inputs** | Baseline graph, the `agent_07`-annotated optimized graph, organized corpus. |
+| **Outputs** | Overwrites the optimized graph and readiness reports; adds `agent_08_remediation_report.json`. |
+| **Exit codes** | Same contract as `agent_07`: 0 clean, 2 an invariant still fails after remediation, 3 invariants pass but rules remain under review. |
+
+##### Key logic
+
+- Patches only a fixed field allowlist per rule — `exceptions`, `exception_basis`, `exception_verification`, `applicability_scope`, `scope_basis`, `scope_derivation` (plus new typed input variables the patch introduces) — and only for rules whose failures are exactly `exceptions` and/or `scope`.
+- Rebuilds unresolved conflict pairs (capped at 5,000 to bound the request count on large conflict groups) and asks the model to resolve each as `non_conflict`/`conflict` with a rationale and any hit-policy update.
+- One deterministic rule folded in here: if any rule declares a `list`-typed output variable, that variable becomes graph-wide `list`-typed and every rule assigning it switches to `COLLECT` hit policy — resolving conflicts where rules legitimately co-fire on a shared collection output.
+
+**Example** (`tests/test_readiness_remediator.py`): a rule failing on `exceptions` gets patched with a new input variable `exception_applies` (boolean), a matching exception predicate, `exception_basis: "explicit_in_source"`, and a real evidence citation — `{"chunk_path": "B2-1-01/001.txt", "section_id": "B2-1-01", "source_text": "Except when exception_applies."}`.
+
+#### `agent_09` — Grounding Verifier
+
+| | |
+| --- | --- |
+| **File** | `agents/agent_09_grounding_verifier.py` |
+| **Purpose** | Independently certifies every source-derived rule field, claim by claim, against text the verifier re-locates in the corpus itself — it does not trust `agent_07`/`agent_08`'s stored citations. |
+| **Inputs** | The post-remediation optimized graph, organized corpus. |
+| **Outputs** | Adds `metadata.grounding_certification` + a per-rule `grounding` block to the graph; `kg_grounding_report.{json,md}` — `pass, total_claims, supported_claims, contradicted_claims, insufficient_evidence_claims, claim_coverage_percent, review_route_counts, …`. |
+| **Exit codes** | **0** clean pass. **3** — `report.pass` is false; the orchestrator only tolerates this if the report is *complete* (`claim_coverage_percent == 100.0`, zero missing/duplicate/unexpected verifier responses) — an incomplete run is a hard stop, never silently accepted. |
+
+##### Key logic — what "independent" means precisely
+
+- Splits claims into two disjoint verification paths, deliberately not both model-based:
+  - `description`, `condition`, `outcome`, `party`, `scope`, `exception` are verified by the LLM against an evidence packet the module **rebuilds itself** from the raw corpus.
+  - `condition_logic` and `test_vector` are **excluded** from model verification — they are pipeline-derived values, not sentences any document states verbatim, and asking a model for a literal quote scored near-100% false-insufficient in practice. These are verified **structurally** instead (predicate coverage, input/output consistency against declared variables).
+- Every model verdict of `supported`/`contradicted` is downgraded to `insufficient_evidence` unless the model's cited quote resolves to a genuine substring of the real corpus text — a hallucinated citation cannot pass even if the model claims "supported."
+- `claim_coverage_percent` measures response-set **completeness** (did the verifier return exactly one verdict per claim, with none missing, duplicated, or unexpected) — a fail-closed integrity check on the verification pipeline itself, distinct from the actual supported/contradicted/insufficient outcome counts.
+
+#### `agent_10` — Dependency DAG Generator
+
+| | |
+| --- | --- |
+| **File** | `agents/agent_10_dag_generator.py`, algorithm in `utils/dag_builder.py` |
+| **Purpose** | Deterministically partitions every rule into one or more directed acyclic graphs built from `agent_06`'s dependency edges, guaranteeing every rule appears in exactly one output DAG — cycles included. |
+| **Inputs** | Optimized graph (falls back to the pre-optimization graph under `--skip-optimize`, where every rule becomes an isolated single-node DAG since dependency edges don't exist yet). |
+| **Outputs** | `dependency_dags.json` — `dags[]` (`rule_ids, nodes, edges, cycle_groups, topological_order, is_acyclic`), `coverage{total_rules, covered_rules, complete}`, `dropped_edges`, `self_loop_edges`. |
+| **Exit codes** | 0 normally; **2** only if `coverage.complete` is somehow false — a real bug, since coverage is structurally guaranteed by construction. |
+
+##### Key logic — the 100%-coverage guarantee, precisely
+
+- Weakly-connected components (union-find over the undirected view of all edges) assign *every* rule, including zero-edge rules, to exactly one component; each component becomes exactly one DAG. The result is explicitly re-verified (`covered_ids == node_ids`, no duplicates) rather than assumed.
+- Within each component, Kosaraju's two-pass DFS finds strongly connected components of any size; any SCC larger than one node is condensed into a single "cycle group" node. SCC-condensation of a directed graph is always acyclic, so a topological sort (Kahn's algorithm) is guaranteed to succeed afterward.
+- Self-loops are reported separately and excluded from cycle detection; edges referencing an unknown `rule_id` are dropped and reported.
+
+**Example**: a cycle `R1 → R2 → R3 → R1` plus a downstream dependency `R3 → R4` condenses into one `cycle_groups` entry `{rule_ids: [R1, R2, R3]}`, with `R4` ordered strictly after that group in `topological_order`.
+
+#### `agent_11` — Executable Model Generator
+
+| | |
+| --- | --- |
+| **File** | `agents/agent_11_executable_model_generator.py` |
+| **Purpose** | Projects the final certified graph into standards-based executable/review artifacts — DMN, BPMN, CMMN, SBVR — validates them for internal consistency, and (additively, best-effort) lowers the graph into a separately provable LExec IR. |
+| **Inputs** | Optimized graph (`agent_06`–`09`), `dependency_dags.json` (`agent_10`). Fails fast (exit 2) if either is missing. |
+| **Outputs** | `compliance_decisions.dmn`, `compliance_workflows.bpmn`, `compliance_reviews.cmmn`, `semantic_vocabulary_profile.json`, and best-effort `lexec_ir.json`/`compilation_report.json`/`proof_records.json`; `executable_model_report.json` summarizing rule/review/BPMN/CMMN counts. |
+| **Exit codes** | 0 on success; **2** if inputs are missing or DMN/BPMN/CMMN validation raises. |
+
+##### Key logic — exact order of operations
+
+1. Build DMN (`utils/executable_models.build_graph_dmn`) and BPMN (`build_dags_bpmn`).
+2. Build CMMN (`utils/semantic_artifacts.build_review_cmmn`) and the SBVR profile (`build_sbvr_profile`).
+3. Validate all four for internal consistency — **any failure raises before anything is written to disk**, so there is never a partial artifact set from a failed validation.
+4. Write the four artifacts.
+5. Best-effort: `compile_and_prove` (`utils/lexec_compile.py`) lowers the graph to LExec IR and runs bounded proof search, writing the three compiler artifacts. Wrapped in a bare exception handler that only warns — a compiler failure must never block or replace the artifacts already written in step 4.
+6. Write the summary report.
+
+A per-rule gate, `bpmn_eligibility`, decides DMN/CMMN-only vs. also-BPMN: it requires `workflow_semantics.kind == "prescriptive_process"`, `basis == "explicit_in_source"`, a non-empty trigger event and actor role, and direct evidence — "a party plus an outcome is not a process." Rules failing this stay visible in DMN/CMMN, with the omission reason recorded in `bpmn_omissions`.
+
+### 2.4 Orchestration summary
+
+The full run order and gating logic, tying every stage above together:
+
+1. `agent_01` → `agent_02` → `agent_03` — each a hard gate.
+2. `agent_04` — called, but its return value is discarded; advisory only.
+3. `agent_05` → `agent_06` — hard gates (unless `--skip-optimize`, which skips `agent_06`–`agent_08` entirely).
+4. `agent_07` — on failure, checks whether any rule needs review: if none, hard stop (unrecoverable invariant failure); if some do, runs `agent_08` then re-verifies with `agent_07`. A repeat exit-3 that is still fully invariant-passing is tolerated and the pipeline continues with rules flagged `requires_review`.
+5. `agent_09` — exit-3 tolerated only if the report shows complete, fail-closed coverage; otherwise hard stop.
+6. `agent_10` → `agent_11` — hard gates.
+
+A "review-required" state is therefore a legitimate terminal state throughout stages 07–09 — explicitly distinguished from a process/integrity failure via exit code 3 vs. 2 — and flows through to the final DMN/BPMN/CMMN artifacts with `requires_review`/`review_route` flags intact rather than blocking generation.
+
+### 2.5 Resume and checkpointing
 
 Two independent mechanisms cooperate:
 
@@ -364,7 +613,300 @@ Key design choices, since they're easy to get wrong by assumption:
 See [`plan/regdelta-product-plan.md`](plan/regdelta-product-plan.md) for the
 full rollout plan and acceptance criteria.
 
-## 6. Directory reference
+## 6. Executable model formats
+
+`agent_11` emits four standards-based artifacts per run. The examples below
+are not hand-written approximations — they are the **actual, unedited
+output** of `utils/executable_models.py` and `utils/semantic_artifacts.py`,
+executed against a small synthetic rule ("transactions over $10,000 require
+compliance-officer approval") for this document. XML is reformatted from the
+generator's real single-line output to multi-line for readability only; no
+element, attribute, or value was altered.
+
+| Format | Namespace / schema | Real spec conformance |
+| --- | --- | --- |
+| DMN | `https://www.omg.org/spec/DMN/20191111/MODEL/` | DMN 1.3 |
+| BPMN | `http://www.omg.org/spec/BPMN/20100524/MODEL` | BPMN 2.0 |
+| CMMN | `http://www.omg.org/spec/CMMN/20151109/MODEL` | CMMN 1.1 (per the module's own validator error text) |
+| SBVR | n/a — plain JSON | `"conformance": "pipeline_profile_not_full_sbvr_exchange"` — explicitly *not* a full OMG SBVR interchange document |
+| LExec IR | n/a — plain JSON | `"schema_version": "lexec-ir/1.0"` (internal, not a standards body format) |
+
+Every emitted document also carries a `ctc:` namespace
+(`https://github.com/rrahimi-uci/policy-logic-forge/executable/1`) with
+pipeline-specific audit attributes — `ctc:ruleId`, `ctc:requiresReview`,
+`ctc:groundingStatus`, `ctc:sourceRef` — so a reviewer can trace any element
+straight back to its source rule and citation without leaving the document.
+
+### 6.1 DMN — `compliance_decisions.dmn`
+
+Source rule fed to `build_graph_dmn`:
+
+```python
+{
+    "rule_id": "R-101", "rule_name": "Large Transaction Approval",
+    "requires_review": False, "grounding": {"status": "certified"},
+    "condition_predicates": [
+        {"variable": "transaction_amount", "operator": ">", "value": 10000}
+    ],
+    "variables": [
+        {"name": "transaction_amount", "type": "number", "role": "input"},
+        {"name": "requires_approval", "type": "boolean", "role": "output"},
+    ],
+    "outcomes": [{"variable": "requires_approval", "value": True}],
+    "execution": {"dmn": {"hit_policy": "UNIQUE"}},
+    "source_reference": {"chunk_path": "policy.txt", "section_id": "s1"},
+}
+```
+
+Real generated output:
+
+```xml
+<?xml version='1.0' encoding='utf-8'?>
+<dmn:definitions xmlns:ctc="https://github.com/rrahimi-uci/policy-logic-forge/executable/1"
+                 xmlns:dmn="https://www.omg.org/spec/DMN/20191111/MODEL/"
+                 id="definitions_compliance_graph" name="Policy Logic Forge DMN"
+                 namespace="https://github.com/rrahimi-uci/policy-logic-forge/executable/1"
+                 exporter="policy-logic-forge" exporterVersion="graph-projection/1">
+  <dmn:decision id="decision_R-101" name="Large Transaction Approval"
+                ctc:ruleId="R-101" ctc:requiresReview="false"
+                ctc:groundingStatus="certified" ctc:sourceRef="policy.txt#s1">
+    <dmn:decisionTable id="table_R-101" hitPolicy="UNIQUE">
+      <dmn:input id="input_R-101_transaction_amount">
+        <dmn:inputExpression typeRef="string">
+          <dmn:text>transaction_amount</dmn:text>
+        </dmn:inputExpression>
+      </dmn:input>
+      <dmn:output id="output_R-101_requires_approval" name="requires_approval" typeRef="string" />
+      <dmn:rule id="row_R-101">
+        <dmn:inputEntry>
+          <dmn:text>&gt; 10000</dmn:text>
+        </dmn:inputEntry>
+        <dmn:outputEntry>
+          <dmn:text>true</dmn:text>
+        </dmn:outputEntry>
+      </dmn:rule>
+    </dmn:decisionTable>
+  </dmn:decision>
+</dmn:definitions>
+```
+
+**Real quirk worth knowing before reading generated output elsewhere:**
+`typeRef` is `"boolean"` only when a variable's declared type is literally
+`boolean`; every other type — including `number`, as here — defaults to
+`"string"`. Output columns are always `typeRef="string"` unconditionally.
+The FEEL comparison text itself (`> 10000`) is numerically correct; only the
+declared column type is imprecise. An unsupported predicate fails closed to
+a literal `false` `inputEntry` rather than being silently omitted.
+
+### 6.2 BPMN — `compliance_workflows.bpmn`
+
+Additional fields fed to `build_dags_bpmn` (only rules passing
+`bpmn_eligibility` reach this emitter — see §2.3's `agent_11` entry):
+
+```python
+rule["responsible_party"] = "COMPLIANCE_OFFICER"
+rule["workflow_semantics"] = {
+    "kind": "prescriptive_process", "basis": "explicit_in_source",
+    "trigger_event": "Transaction submitted", "actor_role": "COMPLIANCE_OFFICER",
+    "ordered_steps": [
+        {"step_id": "review", "name": "Review transaction", "kind": "user_task"},
+        {"step_id": "decide", "name": "Apply approval decision", "kind": "business_rule_task"},
+    ],
+    "evidence": [{"chunk_path": "policy.txt", "section_id": "s1",
+                  "source_text": "Upon submission, review the transaction and apply the approval decision."}],
+}
+```
+
+Real generated output:
+
+```xml
+<?xml version='1.0' encoding='utf-8'?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:ctc="https://github.com/rrahimi-uci/policy-logic-forge/executable/1"
+                  id="definitions_compliance_graph" name="Policy Logic Forge BPMN"
+                  targetNamespace="https://github.com/rrahimi-uci/policy-logic-forge/executable/1"
+                  exporter="policy-logic-forge" exporterVersion="explicit-workflow/2">
+  <bpmn:process id="process_R-101" name="Large Transaction Approval" isExecutable="true"
+                ctc:ruleId="R-101" ctc:sourceRef="policy.txt#s1"
+                ctc:triggerEvent="Transaction submitted" ctc:actorRole="COMPLIANCE_OFFICER">
+    <bpmn:startEvent id="start_1" name="Transaction submitted" />
+    <bpmn:userTask id="step_R-101_review" name="Review transaction" ctc:ruleId="R-101" />
+    <bpmn:sequenceFlow id="flow_1_1" sourceRef="start_1" targetRef="step_R-101_review" />
+    <bpmn:businessRuleTask id="step_R-101_decide" name="Apply approval decision"
+                            implementation="##DMN" ctc:ruleId="R-101" ctc:decisionRef="decision_R-101" />
+    <bpmn:sequenceFlow id="flow_1_2" sourceRef="step_R-101_review" targetRef="step_R-101_decide" />
+    <bpmn:endEvent id="end_1" />
+    <bpmn:sequenceFlow id="flow_1_end" sourceRef="step_R-101_decide" targetRef="end_1" />
+  </bpmn:process>
+</bpmn:definitions>
+```
+
+**Real quirk:** `build_dags_bpmn` accepts a `dags` argument (the DAG
+partition from `agent_10`) but explicitly discards it — dependency order
+between *different* rules is never process order within *one* rule's
+workflow. Only that rule's own `workflow_semantics.ordered_steps` drives
+sequence flow. No `bpmn:lane`/`laneSet` elements are ever emitted; the actor
+role is tracked only as a `ctc:actorRole` attribute. `businessRuleTask`
+carries `implementation="##DMN"` and a `ctc:decisionRef` pointing at the
+matching DMN decision id, linking the two documents.
+
+### 6.3 CMMN — `compliance_reviews.cmmn`
+
+Source rules fed to `build_review_cmmn`:
+
+```python
+{"rule_id": "R-101", "rule_name": "Large Transaction Approval",
+ "review_route": {"route": "human_review", "human_review_required": True,
+                   "reasons": ["2 contradicted claims"]}}
+# a second rule with review_route.route == "machine_repair" produces no case at all
+```
+
+Real generated output:
+
+```xml
+<?xml version='1.0' encoding='utf-8'?>
+<cmmn:definitions xmlns:cmmn="http://www.omg.org/spec/CMMN/20151109/MODEL"
+                  xmlns:ctc="https://github.com/rrahimi-uci/policy-logic-forge/executable/1"
+                  id="definitions_policy_review"
+                  targetNamespace="https://github.com/rrahimi-uci/policy-logic-forge/executable/1"
+                  exporter="policy-logic-forge" exporterVersion="review-routing/1">
+  <cmmn:case id="case_R-101" name="Large Transaction Approval"
+             ctc:ruleId="R-101" ctc:reviewRoute="human_review">
+    <cmmn:casePlanModel id="plan_R-101" name="Resolve policy evidence findings">
+      <cmmn:humanTask id="review_task_R-101" name="Review grounded findings" />
+      <cmmn:planItem id="review_item_R-101" definitionRef="review_task_R-101" />
+      <cmmn:milestone id="resolved_R-101" name="Review resolved" />
+      <cmmn:planItem id="resolved_item_R-101" definitionRef="resolved_R-101" />
+    </cmmn:casePlanModel>
+  </cmmn:case>
+</cmmn:definitions>
+```
+
+**Real quirk:** only rules routed to `human_review` or `case_management`
+produce a `case` at all — `machine_repair` and any other route are correctly
+omitted. Every case is structurally identical: exactly one `humanTask`
+("Review grounded findings") plus one `milestone` ("Review resolved"),
+regardless of rule content. There is no `sentry`/`entryCriterion` element
+anywhere in this generator — case progression is not conditionally gated.
+
+### 6.4 SBVR — `semantic_vocabulary_profile.json`
+
+Source graph fed to `build_sbvr_profile`:
+
+```python
+{
+    "entity_types": {
+        "COMPLIANCE_OFFICER": {"definition": "The role responsible for reviewing flagged transactions.",
+                                "concept_kind": "actor_role",
+                                "source_evidence": [{"chunk_path": "policy.txt", "section_id": "s1"}]},
+        "TRANSACTION": {"definition": "A monetary transfer subject to compliance review."},
+    },
+    "relationships": {
+        "REQUIRES_APPROVAL_FROM": {
+            "source_entity": "TRANSACTION", "target_entity": "COMPLIANCE_OFFICER",
+            "grounding": {"status": "supported"},
+            "source_evidence": [{"chunk_path": "policy.txt", "section_id": "s1"}],
+        },
+    },
+}
+```
+
+Real generated output (full):
+
+```json
+{
+  "profile_type": "sbvr_aligned_semantic_vocabulary",
+  "conformance": "pipeline_profile_not_full_sbvr_exchange",
+  "concept_kinds": [
+    "actor_role", "business_object", "decision_variable", "event", "evidence_object", "process"
+  ],
+  "concepts": [
+    {
+      "concept_id": "COMPLIANCE_OFFICER",
+      "preferred_term": "Compliance Officer",
+      "definition": "The role responsible for reviewing flagged transactions.",
+      "concept_kind": "actor_role",
+      "source_evidence": [{"chunk_path": "policy.txt", "section_id": "s1"}]
+    },
+    {
+      "concept_id": "TRANSACTION",
+      "preferred_term": "Transaction",
+      "definition": "A monetary transfer subject to compliance review.",
+      "concept_kind": "unresolved",
+      "source_evidence": []
+    }
+  ],
+  "fact_types": [
+    {
+      "fact_type_id": "REQUIRES_APPROVAL_FROM",
+      "subject_concept": "TRANSACTION",
+      "verb_term": "requires approval from",
+      "object_concept": "COMPLIANCE_OFFICER",
+      "grounding_status": "supported",
+      "source_evidence": [{"chunk_path": "policy.txt", "section_id": "s1"}]
+    }
+  ],
+  "unresolved_concept_ids": ["TRANSACTION"]
+}
+```
+
+**Real quirk:** `TRANSACTION` had no `concept_kind` in its input, so it is
+typed `"unresolved"` and listed in `unresolved_concept_ids` — a fail-closed
+default, not an error. `preferred_term` is generated deterministically from
+the concept id (`"TRANSACTION".replace("_", " ").title()`), and `verb_term`
+from the fact-type id — neither is a model-authored paraphrase.
+
+### 6.5 LExec IR — `lexec_ir.json` (the proof-checked side channel)
+
+Minimal v2 rule that compiles cleanly, fed to `lower_graph`:
+
+```python
+{
+    "schema_version": "2.0", "rule_id": "r_large_txn_approval", "rule_type": "obligation",
+    "condition_predicates": [{"predicate_id": "p_amount", "variable": "transaction_amount",
+                               "operator": ">", "value": 10000, "value_type": "number"}],
+    "condition_logic": {"all": [{"predicate_ref": "p_amount"}]},
+    "outcomes": [{"variable": "requires_approval", "operator": "=", "value": True, "value_type": "boolean"}],
+    "variables": [
+        {"name": "transaction_amount", "type": "number", "role": "input"},
+        {"name": "requires_approval", "type": "boolean", "role": "output"},
+    ],
+    "recommended_hit_policy": "UNIQUE", "mandatory": True,
+    "source_reference": {"chunk_path": "fixture/aml_policy.txt", "section_id": "sec_4_2",
+                          "source_text": "Transactions exceeding $10,000 require compliance officer approval before processing."},
+}
+```
+
+Real generated output (condition + effect excerpt):
+
+```json
+"condition": {
+  "op": "and",
+  "args": [
+    {"op": "gt", "left": {"symbol": "transaction_amount"}, "right": {"literal": 10000, "type": "real"}}
+  ]
+},
+"exceptions": [],
+"effects": [
+  {
+    "kind": "assignment", "modality": "obligation", "target": "requires_approval",
+    "value": {"literal": true, "type": "bool"},
+    "provenance": [{"chunk_path": "fixture/aml_policy.txt", "section_id": "sec_4_2",
+                     "start_offset": 0, "end_offset": 85, "source_sha256": "aaa…a"}]
+  }
+]
+```
+
+**Real quirk:** `transaction_amount` lowers to theory `real`, not `int` —
+v2's `number` type is always conservatively treated as a real; the IR never
+infers an integer theory from an integral-looking value
+([`docs/ir-semantics-v1.md`](docs/ir-semantics-v1.md)). The full document additionally
+carries `semantics` (`null_model: kleene_three_valued`,
+`unknown_at_table_boundary: refuse`, `exception_reading: defeater_or`), a
+`tables` entry with `policy_proof.status: "unknown"` until `smt.py` proves
+it, and empty `refusals`/`ignored_fields` arrays for a rule this simple.
+
+## 7. Directory reference
 
 ```text
 cli/                         orchestrators
@@ -411,7 +953,7 @@ pipeline-output/<batch>/
     └── lexec_ir.json, compilation_report.json, proof_records.json
 ```
 
-## 7. Testing
+## 8. Testing
 
 No API key is required to run the suite — it tests contract validation,
 readiness/grounding logic, dependency-DAG partitioning, prompt-pack
