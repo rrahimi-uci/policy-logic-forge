@@ -1,7 +1,6 @@
 import type { RuleRow, RunSummary, Stage } from "./types";
 
 export const navItems = [
-  ["new-run", "Start new run", "upload"],
   ["runs", "Runs", "runs"],
   ["overview", "Run overview", "overview"],
   ["queue", "Review queue", "queue"],

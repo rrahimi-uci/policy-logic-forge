@@ -9,7 +9,6 @@ from __future__ import annotations
 import json
 import mimetypes
 import os
-import shutil
 import tempfile
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -17,10 +16,6 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
-from cli.extract import DOMAINS
-
-from .jobs import JobCollisionError, JobRunner
-from .multipart import MultipartError, UploadTooLarge, save_upload
 from .regdelta import RegDeltaPairs, RegDeltaRuns
 from .review_index import ReviewIndex, _slug, build_review_index, stable_hash
 from .review_store import ReviewStore
@@ -31,7 +26,7 @@ MAX_ARTIFACT_VIEW_BYTES = 2_000_000
 class ReviewService:
     def __init__(
         self, pipeline_root: str | Path, index_root: str | Path | None = None, review_db: str | Path | None = None,
-        regdelta_root: str | Path | None = None, upload_root: str | Path | None = None,
+        regdelta_root: str | Path | None = None,
     ) -> None:
         self.pipeline_root = Path(pipeline_root).expanduser().resolve()
         default_index_root = Path(__file__).resolve().parents[1] / ".cache" / "review-index"
@@ -43,15 +38,6 @@ class ReviewService:
         self.regdelta_runs = RegDeltaRuns(self.pipeline_root)
         self._cache: dict[str, ReviewIndex] = {}
         self._cache_signature: dict[str, tuple[tuple[str, int, int], ...]] = {}
-
-        # Deliberate, explicitly-scoped exception to the read-only canonical
-        # artifact boundary: uploads and pipeline jobs are the UI's own write
-        # surface, kept fully separate from `pipeline_root` -- see
-        # `ui/contracts.md`.
-        repo_root = Path(__file__).resolve().parents[2]
-        self.upload_root = Path(upload_root or repo_root / "compliance-files" / "uploads").expanduser().resolve()
-        self.upload_root.mkdir(parents=True, exist_ok=True)
-        self.jobs = JobRunner(repo_root, self.review_store, self.review_store.path.parent / "job-logs")
 
     def run_dirs(self) -> list[Path]:
         if not self.pipeline_root.is_dir():
@@ -226,23 +212,13 @@ def create_handler(service: ReviewService, static_root: str | Path | None = None
 
         def do_POST(self) -> None:  # noqa: N802
             parsed = urlparse(self.path)
-            content_type = self.headers.get("Content-Type", "")
             length = _int(self.headers.get("Content-Length"), 0)
             try:
-                if content_type.lower().startswith("multipart/form-data"):
-                    payload = _route_post_multipart(service, parsed.path, self.rfile, length, content_type)
-                else:
-                    body = json.loads(self.rfile.read(length) or b"{}")
-                    if not isinstance(body, dict):
-                        raise ValueError("request body must be a JSON object")
-                    payload = _route_post(service, parsed.path, body)
+                body = json.loads(self.rfile.read(length) or b"{}")
+                if not isinstance(body, dict):
+                    raise ValueError("request body must be a JSON object")
+                payload = _route_post(service, parsed.path, body)
                 self._send(HTTPStatus.CREATED, payload)
-            except JobCollisionError as exc:
-                self._send(HTTPStatus.CONFLICT, {"error": str(exc)})
-            except UploadTooLarge as exc:
-                self._send(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, {"error": str(exc)})
-            except MultipartError as exc:
-                self._send(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
             except KeyError as exc:
                 self._send(HTTPStatus.NOT_FOUND, {"error": str(exc)})
             except ValueError as exc:
@@ -270,21 +246,6 @@ def _route_get(service: ReviewService, path: str, params: dict[str, list[str]]) 
         return None
     if segments[1:] == ["health"]:
         return {"status": "ok", "pipeline_root": str(service.pipeline_root), "run_count": len(service.run_dirs()), "cached_runs": len(service._cache)}
-    if segments[1:] == ["domains"]:
-        return {"items": list(DOMAINS)}
-    if segments[1:] == ["uploads"]:
-        return {"items": service.review_store.list_uploads()}
-    if segments[1:] == ["jobs"]:
-        return {"items": service.jobs.list_jobs()}
-    if len(segments) >= 3 and segments[1] == "jobs":
-        job = service.jobs.get_job(segments[2])
-        if job is None:
-            raise KeyError(f"unknown job: {segments[2]}")
-        if len(segments) == 3:
-            return job
-        if len(segments) == 4 and segments[3] == "log":
-            return service.jobs.tail_log(job, offset=_int(_first(params, "offset"), 0))
-        raise KeyError("unknown API route")
     if segments[1:] == ["runs"]:
         return {"items": service.runs()}
     if len(segments) >= 2 and segments[1] == "runs":
@@ -360,13 +321,6 @@ def _route_get(service: ReviewService, path: str, params: dict[str, list[str]]) 
 
 
 def _route_post(service: ReviewService, path: str, body: dict[str, Any]) -> dict[str, Any]:
-    if path == "/api/jobs":
-        return _create_job(service, body)
-    segments = [segment for segment in path.split("/") if segment]
-    if len(segments) == 4 and segments[0] == "api" and segments[1] == "runs" and segments[3] == "resume":
-        run_id = segments[2]
-        resume_from = body.get("resume_from") or None
-        return service.jobs.resume(run_id=run_id, resume_from=resume_from)
     if path in {"/api/review/comments", "/api/review/decisions", "/api/review/labels"}:
         required = ("reviewer", "run_id", "artifact_type", "artifact_id")
         missing = [key for key in required if not body.get(key)]
@@ -391,74 +345,6 @@ def _route_post(service: ReviewService, path: str, body: dict[str, Any]) -> dict
             raise ValueError("definition must be a JSON object")
         return service.review_store.save_view(reviewer=str(body["reviewer"]), name=str(body["name"]), definition=body["definition"], run_id=run_id)
     raise KeyError("unknown API route")
-
-
-def _create_job(service: ReviewService, body: dict[str, Any]) -> dict[str, Any]:
-    domain = str(body.get("domain") or "").strip()
-    if domain not in DOMAINS:
-        raise ValueError(f"unsupported or missing domain: {domain!r}")
-    batch_name = str(body.get("batch_name") or "").strip()
-    if not batch_name:
-        raise ValueError("missing required field: batch_name")
-
-    upload_id = body.get("upload_id")
-    if upload_id:
-        upload = service.review_store.get_upload(str(upload_id))
-        if upload is None:
-            raise KeyError(f"unknown upload: {upload_id}")
-        source_dir = upload["dir"]
-    else:
-        raw_dir = str(body.get("source_dir") or "").strip()
-        if not raw_dir:
-            raise ValueError("must provide either upload_id or source_dir")
-        candidate = Path(raw_dir)
-        if not candidate.is_absolute():
-            candidate = service.jobs.repo_root / "compliance-files" / raw_dir
-        source_dir = str(candidate)
-
-    target_rules = body.get("target_rules")
-    if target_rules not in (None, ""):
-        try:
-            target_rules = int(target_rules)
-        except (TypeError, ValueError) as exc:
-            raise ValueError(f"target_rules must be an integer: {target_rules!r}") from exc
-    else:
-        target_rules = None
-
-    return service.jobs.start(
-        domain=domain,
-        source_dir=source_dir,
-        batch_name=batch_name,
-        target_rules=target_rules,
-        skip_optimize=bool(body.get("skip_optimize", False)),
-        upload_id=str(upload_id) if upload_id else None,
-        resume_from=body.get("resume_from") or None,
-    )
-
-
-def _route_post_multipart(service: ReviewService, path: str, rfile: Any, length: int, content_type: str) -> dict[str, Any]:
-    if path != "/api/uploads":
-        raise KeyError("unknown API route")
-    result = save_upload(rfile, length, content_type, upload_root=service.upload_root)
-    domain = (result.get("domain") or "").strip()
-    problems = []
-    if not domain:
-        problems.append("missing required field: domain")
-    elif domain not in DOMAINS:
-        problems.append(f"unsupported domain: {domain!r}")
-    if result["file_count"] == 0:
-        problems.append("upload must include at least one file")
-    if problems:
-        shutil.rmtree(result["dir"], ignore_errors=True)
-        raise ValueError("; ".join(problems))
-    return service.review_store.create_upload(
-        id=result["upload_id"],
-        domain=domain,
-        dir=result["dir"],
-        file_count=result["file_count"],
-        total_bytes=result["total_bytes"],
-        batch_name_hint=result.get("batch_name_hint"),
-    )
 
 
 def _require(value: Any, kind: str) -> Any:

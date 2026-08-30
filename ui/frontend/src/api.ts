@@ -1,17 +1,9 @@
-import type { ArtifactPayload, CompareResult, Diagnostic, DocumentRecord, Evidence, Job, RegDeltaPairSummary, RegDeltaReport, RegDeltaRunSummary, Relationship, RuleDetail, RuleRow, RunSummary, SavedView, Stage, SearchResult, UploadResult } from "./types";
+import type { ArtifactPayload, CompareResult, Diagnostic, DocumentRecord, Evidence, RegDeltaPairSummary, RegDeltaReport, RegDeltaRunSummary, Relationship, RuleDetail, RuleRow, RunSummary, SavedView, Stage, SearchResult } from "./types";
 
 const API_BASE = (import.meta.env.VITE_C2C_API_BASE as string | undefined) || "/api";
 
 export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, { headers: { "Content-Type": "application/json", ...(init?.headers || {}) }, ...init });
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(body.error || `Request failed (${response.status})`);
-  return body as T;
-}
-
-/** Like request(), but for multipart/form-data bodies -- the browser must set its own boundary, so no Content-Type header is set here. */
-export async function requestForm<T>(path: string, formData: FormData): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`, { method: "POST", body: formData });
   const body = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(body.error || `Request failed (${response.status})`);
   return body as T;
@@ -143,39 +135,4 @@ export async function fetchRegDeltaRuns(): Promise<RegDeltaRunSummary[]> {
 
 export function fetchRegDeltaRunDiff(oldRun: string, newRun: string): Promise<RegDeltaReport> {
   return request(`/regdelta/runs/diff?${new URLSearchParams({ old: oldRun, new: newRun })}`);
-}
-
-export async function fetchDomains(): Promise<string[]> {
-  const response = await request<{ items: string[] }>("/domains");
-  return response.items;
-}
-
-/** Uploads a folder's files, preserving relative paths via each File's webkitRelativePath (set by the browser for <input webkitdirectory>). */
-export function uploadFolder(files: File[], domain: string, batchNameHint?: string): Promise<UploadResult> {
-  const formData = new FormData();
-  formData.append("domain", domain);
-  if (batchNameHint) formData.append("batch_name_hint", batchNameHint);
-  for (const file of files) formData.append("files", file, file.webkitRelativePath || file.name);
-  return requestForm("/uploads", formData);
-}
-
-export function startJob(params: { upload_id?: string; source_dir?: string; domain: string; batch_name?: string; target_rules?: number; skip_optimize?: boolean }): Promise<Job> {
-  return request("/jobs", { method: "POST", body: JSON.stringify(params) });
-}
-
-export function resumeRun(runId: string, resumeFrom?: string): Promise<Job> {
-  return request(`/runs/${encodeURIComponent(runId)}/resume`, { method: "POST", body: JSON.stringify(resumeFrom ? { resume_from: resumeFrom } : {}) });
-}
-
-export async function fetchJobs(): Promise<Job[]> {
-  const response = await request<{ items: Job[] }>("/jobs");
-  return response.items;
-}
-
-export function fetchJob(jobId: string): Promise<Job> {
-  return request(`/jobs/${encodeURIComponent(jobId)}`);
-}
-
-export function fetchJobLog(jobId: string, offset = 0): Promise<{ offset: number; content: string; eof: boolean; status: string }> {
-  return request(`/jobs/${encodeURIComponent(jobId)}/log?${new URLSearchParams({ offset: String(offset) })}`);
 }

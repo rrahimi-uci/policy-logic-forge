@@ -2,21 +2,14 @@ from __future__ import annotations
 
 import json
 import threading
-import time
 import urllib.error
 import urllib.request
-from contextlib import contextmanager
-from http.server import ThreadingHTTPServer
 from pathlib import Path
 
 import pytest
 
-from cli.extract import DOMAINS
 from ui.backend.api import MAX_ARTIFACT_VIEW_BYTES, ReviewService, _first, _int, create_handler
-from ui.backend.jobs import JobRunner
 from ui.tests.test_review_index import make_run
-
-FIXTURE_PIPELINE = Path(__file__).resolve().parent / "fixtures" / "fake_pipeline.py"
 
 
 def _get(url: str) -> tuple[int, dict]:
@@ -25,41 +18,6 @@ def _get(url: str) -> tuple[int, dict]:
             return response.status, json.loads(response.read())
     except urllib.error.HTTPError as error:
         return error.code, json.loads(error.read())
-
-
-def _post_json(url: str, body: dict) -> tuple[int, dict]:
-    request = urllib.request.Request(
-        url, data=json.dumps(body).encode(), headers={"Content-Type": "application/json"}, method="POST"
-    )
-    try:
-        with urllib.request.urlopen(request) as response:
-            return response.status, json.loads(response.read())
-    except urllib.error.HTTPError as error:
-        return error.code, json.loads(error.read())
-
-
-@contextmanager
-def _server(svc: ReviewService):
-    server = ThreadingHTTPServer(("127.0.0.1", 0), create_handler(svc, svc.pipeline_root / "no-frontend-build"))
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
-    thread.start()
-    try:
-        yield f"http://127.0.0.1:{server.server_port}"
-    finally:
-        server.shutdown()
-        thread.join(timeout=2)
-
-
-def _wait_for_job_terminal(base: str, job_id: str, timeout: float = 10.0) -> dict:
-    deadline = time.time() + timeout
-    detail: dict = {}
-    while time.time() < deadline:
-        status, detail = _get(f"{base}/api/jobs/{job_id}")
-        assert status == 200
-        if detail["status"] in {"succeeded", "failed"}:
-            return detail
-        time.sleep(0.02)
-    raise AssertionError(f"job {job_id} did not reach a terminal status within {timeout}s")
 
 
 @pytest.fixture()
@@ -72,10 +30,7 @@ def service(tmp_path: Path) -> ReviewService:
     payload["business_rules"][0]["description"] = "Collect email for account support after consent."
     payload["dependency_details"]["dependencies"][0]["rationale"] = "before after consent"
     optimized.write_text(json.dumps(payload), encoding="utf-8")
-    return ReviewService(
-        pipeline, tmp_path / "indexes", tmp_path / "state.db",
-        upload_root=tmp_path / "compliance-files" / "uploads",
-    )
+    return ReviewService(pipeline, tmp_path / "indexes", tmp_path / "state.db")
 
 
 def test_service_catalog_filters_and_compare(service: ReviewService) -> None:
@@ -184,184 +139,3 @@ def test_http_routes_and_overlay(service: ReviewService, tmp_path: Path) -> None
     finally:
         server.shutdown()
         thread.join(timeout=2)
-
-
-def test_domains_route_matches_cli_extract(service: ReviewService) -> None:
-    with _server(service) as base:
-        status, payload = _get(base + "/api/domains")
-        assert status == 200
-        assert payload["items"] == list(DOMAINS)
-
-
-def test_upload_multipart_lands_files_under_uploads_dir(service: ReviewService) -> None:
-    """A real multipart POST, hand-encoded independently of ``ui.backend.multipart``
-    so this test actually catches an encode/decode mismatch in the parser."""
-    boundary = "----ReviewApiTestBoundary9001"
-    file_a = b"alpha\ncontent\n"
-    file_b = b"beta content \x00\xff"
-
-    def part(name: str, *, filename: str | None = None, content_type: str | None = None, body: bytes = b"") -> bytes:
-        disposition = f'form-data; name="{name}"'
-        if filename is not None:
-            disposition += f'; filename="{filename}"'
-        header = f"--{boundary}\r\nContent-Disposition: {disposition}\r\n"
-        if content_type is not None:
-            header += f"Content-Type: {content_type}\r\n"
-        header += "\r\n"
-        return header.encode("latin-1") + body + b"\r\n"
-
-    body = (
-        part("domain", body=b"nda_confidentiality")
-        + part("batch_name_hint", body=b"api-upload-test")
-        + part("files", filename="folder/a.txt", content_type="text/plain", body=file_a)
-        + part("files", filename="folder/sub/b.bin", content_type="application/octet-stream", body=file_b)
-        + f"--{boundary}--\r\n".encode("latin-1")
-    )
-
-    with _server(service) as base:
-        request = urllib.request.Request(
-            base + "/api/uploads", data=body,
-            headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
-            method="POST",
-        )
-        with urllib.request.urlopen(request) as response:
-            assert response.status == 201
-            payload = json.loads(response.read())
-
-        assert payload["domain"] == "nda_confidentiality"
-        assert payload["batch_name_hint"] == "api-upload-test"
-        assert payload["file_count"] == 2
-        assert payload["total_bytes"] == len(file_a) + len(file_b)
-
-        upload_dir = Path(payload["dir"])
-        assert upload_dir.name == payload["id"]
-        assert upload_dir.parent.name == "uploads"
-        assert upload_dir.parent.parent.name == "compliance-files"
-        assert (upload_dir / "folder" / "a.txt").read_bytes() == file_a
-        assert (upload_dir / "folder" / "sub" / "b.bin").read_bytes() == file_b
-
-        status, listed = _get(base + "/api/uploads")
-        assert status == 200
-        assert any(item["id"] == payload["id"] for item in listed["items"])
-
-
-def test_upload_multipart_rejects_unsupported_domain(service: ReviewService) -> None:
-    boundary = "----BadDomainBoundary"
-    body = (
-        f"--{boundary}\r\n"
-        f'Content-Disposition: form-data; name="domain"\r\n\r\nnot-a-real-domain\r\n'
-        f"--{boundary}\r\n"
-        f'Content-Disposition: form-data; name="files"; filename="a.txt"\r\n\r\nhi\r\n'
-        f"--{boundary}--\r\n"
-    ).encode("latin-1")
-    with _server(service) as base:
-        request = urllib.request.Request(
-            base + "/api/uploads", data=body,
-            headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
-            method="POST",
-        )
-        with pytest.raises(urllib.error.HTTPError) as error:
-            urllib.request.urlopen(request)
-        assert error.value.code == 400
-
-
-def test_jobs_lifecycle_via_http_with_fixture_pipeline(service: ReviewService, tmp_path: Path) -> None:
-    service.jobs = JobRunner(tmp_path, service.review_store, tmp_path / "job-logs", extract_script=FIXTURE_PIPELINE)
-    source_dir = tmp_path / "src"
-
-    with _server(service) as base:
-        status, created = _post_json(
-            base + "/api/jobs",
-            {"domain": "nda_confidentiality", "batch_name": "http-run-1", "source_dir": str(source_dir)},
-        )
-        assert status == 201
-        assert created["status"] == "running"
-        assert created["kind"] == "full"
-        job_id = created["id"]
-
-        detail = _wait_for_job_terminal(base, job_id)
-        assert detail["status"] == "succeeded"
-        assert detail["exit_code"] == 0
-        assert "resume_hint" in detail
-
-        status, listed = _get(base + "/api/jobs")
-        assert status == 200
-        assert any(item["id"] == job_id for item in listed["items"])
-
-        # Log-offset polling: walk the whole file in small chunks and confirm
-        # it reassembles exactly, terminating on eof.
-        offset = 0
-        seen = ""
-        for _ in range(500):
-            status, chunk = _get(f"{base}/api/jobs/{job_id}/log?offset={offset}")
-            assert status == 200
-            seen += chunk["data"]
-            offset = chunk["next_offset"]
-            if chunk["eof"]:
-                break
-        else:
-            raise AssertionError("log tail never reported eof")
-        assert "fake_pipeline: done" in seen
-
-        assert _get(f"{base}/api/jobs/no-such-job")[0] == 404
-
-
-def test_jobs_post_conflict_returns_409(service: ReviewService, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("FAKE_PIPELINE_SLEEP_SECONDS", "0.5")
-    service.jobs = JobRunner(tmp_path, service.review_store, tmp_path / "job-logs", extract_script=FIXTURE_PIPELINE)
-    source_dir = tmp_path / "src"
-
-    with _server(service) as base:
-        status, first = _post_json(
-            base + "/api/jobs",
-            {"domain": "nda_confidentiality", "batch_name": "http-dup-run", "source_dir": str(source_dir)},
-        )
-        assert status == 201
-        status2, _conflict = _post_json(
-            base + "/api/jobs",
-            {"domain": "nda_confidentiality", "batch_name": "http-dup-run", "source_dir": str(source_dir)},
-        )
-        assert status2 == 409
-        _wait_for_job_terminal(base, first["id"])
-
-
-def test_jobs_post_validates_domain_and_batch_name(service: ReviewService, tmp_path: Path) -> None:
-    service.jobs = JobRunner(tmp_path, service.review_store, tmp_path / "job-logs", extract_script=FIXTURE_PIPELINE)
-    with _server(service) as base:
-        status, _ = _post_json(base + "/api/jobs", {"domain": "not-a-domain", "batch_name": "x", "source_dir": "src"})
-        assert status == 400
-        status, _ = _post_json(base + "/api/jobs", {"domain": "nda_confidentiality", "source_dir": "src"})
-        assert status == 400
-        status, _ = _post_json(
-            base + "/api/jobs", {"domain": "nda_confidentiality", "batch_name": "x", "upload_id": "no-such-upload"}
-        )
-        assert status == 404
-
-
-def test_runs_resume_route_starts_new_job(service: ReviewService, tmp_path: Path) -> None:
-    service.jobs = JobRunner(tmp_path, service.review_store, tmp_path / "job-logs", extract_script=FIXTURE_PIPELINE)
-    source_dir = tmp_path / "src"
-
-    with _server(service) as base:
-        status, created = _post_json(
-            base + "/api/jobs",
-            {"domain": "nda_confidentiality", "batch_name": "http-resume-run", "source_dir": str(source_dir)},
-        )
-        assert status == 201
-        _wait_for_job_terminal(base, created["id"])
-
-        status, resumed = _post_json(f"{base}/api/runs/http-resume-run/resume", {})
-        assert status == 201
-        assert resumed["kind"] == "resume"
-        assert resumed["batch_name"] == "http-resume-run"
-        assert resumed["source_dir"] == str(source_dir)
-        assert "--resume-from" in resumed["command"]
-        _wait_for_job_terminal(base, resumed["id"])
-
-        status, resumed_override = _post_json(f"{base}/api/runs/http-resume-run/resume", {"resume_from": "agent_06"})
-        assert status == 201
-        assert resumed_override["resume_from_stage"] == "agent_06"
-        _wait_for_job_terminal(base, resumed_override["id"])
-
-        status, _ = _post_json(f"{base}/api/runs/no-such-run/resume", {})
-        assert status == 404

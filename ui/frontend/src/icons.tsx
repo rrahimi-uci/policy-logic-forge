@@ -14,8 +14,7 @@ export type IconName =
   | "refresh"
   | "menu"
   | "close"
-  | "collapse"
-  | "upload";
+  | "collapse";
 
 const paths: Record<IconName, React.ReactNode> = {
   runs: <><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></>,
@@ -32,7 +31,6 @@ const paths: Record<IconName, React.ReactNode> = {
   menu: <path d="M4 7h16M4 12h16M4 17h16" />,
   close: <path d="m6 6 12 12M18 6 6 18" />,
   collapse: <><path d="M9 18 3 12l6-6M15 6l6 6-6 6" /></>,
-  upload: <><path d="M12 16V4M7 9l5-5 5 5" /><path d="M4 20h16" /></>,
 };
 
 export function Icon({ name, ...props }: { name: IconName } & SVGProps<SVGSVGElement>) {

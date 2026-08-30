@@ -52,11 +52,6 @@ compliance-files/deonticbench/
 compliance-files/mortgage/
 compliance-files/mortgage-v2/
 
-# UI-driven uploads (see ui/backend/multipart.py's save_upload()). Namespaced
-# separately from the curated benchmark domain folders above, which are
-# matched by name, not by a general pattern.
-compliance-files/uploads/
-
 # OS / editor
 .DS_Store
 .idea/
