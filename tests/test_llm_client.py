@@ -74,12 +74,12 @@ class TestChatCompletionParams:
         client._client = mock_openai
         return client, mock_openai
 
-    @allure.title("Default request gate uses the fast provider-safe ceiling")
-    def test_default_request_gate_matches_fast_profile(self, monkeypatch):
+    @allure.title("Default request gate uses the doubled throughput ceiling")
+    def test_default_request_gate_matches_doubled_profile(self, monkeypatch):
         monkeypatch.delenv("KG_LLM_CONCURRENCY", raising=False)
         client = LLMClient(api_key="sk-test", model="gpt-4o")
 
-        assert client._request_gate._value == 16
+        assert client._request_gate._value == 32
 
     @allure.title("Client uses the configured GPT-5.6 Luna default")
     def test_default_model(self):

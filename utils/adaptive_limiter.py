@@ -50,8 +50,8 @@ class AdaptiveRequestLimiter:
             return None
         return cls(
             state_file,
-            initial_limit=int(os.getenv("KG_GLOBAL_LLM_CONCURRENCY_INITIAL", "8")),
-            maximum_limit=int(os.getenv("KG_GLOBAL_LLM_CONCURRENCY_MAX", "16")),
+            initial_limit=int(os.getenv("KG_GLOBAL_LLM_CONCURRENCY_INITIAL", "16")),
+            maximum_limit=int(os.getenv("KG_GLOBAL_LLM_CONCURRENCY_MAX", "32")),
             minimum_limit=int(os.getenv("KG_GLOBAL_LLM_CONCURRENCY_MIN", "1")),
             success_window=int(os.getenv("KG_GLOBAL_LLM_SUCCESS_WINDOW", "3")),
             lease_seconds=float(os.getenv("KG_GLOBAL_LLM_LEASE_SECONDS", "900")),

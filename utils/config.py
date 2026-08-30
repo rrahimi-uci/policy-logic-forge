@@ -338,11 +338,11 @@ class Config:
         env_val = os.getenv('MAX_WORKERS')
         if env_val:
             return int(env_val)
-        return self.get('pipeline.max_workers', 40)
+        return self.get('pipeline.max_workers', 80)
 
     def get_document_workers(self) -> int:
         """Get safe concurrent document subprocesses for standard CLI runs."""
-        return max(1, int(self.get('pipeline.document_workers', 16)))
+        return max(1, int(self.get('pipeline.document_workers', 32)))
 
     def get_performance_profile(self) -> dict:
         """Return the centralized throughput/resilience profile."""

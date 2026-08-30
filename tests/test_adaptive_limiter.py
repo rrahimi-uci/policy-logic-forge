@@ -47,7 +47,7 @@ def test_acquire_reaps_lease_left_by_dead_worker(tmp_path):
     limiter.release(lease, success=True)
 
 
-def test_environment_defaults_match_fast_safe_pipeline_profile(tmp_path, monkeypatch):
+def test_environment_defaults_match_doubled_pipeline_profile(tmp_path, monkeypatch):
     monkeypatch.setenv("KG_GLOBAL_LLM_STATE_FILE", str(tmp_path / "limiter.sqlite3"))
     for name in (
         "KG_GLOBAL_LLM_CONCURRENCY_INITIAL",
@@ -60,7 +60,7 @@ def test_environment_defaults_match_fast_safe_pipeline_profile(tmp_path, monkeyp
     limiter = AdaptiveRequestLimiter.from_environment()
 
     assert limiter is not None
-    assert limiter.initial_limit == 8
-    assert limiter.maximum_limit == 16
+    assert limiter.initial_limit == 16
+    assert limiter.maximum_limit == 32
     assert limiter.minimum_limit == 1
     assert limiter.success_window == 3

@@ -74,10 +74,10 @@ own `domain-prompts/<domain>/` pack), and `mortgage` (uses the shared
 `prompts/` fallback). `--dir` accepts either an absolute path or a name under
 `compliance-files/`.
 
-The default runtime profile is tuned for fast, provider-safe throughput: 40
-scheduling workers, 16 in-flight API requests (the shared adaptive limiter
-starts at 8 and ramps to 16), and 16 document workers. Stage pools can queue
-up to 40 tasks while the request gate bounds provider work. Requests have a
+The default runtime profile is tuned for high-throughput execution: 80
+scheduling workers, 32 in-flight API requests (the shared adaptive limiter
+starts at 16 and ramps to 32), and 32 document workers. Stage pools can queue
+up to 80 tasks while the request gate bounds provider work. Requests have a
 300-second timeout, a 900-second shared lease,
 a 30-second watchdog margin, and a 10-second connection backoff. Grounding uses
 12 relationship packets per request to keep prompts bounded. Operators can

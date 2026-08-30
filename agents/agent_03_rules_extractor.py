@@ -976,11 +976,11 @@ class BusinessRulesExtractor:
         
         gate_size = max(1, int(os.getenv(
             "KG_LLM_CONCURRENCY",
-            str(min(max_workers, 16)),
+            str(min(max_workers, 32)),
         )))
         # Do not create dozens of workers that immediately block on the same
-        # semaphore.  Python's semaphore wake-up order is not FIFO; with 40
-        # workers and a four-request gate, later batches can starve for tens of
+        # semaphore.  Python's semaphore wake-up order is not FIFO; matching
+        # the worker pool to the request gate keeps later batches from starving
         # minutes even though the provider is healthy.  Matching executor
         # width to the gate keeps queue order bounded and makes batch latency
         # reflect the actual API schedule.
@@ -1904,7 +1904,7 @@ def main():
     # Process batches in parallel (simultaneous API calls)
     # This reduces extraction time significantly
     # config.get_max_workers() already implements "MAX_WORKERS env var, else
-    # pipeline.max_workers (40)" — reading os.environ directly here
+    # pipeline.max_workers (80)" — reading os.environ directly here
     # duplicated that logic with a different, lower hardcoded fallback (20).
     max_workers = config.get_max_workers()
     extraction_ok = extractor.extract_rules_parallel(batches, max_workers=max_workers)

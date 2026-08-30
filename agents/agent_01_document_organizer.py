@@ -2086,7 +2086,7 @@ If no TOC is found, return {{"has_toc": false, "toc_entries": []}}
         # 100+ document batch take hours even though the LLM client itself
         # already supports KG_LLM_CONCURRENCY-many in-flight requests.
         try:
-            organizer_workers = max(1, int(os.getenv("KG_ORGANIZER_WORKERS", os.getenv("KG_LLM_CONCURRENCY", "16"))))
+            organizer_workers = max(1, int(os.getenv("KG_ORGANIZER_WORKERS", os.getenv("KG_LLM_CONCURRENCY", "32"))))
         except (TypeError, ValueError):
             organizer_workers = 16
         organizer_workers = min(organizer_workers, len(files))
