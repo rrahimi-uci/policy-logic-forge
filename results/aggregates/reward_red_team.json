@@ -1,6 +1,0 @@
-{
-  "schema_version": "reward-audit/1.0",
-  "status": "unrun",
-  "claimable": false,
-  "reason": "Conditional reward audit is not activated before G4 evidence."
-}

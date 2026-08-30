@@ -1,6 +1,0 @@
-{
-  "schema_version": "g5-training/1.0",
-  "status": "unrun",
-  "claimable": false,
-  "reason": "GPU/provider authorization and a passing adversarial reward audit are required."
-}

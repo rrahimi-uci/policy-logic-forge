@@ -1,9 +1,0 @@
-{
-  "schema_version": "perturbation/1.0",
-  "status": "unrun",
-  "claimable": false,
-  "n": 0,
-  "percent_agreement": null,
-  "cohen_kappa": null,
-  "reason": "Independent source annotator labels are not retained yet."
-}
