@@ -25,15 +25,12 @@ We aim to acknowledge reports within a few business days.
 
 ## Scope and hardening notes
 
-This is a CLI-and-library research pipeline with no server component: no UI,
-no backend API, and no self-hosted service exposed to a network. Its only
+This is a CLI-and-library pipeline with no server component: no UI, no
+backend API, and no self-hosted service exposed to a network. Its only
 external dependency is the OpenAI API, called with a key you supply.
 
 - The pipeline reads and writes local files only (`compliance-files/`,
-  `pipeline-output/`, `benchmarks/`); it does not open a network port.
+  `pipeline-output/`); it does not open a network port.
 - Documents you point the pipeline at are sent to the OpenAI API as part of
   extraction — do not run it over documents you are not authorized to send
   to a third-party model provider.
-- Two of the four benchmark corpora (OPP-115, MAPP) are licensed for research
-  use without a redistribution grant; see `README.md` "Data and licensing"
-  before redistributing anything built from them.
