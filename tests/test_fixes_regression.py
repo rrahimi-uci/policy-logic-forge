@@ -15,6 +15,7 @@ PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from utils.config import Config
+from agents.agent_04_rule_validator import RuleValidationAgent
 
 
 # ── config: fallback to config.example.json when config.json is absent ──
@@ -91,6 +92,31 @@ class TestProvider:
     def test_no_anthropic_key_getter(self):
         # Anthropic support was removed; the getter must be gone.
         assert not hasattr(Config, "get_anthropic_api_key")
+
+
+class TestRuleValidatorStructuredEnums:
+    def test_structured_enum_values_are_reported_without_crashing(self):
+        """Malformed structured enum output must remain a validation warning."""
+        validator = object.__new__(RuleValidationAgent)
+        report = {"failures": [], "warnings": [], "passed": []}
+
+        validator._validate_completeness(
+            [
+                {
+                    "schema_version": "2.0",
+                    "rule_id": "rule-1",
+                    "risk_level": {"level": "high"},
+                    "audit_frequency": {"frequency": "monthly"},
+                }
+            ],
+            report,
+        )
+
+        enum_warnings = [
+            warning for warning in report["warnings"]
+            if warning.get("check") == "enum_validation"
+        ]
+        assert len(enum_warnings) == 2
 
 
 # ── utils package: importing Config must not pull in the LLM client ──

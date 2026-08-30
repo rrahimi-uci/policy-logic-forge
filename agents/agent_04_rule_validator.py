@@ -375,7 +375,11 @@ class RuleValidationAgent:
             _valid_audit_frequencies = {'at_origination', 'monthly', 'quarterly', 'annually', 'on_change'}
             
             risk = rule.get('risk_level', '')
-            if risk and risk not in _valid_risk_levels:
+            # Model output may contain a structured value even though the
+            # contract declares this field as a scalar enum.  Check the type
+            # before membership testing so malformed output is reported as a
+            # warning instead of crashing validation with ``unhashable type``.
+            if risk and (not isinstance(risk, str) or risk not in _valid_risk_levels):
                 report['warnings'].append({
                     "rule_id": rule_id,
                     "check": "enum_validation",
@@ -385,7 +389,7 @@ class RuleValidationAgent:
                 })
             
             audit = rule.get('audit_frequency', '')
-            if audit and audit not in _valid_audit_frequencies:
+            if audit and (not isinstance(audit, str) or audit not in _valid_audit_frequencies):
                 report['warnings'].append({
                     "rule_id": rule_id,
                     "check": "enum_validation",
