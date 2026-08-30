@@ -2,6 +2,7 @@ openai>=1.59.7
 python-dotenv>=1.0.0
 json-repair>=0.63.4
 PyPDF2>=3.0.1
+rich>=13.7                        # CLI progress display, tables, and panels (cli/extract.py)
 
 # OCR for scanned PDFs
 pytesseract>=0.3.10               # Tesseract OCR wrapper
