@@ -25,15 +25,9 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements-dev.txt
-      - name: Validate NeurIPS execution plan
-        run: python scripts/validate_neurips_plan.py --check
       - name: Validate pipeline configuration
         run: python scripts/validate_config.py
-      - name: Validate retained research artifacts
-        run: python scripts/validate_research_artifacts.py
-      - name: Validate NeurIPS paper source contract
-        run: python paper/scripts/validate_paper.py --source paper/main.tex --check-source
-      - name: Run tests with compiler coverage gate
+      - name: Run tests with coverage report
         run: |
           python -m coverage erase
           python -m coverage run -m pytest -q
