@@ -1065,6 +1065,38 @@ def _normalise_rule_contract(rule: dict[str, Any]) -> dict[str, Any]:
         else:
             variable["role"] = "derived"
 
+    # Remediation patches and repeated normalization can independently add the
+    # same declaration (most often when two outcomes converge on a threshold
+    # output). The v2 contract requires unique variable names. Merge duplicate
+    # declarations deterministically, retaining every non-empty constraint and
+    # preferring an output role when either declaration is an output. This is
+    # a structural/idempotence repair; it does not alter any outcome value or
+    # source evidence.
+    merged_variables: list[dict[str, Any]] = []
+    merged_by_name: dict[str, dict[str, Any]] = {}
+    for variable in variables:
+        if not isinstance(variable, dict):
+            continue
+        name = str(variable.get("name", "")).strip()
+        if not name:
+            continue
+        key = name.casefold()
+        existing = merged_by_name.get(key)
+        if existing is None:
+            merged = dict(variable)
+            merged_variables.append(merged)
+            merged_by_name[key] = merged
+            continue
+        for field, value in variable.items():
+            if field not in existing or existing.get(field) in (None, "", [], {}):
+                existing[field] = deepcopy(value)
+        roles = {str(existing.get("role", "")).casefold(), str(variable.get("role", "")).casefold()}
+        if "output" in roles:
+            existing["role"] = "output"
+        elif "input" in roles:
+            existing["role"] = "input"
+    rule["variables"] = merged_variables
+
     verification = rule.get("exception_verification")
     if (
         rule.get("exception_basis") == "explicit_in_source"

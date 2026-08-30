@@ -1233,3 +1233,19 @@ def test_missing_vectors_are_deferred_for_source_backed_rules():
     missing = next(issue for issue in issues if issue.code == "missing_test_vectors")
 
     assert is_deferred_contract_issue(missing.as_dict(), rule)
+
+
+def test_repeated_remediation_merges_duplicate_variable_declarations():
+    rule = valid_rule()
+    rule["variables"].append({
+        "name": "maximum_number_of_pools", "type": "number", "role": "output",
+        "allowed_range": [0, 10],
+    })
+
+    normalise_rule_contract(rule)
+    issues = validate_rule_v2(rule, {"SELLER_SERVICER", "FANNIE_MAE"})
+    declarations = [item for item in rule["variables"] if item["name"] == "maximum_number_of_pools"]
+
+    assert len(declarations) == 1
+    assert declarations[0]["allowed_range"] == [0, 10]
+    assert not any(issue.code == "duplicate_variable_name" for issue in issues)
