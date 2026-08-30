@@ -29,10 +29,9 @@ def _lower_and_prove(graph: dict, output_dir: Path, *, document_id: str) -> dict
     the compilation report on success, or None (with a printed warning) on
     an unexpected failure.
 
-    ``executable_decisions.dmn`` (proposal.md Phase 1's proposed fourth
-    file) is deliberately not produced yet: utils.dmn_builder cannot
-    represent a rule with a non-null ``scope.predicate`` (raises
-    UNSUPPORTED_SCOPE), which is now most compiled mortgage rules since
+    A proof-verified ``executable_decisions.dmn`` is deliberately not
+    produced yet: no emitter here can represent a rule with a non-null
+    ``scope.predicate``, which is now most compiled mortgage rules since
     utils.lexec_ir started representing loan/transaction/occupancy-type
     scope as a checkable predicate. Extending DMN emission to fold
     scope.predicate into the table's condition columns is separate,
