@@ -160,14 +160,14 @@ class LLMClient:
         self._api_key = api_key
         self._client: Optional[OpenAI] = None
         # Worker pools in the pipeline can be intentionally large (for example
-        # MAX_WORKERS=40), but allowing every worker to open an API request at
+        # MAX_WORKERS=80), but allowing every worker to open an API request at
         # once causes connection-pool exhaustion and transient rate-limit
         # failures.  Keep executor parallelism independent from bounded
         # in-flight API concurrency; callers can tune the latter per run.
         try:
-            gate_size = max(1, int(concurrency if concurrency is not None else os.getenv("KG_LLM_CONCURRENCY", "16")))
+            gate_size = max(1, int(concurrency if concurrency is not None else os.getenv("KG_LLM_CONCURRENCY", "32")))
         except (TypeError, ValueError):
-            gate_size = 16
+            gate_size = 32
         self._adaptive_limiter = AdaptiveRequestLimiter.from_environment()
         self._request_gate = threading.BoundedSemaphore(gate_size)
 

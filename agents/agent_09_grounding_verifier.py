@@ -222,7 +222,7 @@ class GroundingResolver(Protocol):
 
 class OpenAIGroundingResolver:
     def __init__(self, api_key: str, model: str, reasoning_effort: str) -> None:
-        concurrency = max(1, int(os.getenv("KG_GROUNDING_LLM_CONCURRENCY", "16")))
+        concurrency = max(1, int(os.getenv("KG_GROUNDING_LLM_CONCURRENCY", "32")))
         self.model = model
         self.reasoning_effort = reasoning_effort
         self.client = create_llm_client(api_key=api_key, model=model, concurrency=concurrency)
@@ -834,7 +834,7 @@ class GroundingVerifier:
             f"{len(batches)} batches, {workers} workers",
             flush=True,
         )
-        api_workers = max(1, int(os.getenv("KG_GROUNDING_LLM_CONCURRENCY", "16")))
+        api_workers = max(1, int(os.getenv("KG_GROUNDING_LLM_CONCURRENCY", "32")))
         workers = min(workers, api_workers)
         with ThreadPoolExecutor(max_workers=min(workers, max(1, len(batches))), thread_name_prefix="kg-grounding") as executor:
             futures = [executor.submit(verify_batch, batch) for batch in batches]

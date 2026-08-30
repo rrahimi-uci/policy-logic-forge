@@ -129,9 +129,9 @@ class OpenAIEvidenceResolver:
 
     def __init__(self, api_key: str, model: str, reasoning_effort: str) -> None:
         try:
-            readiness_concurrency = max(1, int(os.getenv("KG_READINESS_LLM_CONCURRENCY", "16")))
+            readiness_concurrency = max(1, int(os.getenv("KG_READINESS_LLM_CONCURRENCY", "32")))
         except (TypeError, ValueError):
-            readiness_concurrency = 16
+            readiness_concurrency = 32
         self.readiness_concurrency = readiness_concurrency
         self.client = create_llm_client(
             api_key=api_key,
@@ -1959,7 +1959,7 @@ class ExecutableReadinessCompleter:
             batch_size = max(1, int(os.getenv("KG_READINESS_RULES_PER_REQUEST", "4")))
             indexed = list(enumerate(rules))
             batches = [indexed[start:start + batch_size] for start in range(0, len(indexed), batch_size)]
-            api_workers = max(1, int(os.getenv("KG_READINESS_LLM_CONCURRENCY", "16")))
+            api_workers = max(1, int(os.getenv("KG_READINESS_LLM_CONCURRENCY", "32")))
             readiness_workers = min(readiness_workers, api_workers)
             print(f"▶ agent_07 rule evidence: {len(rules)} rules in {len(batches)} batches, "
                   f"{readiness_workers} workers, {getattr(self.resolver, 'readiness_concurrency', 'bounded') if self.resolver else 0} API concurrency", flush=True)
@@ -2154,7 +2154,7 @@ class ExecutableReadinessCompleter:
             conflict_entries = [deepcopy(dict(item)) for item in existing_conflicts if isinstance(item, Mapping)]
         else:
             entity_results: dict[str, list[dict[str, Any]]] = {}
-            api_workers = max(1, int(os.getenv("KG_READINESS_LLM_CONCURRENCY", "16")))
+            api_workers = max(1, int(os.getenv("KG_READINESS_LLM_CONCURRENCY", "32")))
             conflict_workers = min(readiness_workers, api_workers)
             with ThreadPoolExecutor(max_workers=min(conflict_workers, max(1, len(groups))), thread_name_prefix="kg-conflict") as executor:
                 futures = {executor.submit(analyse_group, entity, member_ids): entity for entity, member_ids in groups.items()}

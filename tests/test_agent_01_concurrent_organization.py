@@ -3,9 +3,9 @@
 Context: process_knowledge_folder chunked and organized every file in a
 single-threaded `for` loop, with an added `time.sleep(1)` between files. The
 per-document LLM call (chunk_document_with_reasoning) already goes through a
-client whose in-flight concurrency is gated by KG_LLM_CONCURRENCY (default 16,
+client whose in-flight concurrency is gated by KG_LLM_CONCURRENCY (default 32,
 set by the CLI orchestrator's performance profile) — so the client already
-supports up to 16 concurrent reasoning calls, but the loop only ever issued
+supports up to 32 concurrent reasoning calls, but the loop only ever issued
 one at a time. On a real 115-document benchmark corpus this made agent_01
 alone take on the order of hours (~2.4 minutes/document, wholly serial),
 independent of how many workers the rest of the pipeline used.
