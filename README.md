@@ -133,12 +133,19 @@ not define the current pipeline numbering. Readers also accept the former
 write the descriptive shared-directory name above.
 
 Run a single stage with `--stage 9` or a single agent with `--agent agent_09`
-(for example, to re-run grounding certification). `--skip-optimize` skips
-`agent_06`–`agent_08`; independent `agent_09` grounding still runs before
-`agent_10` DAG generation. `--resume`/`--resume-from` resume an interrupted
-run from the last recorded stage instead of starting over. The deprecated
-numeric `--step` selector remains accepted for backwards compatibility and
-prints the canonical stage it maps to.
+(for example, to re-run grounding certification), or multiple stages in one
+invocation with `--stages 7-9` (also accepts a list or a mix, e.g. `3,5,7`).
+`--skip-optimize` skips `agent_06`–`agent_08`; independent `agent_09`
+grounding still runs before `agent_10` DAG generation. There is no separate
+`--resume` flag: re-running only the remaining stage(s) against the same
+`--batch-name` reuses the earlier stages' already-written output and *is*
+the resume workflow — see [`docs/cli.md`](docs/cli.md#recovering-from-a-mid-run-failure-no-separate---resume-flag)
+for a worked example. The deprecated numeric `--step` selector remains
+accepted for backwards compatibility and prints the canonical stage it maps
+to. Every run also writes a `run_metrics.json` next to its other output with
+per-stage/total timing, token, cost, and cache-hit metrics — see
+[`docs/cli.md`](docs/cli.md) for the full CLI reference, output modes
+(`--output json` for scripting), and troubleshooting guidance.
 
 Readiness exit code 3 is a review signal, not a subprocess crash. The full
 orchestrator runs remediation, then continues to independent grounding and DAG

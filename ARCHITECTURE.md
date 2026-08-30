@@ -431,13 +431,16 @@ A "review-required" state is therefore a legitimate terminal state throughout st
 
 Two independent mechanisms cooperate:
 
-- **Stage-level resume.** After every stage, `ExtractionPipeline` writes
-  `pipeline_run_state.json` at the batch root recording which of the nine
-  resumable units (agents 01–06 individually, the 07→08→09 loop as one
-  unit, then 10 and 11) completed successfully. `--resume` reads this file
-  and restarts at the first incomplete unit; `--resume-from <stage>`
-  overrides that explicitly. The 07→08→09 loop is always resumed from its
-  start, never mid-loop.
+- **Stage-level resume, via targeted re-selection.** There is no separate
+  `--resume`/`--resume-from` flag or persisted "which stage completed"
+  state file. Instead, `--stage`/`--agent`/`--stages` (see
+  [`docs/cli.md`](../docs/cli.md#selecting-stages)) read and write into the
+  *same* `pipeline-output/<batch-name>/` directory as the original run, so
+  re-running only the remaining stage(s) against that batch name picks up
+  exactly where a failed or interrupted run left off, reusing every earlier
+  stage's already-written output as-is. `--stages 7-9 --keep-going` runs a
+  contiguous or mixed set of stages in one invocation regardless of earlier
+  per-stage failures.
 - **Item-level resume, inside a single stage.** Agents 01, 03, 07, 08, and
   09 each maintain their own append-only JSONL checkpoint
   (`agent_07_rule_checkpoint.jsonl` and similar) keyed by a content
