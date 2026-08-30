@@ -7,6 +7,10 @@ dependency DAGs with a 100%-coverage guarantee. A differential-execution
 engine (RegDelta) can then compare two versions of a policy and report which
 rules and downstream cases actually changed.
 
+For a detailed technical reference — per-stage responsibilities and
+algorithms, module dependency graphs, configuration/prompt resolution, and
+real DMN/BPMN/CMMN/SBVR examples — see [`ARCHITECTURE.md`](ARCHITECTURE.md).
+
 ## What's here
 
 **The extraction pipeline** — eleven canonical agents, `agent_01` through
@@ -144,7 +148,7 @@ still stop the run.
 
 ## Structure
 
-```
+```text
 cli/extract.py              `agent_01`–`agent_11` orchestrator
 agents/                     one zero-padded module per agent
 utils/                      config, LLM client, adaptive rate limiter,
