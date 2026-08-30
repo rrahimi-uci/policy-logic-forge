@@ -14,6 +14,7 @@ normalise_graph_entity_names = readiness_module._normalise_graph_entity_names
 normalise_rule_contract = readiness_module._normalise_rule_contract
 evidence_pointer = readiness_module._evidence_pointer
 conflict_batch_groups = readiness_module._conflict_batch_groups
+conflict_candidate_pairs = readiness_module._conflict_candidate_pairs
 compact_readiness_rule = readiness_module._compact_readiness_rule
 normalise_final_evidence_states = readiness_module._normalise_final_evidence_states
 normalise_conflict_entries = readiness_module._normalise_conflict_entries
@@ -1152,3 +1153,22 @@ def test_large_entity_group_dispatches_its_output_variable_buckets_concurrently(
     assert peak_active > 1, "output-variable buckets ran one at a time despite concurrent dispatch"
     # 3 buckets at 0.2s each: ~0.6s serial vs a fraction of that concurrently.
     assert elapsed < 0.5, f"took {elapsed:.2f}s — looks serial, not concurrent"
+
+
+def test_large_conflict_group_bounds_pair_coverage_to_overlapping_outputs(monkeypatch):
+    """Large groups must not materialize every pair of a generic entity."""
+    monkeypatch.setenv("KG_CONFLICT_MAX_COVERAGE_PAIRS", "10000")
+    member_ids = [f"BR-{index}" for index in range(500)]
+    pairs = conflict_candidate_pairs(member_ids, {"BR-1", "BR-2"}, 32)
+
+    assert pairs is not None
+    assert len(pairs) == 2 * 499 - 1
+    assert ("BR-1", "BR-2") in pairs
+    assert ("BR-200", "BR-201") not in pairs
+
+
+def test_oversized_conflict_coverage_fails_closed_without_pair_expansion(monkeypatch):
+    monkeypatch.setenv("KG_CONFLICT_MAX_COVERAGE_PAIRS", "100")
+    member_ids = [f"BR-{index}" for index in range(500)]
+
+    assert conflict_candidate_pairs(member_ids, set(member_ids), 32) is None
