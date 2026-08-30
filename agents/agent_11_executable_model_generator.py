@@ -25,8 +25,7 @@ def _lower_and_prove(graph: dict, output_dir: Path, *, document_id: str) -> dict
     """Emit lexec_ir.json/compilation_report.json/proof_records.json.
 
     Additive and best-effort: a failure here must never block or replace
-    the review-projection DMN/BPMN this agent already produces (the UI
-    depends on those file names -- see ui/backend/review_index.py). Returns
+    the review-projection DMN/BPMN this agent already produces. Returns
     the compilation report on success, or None (with a printed warning) on
     an unexpected failure.
 

@@ -30,11 +30,8 @@ certification → dependency DAG generation). A lean CLI orchestrator
 
 **Cut, deliberately**:
 
-- **No FastAPI, no WebSocket streaming.** This is a CLI-and-library research
-  repo at its core. There is a small, optional, stdlib-only local review UI
-  and job runner under `ui/` (a read model over completed runs, plus upload
-  and subprocess-driven run/resume orchestration) -- see
-  `ui/IMPLEMENTATION_STATUS.md` for exactly what it does and does not cover.
+- **No UI, no backend.** No FastAPI, no React, no WebSocket streaming, no run
+  history database. This is a CLI-and-library research repo.
 - **No cross-graph comparison pipeline** (rule clustering, semantic matching,
   set operations, or comparison visualization). Comparing two already-extracted
   graphs is a different task from extracting one.
