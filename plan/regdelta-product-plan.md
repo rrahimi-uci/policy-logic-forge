@@ -1,25 +1,13 @@
 # RegDelta product plan: regulatory change impact, grounded in this repository
 
-## 0. Relationship to `plan/proposal.md`
+## 0. What this is
 
-[`proposal.md`](proposal.md) is the research/benchmark track for RegDelta: it
-targets academic venues and depends on acquiring external evaluation
-resources (OpenExempt-CF, RegelRecht-Real) that are not yet present in this
-repository. This document is a separate **product-engineering track** for the
-same underlying capability. It is validated entirely against data and code
-this repository already has, with no external acquisition on the critical
-path. The two tracks share the same execution engine: Section 6 below
-duplicates proposal.md's system design almost verbatim, and Section 7's
-Phases 1-2 point back to proposal.md's execution steps rather than
-duplicating them, because that design and that prerequisite engineering do
-not depend on which validation data feeds them. Section 7's Phases 3-7 are
-new — that's where the two tracks diverge on what proves the engine works,
-in what order domains are tackled, and what closes the gap to an actual
-product.
-
-Nothing here blocks or is blocked by `proposal.md`. DeonticBench, OpenExempt,
-and RegelRecht remain available later, exactly as described there, if an
-academic evaluation becomes a priority.
+RegDelta is a differential-execution engine layered on top of the eleven-agent
+extraction pipeline: given old and new versions of a policy document, it
+compiles both to LExec IR, aligns rules, classifies semantic changes, and
+propagates impact through the dependency graph — entirely from data and code
+this repository already has, with no external benchmark acquisition on the
+critical path.
 
 ## 1. Goal
 
@@ -49,10 +37,10 @@ completing, and its own text elsewhere cites a pre-dedup, agent_05-stage
 count (2,741) rather than agent_06's final optimized count (2,631) used
 below.
 
-| Domain | Agent 06 (optimized rules) | Agent 10 (DAG) | Agent 11 (DMN/BPMN) | UI |
+| Domain | Agent 06 (optimized rules) | Agent 10 (DAG) | Agent 11 (DMN/BPMN) | Prior review-UI smoke status (historical; that UI has since been removed) |
 | --- | --- | --- | --- | --- |
-| `mortgage` | 631 rules, 481 dependencies | 235 DAGs, 631/631 covered, 1 cycle group | generated (`compliance_decisions.dmn`, `compliance_workflows.bpmn`); 590/631 rules still `requires_review`, 41 clean | already smoke-tested (`ui/IMPLEMENTATION_STATUS.md`: "mortgage API smoke checks") |
-| `privacy_policy` | 802 rules | 757 DAGs, **802/802 covered, complete** | **not yet run** | validated against a retained privacy-policy run |
+| `mortgage` | 631 rules, 481 dependencies | 235 DAGs, 631/631 covered, 1 cycle group | generated (`compliance_decisions.dmn`, `compliance_workflows.bpmn`); 590/631 rules still `requires_review`, 41 clean | previously smoke-tested |
+| `privacy_policy` | 802 rules | 757 DAGs, **802/802 covered, complete** | **not yet run** | previously validated against a retained privacy-policy run |
 | `mobile_app_privacy` | 1,904 rules | not yet run | not yet run | not yet exercised |
 | `nda_confidentiality` | 2,631 rules | not yet run | not yet run | not yet exercised |
 | `commercial_contracts` | not yet run in this checkout | — | — | — |
@@ -200,22 +188,17 @@ Tier 1 proves the engine given a hand-edited *graph*. Tier 2 proves the
 
 ## 5. Scope and non-goals
 
-Unchanged from `proposal.md` Sections 5.1-5.3: in scope is old/new
-compilation within the supported LExec subset, rule alignment, semantic
-change classification, scenario replay, witness generation, downstream
-propagation, and quantitative exposure with full provenance. Out of scope for
-this track, same as there: general business-process simulation, real
+In scope: old/new compilation within the supported LExec subset, rule
+alignment, semantic change classification, scenario replay, witness
+generation, downstream propagation, and quantitative exposure with full
+provenance. Out of scope: general business-process simulation, real
 staffing/cycle-time/cost forecasts, expected financial or reputational loss,
-and any claim of legal correctness beyond what a rule's own source evidence
-supports. This plan additionally scopes out, for now: any external benchmark
-integration (that remains `proposal.md`'s job if pursued later).
+any claim of legal correctness beyond what a rule's own source evidence
+supports, and external benchmark integration.
 
 ## 6. System design
 
-This section is intentionally the same engine design as `proposal.md`
-Sections 6.1-6.5 — the design does not change based on which validation data
-proves it. The worked example is reworked to use data this repository
-already has.
+The worked example below uses data this repository already has.
 
 ### 6.1 End-to-end flow
 
@@ -271,28 +254,25 @@ Execution status:          observed by replay (Tier 1); to be confirmed by
 
 ### 6.3 Change taxonomy
 
-Unchanged from `proposal.md` Section 6.3: rule addition/removal, condition
-strengthening/weakening, threshold or constant change, output/effect change,
-modality change, exception addition/removal, scope change, priority/hit-policy
-change, dependency change, semantically unchanged edits, and unresolved
-alignment.
+The change taxonomy: rule addition/removal, condition strengthening/weakening,
+threshold or constant change, output/effect change, modality change,
+exception addition/removal, scope change, priority/hit-policy change,
+dependency change, semantically unchanged edits, and unresolved alignment.
 
 ### 6.4 Rule alignment
 
-Unchanged from `proposal.md` Section 6.4. For the mortgage domain
-specifically, Tier 1's alignment is close to trivial (the "new" graph is a
-copy of the "old" graph with a handful of fields edited, so rule IDs match
-exactly); Tier 2 is where the alignment contract is actually exercised,
-because the real extraction over the errata excerpt will not reuse the
-original rule IDs and must be aligned by source section and predicate
-structure instead.
+For the mortgage domain specifically, Tier 1's alignment is close to trivial
+(the "new" graph is a copy of the "old" graph with a handful of fields
+edited, so rule IDs match exactly); Tier 2 is where the alignment contract is
+actually exercised, because the real extraction over the errata excerpt will
+not reuse the original rule IDs and must be aligned by source section and
+predicate structure instead.
 
 ### 6.5 Impact propagation
 
-Unchanged from `proposal.md` Section 6.5 (`Direct`/`Potential`/`Recompute`
-over the dependency DAG, full replay as the correctness oracle). For the
-anchor example: `Direct` = `{R-120-004}`; `Potential` = `{R-120-004,
-R-120-003}` (via `dag_0203`).
+`Direct`/`Potential`/`Recompute` over the dependency DAG, full replay as the
+correctness oracle. For the anchor example: `Direct` = `{R-120-004}`;
+`Potential` = `{R-120-004, R-120-003}` (via `dag_0203`).
 
 `Recompute` is *not* automatically equal to `Potential` here, and this is a
 genuine open design question for Phase 2, not a solved fact: `dag_0203`'s
@@ -315,19 +295,19 @@ the concrete case.
 
 ## 7. Rollout phases
 
-### Phases 1-2: executable pipeline boundary; gold differential engine
+### Phases 1-2: executable pipeline boundary; gold differential engine — delivered
 
-These are identical to `proposal.md` Section 11 Phases 1-2 (including their
-"Execution steps" and "Acceptance criteria") — integrating LExec into the
-live pipeline and building the alignment/diff/propagation/witness engine are
-prerequisite engineering regardless of which validation data proves them.
-See that document rather than duplicating it here; the two should be kept in
-sync if either changes.
+LExec is integrated into the live pipeline (`agent_11` compiles and proves
+each rule via `utils/lexec_compile.py`), and the alignment/diff/propagation/
+witness engine is implemented (`utils/rule_alignment.py`,
+`utils/semantic_diff.py`, `utils/impact_propagation.py`, orchestrated by
+`utils/regdelta_engine.py`).
 
 ### Phase 3: mortgage Tier 1 fixture and acceptance tests
 
-Replaces `proposal.md`'s "OpenExempt-CF adapter" phase with the in-house
-equivalent from Section 4.1 above.
+A small, hand-labeled, in-house fixture (rather than an external benchmark
+adapter) proving the engine against real pipeline output — see Section 4.1
+above.
 
 Execution steps:
 
@@ -371,8 +351,8 @@ Acceptance criteria:
 
 ### Phase 4: mortgage Tier 2 real text-to-pipeline validation
 
-Replaces `proposal.md`'s end-to-end OpenExempt-CF benchmark phase with the
-in-house equivalent from Section 4.2 above.
+Validates Tier 1's hand-authored edits against a real text-to-pipeline
+extraction — see Section 4.2 above.
 
 Execution steps:
 
@@ -402,9 +382,7 @@ Acceptance criteria:
 
 ### Phase 5: expand to the remaining domains
 
-Replaces `proposal.md`'s "RegelRecht real-change evaluation" phase — there is
-no genuine-version-pair resource in scope here, so this phase is domain
-breadth instead: the same Tier 1/Tier 2 approach applied to each of this
+Domain breadth: the same Tier 1/Tier 2 approach applied to each of this
 repository's other four domains, ordered by actual pipeline distance to
 mortgage's depth (Section 2), not by any external priority:
 
@@ -425,23 +403,15 @@ achieves the same 100%-agreement bar Phase 3 set for mortgage.
 
 ### Phase 6: review UI — "Compare versions"
 
-Same UI scope as `proposal.md` Phase 6 (source redline, alignment status,
-change categories, affected-case tables, old/new comparison, witness
-exploration, impacted-rule DAGs, proved/observed/uncertain/refused states,
-downloadable reports), built first against mortgage's Tier 1 fixture so it
-has real data to render from day one, then wired to Tier 2 and to each domain
-as Phase 5 completes them.
-
-Execution steps:
-
-1. Extend `ui/backend` with endpoints serving the Phase 3 fixture's impact
-   report shape directly, so frontend work in step 2 doesn't block on Phase
-   1/2/3 being fully wired end-to-end.
-2. Extend `ui/frontend`, reusing the existing layered rule-graph view for
-   impacted-rule DAGs (it already renders mortgage's DAGs today) and the
-   existing DMN/BPMN drill-down for the review-projection side of each rule.
-3. Add component tests against the mortgage Tier 1 fixture, following the
-   conventions in `ui/IMPLEMENTATION_STATUS.md`.
+No review UI exists in this repository (the earlier review workbench under
+`ui/` was removed). This phase needs a UI built from scratch — source
+redline, alignment status, change categories, affected-case tables, old/new
+comparison, witness exploration, impacted-rule DAGs, proved/observed/
+uncertain/refused states, downloadable reports — built first against
+mortgage's Tier 1 fixture so it has real data to render from day one, then
+wired to Tier 2 and to each domain as Phase 5 completes them. Scope, stack,
+and endpoints are undecided; this is a future planning task, not a
+ready-to-execute step.
 
 ### Phase 7: real end-to-end product workflow
 
@@ -480,17 +450,15 @@ Tier 1/Tier 2 gap. This extends Phase 2's alignment/diff engine to the full
 rule population; it does not replace it, and it does not introduce a new
 status vocabulary — Phase 3 already did.
 
-**7.3 A real product entry point.** Add a "Compare versions" action in
-`ui/frontend` and a corresponding `ui/backend` endpoint that: accepts two
-document(-set) references (an existing batch, or a freshly uploaded file);
-triggers `cli/extract.py` for whichever side hasn't reached `agent_11` yet;
-triggers Phase 2's `cli/regdelta_diff.py` once both sides have; and renders
-the resulting impact report. Pipeline runs are not instant, so this needs an
-async job model exposing per-agent run status (queued / running agent N of
-11 / complete / failed), reusing the stage-status conventions already in
-`ui/backend/review_index.py`. Reject a cross-domain comparison outright, and
-block (with a clear message, not a partial diff) comparing a side that
-hasn't reached `agent_10`/`agent_11` yet.
+**7.3 A real product entry point.** A "Compare versions" action (UI or CLI)
+that: accepts two document(-set) references (an existing batch, or a freshly
+uploaded file); triggers `cli/extract.py` for whichever side hasn't reached
+`agent_11` yet; runs the differential engine once both sides have; and
+renders the resulting impact report. Pipeline runs are not instant, so this
+needs an async job model exposing per-agent run status (queued / running
+agent N of 11 / complete / failed). Reject a cross-domain comparison
+outright, and block (with a clear message, not a partial diff) comparing a
+side that hasn't reached `agent_10`/`agent_11` yet.
 
 **7.4 Measured cost and latency, not assumed.** Record actual wall-clock time
 and LLM spend for both the 7.1 full second-document run and a full round
@@ -550,10 +518,7 @@ what a customer could actually use.
 ## 9. What this plan intentionally defers
 
 No external benchmark acquisition, license negotiation, or academic
-baseline/ablation protocol is required by this plan. `proposal.md` remains
-the place those return if a research/benchmarks track is picked back up; nor
-does building this plan foreclose that — the compiler and differential
-engine built in Phases 1-2 are exactly what that track would also need.
+baseline/ablation protocol is required by this plan.
 
 Phase 7's single new external input (Section 7.1's second Selling Guide
 edition) is the one deliberate exception to this posture, and is scoped as

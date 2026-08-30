@@ -1,21 +1,16 @@
-# Aggregate release boundary
+# Retained run evidence
 
-`bench/run_bundle.py` validates retained benchmark bundles before an aggregate
-is released. Every bundle must include a validated run manifest and
-`requirements-lock.txt`; every listed artifact is checked for path safety,
-byte size, and SHA-256 equality.
+This directory holds metadata-only evidence from real pipeline runs — run
+manifests recording configuration, stage status, and content hashes, never
+source documents or full pipeline output.
 
-Release is an explicit allowlist, not an inference from a directory. The
-allowlist may contain `aggregate_only` and `redistributable` artifacts, but it
-must reject source documents, gold labels, raw outputs, restricted files, and
-local-only artifacts. Failed and refused run records remain in the run
-manifest even when they have no publishable output.
+- `config_high_smoke/`, `full_smallest_privacy/` — retained manifests from
+  real extraction runs, pinning status, model/reasoning configuration, and
+  DAG coverage as a regression check (`tests/test_pipeline_smoke_manifest.py`,
+  `tests/test_full_smallest_run_manifest.py`).
+- `regdelta/` — retained results from the RegDelta differential-execution
+  engine's fixture-based acceptance tests (`tests/test_mortgage_tier1_fixture.py`,
+  `tests/test_regdelta_tier1_fixtures.py`, `tests/test_mortgage_tier2_extraction.py`).
 
-This directory contains aggregate metadata only. It does not authorize
-redistribution of any benchmark corpus or gold artifact, and no benchmark run
-bundle is claimed or retained by this contract implementation.
-
-IR-2 census manifests record the repository commit and dirty state observed
-before the census writes its generated reports. This keeps report generation
-from turning a clean source checkout into a misleadingly dirty provenance
-record.
+Nothing here authorizes redistribution of any source document or full
+pipeline output; only aggregate, hash-verifiable metadata is retained.

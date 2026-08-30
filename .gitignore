@@ -8,9 +8,6 @@ __pycache__/
 .coverage
 htmlcov/
 
-# Generated NeurIPS paper build output (regenerable)
-paper/build/
-
 # Secrets
 .env
 .env.*
@@ -23,27 +20,16 @@ config.json
 *.db-wal
 *.db-shm
 
-# Generated pipeline output (regenerable; see benchmarks/README.md for how
-# to reproduce a run)
+# Generated pipeline output (regenerable by re-running the pipeline)
 pipeline-output/
 
-# Local pilot-sized samples for the redistribution-restricted domains
-# (OPP-115, MAPP — no redistribution grant; see README.md "Data and
-# licensing"). Nothing is committed under compliance-files/ for any domain
-# — this just covers the folder name if you create one locally by hand.
+# Local pilot-sized samples, if you create one locally by hand. Nothing is
+# committed under compliance-files/ for any domain.
 compliance-files/privacy_policy_pilot/
 compliance-files/mobile_app_privacy_pilot/
 
-# Benchmark corpora (downloaded, not vendored — see benchmarks/README.md)
-benchmarks/data/
-benchmarks/raw/
-benchmarks/*-source-docs/
-
-# Full benchmark corpora copied into compliance-files/<domain>/ for
-# full-corpus runs (see benchmarks/README.md "Run the pipeline per
-# benchmark"). Regenerable from benchmarks/*-source-docs/ — not committed,
-# regardless of license. (Distinct from compliance-files/<domain>_pilot/
-# above: no _pilot suffix.)
+# Source documents you put under compliance-files/<domain>/ for a real run —
+# never committed, regardless of content or license.
 compliance-files/commercial_contracts/
 compliance-files/nda_confidentiality/
 compliance-files/privacy_policy/
