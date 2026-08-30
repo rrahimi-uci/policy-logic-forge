@@ -118,6 +118,40 @@ def _conflict_batch_groups(
     return [component[start:start + limit] for component in components for start in range(0, len(component), limit)]
 
 
+def _conflict_candidate_pairs(
+    member_ids: list[str],
+    overlapping_ids: set[str],
+    max_rules_per_call: int,
+) -> set[tuple[str, str]] | None:
+    """Return pairs needing coverage, or ``None`` when pair expansion is unsafe.
+
+    Small groups retain exact pair coverage.  For a large source-scoped group,
+    rules whose output variables are pairwise disjoint are mechanically safe;
+    only pairs touching an overlapping-output rule can be ambiguous.  Even
+    that reduced cartesian product can be enormous for pathological graphs, so
+    callers fail closed with one unresolved group instead of materialising an
+    unbounded set.
+    """
+    ids = sorted({str(rule_id) for rule_id in member_ids})
+    if len(ids) <= max(2, int(max_rules_per_call)):
+        return set(combinations(ids, 2))
+    overlap = sorted(set(str(rule_id) for rule_id in overlapping_ids) & set(ids))
+    if len(overlap) < 1:
+        return set()
+    try:
+        max_pairs = max(1, int(os.getenv("KG_CONFLICT_MAX_COVERAGE_PAIRS", "10000")))
+    except (TypeError, ValueError):
+        max_pairs = 10000
+    if len(overlap) * (len(ids) - 1) > max_pairs:
+        return None
+    return {
+        tuple(sorted((rule_id, other)))
+        for rule_id in overlap
+        for other in ids
+        if other != rule_id
+    }
+
+
 class EvidenceResolver(Protocol):
     def complete_rule(self, rule: Mapping[str, Any], corpus: Mapping[str, Any]) -> Mapping[str, Any]: ...
     def complete_rules(self, rules: list[Mapping[str, Any]]) -> list[Mapping[str, Any]]: ...
@@ -2112,12 +2146,41 @@ class ExecutableReadinessCompleter:
                         })
             if not entries:
                 entries = [{"entity": entity, "status": "unresolved", "rule_ids": member_ids, "reasoning": "No entity-local conflict analysis was returned.", "resolution": "Manual review required."}]
-            expected_pairs = {tuple(pair) for pair in combinations(member_ids, 2)}
-            covered_pairs = {
-                tuple(pair)
-                for analysis in entries
-                for pair in combinations(sorted(str(rule_id) for rule_id in analysis.get("rule_ids", []) if str(rule_id) in member_ids), 2)
-            }
+            expected_pairs = _conflict_candidate_pairs(member_ids, overlapping_ids, max_rules_per_call)
+            if expected_pairs is None:
+                # The potentially ambiguous cross-bucket product itself is
+                # too large to enumerate safely. Preserve fail-closed
+                # semantics with one bounded unresolved group; downstream
+                # readiness marks every affected rule for review without
+                # allocating quadratic pair state.
+                if len(overlapping_ids) > 1:
+                    entries.append({
+                        "entity": entity,
+                        "status": "unresolved",
+                        "rule_ids": sorted(overlapping_ids),
+                        "reasoning": "The overlapping-output conflict set is too large for bounded pair enumeration; cross-bucket interactions were not exhaustively resolved.",
+                        "resolution": "Manual review required for the unresolved overlapping-output group.",
+                    })
+                expected_pairs = set()
+            # For a large group, avoid combinations() over a giant
+            # non-overlapping deterministic entry. Only candidate pairs above
+            # can be materially ambiguous; the bounded nested loop keeps the
+            # coverage calculation linear in the source group size when the
+            # overlap set is small.
+            member_set = set(member_ids)
+            covered_pairs: set[tuple[str, str]] = set()
+            for analysis in entries:
+                analysis_ids = [str(rule_id) for rule_id in analysis.get("rule_ids", []) if str(rule_id) in member_set]
+                if len(member_ids) <= max_rules_per_call:
+                    covered_pairs.update(combinations(sorted(analysis_ids), 2))
+                elif expected_pairs:
+                    analysis_overlap = set(analysis_ids) & overlapping_ids
+                    for rule_id in analysis_overlap:
+                        covered_pairs.update(
+                            tuple(sorted((rule_id, other)))
+                            for other in analysis_ids
+                            if other != rule_id
+                        )
             # The prompt asks the model for "every material pair or an
             # unresolved group with a specific reason" — it is not instructed
             # to enumerate every combinatorial pair, so a small group's
