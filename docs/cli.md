@@ -21,6 +21,7 @@ computes internally.
 - [What the terminal display shows](#what-the-terminal-display-shows)
 - [The `run_metrics.json` artifact](#the-run_metricsjson-artifact)
 - [Configuration](#configuration)
+- [Agent 12 business knowledge report](#agent-12-business-knowledge-report)
 - [Common workflows](#common-workflows)
 - [Troubleshooting](#troubleshooting)
 
@@ -75,6 +76,25 @@ all four to run the full 11-stage pipeline (`run_all`).
 Run `python3 cli/extract.py --help` for the same reference from the tool
 itself, including the full per-stage summary table baked into its
 description.
+
+## Agent 12 business knowledge report
+
+Agent 12 is a post-pipeline presentation stage. It reads the optimized graph,
+the DAG artifact, Agent 11's DMN/BPMN/CMMN bundle, and the organized source
+chunks, then writes a single self-contained HTML report. It does not call an
+LLM or alter upstream artifacts.
+
+```bash
+KG_BATCH_NAME=nda-2026 KG_DOMAIN=nda_confidentiality \
+  .venv/bin/python agents/agent_12_business_knowledge_report.py
+```
+
+The default output is
+`pipeline-output/<batch-name>/agent_12-business-knowledge-report/business_knowledge_report.html`.
+Use `--graph`, `--dags`, `--models-dir`, `--organized-dir`, and `--output-dir`
+when reading from an explicitly selected bundle. The report embeds source
+chunks and its CSS, JavaScript, and SVG visualizations, so it can be opened
+directly from disk without a web server or network access.
 
 ## Selecting stages
 

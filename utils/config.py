@@ -258,6 +258,10 @@ class Config:
         base = self.get_pipeline_base_path()
         return base / output_dir_name("agent_11")
 
+    def get_business_report_dir(self) -> Path:
+        """``agent_12`` self-contained HTML report output directory."""
+        return self.get_pipeline_base_path() / "agent_12-business-knowledge-report"
+
     def get_target_rules(self) -> int:
         """Get target number of rules to extract."""
         env_target = os.getenv('TARGET_RULES')
