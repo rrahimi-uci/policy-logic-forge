@@ -76,6 +76,23 @@ describe("review workbench components", () => {
     expect(scope.getByRole("tabpanel", { name: "SBVR vocabulary" })).toHaveTextContent("Typed vocabulary");
   });
 
+  it("never lets a DMN/BPMN/CMMN projection read as executed or proof-verified", () => {
+    // These panels are generated from a rule's own contract fields, not from
+    // the pipeline's compiled/proof-checked decision layer (lexec_ir.json,
+    // proof_records.json). A viewer must not be able to mistake either for
+    // the other -- see plan/simulation-impact-analysis.md Section 8.
+    const workflowRule: RuleDetail = { ...detail, workflow_semantics: { kind: "prescriptive_process", basis: "explicit_in_source", trigger_event: "account submitted", actor_role: "FIRST_PARTY", evidence: [{ chunk_path: "doc/chunk.txt", section_id: "Privacy", source_text: "When submitted, verify then retain." }], ordered_steps: [{ step_id: "verify", name: "Verify", kind: "user_task" }, { step_id: "retain", name: "Retain", kind: "service_task" }] } };
+    const { container } = render(<ExecutableRepresentations rule={workflowRule} />);
+    const scope = within(container);
+    expect(scope.getByText(/review projections generated from this rule.s own contract fields, not proof-verified or executable/)).toBeInTheDocument();
+    expect(scope.queryByText("Ready")).not.toBeInTheDocument();
+    expect(scope.getByRole("tabpanel", { name: "DMN decision table" })).toHaveTextContent("not proof-verified");
+    fireEvent.click(scope.getByRole("tab", { name: /BPMN/ }));
+    expect(scope.getByRole("tabpanel", { name: "BPMN workflow" })).toHaveTextContent("not a simulated or executed process");
+    fireEvent.click(scope.getByRole("tab", { name: /CMMN/ }));
+    expect(scope.getByRole("tabpanel", { name: "CMMN review case" })).toHaveTextContent("No review case");
+  });
+
   it("renders stage flow and overview actions", () => {
     const onView = vi.fn();
     render(<Overview run={run} stages={stages} onStage={vi.fn()} onView={onView} />);
