@@ -352,6 +352,13 @@ LEGACY_VALUE_TYPES = {
     # predicates.  It carries no additional semantics and is safe to map to
     # the v2 contract's canonical string value type.
     "text": "string",
+    # ``source_text`` is the extraction label for a literal explanation in an
+    # exception. It has the same runtime shape as the contract's string type.
+    "source_text": "string",
+    # A bare ``set`` is another extraction spelling for a membership list.
+    # The v2 contract intentionally has one collection type (``list``), so
+    # this alias is safe for both enum and scalar membership predicates.
+    "set": "list",
     # A membership predicate over a declared enum is represented by the
     # contract's list value type; ``enum_reference`` is an extraction-only
     # label for that same literal set.
@@ -778,16 +785,95 @@ def _normalise_rule_contract(rule: dict[str, Any]) -> dict[str, Any]:
         if isinstance(outcome.get("value"), list) and outcome.get("value_type") == "number":
             outcome["value_type"] = "list"
 
+    # Outcome records are the source of truth for their assigned variable.
+    # Older extraction batches sometimes emitted a variable_reference outcome
+    # without repeating the output declaration in ``variables``. When the
+    # reference resolves to a declared variable, copy only that variable's
+    # type/constraints and give the new declaration an output role. This is a
+    # structural repair (not a semantic guess) and keeps the source-backed
+    # outcome executable without inventing a literal value.
+    variable_by_name = {
+        str(variable.get("name", "")).strip().lower(): variable
+        for variable in variables
+        if isinstance(variable, dict) and str(variable.get("name", "")).strip()
+    }
+    for outcome in rule.get("outcomes", []) or []:
+        if not isinstance(outcome, Mapping):
+            continue
+        output_name = str(outcome.get("variable", "")).strip()
+        if not output_name or output_name.lower() in variable_by_name:
+            continue
+        value_type = _normalise_value_type(outcome.get("value_type"))
+        template: Mapping[str, Any] | None = None
+        if value_type == "variable_reference":
+            reference_name = str(outcome.get("value", "")).strip().lower()
+            template = variable_by_name.get(reference_name)
+        if template is not None:
+            output_variable = deepcopy(dict(template))
+            output_variable["name"] = output_name
+            output_variable["role"] = "output"
+            variables.append(output_variable)
+            variable_by_name[output_name.lower()] = output_variable
+        elif value_type in {"number", "boolean", "enum", "date", "date_time", "duration", "string", "list"}:
+            output_variable = {"name": output_name, "type": value_type, "role": "output"}
+            if value_type == "string":
+                output_variable["free_text"] = True
+            if value_type == "enum":
+                literal = outcome.get("value")
+                output_variable["allowed_values"] = literal if isinstance(literal, list) else [literal]
+            variables.append(output_variable)
+            variable_by_name[output_name.lower()] = output_variable
+
     predicates = rule.get("condition_predicates")
     if not isinstance(predicates, list):
         predicates = []
         rule["condition_predicates"] = predicates
+    # Every atomic predicate must have an ID before condition_logic is
+    # resolved. Assign the first available deterministic pN identifier to
+    # missing IDs so a logic tree such as ``predicate_ref: p4`` can resolve to
+    # the fourth extracted predicate instead of becoming an unknown reference.
+    used_predicate_ids = {
+        str(predicate.get("predicate_id"))
+        for predicate in predicates
+        if isinstance(predicate, Mapping) and str(predicate.get("predicate_id", "")).strip()
+    }
+    next_predicate_number = 1
+    for predicate in predicates:
+        if not isinstance(predicate, dict) or str(predicate.get("predicate_id", "")).strip():
+            continue
+        while f"p{next_predicate_number}" in used_predicate_ids:
+            next_predicate_number += 1
+        predicate["predicate_id"] = f"p{next_predicate_number}"
+        used_predicate_ids.add(predicate["predicate_id"])
+        next_predicate_number += 1
     predicate_by_id = {
         str(predicate.get("predicate_id")): predicate
         for predicate in predicates
         if isinstance(predicate, dict) and predicate.get("predicate_id")
     }
     referenced_predicates: dict[str, int] = {}
+
+    def resolve_predicate_id(value: Any) -> str:
+        """Resolve a positional pN reference to an existing atomic predicate.
+
+        Some model responses give an atomic predicate a descriptive ID (for
+        example its variable name) while the logic tree still refers to the
+        predicate by its positional ``pN`` label. Reconcile that deterministic
+        alias only when the requested position exists; unrelated unknown IDs
+        remain untouched and continue to fail closed.
+        """
+        predicate_id = str(value)
+        if predicate_id in predicate_by_id:
+            return predicate_id
+        match = re.fullmatch(r"p(\d+)", predicate_id, flags=re.IGNORECASE)
+        if match:
+            index = int(match.group(1)) - 1
+            if 0 <= index < len(predicates):
+                candidate = predicates[index]
+                candidate_id = str(candidate.get("predicate_id", "")).strip() if isinstance(candidate, Mapping) else ""
+                if candidate_id in predicate_by_id:
+                    return candidate_id
+        return predicate_id
 
     def normalise_logic(node: Any) -> dict[str, Any] | None:
         if not isinstance(node, Mapping):
@@ -805,7 +891,7 @@ def _normalise_rule_contract(rule: dict[str, Any]) -> dict[str, Any]:
             predicate_by_id[predicate_id] = predicate
             return {"predicate_ref": predicate_id}
         if "predicate_ref" in node:
-            predicate_id = str(node.get("predicate_ref"))
+            predicate_id = resolve_predicate_id(node.get("predicate_ref"))
             if node.get("negate") is True and predicate_id in predicate_by_id:
                 negated_id = f"{predicate_id}_negated"
                 suffix = 2
@@ -929,6 +1015,16 @@ def _normalise_rule_contract(rule: dict[str, Any]) -> dict[str, Any]:
             continue
         value = exception.get("value")
         value_type = exception.get("value_type")
+        # ``input_reference`` is emitted when the model recognizes that the
+        # exception compares two inputs. Canonicalize it only when the
+        # referenced input is declared in this rule; otherwise retain the
+        # extraction label so the capability gap remains visibly deferred
+        # instead of silently turning an unresolved name into a literal.
+        if value_type == "input_reference":
+            reference = variable_by_name.get(str(value).strip().lower())
+            if reference is not None:
+                exception["value_type"] = "variable_reference"
+                value_type = "variable_reference"
         variable_type = value_type if value_type in {"number", "boolean", "enum", "date", "date_time", "duration", "string"} else "string"
         variable: dict[str, Any] = {"name": name, "type": variable_type, "role": "input"}
         if variable_type == "string":
@@ -968,6 +1064,38 @@ def _normalise_rule_contract(rule: dict[str, Any]) -> dict[str, Any]:
             variable["role"] = "input"
         else:
             variable["role"] = "derived"
+
+    # Remediation patches and repeated normalization can independently add the
+    # same declaration (most often when two outcomes converge on a threshold
+    # output). The v2 contract requires unique variable names. Merge duplicate
+    # declarations deterministically, retaining every non-empty constraint and
+    # preferring an output role when either declaration is an output. This is
+    # a structural/idempotence repair; it does not alter any outcome value or
+    # source evidence.
+    merged_variables: list[dict[str, Any]] = []
+    merged_by_name: dict[str, dict[str, Any]] = {}
+    for variable in variables:
+        if not isinstance(variable, dict):
+            continue
+        name = str(variable.get("name", "")).strip()
+        if not name:
+            continue
+        key = name.casefold()
+        existing = merged_by_name.get(key)
+        if existing is None:
+            merged = dict(variable)
+            merged_variables.append(merged)
+            merged_by_name[key] = merged
+            continue
+        for field, value in variable.items():
+            if field not in existing or existing.get(field) in (None, "", [], {}):
+                existing[field] = deepcopy(value)
+        roles = {str(existing.get("role", "")).casefold(), str(variable.get("role", "")).casefold()}
+        if "output" in roles:
+            existing["role"] = "output"
+        elif "input" in roles:
+            existing["role"] = "input"
+    rule["variables"] = merged_variables
 
     verification = rule.get("exception_verification")
     if (
@@ -1053,6 +1181,11 @@ def _is_deferred_contract_issue(issue: Mapping[str, Any], rule: Mapping[str, Any
         # but treating the representation gap as deferred lets the pipeline
         # complete while the rule stays explicitly review-required.
         return bool(rule.get("source_reference")) and bool(rule.get("outcomes"))
+    if code == "missing_test_vectors":
+        # A source-backed rule may be fully grounded while its executable
+        # examples are still a capability gap. Keep it review-required, but
+        # allow downstream model/export stages to run and expose the gap.
+        return bool(rule.get("source_reference")) and bool(rule.get("outcomes"))
     if code == "invalid_outcome_value_type":
         path = str(issue.get("path", ""))
         try:
@@ -1077,6 +1210,26 @@ def _is_deferred_contract_issue(issue: Mapping[str, Any], rule: Mapping[str, Any
         except (IndexError, TypeError, ValueError, AttributeError):
             value_type = None
         return value_type in {"variable_expression", "formula", "expression"}
+    if code == "invalid_exception_value_type":
+        path = str(issue.get("path", ""))
+        try:
+            index = int(path.split("[")[1].split("]")[0])
+            value_type = (rule.get("exceptions") or [])[index].get("value_type")
+        except (IndexError, TypeError, ValueError, AttributeError):
+            value_type = None
+        # Computed exception expressions and unresolved input references are
+        # not representable by the current v2 scalar contract. Preserve their
+        # original shape and route them for human review rather than coercing
+        # them into a misleading literal type.
+        return value_type in {"formula", "expression", "object", "variable_expression", "conditional_map", "input_reference"}
+    if code == "undefined_exception_variable_reference":
+        path = str(issue.get("path", ""))
+        try:
+            index = int(path.split("[")[1].split("]")[0])
+            value_type = (rule.get("exceptions") or [])[index].get("value_type")
+        except (IndexError, TypeError, ValueError, AttributeError):
+            value_type = None
+        return value_type == "input_reference"
     if code == "invalid_exception_operator":
         path = str(issue.get("path", ""))
         try:
