@@ -29,6 +29,14 @@ graph. See [`plan/regdelta-product-plan.md`](plan/regdelta-product-plan.md).
 **No UI.** This is a CLI-and-library tool; there is currently no web
 frontend or backend service.
 
+**Agent 12 report layer** — after Agent 11 has produced its model bundle,
+`agents/agent_12_business_knowledge_report.py` creates one self-contained
+`business_knowledge_report.html`. The report provides tabbed SBVR vocabulary,
+rule exploration, review management, DMN/BPMN/CMMN coverage, dependency views,
+embedded source chunks, search/filter controls, and inline SVG visualizations.
+It uses only graph-derived facts; missing evidence remains explicitly
+unresolved.
+
 ### Engineering fixes made along the way
 
 Three pre-existing defects were found and fixed while building this out,
@@ -102,6 +110,10 @@ Output lands under `pipeline-output/<batch-name>/`:
 - `agent_11-executable-models/` — DMN/BPMN/CMMN/SBVR review projections, plus
   a compiled, proof-checked LExec IR document for rules the compiler can
   represent (`lexec_ir.json`, `compilation_report.json`, `proof_records.json`).
+- `agent_12-business-knowledge-report/business_knowledge_report.html` — the
+  self-contained human-review and exploration report generated from the Agent
+  11 bundle. Open it directly in a browser; no server or network access is
+  required.
 
 ### Numbering contract
 
@@ -132,6 +144,18 @@ not define the current pipeline numbering. Readers also accept the former
 `agent_06-optimized/` name for retained historical bundles; new runs always
 write the descriptive shared-directory name above.
 
+Agent 12 is a post-pipeline presentation stage and is intentionally not added
+to the canonical extraction numbering contract. Generate it for an existing
+batch with:
+
+```bash
+KG_BATCH_NAME=my-batch KG_DOMAIN=privacy_policy \
+  .venv/bin/python agents/agent_12_business_knowledge_report.py
+```
+
+Optional `--graph`, `--dags`, `--models-dir`, `--organized-dir`, and
+`--output-dir` arguments allow generation from an explicitly selected bundle.
+
 Run a single stage with `--stage 9` or a single agent with `--agent agent_09`
 (for example, to re-run grounding certification), or multiple stages in one
 invocation with `--stages 7-9` (also accepts a list or a mix, e.g. `3,5,7`).
@@ -157,7 +181,7 @@ still stop the run.
 
 ```text
 cli/extract.py              `agent_01`–`agent_11` orchestrator
-agents/                     one zero-padded module per agent
+agents/                     one zero-padded module per extraction agent plus Agent 12 report layer
 utils/                      config, LLM client, adaptive rate limiter,
                             rule contract + validator, readiness/grounding
                             helpers, dependency-DAG partitioning, the LExec
