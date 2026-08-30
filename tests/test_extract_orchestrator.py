@@ -1,9 +1,86 @@
-from cli.extract import ExtractionPipeline, _PERFORMANCE_ENV, _parse_stage_arg
+import argparse
+
+import pytest
+
+from cli.extract import ExtractionPipeline, _PERFORMANCE_ENV, _parse_stage_arg, _parse_stages_arg
 
 
 def test_stage_argument_accepts_display_number_with_or_without_zero_padding():
     assert _parse_stage_arg("7") == "7"
     assert _parse_stage_arg("07") == "7"
+
+
+def test_stages_argument_accepts_a_range():
+    assert _parse_stages_arg("3-6") == ["agent_03", "agent_04", "agent_05", "agent_06"]
+
+
+def test_stages_argument_accepts_a_comma_list():
+    assert _parse_stages_arg("3,5,7") == ["agent_03", "agent_05", "agent_07"]
+
+
+def test_stages_argument_accepts_a_mix_dedupes_and_sorts():
+    assert _parse_stages_arg("9-11,1,3,3") == ["agent_01", "agent_03", "agent_09", "agent_10", "agent_11"]
+
+
+def test_stages_argument_rejects_out_of_range():
+    with pytest.raises(argparse.ArgumentTypeError):
+        _parse_stages_arg("0-3")
+    with pytest.raises(argparse.ArgumentTypeError):
+        _parse_stages_arg("12")
+
+
+def test_stages_argument_rejects_backwards_range():
+    with pytest.raises(argparse.ArgumentTypeError):
+        _parse_stages_arg("6-3")
+
+
+def test_stages_argument_rejects_empty_input():
+    with pytest.raises(argparse.ArgumentTypeError):
+        _parse_stages_arg("")
+    with pytest.raises(argparse.ArgumentTypeError):
+        _parse_stages_arg("  , ,")
+
+
+def test_run_stages_stops_at_first_failure_by_default(monkeypatch):
+    pipeline = object.__new__(ExtractionPipeline)
+    calls = []
+    monkeypatch.setattr(
+        pipeline, "run_agent",
+        lambda agent_id: (calls.append(agent_id), agent_id != "agent_05")[1],
+    )
+    ok = pipeline.run_stages(["agent_03", "agent_04", "agent_05", "agent_06"])
+    assert ok is False
+    assert calls == ["agent_03", "agent_04", "agent_05"]  # agent_06 never attempted
+
+
+def test_run_stages_keep_going_runs_every_selected_stage(monkeypatch):
+    pipeline = object.__new__(ExtractionPipeline)
+    calls = []
+    monkeypatch.setattr(
+        pipeline, "run_agent",
+        lambda agent_id: (calls.append(agent_id), agent_id != "agent_05")[1],
+    )
+    ok = pipeline.run_stages(["agent_03", "agent_04", "agent_05", "agent_06"], keep_going=True)
+    assert ok is False  # one stage failed
+    assert calls == ["agent_03", "agent_04", "agent_05", "agent_06"]  # but every stage still ran
+
+
+def test_run_stages_all_pass_returns_true(monkeypatch):
+    pipeline = object.__new__(ExtractionPipeline)
+    calls = []
+    monkeypatch.setattr(pipeline, "run_agent", lambda agent_id: calls.append(agent_id) or True)
+    assert pipeline.run_stages(["agent_01", "agent_02"]) is True
+    assert calls == ["agent_01", "agent_02"]
+
+
+def test_run_stages_is_safe_without_reporting_configured(monkeypatch):
+    """object.__new__ test doubles have no self.metrics/self.reporter; run_stages must not crash."""
+
+    pipeline = object.__new__(ExtractionPipeline)
+    assert not hasattr(pipeline, "metrics")
+    assert not hasattr(pipeline, "reporter")
+    monkeypatch.setattr(pipeline, "run_agent", lambda agent_id: True)
+    assert pipeline.run_stages(["agent_01"]) is True
 
 
 def test_review_only_readiness_is_non_blocking_but_fail_closed(tmp_path):

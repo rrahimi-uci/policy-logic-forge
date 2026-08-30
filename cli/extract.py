@@ -46,6 +46,16 @@ from utils.agent_names import (  # noqa: E402
     stage_label,
 )
 from utils.config import get_config  # noqa: E402
+from utils.pipeline_metrics import (  # noqa: E402
+    FAIL,
+    PASS,
+    REVIEW,
+    SKIPPED,
+    RunMetrics,
+    classify_log_line,
+    parse_llm_cost_line,
+)
+from cli.console import make_reporter  # noqa: E402
 
 DOMAINS = [
     "nda_confidentiality", "privacy_policy", "mobile_app_privacy", "commercial_contracts",
@@ -63,6 +73,40 @@ def _parse_stage_arg(value: str) -> str:
     if normalized not in CANONICAL_STAGE_NUMBERS:
         raise argparse.ArgumentTypeError("stage must be an integer from 1 to 11")
     return normalized
+
+
+def _parse_stages_arg(value: str) -> list[str]:
+    """Parse ``--stages`` into an ascending, deduplicated list of agent ids.
+
+    Accepts a comma-separated mix of single numbers and inclusive ranges,
+    e.g. ``"3-6"``, ``"3,5,7"``, or ``"3-6,9,11"``.
+    """
+
+    numbers: set[int] = set()
+    for part in value.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        if "-" in part:
+            start_s, _, end_s = part.partition("-")
+            try:
+                start, end = int(start_s), int(end_s)
+            except ValueError as exc:
+                raise argparse.ArgumentTypeError(f"invalid stage range: {part!r}") from exc
+            if start > end:
+                raise argparse.ArgumentTypeError(f"invalid stage range (start > end): {part!r}")
+            numbers.update(range(start, end + 1))
+        else:
+            try:
+                numbers.add(int(part))
+            except ValueError as exc:
+                raise argparse.ArgumentTypeError(f"invalid stage number: {part!r}") from exc
+    if not numbers:
+        raise argparse.ArgumentTypeError("--stages requires at least one stage number or range")
+    out_of_range = sorted(n for n in numbers if not 1 <= n <= len(AGENT_IDS))
+    if out_of_range:
+        raise argparse.ArgumentTypeError(f"stage(s) out of range 1-{len(AGENT_IDS)}: {out_of_range}")
+    return [agent_id_for_stage(n) for n in sorted(numbers)]
 
 # Env vars every agent subprocess inherits, mapped from pipeline.performance in
 # config.json. Kept as a flat table (name -> (config_key, fallback)) so a new
@@ -119,7 +163,8 @@ def _count_business_rules(data: dict) -> int:
 
 class ExtractionPipeline:
     def __init__(self, source_dir: Path, domain: str, target_rules: int, max_workers: int | None,
-                 skip_optimize: bool, batch_name: str | None, pilot_batch_limit: int | None = None):
+                 skip_optimize: bool, batch_name: str | None, pilot_batch_limit: int | None = None,
+                 output: str = "text"):
         self.config = get_config(domain=domain)
         self.source_dir = source_dir
         self.domain = domain
@@ -151,17 +196,28 @@ class ExtractionPipeline:
                 value = str(value).lower()
             self._perf_env[env_name] = os.getenv(env_name, str(value))
 
-        print("=" * 80)
-        print(f"policy-logic-forge: extraction pipeline")
-        print(f"  domain:       {domain}")
-        print(f"  source:       {source_dir}")
-        print(f"  batch name:   {self.batch_name}")
-        print(f"  target rules: {target_rules}")
-        print(f"  stages:       Stage 01/{len(AGENT_IDS)} -> Stage {len(AGENT_IDS):02d}/{len(AGENT_IDS)} (agent_01 -> agent_{len(AGENT_IDS):02d})")
+        # Run-level reporting: metrics aggregation + terminal/JSON rendering.
+        # Constructed unconditionally so every real pipeline run gets a
+        # polished config panel, live stage table, and final summary; see
+        # `_reporting_enabled()` for why bare test doubles (`object.__new__`)
+        # that skip __init__ safely no-op instead of touching these.
+        run_config: dict = {
+            "target_rules": target_rules,
+            "model": self.config.get_reasoning_model(),
+            "reasoning_effort": self.config.get_reasoning_effort(),
+            "provider": self.config.get_model_provider(),
+            "workers": max_workers,
+            "skip_optimize": skip_optimize,
+            "performance": dict(self._perf_env),
+            "output_path": str(self.config.get_pipeline_base_path()),
+        }
         if pilot_batch_limit is not None:
-            print(f"  ⚠ pilot batch limit: {pilot_batch_limit} (NOT a full-coverage run)")
-        print(f"  output:       {self.config.get_pipeline_base_path()}")
-        print("=" * 80)
+            run_config["pilot_batch_limit"] = pilot_batch_limit
+        self.metrics = RunMetrics(
+            batch_name=self.batch_name, domain=domain, source_dir=str(source_dir), config=run_config,
+        )
+        self.reporter = make_reporter(output)
+        self._planned_stage_ids: list[str] = []
 
     def _env(self) -> dict:
         env = os.environ.copy()
@@ -182,6 +238,42 @@ class ExtractionPipeline:
             env["PILOT_BATCH_LIMIT"] = str(self.pilot_batch_limit)
         return env
 
+    def _reporting_enabled(self) -> bool:
+        """False for test doubles built via ``object.__new__`` that skip ``__init__``."""
+
+        return getattr(self, "reporter", None) is not None and getattr(self, "metrics", None) is not None
+
+    def _begin_run(self, stage_ids: list[str], selection_label: str) -> None:
+        """Start run-level reporting: populate the stage plan and print the config panel."""
+
+        if not self._reporting_enabled():
+            return
+        self._planned_stage_ids = list(stage_ids)
+        self.metrics.config["stages_selected"] = selection_label
+        for stage_id in stage_ids:
+            self.metrics.stage(stage_id, stage_label(stage_id))
+        self.reporter.run_start(self.metrics)
+
+    def _end_run(self, overall_status: str) -> None:
+        """Finish run-level reporting: print the final summary and persist run_metrics.json."""
+
+        if not self._reporting_enabled():
+            return
+        self.metrics.finish(overall_status=overall_status)
+        self.reporter.run_end(self.metrics)
+        try:
+            self.metrics.write_json(self.config.get_pipeline_base_path() / "run_metrics.json")
+        except OSError as exc:
+            self.reporter.error(f"Could not write run_metrics.json: {exc}")
+
+    def _stage_position(self, agent_id: str) -> tuple[int, int]:
+        planned = self._planned_stage_ids or [agent_id]
+        try:
+            index = planned.index(agent_id) + 1
+        except ValueError:
+            index = 1
+        return index, len(planned)
+
     def _run(
         self,
         agent_id: str,
@@ -189,11 +281,14 @@ class ExtractionPipeline:
         extra_env: dict[str, str] | None = None,
     ) -> bool:
         spec = agent_spec(agent_id)
-        print("\n" + "=" * 80)
-        print(stage_label(agent_id))
-        print("=" * 80)
+        label = stage_label(agent_id)
+        stage = self.metrics.stage(agent_id, label)
+        stage.start()
+        index, total = self._stage_position(agent_id)
+        self.reporter.stage_start(stage, index, total)
+
         cmd = [sys.executable, str(_ROOT / "agents" / spec.module)] + args
-        print(f"$ {' '.join(cmd)}\n", flush=True)
+        self.reporter.log_line(f"$ {' '.join(cmd)}", "plain")
         env = self._env()
         if extra_env:
             env.update(extra_env)
@@ -202,11 +297,21 @@ class ExtractionPipeline:
             text=True, bufsize=1, env=env,
         )
         for line in process.stdout:
-            print(line, end="", flush=True)
+            call = parse_llm_cost_line(line)
+            if call is not None:
+                # Structured [LLM_COST] marker: aggregate, don't display raw JSON.
+                stage.record_llm_call(call)
+                continue
+            kind = classify_log_line(line)
+            if kind in ("warning", "error"):
+                stage.observe_log_line(line)
+            self.reporter.log_line(line, kind)
         code = process.wait()
         self._last_exit_codes[agent_id] = code
         ok = code == 0
-        print(f"\n{'PASS' if ok else 'FAIL'} {agent_id}: {spec.role} (exit {code})")
+        status = PASS if ok else (REVIEW if code == 3 else FAIL)
+        stage.finish(status=status, exit_code=code)
+        self.reporter.stage_end(stage, self.metrics)
         return ok
 
     def run_agent_01(self) -> bool:
@@ -265,7 +370,12 @@ class ExtractionPipeline:
 
     def run_agent_06(self) -> bool:
         if self.skip_optimize:
-            print(f"\n{stage_label('agent_06')} -- SKIPPED (--skip-optimize)")
+            if self._reporting_enabled():
+                stage = self.metrics.stage("agent_06", stage_label("agent_06"))
+                stage.finish(status=SKIPPED, exit_code=None, note="--skip-optimize")
+                self.reporter.stage_end(stage, self.metrics)
+            else:
+                print(f"\n{stage_label('agent_06')} -- SKIPPED (--skip-optimize)")
             return True
         return self._run("agent_06", [])
 
@@ -331,6 +441,12 @@ class ExtractionPipeline:
         )
 
     def run_all(self) -> bool:
+        self._begin_run(list(AGENT_IDS), f"full pipeline ({len(AGENT_IDS)} stages)")
+        ok = self._run_all_stages()
+        self._end_run(overall_status=PASS if ok else FAIL)
+        return ok
+
+    def _run_all_stages(self) -> bool:
         start = datetime.now()
         if not self.run_agent_01():
             return False
@@ -404,6 +520,30 @@ class ExtractionPipeline:
             return False
         return dispatch[agent_id]()
 
+    def run_stages(self, stage_ids: list[str], *, keep_going: bool = False,
+                    selection_label: str | None = None) -> bool:
+        """Run one or more canonical agents, in order.
+
+        The single-stage selectors (``--agent``/``--stage``/``--step``) and the
+        multi-stage ``--stages`` selector all funnel through here so every CLI
+        invocation gets the same config panel / stage table / final summary.
+        By default, stops at the first failing stage; pass ``keep_going=True``
+        (``--keep-going``) to run every selected stage regardless of earlier
+        failures and report the aggregate result.
+        """
+
+        if selection_label is None:
+            selection_label = ", ".join(stage_ids)
+        self._begin_run(stage_ids, selection_label)
+        overall_ok = True
+        for agent_id in stage_ids:
+            if not self.run_agent(agent_id):
+                overall_ok = False
+                if not keep_going:
+                    break
+        self._end_run(overall_status=PASS if overall_ok else FAIL)
+        return overall_ok
+
     def run_step(self, step: str) -> bool:
         """Run a legacy selector without changing its historical meaning."""
 
@@ -411,8 +551,9 @@ class ExtractionPipeline:
             valid = ", ".join(LEGACY_STEP_ALIASES)
             print(f"Invalid legacy step: {step}. Valid legacy steps: {valid}; use --stage or --agent")
             return False
-        print(f"Legacy --step {step} maps to {stage_label(LEGACY_STEP_ALIASES[step])}")
-        return self.run_agent(LEGACY_STEP_ALIASES[step])
+        agent_id = LEGACY_STEP_ALIASES[step]
+        print(f"Legacy --step {step} maps to {stage_label(agent_id)}")
+        return self.run_stages([agent_id], selection_label=f"legacy step {step} ({stage_label(agent_id)})")
 
     def run_stage(self, stage: str) -> bool:
         """Run one canonical, one-based pipeline stage."""
@@ -422,7 +563,7 @@ class ExtractionPipeline:
         except ValueError as exc:
             print(exc)
             return False
-        return self.run_agent(agent_id)
+        return self.run_stages([agent_id], selection_label=f"single stage ({stage_label(agent_id)})")
 
 
 def main():
@@ -434,10 +575,19 @@ def main():
     parser.add_argument("--pilot-batch-limit", type=int, default=None, help="Cap the number of word-balanced batches agent_03 processes, for a cheap smoke run. Omit for full coverage (default): every organized chunk is read whole and every batch is processed. A capped run is never corpus coverage.")
     parser.add_argument("--workers", type=int, default=None, help="Local scheduling workers (default: config.json pipeline.max_workers)")
     parser.add_argument("--skip-optimize", action="store_true", help="Skip agents agent_06 through agent_08 (optimization, readiness, remediation); independent agent_09 grounding still runs")
+    parser.add_argument("--keep-going", action="store_true", help="With --stages, run every selected stage even after an earlier one fails, instead of stopping at the first failure")
+    parser.add_argument("--output", choices=["text", "json"], default="text",
+                         help="'text' (default): polished interactive terminal display. "
+                              "'json': line-delimited JSON events on stdout for automation/scripting "
+                              "(run_start/stage_start/stage_end/run_end/error); raw subprocess log lines "
+                              "go to stderr instead so stdout stays machine-parseable.")
     selector = parser.add_mutually_exclusive_group()
     selector.add_argument("--agent", choices=list(AGENT_IDS), help="Run one canonical agent only (for example: agent_07)")
     selector.add_argument("--stage", type=_parse_stage_arg, choices=list(CANONICAL_STAGE_NUMBERS), help="Run one canonical pipeline stage (1–11; Stage 07 maps to agent_07)")
     selector.add_argument("--step", choices=list(LEGACY_STEP_ALIASES), help="Deprecated legacy selector; use --stage or --agent (fractional aliases retain historical meanings)")
+    selector.add_argument("--stages", type=_parse_stages_arg, metavar="RANGE",
+                           help="Run multiple canonical stages in order, e.g. '3-6', '3,5,7', or '3-6,9,11' "
+                                "(mutually exclusive with --agent/--stage/--step; see --keep-going)")
     args = parser.parse_args()
 
     source_dir = Path(args.dir)
@@ -450,17 +600,22 @@ def main():
     pipeline = ExtractionPipeline(
         source_dir=source_dir, domain=args.domain, target_rules=args.target_rules,
         max_workers=args.workers, skip_optimize=args.skip_optimize, batch_name=args.batch_name,
-        pilot_batch_limit=args.pilot_batch_limit,
+        pilot_batch_limit=args.pilot_batch_limit, output=args.output,
     )
-    ok = (
-        pipeline.run_agent(args.agent)
-        if args.agent
-        else pipeline.run_stage(args.stage)
-        if args.stage
-        else pipeline.run_step(args.step)
-        if args.step
-        else pipeline.run_all()
-    )
+    if args.agent:
+        ok = pipeline.run_stages([args.agent], selection_label=f"single agent ({stage_label(args.agent)})")
+    elif args.stage:
+        ok = pipeline.run_stage(args.stage)
+    elif args.step:
+        ok = pipeline.run_step(args.step)
+    elif args.stages:
+        numbers = ", ".join(agent_id.rsplit("_", 1)[-1] for agent_id in args.stages)
+        ok = pipeline.run_stages(
+            args.stages, keep_going=args.keep_going,
+            selection_label=f"{len(args.stages)} selected stages (agent_{{{numbers}}})",
+        )
+    else:
+        ok = pipeline.run_all()
     sys.exit(0 if ok else 1)
 
 
