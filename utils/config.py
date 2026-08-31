@@ -422,7 +422,14 @@ class Config:
         env_val = os.getenv('KG_ENTITY_EXTRACTOR_MAX_TOKENS')
         if env_val:
             return int(env_val)
-        return self.get('entity_extractor.max_tokens', 8192)
+        # 8192 was enough only because the prompt schema never actually
+        # requested source_evidence (see scripts/generate_benchmark_domain_
+        # prompts.py's ENTITY_EXTRACTION_COMPACT fix); once every entity and
+        # relationship must carry a verbatim quote, a full max_entities +
+        # max_relationships response no longer reliably fits -- confirmed via
+        # a real truncated response (finish_reason=length) against a live
+        # model after that fix landed.
+        return self.get('entity_extractor.max_tokens', 16384)
 
     # -- Rules extractor --
 

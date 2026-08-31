@@ -71,10 +71,12 @@ Return ONLY one valid JSON object, no Markdown:
     "ENTITY_NAME": {{
       "definition": "Clear business definition in Mobile App Privacy (GDPR, bilingual) context",
       "description": "Longer explanation of the role this entity plays",
+      "concept_kind": "actor_role|business_object|evidence_object|event|decision_variable|process",
       "attributes": ["attribute_one", "attribute_two", "attribute_three"],
       "examples": ["excerpt-grounded example"],
       "business_rules": ["High-level summary of a rule involving this entity"],
-      "business_rule_summaries": ["Alternate summary list for downstream compatibility"]
+      "business_rule_summaries": ["Alternate summary list for downstream compatibility"],
+      "source_evidence": [{{"chunk_path": "exact File path", "source_text": "verbatim source quote"}}]
     }}
   }},
   "relationships": {{
@@ -87,7 +89,8 @@ Return ONLY one valid JSON object, no Markdown:
       "description": "Directional semantics of the relationship",
       "cardinality": "one-to-one|one-to-many|many-to-many",
       "examples": ["excerpt-grounded example"],
-      "business_rules": ["High-level summary of a rule governing this relationship"]
+      "business_rules": ["High-level summary of a rule governing this relationship"],
+      "source_evidence": [{{"chunk_path": "exact File path", "source_text": "verbatim source quote"}}]
     }}
   }},
   "extraction_metadata": {{
@@ -98,7 +101,10 @@ Return ONLY one valid JSON object, no Markdown:
 }}
 
 Ground every entity and relationship in the excerpts. Do not invent entities the
-text does not support.
+text does not support. Every entity and relationship needs at least one
+source_evidence record quoting the exact words that establish it in the
+excerpts above; a nearby rule citation is not concept evidence. If an item has
+no exact concept-specific evidence in the supplied excerpts, omit it.
 
 EXCERPTS:
 {sample_content}

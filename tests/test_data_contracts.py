@@ -89,9 +89,11 @@ def _prompt_contains_any(prompt_text: str, *values: str) -> bool:
 
 EXPECTED_PROMPT_FILES = [
     "business_rules_extraction",
+    "business_rules_extraction_compact",  # what agent_03 actually requests
     "dependency_analysis",
     "document_structure_analysis",
     "entity_extraction",
+    "entity_extraction_compact",  # what agent_02 actually requests
     "entity_refinement",
     "entity_resolution",
     "rule_deduplication",
@@ -409,6 +411,81 @@ class TestEntityExtractionContract:
         assert has_target_entity or has_target, (
             f'{domain}/entity_extraction.txt must include "target_entity" or "target" '
             f"in relationships"
+        )
+
+    @pytest.mark.parametrize("domain", DOMAINS)
+    def test_source_evidence_field(self, domain):
+        """agent_02's validate_catalog_evidence() hard-requires a non-empty
+        source_evidence list (chunk_path + source_text) on every entity and
+        relationship, or the whole extraction fails closed after its retry
+        budget is exhausted (agents/agent_02_entity_extractor.py). This field
+        was missing from every domain's generated entity-extraction prompts
+        for an unknown period (a template/validator contract drift the tests
+        below did not previously catch) -- confirmed via a real, reproducible
+        failure against a live model."""
+        prompt = _load_prompt(domain, "entity_extraction")
+        assert _prompt_contains_field(prompt, "source_evidence"), (
+            f'{domain}/entity_extraction.txt must include "source_evidence" -- '
+            f"agent_02's validator hard-requires it on every entity/relationship"
+        )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 4b. entity_extraction_compact  →  agent_02 (the file it ACTUALLY reads)
+#
+#     agents/agent_02_entity_extractor.py's real prompt call is
+#     self.prompt_manager.format_prompt("entity_extraction_compact", ...) --
+#     not "entity_extraction". TestEntityExtractionContract above exercises
+#     entity_extraction.txt, which no agent currently calls at runtime (kept
+#     only because tests/contract docs above historically required it in
+#     every domain directory). This class applies the same checks, plus
+#     source_evidence, to the file agent_02 actually sends to the model.
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestEntityExtractionCompactContract:
+    """entity_extraction_compact.txt must produce fields agent_02 actually reads
+    (this is the prompt name agent_02 requests at runtime, unlike the
+    non-compact entity_extraction.txt covered above)."""
+
+    @pytest.mark.parametrize("domain", DOMAINS)
+    def test_entity_types_key(self, domain):
+        prompt = _load_prompt(domain, "entity_extraction_compact")
+        assert _prompt_contains_field(prompt, "entity_types"), (
+            f'{domain}/entity_extraction_compact.txt must include "entity_types"'
+        )
+
+    @pytest.mark.parametrize("domain", DOMAINS)
+    def test_relationships_key(self, domain):
+        prompt = _load_prompt(domain, "entity_extraction_compact")
+        assert _prompt_contains_field(prompt, "relationships"), (
+            f'{domain}/entity_extraction_compact.txt must include "relationships"'
+        )
+
+    @pytest.mark.parametrize("domain", DOMAINS)
+    def test_source_evidence_field(self, domain):
+        """The exact field whose absence caused a real, reproducible fail-
+        closed failure against a live model (both OpenAI and Anthropic are
+        plausibly affected -- the field was simply never requested)."""
+        prompt = _load_prompt(domain, "entity_extraction_compact")
+        assert _prompt_contains_field(prompt, "source_evidence"), (
+            f'{domain}/entity_extraction_compact.txt must include "source_evidence" -- '
+            f"agent_02's validate_catalog_evidence() hard-requires a non-empty "
+            f"source_evidence list on every entity/relationship or the extraction "
+            f"fails closed after its retry budget is exhausted"
+        )
+
+    @pytest.mark.parametrize("domain", DOMAINS)
+    def test_source_evidence_shape(self, domain):
+        """The shape validate_catalog_evidence() actually reads: a list of
+        {chunk_path, source_text} records, not just the bare field name."""
+        prompt = _load_prompt(domain, "entity_extraction_compact")
+        assert _prompt_contains_field(prompt, "chunk_path"), (
+            f'{domain}/entity_extraction_compact.txt\'s source_evidence records '
+            f'must document "chunk_path"'
+        )
+        assert _prompt_contains_field(prompt, "source_text"), (
+            f'{domain}/entity_extraction_compact.txt\'s source_evidence records '
+            f'must document "source_text"'
         )
 
 
