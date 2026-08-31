@@ -2,7 +2,20 @@ import json
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-from agents.agent_12_business_knowledge_report import _dependency_graph_layout, _dependency_graph_svg, generate, main
+from agents.agent_12_business_knowledge_report import (
+    _dependency_graph_layout,
+    _dependency_graph_svg,
+    _formal_logic_html,
+    _outcome_badge_html,
+    _outcome_cards_html,
+    _outcome_chip_html,
+    _outcome_kind,
+    _review_route_meta,
+    _route_badge_html,
+    _route_card_html,
+    generate,
+    main,
+)
 
 
 def _graph():
@@ -179,6 +192,126 @@ def test_agent_12_separates_human_queue_from_nonhuman_quality_holds(tmp_path: Pa
     assert "case management" in report
     assert 'id="rule-route"' in report
     assert 'data-route="case_management"' in report
+
+
+def test_outcome_kind_classifies_booleans_numbers_lists_and_text():
+    assert _outcome_kind(True, "boolean") == "true"
+    assert _outcome_kind(False, "boolean") == "false"
+    assert _outcome_kind("true", "boolean") == "true"  # value_type-declared boolean stored as a string
+    assert _outcome_kind(42, None) == "number"
+    assert _outcome_kind(3.5, "number") == "number"
+    assert _outcome_kind(["a", "b"], None) == "list"
+    assert _outcome_kind("manual_underwriting", "enum") == "text"
+
+
+def test_outcome_badge_renders_true_false_as_pills_not_raw_python_bool():
+    assert '<span class="outcome-badge type-true">TRUE</span>' == _outcome_badge_html(True, "boolean")
+    assert '<span class="outcome-badge type-false">FALSE</span>' == _outcome_badge_html(False, "boolean")
+
+
+def test_outcome_badge_explodes_a_list_into_individual_chips():
+    html = _outcome_badge_html(["financial condition", "staffing"], "list")
+    assert html.count("outcome-value-item") == 2
+    assert "financial condition" in html and "staffing" in html
+
+
+def test_outcome_cards_render_one_card_per_outcome_with_readable_and_raw_name():
+    outcomes = [
+        {"variable": "loan_eligible_for_sale", "value": True, "value_type": "boolean"},
+        {"variable": "minimum_down_payment_percentage", "value": 3, "value_type": "number"},
+    ]
+    html = _outcome_cards_html(outcomes)
+    assert html.count("outcome-card") == 2
+    assert "Loan eligible for sale" in html  # humanized label
+    assert "loan_eligible_for_sale" in html  # raw variable name retained
+    assert '<span class="outcome-badge type-true">TRUE</span>' in html
+    assert '<span class="outcome-badge type-number"' in html and ">3<" in html
+
+
+def test_outcome_cards_report_none_declared_for_empty_outcomes():
+    assert "None declared" in _outcome_cards_html([])
+
+
+def test_outcome_chip_marks_boolean_outcomes_for_banner_styling():
+    true_chip = _outcome_chip_html({"variable": "eligible", "value": True})
+    false_chip = _outcome_chip_html({"variable": "eligible", "value": False})
+    assert 'outcome-chip ov-true' in true_chip
+    assert 'outcome-chip ov-false' in false_chip
+    assert "eligible" in true_chip and "true" in true_chip
+
+
+def test_formal_logic_html_wraps_multiple_outcomes_as_separate_chips_and_cards():
+    """A rule with several outcomes must not collapse into one AND-joined
+    sentence -- each outcome gets its own banner chip and its own card in
+    the Outcomes panel."""
+
+    rule = {
+        "condition_predicates": [{"variable": "loan_secured_by_manufactured_home", "operator": "==", "value": True}],
+        "outcomes": [
+            {"variable": "underwriting_system", "value": "DU", "value_type": "enum"},
+            {"variable": "property_type_identification_required", "value": True, "value_type": "boolean"},
+            {"variable": "project_type_identification_required", "value": True, "value_type": "boolean"},
+        ],
+        "exceptions": [], "variables": [],
+    }
+    html = _formal_logic_html(rule)
+    assert html.count('class="outcome-chip') == 3  # one banner chip per outcome
+    assert html.count('class="outcome-card"') == 3  # one card per outcome
+    assert '<div class="logic-if">' in html and '<div class="logic-then-row">' in html
+    # No stray "?" placeholder where an outcome lacks an explicit operator.
+    assert " ? " not in html
+
+
+def test_formal_logic_html_falls_back_when_no_outcomes_declared():
+    html = _formal_logic_html({"condition_predicates": [], "outcomes": [], "exceptions": [], "variables": []})
+    assert "evaluate outcome" in html
+    assert "None declared" in html  # empty Outcomes panel
+
+
+def test_review_route_meta_covers_every_known_semantic_routing_value():
+    """utils/semantic_routing.py::classify_review_route only ever emits these
+    four routes, plus agent_12's own 'unclassified' fallback -- every one
+    must have a real icon/label/description, not the generic unknown-route
+    fallback."""
+
+    for route in ("none", "human_review", "machine_repair", "case_management", "unclassified"):
+        icon, label, description = _review_route_meta(route)
+        assert icon and label and description
+        assert label != _review_route_meta("totally-unknown-route")[1]
+
+
+def test_review_route_meta_falls_back_gracefully_for_an_unrecognized_route():
+    icon, label, description = _review_route_meta("some_future_route")
+    assert icon == "❔"
+    assert label == "Some future route"  # humanized, not a raw enum dump
+    assert description
+
+
+def test_route_badge_preserves_lowercase_route_text_for_filter_compatibility():
+    """The compact toolbar filter/data-route attribute rely on the raw,
+    lowercase, underscore-free route text still being present verbatim."""
+
+    html = _route_badge_html("case_management")
+    assert "case management" in html  # raw text preserved
+    assert "Case management" in html  # human label added
+    assert 'class="status status-case_management route-badge"' in html
+
+
+def test_route_card_shows_icon_label_description_and_hold_state():
+    html = _route_card_html("human_review", has_hold=True, reason_items=["Evidence contradicted the source"])
+    assert 'class="route-card route-human_review"' in html
+    assert "Human review" in html
+    assert "judgment call" in html  # the plain-language description
+    assert '<span class="route-hold route-hold-yes">Quality hold</span>' in html
+    assert "Evidence contradicted the source" in html
+    assert "Why (1)" in html
+
+
+def test_route_card_shows_no_hold_state_and_default_reason_for_a_clean_route():
+    html = _route_card_html("none", has_hold=False, reason_items=[])
+    assert '<span class="route-hold route-hold-no">No quality hold</span>' in html
+    assert "No review reason recorded." in html
+    assert "Why (0)" in html
 
 
 def test_agent_12_handles_missing_optional_upstream_models(tmp_path: Path):
