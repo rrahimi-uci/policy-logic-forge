@@ -422,7 +422,8 @@ def _highlight_xml(path: Path, kind: str) -> str:
         highlighted_lines.append(
             f'<span class="xml-line"><span class="xml-ln">{number:04d}</span><span class="xml-source">{highlighted or " "}</span></span>'
         )
-    return f'<div class="xml-viewer" role="region" aria-label="Highlighted {_safe(kind)} XML"><div class="xml-toolbar"><span><strong>{_safe(kind)}</strong> XML · {_safe(path.name)}</span><span class="muted">{len(lines)} lines · read-only</span></div><pre class="xml-code" tabindex="0">{"\n".join(highlighted_lines)}</pre></div>'
+    xml_code = "\n".join(highlighted_lines)
+    return f'<div class="xml-viewer" role="region" aria-label="Highlighted {_safe(kind)} XML"><div class="xml-toolbar"><span><strong>{_safe(kind)}</strong> XML · {_safe(path.name)}</span><span class="muted">{len(lines)} lines · read-only</span></div><pre class="xml-code" tabindex="0">{xml_code}</pre></div>'
 
 
 def _dependency_graph_layout(edges: Sequence[Mapping[str, Any]], rule_ids: Sequence[str] = ()) -> dict[str, Any]:
