@@ -2,7 +2,7 @@ import json
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-from agents.agent_12_business_knowledge_report import generate, main
+from agents.agent_12_business_knowledge_report import _dependency_graph_layout, _dependency_graph_svg, generate, main
 
 
 def _graph():
@@ -27,6 +27,28 @@ def _graph():
         ],
         "dependency_details": {"dependencies": [{"source_rule_id": "R-1", "target_rule_id": "R-1", "dependency_type": "self"}]},
     }
+
+
+def test_dependency_graph_preserves_direction_and_assigns_degree_layers():
+    layout = _dependency_graph_layout(
+        [
+            {"source_rule_id": "R-0", "target_rule_id": "R-1", "dependency_type": "prerequisite"},
+            {"source_rule_id": "R-1", "target_rule_id": "R-2", "dependency_type": "condition"},
+            {"source_rule_id": "R-2", "target_rule_id": "R-1", "dependency_type": "back-link"},
+            {"source_rule_id": "R-2", "target_rule_id": "R-2", "dependency_type": "self"},
+        ],
+        ["R-0", "R-isolated"],
+    )
+
+    assert layout["layers"] == {0: ["R-0", "R-isolated"], 1: ["R-1"], 2: ["R-2"]}
+    assert layout["degrees"] == {"R-0": 0, "R-1": 1, "R-2": 2, "R-isolated": 0}
+    assert layout["isolated_nodes"] == ["R-isolated"]
+    svg = _dependency_graph_svg(layout)
+    assert 'aria-label="Directed dependency graph layered by degree"' in svg
+    assert 'marker-end="url(#dependency-arrow)"' in svg
+    assert 'data-source="R-0" data-target="R-1"' in svg
+    assert 'data-source="R-2" data-target="R-1"' in svg
+    assert 'data-degree="2"' in svg
 
 
 def test_agent_12_generates_self_contained_report_with_traceability(tmp_path: Path):
@@ -85,6 +107,11 @@ def test_agent_12_generates_self_contained_report_with_traceability(tmp_path: Pa
     assert "Quality holds outside the human queue (0)" in report
     assert "Explicit human judgment required" in report
     assert "data-tab=\"models\"" in report
+    assert "Directed rule relationship graph" in report
+    assert "Dependency topology" in report
+    assert "dependency-graph-svg" in report
+    assert "degree 0" in report
+    assert "source_rule_id → target_rule_id" in report
     assert report.count("Open highlighted XML") == 3
     assert report.count('class="xml-viewer"') == 3
     assert report.count('class="xml-line"') >= 3
