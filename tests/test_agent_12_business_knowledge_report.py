@@ -3,19 +3,29 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 from agents.agent_12_business_knowledge_report import (
+    _bpmn_flow_html,
+    _cmmn_plan_html,
     _dependency_graph_layout,
     _dependency_graph_svg,
+    _dmn_table_html,
     _formal_logic_html,
+    _model_kind_section_html,
+    _model_links_html,
     _outcome_badge_html,
     _outcome_cards_html,
     _outcome_chip_html,
     _outcome_kind,
+    _parse_bpmn_processes,
+    _parse_cmmn_cases,
+    _parse_dmn_decisions,
     _review_route_meta,
     _route_badge_html,
     _route_card_html,
     generate,
     main,
 )
+from utils.executable_models import build_dags_bpmn, build_graph_dmn
+from utils.semantic_artifacts import build_review_cmmn
 
 
 def _graph():
@@ -312,6 +322,222 @@ def test_route_card_shows_no_hold_state_and_default_reason_for_a_clean_route():
     assert '<span class="route-hold route-hold-no">No quality hold</span>' in html
     assert "No review reason recorded." in html
     assert "Why (0)" in html
+
+
+def _model_source_graph():
+    """One BPMN-eligible rule (explicit ordered workflow with a business-rule
+    task, for decision_ref cross-linking) and one CMMN-eligible rule (routed
+    to case_management) -- built the same shape as
+    tests/test_executable_models.py's own fixtures, so parsing is tested
+    against real utils.executable_models/utils.semantic_artifacts generator
+    output, not hand-approximated XML."""
+
+    return {"business_rules": [
+        {
+            "rule_id": "R-1", "rule_name": "Allow processing", "requires_review": False,
+            "grounding": {"status": "certified"},
+            "condition_predicates": [{"variable": "active", "operator": "==", "value": True}],
+            "variables": [{"name": "active", "type": "boolean", "role": "input"}],
+            "outcomes": [{"variable": "decision", "value": "allow"}],
+            "execution": {"dmn": {"hit_policy": "UNIQUE"}},
+            "source_reference": {"chunk_path": "policy.txt", "section_id": "s1"},
+            "responsible_party": "SELLER_SERVICER",
+            "workflow_semantics": {
+                "kind": "prescriptive_process", "basis": "explicit_in_source",
+                "trigger_event": "Application received", "actor_role": "SELLER_SERVICER",
+                "ordered_steps": [
+                    {"step_id": "review", "name": "Review application", "kind": "user_task"},
+                    {"step_id": "decide", "name": "Apply eligibility decision", "kind": "business_rule_task"},
+                ],
+                "evidence": [{"chunk_path": "policy.txt", "section_id": "s1", "source_text": "After receipt, review the application and apply the eligibility decision."}],
+            },
+        },
+        {
+            "rule_id": "R-2", "rule_name": "Escalate for review", "requires_review": True,
+            "grounding": {"status": "failed"},
+            "condition_predicates": [{"variable": "flagged", "operator": "==", "value": True}],
+            "variables": [{"name": "flagged", "type": "boolean", "role": "input"}],
+            "outcomes": [{"variable": "decision", "value": "hold"}],
+            "source_reference": {"chunk_path": "policy.txt", "section_id": "s2"},
+            "review_route": {"route": "case_management", "human_review_required": False, "reasons": ["Evidence gap"]},
+        },
+    ]}
+
+
+def _write_real_models(models_dir: Path, graph: dict) -> None:
+    dags = {"dags": [{"dag_id": "d1", "rule_ids": ["R-1", "R-2"],
+                       "topological_order": ["d1_cycle_1"],
+                       "cycle_groups": [{"group_id": "d1_cycle_1", "rule_ids": ["R-1", "R-2"]}]}]}
+    (models_dir / "compliance_decisions.dmn").write_bytes(build_graph_dmn(graph))
+    (models_dir / "compliance_workflows.bpmn").write_bytes(build_dags_bpmn(graph, dags))
+    (models_dir / "compliance_reviews.cmmn").write_bytes(build_review_cmmn(graph))
+
+
+def test_parse_dmn_decisions_reads_real_generator_output(tmp_path):
+    graph = _model_source_graph()
+    _write_real_models(tmp_path, graph)
+    decisions = _parse_dmn_decisions(tmp_path / "compliance_decisions.dmn")
+    by_id = {d["rule_id"]: d for d in decisions}
+    assert set(by_id) == {"R-1", "R-2"}
+    r1 = by_id["R-1"]
+    assert r1["inputs"] == [{"name": "active", "type": "boolean"}]
+    assert r1["outputs"] == [{"name": "decision", "type": "string"}]
+    assert r1["input_entries"] == ["true"]
+    assert r1["output_entries"] == ['"allow"']  # _feel() quotes non-numeric/boolean FEEL literals
+    assert r1["hit_policy"] == "UNIQUE"
+    assert r1["grounding_status"] == "certified"
+
+
+def test_parse_bpmn_processes_preserves_document_order_and_decision_ref(tmp_path):
+    graph = _model_source_graph()
+    _write_real_models(tmp_path, graph)
+    processes = _parse_bpmn_processes(tmp_path / "compliance_workflows.bpmn")
+    assert len(processes) == 1  # only R-1 has explicit ordered workflow semantics
+    process = processes[0]
+    assert process["rule_id"] == "R-1"
+    assert process["trigger_event"] == "Application received"
+    assert process["actor_role"] == "SELLER_SERVICER"
+    assert [node["kind"] for node in process["nodes"]] == ["start", "user_task", "business_rule_task", "end"]
+    business_rule_node = process["nodes"][2]
+    assert business_rule_node["name"] == "Apply eligibility decision"
+    assert business_rule_node["decision_ref"]  # cross-links back to its DMN decision
+
+
+def test_parse_cmmn_cases_reads_real_generator_output(tmp_path):
+    graph = _model_source_graph()
+    _write_real_models(tmp_path, graph)
+    cases = _parse_cmmn_cases(tmp_path / "compliance_reviews.cmmn")
+    assert len(cases) == 1  # only R-2 is routed to case_management/human_review
+    case = cases[0]
+    assert case["rule_id"] == "R-2"
+    assert case["review_route"] == "case_management"
+    assert [item["kind"] for item in case["items"]] == ["human_task", "milestone"]
+
+
+def test_model_parsers_return_empty_list_for_a_missing_or_unparseable_file(tmp_path):
+    missing = tmp_path / "does-not-exist.dmn"
+    assert _parse_dmn_decisions(missing) == []
+    assert _parse_bpmn_processes(missing) == []
+    assert _parse_cmmn_cases(missing) == []
+    broken = tmp_path / "broken.dmn"
+    broken.write_text("not xml <<<", encoding="utf-8")
+    assert _parse_dmn_decisions(broken) == []
+
+
+def test_dmn_table_html_renders_input_and_output_columns():
+    decision = {
+        "hit_policy": "UNIQUE",
+        "inputs": [{"name": "active", "type": "boolean"}],
+        "outputs": [{"name": "decision", "type": "string"}],
+        "input_entries": ["true"], "output_entries": ["allow"],
+    }
+    html = _dmn_table_html(decision)
+    assert '<th class="dmn-col-input">active' in html
+    assert '<th class="dmn-col-output">decision' in html
+    assert '<td class="dmn-col-input"><code>true</code></td>' in html
+    assert '<td class="dmn-col-output"><code>allow</code></td>' in html
+    assert "UNIQUE" in html
+
+
+def test_dmn_table_html_empty_state_for_a_structureless_decision():
+    assert "No decision table structure" in _dmn_table_html({"inputs": [], "outputs": []})
+
+
+def test_bpmn_flow_html_marks_dmn_backed_task_and_connects_steps_with_arrows():
+    process = {"nodes": [
+        {"kind": "start", "name": "Start"},
+        {"kind": "business_rule_task", "name": "Apply eligibility decision", "decision_ref": "decision_R-1"},
+        {"kind": "end", "name": "End"},
+    ]}
+    html = _bpmn_flow_html(process)
+    assert html.count('<div class="bpmn-node ') == 3  # outer node divs only, not the icon/label/sub spans
+    assert html.count('class="bpmn-arrow"') == 2
+    assert "DMN-backed" in html
+    assert "Apply eligibility decision" in html
+
+
+def test_bpmn_flow_html_empty_state_for_no_ordered_steps():
+    assert "No ordered workflow steps" in _bpmn_flow_html({"nodes": []})
+
+
+def test_cmmn_plan_html_renders_unordered_items_without_arrows():
+    case = {"items": [{"kind": "human_task", "name": "Review grounded findings"}, {"kind": "milestone", "name": "Review resolved"}]}
+    html = _cmmn_plan_html(case)
+    assert html.count('<div class="cmmn-item ') == 2  # outer item divs only, not the icon/kind/name children
+    assert "→" not in html  # case items carry no forced sequence
+    assert "Review grounded findings" in html and "Review resolved" in html
+
+
+def test_cmmn_plan_html_empty_state_for_no_case_plan_items():
+    assert "No case plan items" in _cmmn_plan_html({"items": []})
+
+
+def test_model_kind_section_html_builds_select_and_hides_all_but_first_item():
+    items = [{"rule_id": "R-1", "name": "First"}, {"rule_id": "R-2", "name": "Second"}]
+    html = _model_kind_section_html("DMN", items, lambda item: f'<div class="stub">{item["rule_id"]}</div>')
+    assert 'id="model-dmn-select"' in html
+    assert html.count("<option") == 2
+    assert 'id="model-dmn-item-R-1" data-rule-id="R-1">' in html  # first item visible
+    assert 'id="model-dmn-item-R-2" data-rule-id="R-2" hidden>' in html  # rest start hidden
+    assert 'data-items="model-dmn-items"' in html
+    assert 'data-select="model-dmn-select"' in html
+
+
+def test_model_kind_section_html_empty_state_has_no_select():
+    html = _model_kind_section_html("BPMN", [], lambda item: "")
+    assert "No applicable elements were generated." in html
+    assert "<select" not in html
+
+
+def test_model_links_html_only_links_kinds_with_an_item_for_this_rule():
+    model_rule_ids = {"DMN": {"R-1", "R-2"}, "BPMN": {"R-1"}, "CMMN": set()}
+    html = _model_links_html("R-1", model_rule_ids)
+    assert "DMN" in html and "BPMN" in html and "CMMN" not in html
+    assert 'href="#model-dmn-item-R-1"' in html
+    assert 'href="#model-bpmn-item-R-1"' in html
+
+
+def test_model_links_html_empty_when_rule_has_no_models():
+    assert _model_links_html("R-9", {"DMN": {"R-1"}, "BPMN": set(), "CMMN": set()}) == ""
+
+
+def test_agent_12_renders_real_dmn_bpmn_cmmn_diagrams_and_navigation_js(tmp_path: Path):
+    """End-to-end: real generator output flows through to real diagrams, a
+    working selector, rule<->model deep links, and the cross-tab/details
+    navigation fix (the reported 'clicking links does nothing' bug)."""
+
+    graph = _model_source_graph()
+    graph_file = tmp_path / "graph.json"
+    graph_file.write_text(json.dumps(graph), encoding="utf-8")
+    models = tmp_path / "models"
+    models.mkdir()
+    _write_real_models(models, graph)
+
+    manifest = generate(graph_file, None, models, tmp_path / "report")
+    report = (tmp_path / "report" / "business_knowledge_report.html").read_text(encoding="utf-8")
+
+    assert manifest["rule_count"] == 2
+    # Real structural diagrams, not the old bar-chart placeholder:
+    assert 'class="dmn-table"' in report
+    assert 'class="bpmn-flow"' in report
+    assert 'class="cmmn-plan"' in report
+    assert "DMN-backed" in report
+    # Select-one-to-inspect controls, one per kind, each with pre-rendered
+    # (hidden-until-selected) diagram blocks:
+    assert 'id="model-dmn-select"' in report
+    assert 'id="model-bpmn-select"' in report
+    assert 'id="model-cmmn-select"' in report
+    assert 'class="model-diagram-item"' in report
+    # Rule row -> model deep links (only for kinds each rule actually has):
+    assert 'href="#model-dmn-item-R-1"' in report
+    assert 'href="#model-bpmn-item-R-1"' in report
+    assert 'href="#model-cmmn-item-R-2"' in report
+    # The universal cross-tab/details reveal fix:
+    assert "function revealTarget(id)" in report
+    assert "function activateTab(tabId)" in report
+    assert "function showModelItem(groupEl,ruleId)" in report
+    assert "el.scrollIntoView(" in report
+    assert "nav-highlight" in report
 
 
 def test_agent_12_handles_missing_optional_upstream_models(tmp_path: Path):
