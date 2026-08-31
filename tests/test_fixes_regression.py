@@ -15,7 +15,7 @@ PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from utils.config import Config
-from agents.agent_04_rule_validator import RuleValidationAgent
+from agents.agent_04_rule_validator import RuleValidationAgent, validation_exit_code
 
 
 # ── config: fallback to config.example.json when config.json is absent ──
@@ -95,6 +95,11 @@ class TestProvider:
 
 
 class TestRuleValidatorStructuredEnums:
+    def test_findings_remain_advisory_for_pipeline_progression(self):
+        report = {"statistics": {"failure_count": 583}}
+
+        assert validation_exit_code(report) == 0
+
     def test_structured_enum_values_are_reported_without_crashing(self):
         """Malformed structured enum output must remain a validation warning."""
         validator = object.__new__(RuleValidationAgent)
