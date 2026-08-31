@@ -155,7 +155,7 @@ class ReadinessRemediator:
         "exceptions", "exception_basis", "exception_verification",
         "applicability_scope", "scope_basis", "scope_derivation",
     )
-    CHECKPOINT_VERSION = 2
+    CHECKPOINT_VERSION = 3
 
     @staticmethod
     def _unresolved_conflict_fallback(batch: list[dict[str, Any]], error: Exception) -> list[dict[str, Any]]:

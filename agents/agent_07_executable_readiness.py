@@ -35,7 +35,7 @@ from utils.kg_readiness import (
 )
 from utils.llm_client import create_llm_client
 from utils.prompt_manager import get_prompt_manager
-from utils.rule_contract import annotate_rule_contract
+from utils.rule_contract import annotate_rule_contract, quarantine_non_actor_counterparties
 from utils.rule_contract import EXCEPTION_BASES, SCOPE_BASES, validate_rule_v2
 from utils.semantic_routing import bpmn_eligibility
 
@@ -1659,17 +1659,48 @@ def _verify_completion_evidence(rule: dict[str, Any], corpus: Mapping[str, Any])
                 quote = entry.get("source_text") or entry.get("quote") or entry.get("text")
                 chunk_text = _chunk_for(str(entry.get("chunk_path") or ""))
                 if not quote or not chunk_text:
+                    entry["source_text_found_in_chunk"] = False
                     continue
                 if normalise_text(quote) in normalise_text(chunk_text):
+                    entry["source_text_found_in_chunk"] = True
                     continue
                 repaired = repair_citation(str(quote), chunk_text)
                 if repaired is None:
+                    entry["source_text_found_in_chunk"] = False
                     continue
                 key = "source_text" if entry.get("source_text") else (
                     "quote" if entry.get("quote") else "text"
                 )
                 entry[key] = repaired
                 entry["source_text_repaired"] = True
+                entry["source_text_found_in_chunk"] = True
+
+
+def _sync_completion_field_evidence(rule: dict[str, Any]) -> None:
+    """Attach completion evidence to the exact structured fields it supports."""
+    field_evidence = rule.setdefault("field_evidence", {})
+    if not isinstance(field_evidence, dict):
+        return
+
+    def records(parent_name: str) -> list[dict[str, Any]]:
+        parent = rule.get(parent_name)
+        if not isinstance(parent, Mapping):
+            return []
+        candidates = parent.get("evidence") or parent.get("source_evidence") or []
+        return [
+            dict(item) for item in candidates
+            if isinstance(item, Mapping)
+            and item.get("source_text_found_in_chunk") is True
+        ]
+
+    exception_records = records("exception_verification")
+    if rule.get("exceptions") and exception_records:
+        field_evidence["exceptions"] = exception_records
+
+    scope = rule.get("applicability_scope")
+    scope_records = records("scope_derivation")
+    if isinstance(scope, Mapping) and any(scope.get(key) for key in scope) and scope_records:
+        field_evidence["applicability_scope"] = scope_records
 
 
 def _normalise_field_evidence_references(rule: dict[str, Any]) -> None:
@@ -1724,6 +1755,8 @@ def _report_markdown(report: Mapping[str, Any]) -> str:
 class ExecutableReadinessCompleter:
     """Completes evidence fields and emits a non-silent pass/fail self-report."""
 
+    CHECKPOINT_VERSION = 2
+
     def __init__(self, resolver: EvidenceResolver | None = None) -> None:
         self.resolver = resolver
         self.checkpoint_path: Path | None = None
@@ -1733,7 +1766,11 @@ class ExecutableReadinessCompleter:
     @staticmethod
     def _fingerprint(rule: Mapping[str, Any], packet: Mapping[str, Any]) -> str:
         payload = json.dumps(
-            {"rule": rule, "packet": packet}, sort_keys=True,
+            {
+                "checkpoint_version": ExecutableReadinessCompleter.CHECKPOINT_VERSION,
+                "rule": rule,
+                "packet": packet,
+            }, sort_keys=True,
             ensure_ascii=False, separators=(",", ":"),
         )
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()
@@ -1969,6 +2006,11 @@ class ExecutableReadinessCompleter:
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         final_graph = _normalise_graph_entity_names(deepcopy(dict(graph)))
         _ensure_referenced_entity_placeholders(final_graph)
+        entity_catalog = (
+            final_graph.get("entity_types")
+            if isinstance(final_graph.get("entity_types"), Mapping)
+            else {}
+        )
         _restore_legacy_outcome_operators(final_graph, baseline)
         corpus = source_document_index(organized_dir)
         # Build retrieval-normalization data once. Without this index every
@@ -1981,7 +2023,7 @@ class ExecutableReadinessCompleter:
         ]
         corpus["_token_index"] = _build_token_index(corpus["_search_index"])
         rules = [
-            deepcopy(dict(rule))
+            quarantine_non_actor_counterparties(rule, entity_catalog)
             for rule in final_graph.get("business_rules", [])
             if isinstance(rule, Mapping) and not _is_unusable_empty_rule(rule)
         ]
@@ -2058,6 +2100,7 @@ class ExecutableReadinessCompleter:
             for key in ("loan_types", "occupancy_types", "transaction_types"):
                 rule["applicability_scope"].setdefault(key, [])
             _verify_completion_evidence(rule, corpus)
+            _sync_completion_field_evidence(rule)
             rule = _normalise_rule_contract(rule)
             _normalise_field_evidence_references(rule)
             _normalise_final_evidence_states(rule, corpus)
@@ -2071,7 +2114,7 @@ class ExecutableReadinessCompleter:
             # ever adds requires_review=True for a genuine remaining issue —
             # annotate_rule_contract() never clears a True set for another
             # reason (e.g. an unresolved evidence gap) elsewhere in this file.
-            rule = annotate_rule_contract(rule)
+            rule = annotate_rule_contract(rule, entity_catalog)
             rule["execution"] = _project_execution(rule)
             self._save_checkpoint(cache_key, rule)
             return index, rule
@@ -2090,8 +2133,10 @@ class ExecutableReadinessCompleter:
                     # on resumed runs and stale review metadata is not carried
                     # into the final readiness report.
                     cached_rule = _normalise_rule_contract(deepcopy(self._checkpoint[cache_key]))
+                    _sync_completion_field_evidence(cached_rule)
+                    _normalise_field_evidence_references(cached_rule)
                     _normalise_final_evidence_states(cached_rule, corpus)
-                    cached_rule = annotate_rule_contract(cached_rule)
+                    cached_rule = annotate_rule_contract(cached_rule, entity_catalog)
                     cached_rule["execution"] = _project_execution(cached_rule)
                     _recover_source_reference(cached_rule, packet)
                     completed.append((index, cached_rule))
@@ -2136,10 +2181,11 @@ class ExecutableReadinessCompleter:
             rules = []
             for rule in existing_rules:
                 normalized = _normalise_rule_contract(rule)
+                _sync_completion_field_evidence(normalized)
                 _normalise_field_evidence_references(normalized)
                 _normalise_final_evidence_states(normalized, corpus)
                 _recover_source_reference(normalized, self._evidence_packet(normalized, corpus))
-                rules.append(annotate_rule_contract(normalized))
+                rules.append(annotate_rule_contract(normalized, entity_catalog))
             for rule in rules:
                 rule["execution"] = _project_execution(rule)
         else:
@@ -2383,7 +2429,7 @@ class ExecutableReadinessCompleter:
 
         naming = naming_issues(final_graph)
         references = referential_integrity_issues(final_graph)
-        entity_keys = list((final_graph.get("entity_types") or {}).keys())
+        entity_keys = list(entity_catalog.keys())
         conflict_by_rule: dict[str, list[dict[str, Any]]] = {}
         for conflict in conflict_entries:
             if len({str(value) for value in conflict.get("rule_ids", [])}) < 2:
@@ -2397,7 +2443,7 @@ class ExecutableReadinessCompleter:
         deferred_contract_error_count = 0
         final_contract_error_count = 0
         for rule in rules:
-            contract_issues = [issue.as_dict() for issue in validate_rule_v2(rule, entity_keys)]
+            contract_issues = [issue.as_dict() for issue in validate_rule_v2(rule, entity_catalog)]
             deferred_contract_error_count += sum(_is_deferred_contract_issue(issue, rule) for issue in contract_issues)
             contract_error_count += sum(not _is_deferred_contract_issue(issue, rule) for issue in contract_issues)
             issues = contract_issues

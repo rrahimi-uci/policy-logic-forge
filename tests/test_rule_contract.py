@@ -76,6 +76,8 @@ def valid_rule():
             "condition_predicates": [evidence],
             "outcomes": [evidence],
             "responsible_party": [evidence],
+            "counterparties": [evidence],
+            "applicability_scope": [evidence],
             "scope_basis": [evidence],
             "versioning_status": [evidence],
             "exceptions": [evidence],
@@ -144,6 +146,47 @@ def test_exception_predicates_must_reference_declared_variables():
     result = parse_rule_v2(candidate, {"SELLER_SERVICER", "FANNIE_MAE"})
 
     assert any(issue.code == "undefined_exception_variable" for issue in result.issues)
+
+
+def test_exception_cannot_be_the_rules_own_output_or_its_negation():
+    candidate = valid_rule()
+    candidate["exceptions"] = [{
+        "predicate_id": "e1",
+        "variable": "maximum_number_of_pools",
+        "operator": "==",
+        "value": 0,
+        "value_type": "number",
+    }]
+
+    result = parse_rule_v2(candidate, {"SELLER_SERVICER", "FANNIE_MAE"})
+
+    assert any(issue.code == "exception_uses_output_variable" for issue in result.issues)
+
+
+def test_typed_party_catalog_rejects_business_objects_as_parties():
+    candidate = valid_rule()
+    candidate["counterparties"] = ["MORTGAGE_LOAN"]
+    catalog = {
+        "SELLER_SERVICER": {"concept_kind": "actor_role"},
+        "FANNIE_MAE": {"concept_kind": "actor_role"},
+        "MORTGAGE_LOAN": {"concept_kind": "business_object"},
+    }
+
+    result = parse_rule_v2(candidate, catalog)
+
+    assert any(issue.code == "non_actor_counterparty" for issue in result.issues)
+
+
+def test_populated_scope_and_counterparties_require_dedicated_evidence():
+    candidate = valid_rule()
+    candidate["field_evidence"].pop("counterparties")
+    candidate["field_evidence"].pop("applicability_scope")
+
+    result = parse_rule_v2(candidate, {"SELLER_SERVICER", "FANNIE_MAE"})
+
+    paths = {issue.path for issue in result.issues if issue.code == "missing_field_evidence"}
+    assert "field_evidence.counterparties" in paths
+    assert "field_evidence.applicability_scope" in paths
 
 
 def test_string_variables_must_be_explicitly_free_text():

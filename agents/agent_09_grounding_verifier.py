@@ -361,30 +361,44 @@ class GroundingVerifier:
         corpus: Mapping[str, Any],
         max_chars: int,
     ) -> list[dict[str, Any]]:
-        candidates: list[Mapping[str, Any]] = []
+        candidates: list[tuple[Mapping[str, Any], str]] = []
         source_rules = [rules] if isinstance(rules, Mapping) else list(rules)
         for rule in source_rules:
-            candidates.extend(_iter_references(rule.get("source_reference")))
+            candidates.extend(
+                (item, "source_reference")
+                for item in _iter_references(rule.get("source_reference"))
+            )
             field_evidence = rule.get("field_evidence")
             if isinstance(field_evidence, Mapping):
-                for value in field_evidence.values():
-                    candidates.extend(_iter_references(value))
-            for parent in (rule.get("exception_verification"), rule.get("scope_derivation")):
+                for field_name, value in field_evidence.items():
+                    candidates.extend(
+                        (item, str(field_name)) for item in _iter_references(value)
+                    )
+            for parent_name, parent in (
+                ("exceptions", rule.get("exception_verification")),
+                ("applicability_scope", rule.get("scope_derivation")),
+            ):
                 if isinstance(parent, Mapping):
-                    candidates.extend(_iter_references(parent.get("evidence")))
+                    candidates.extend(
+                        (item, parent_name)
+                        for item in _iter_references(
+                            parent.get("evidence") or parent.get("source_evidence")
+                        )
+                    )
 
-        unique: dict[tuple[str, str, str], Mapping[str, Any]] = {}
-        for item in candidates:
+        unique: dict[tuple[str, str, str], dict[str, Any]] = {}
+        for item, supporting_field in candidates:
             key = (
                 str(item.get("chunk_path", "")), str(item.get("section_id", "")),
                 str(item.get("source_text", item.get("text", ""))),
             )
             if any(key):
-                unique[key] = item
+                entry = unique.setdefault(key, {"item": item, "supports_fields": set()})
+                entry["supports_fields"].add(supporting_field)
 
         records = []
         used_chars = 0
-        for (chunk_path, section_id, quote), _ in sorted(unique.items()):
+        for (chunk_path, section_id, quote), evidence_entry in sorted(unique.items()):
             chunk = cls._chunk_for_path(corpus, chunk_path)
             chunk_text = str((chunk or {}).get("text", ""))
             original_quote = quote
@@ -416,6 +430,7 @@ class GroundingVerifier:
                 "start_offset": (span or {}).get("start_offset"),
                 "end_offset": (span or {}).get("end_offset"),
                 "context": context,
+                "supports_fields": sorted(evidence_entry["supports_fields"]),
             }
             if span and span.get("source_text_repaired"):
                 # Transparency/audit trail: a reviewer (or future analysis
@@ -448,6 +463,15 @@ class GroundingVerifier:
                 "unresolved_reason": parent.get("unresolved_reason"),
             }
 
+        evidence = cls._evidence_records(rule, corpus, max_chars)
+        for claim in claims:
+            field_name = cls._claim_evidence_field(claim)
+            claim["eligible_evidence_ids"] = [
+                item["evidence_id"]
+                for item in evidence
+                if field_name in item.get("supports_fields", [])
+            ]
+
         return {
             "rule_id": str(rule.get("rule_id", "")),
             "claims": claims,
@@ -463,8 +487,21 @@ class GroundingVerifier:
                 "exception_verification": provenance(rule.get("exception_verification"), "searched_chunk_count"),
                 "scope_derivation": provenance(rule.get("scope_derivation"), "reviewed_chunk_count"),
             },
-            "evidence": cls._evidence_records(rule, corpus, max_chars),
+            "evidence": evidence,
         }
+
+    @staticmethod
+    def _claim_evidence_field(claim: Mapping[str, Any]) -> str:
+        field_path = str(claim.get("field_path") or "")
+        if field_path == "description":
+            return "source_reference"
+        if field_path.startswith("counterparties"):
+            return "counterparties"
+        if field_path.startswith("applicability_scope"):
+            return "applicability_scope"
+        if field_path.startswith("exceptions"):
+            return "exceptions"
+        return field_path.split("[", 1)[0].split(".", 1)[0]
 
     @classmethod
     def build_relationship_packets(
@@ -687,7 +724,11 @@ class GroundingVerifier:
                 and provenance.get("corpus_sha256") == (packet.get("search_provenance") or {}).get("current_corpus_sha256")
                 and provenance.get("searched_chunk_count") == (packet.get("search_provenance") or {}).get("current_chunk_count")
             )
-        return cls._quote_is_authentic(result, packet)
+        if "eligible_evidence_ids" not in claim:
+            return cls._quote_is_authentic(result, packet)
+        evidence_id = str(result.get("evidence_id") or "")
+        eligible_ids = {str(value) for value in claim.get("eligible_evidence_ids", [])}
+        return evidence_id in eligible_ids and cls._quote_is_authentic(result, packet)
 
     @staticmethod
     def _verify_test_vector(claim: Mapping[str, Any], rule: Mapping[str, Any]) -> tuple[str, str]:

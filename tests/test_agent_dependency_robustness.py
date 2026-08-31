@@ -36,8 +36,16 @@ class TestAgent06DependencyMissingKeys:
         opt.model = "test-model"
 
         rules = [
-            {"rule_id": "R1", "rule_type": "x"},
-            {"rule_id": "R2", "rule_type": "y"},
+            {
+                "rule_id": "R1",
+                "rule_type": "x",
+                "outcomes": [{"variable": "eligibility_result"}],
+            },
+            {
+                "rule_id": "R2",
+                "rule_type": "y",
+                "condition_predicates": [{"variable": "eligibility_result"}],
+            },
         ]
 
         # One well-formed dependency and one missing dependency_type/rationale,
@@ -85,7 +93,7 @@ class TestAgent06DependencyMissingKeys:
         # batch_size >= len(rules) → exactly one batch, zero cross-batch pairs.
         result_rules, metadata = opt._analyze_dependencies_batched(rules, batch_size=10)
 
-        # The well-formed dependency must be applied to R2.
+        # The well-formed, directionally supported dependency is applied to R2.
         r2 = next(r for r in result_rules if r["rule_id"] == "R2")
         assert "dependencies" in r2
         assert r2["dependencies"][0]["depends_on_rule"] == "R1"

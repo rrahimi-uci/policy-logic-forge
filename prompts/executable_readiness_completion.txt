@@ -23,6 +23,9 @@ Rules:
 - If source wording identifies an exception, emit typed predicates and use
   `explicit_in_source`. If declared variables cannot express it, mark unresolved
   and explain the exact evidence limit.
+- An exception must be a source-stated input circumstance. Never use the rule's
+  own output variable, the opposite of its outcome, or an ordinary firing
+  condition as an exception.
 - Populate loan_types, occupancy_types, and transaction_types only from direct
   source wording. `explicitly_universal_in_source` requires universal wording.
   Use `genuinely_unscoped` only when the relevant cited material has no scope

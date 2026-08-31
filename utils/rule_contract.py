@@ -117,6 +117,46 @@ def _normalise_name(value: Any) -> str:
     return str(value or "").strip().lower()
 
 
+def quarantine_non_actor_counterparties(
+    rule: Mapping[str, Any],
+    entity_catalog: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Remove ontology-proven non-parties while retaining an audit record.
+
+    Counterparties are optional actor bindings. When the typed concept catalog
+    proves a value is a business/evidence object, process, event, or decision
+    variable, retaining it as a party is always wrong. Unknown or untyped
+    concepts remain untouched and fail normal validation rather than being
+    guessed away.
+    """
+    sanitized = deepcopy(dict(rule))
+    if not isinstance(entity_catalog, Mapping):
+        return sanitized
+    kinds = {
+        _normalise_name(name): str(definition.get("concept_kind") or "")
+        for name, definition in entity_catalog.items()
+        if isinstance(definition, Mapping) and definition.get("concept_kind")
+    }
+    if not kinds or not isinstance(sanitized.get("counterparties"), list):
+        return sanitized
+    retained = []
+    rejected = []
+    for value in sanitized["counterparties"]:
+        kind = kinds.get(_normalise_name(value))
+        if kind and kind != "actor_role":
+            rejected.append({
+                "field_path": "counterparties",
+                "value": value,
+                "reason": f"concept_kind {kind} cannot bear a party role",
+            })
+        else:
+            retained.append(value)
+    sanitized["counterparties"] = retained
+    if rejected:
+        sanitized.setdefault("quarantined_claims", []).extend(rejected)
+    return sanitized
+
+
 def _is_number(value: Any) -> bool:
     return isinstance(value, (int, float)) and not isinstance(value, bool)
 
@@ -405,8 +445,17 @@ def _validate_exceptions(
         else:
             predicate_ids.add(predicate_id)
 
-        if _normalise_name(predicate.get("variable")) not in variables:
+        variable = variables.get(_normalise_name(predicate.get("variable")))
+        if variable is None:
             _issue(issues, 6, "undefined_exception_variable", f"{predicate_path}.variable", "Exception variables must be declared in variables.")
+        elif variable.get("role") == "output":
+            _issue(
+                issues,
+                6,
+                "exception_uses_output_variable",
+                f"{predicate_path}.variable",
+                "An exception must be an input circumstance, not the rule's own outcome or its negation.",
+            )
         if predicate.get("operator") not in OPERATORS:
             _issue(issues, 6, "invalid_exception_operator", f"{predicate_path}.operator", "Exception operator is invalid.")
         value_type = predicate.get("value_type")
@@ -443,11 +492,25 @@ def _validate_rule_metadata(rule: Mapping[str, Any], entity_catalog: Iterable[st
         _issue(issues, 4, "missing_inference_reasoning", "inference_reasoning", "Inferred scope requires an explanation.")
 
     catalog = {_normalise_name(item) for item in entity_catalog}
+    actor_catalog = set()
+    typed_catalog = isinstance(entity_catalog, Mapping) and any(
+        isinstance(definition, Mapping) and definition.get("concept_kind")
+        for definition in entity_catalog.values()
+    )
+    if isinstance(entity_catalog, Mapping):
+        actor_catalog = {
+            _normalise_name(name)
+            for name, definition in entity_catalog.items()
+            if isinstance(definition, Mapping)
+            and str(definition.get("concept_kind") or "").strip() == "actor_role"
+        }
     responsible_party = rule.get("responsible_party")
     if not isinstance(responsible_party, str) or not responsible_party.strip():
         _issue(issues, 5, "missing_responsible_party", "responsible_party", "A responsible_party is required.")
     elif catalog and _normalise_name(responsible_party) not in catalog:
         _issue(issues, 5, "unknown_responsible_party", "responsible_party", "responsible_party must use an existing entity type.")
+    elif typed_catalog and _normalise_name(responsible_party) not in actor_catalog:
+        _issue(issues, 5, "non_actor_responsible_party", "responsible_party", "responsible_party must reference an actor_role concept.")
 
     counterparties = rule.get("counterparties")
     if not isinstance(counterparties, list):
@@ -456,6 +519,8 @@ def _validate_rule_metadata(rule: Mapping[str, Any], entity_catalog: Iterable[st
         for index, party in enumerate(counterparties):
             if _normalise_name(party) not in catalog:
                 _issue(issues, 5, "unknown_counterparty", f"counterparties[{index}]", "counterparty must use an existing entity type.")
+            elif typed_catalog and _normalise_name(party) not in actor_catalog:
+                _issue(issues, 5, "non_actor_counterparty", f"counterparties[{index}]", "counterparty must reference an actor_role concept.")
 
     if rule.get("exception_basis") not in EXCEPTION_BASES:
         _issue(issues, 6, "invalid_exception_basis", "exception_basis", "exception_basis is required.")
@@ -552,6 +617,19 @@ def validate_rule_v2(
             "test_vectors",
         ):
             _validate_evidence(evidence.get(field_path), f"field_evidence.{field_path}", issues)
+        if rule.get("counterparties"):
+            _validate_evidence(
+                evidence.get("counterparties"),
+                "field_evidence.counterparties",
+                issues,
+            )
+        scope = rule.get("applicability_scope")
+        if isinstance(scope, Mapping) and any(scope.get(key) for key in scope):
+            _validate_evidence(
+                evidence.get("applicability_scope"),
+                "field_evidence.applicability_scope",
+                issues,
+            )
 
     return issues
 
@@ -563,7 +641,7 @@ def normalize_rule_v2(rule: Mapping[str, Any]) -> dict[str, Any]:
     for variable in normalized.get("variables", []):
         if isinstance(variable, dict) and isinstance(variable.get("name"), str):
             variable["name"] = variable["name"].strip()
-    for collection_name in ("condition_predicates", "outcomes"):
+    for collection_name in ("condition_predicates", "outcomes", "exceptions"):
         for item in normalized.get(collection_name, []):
             if isinstance(item, dict) and isinstance(item.get("variable"), str):
                 item["variable"] = item["variable"].strip()
