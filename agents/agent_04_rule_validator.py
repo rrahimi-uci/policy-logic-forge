@@ -69,19 +69,43 @@ class RuleValidationAgent:
         with open(rules_file, 'r', encoding='utf-8') as f:
             data = json.load(f)
         
-        # Extract rules from data structure
+        # Extract rules from both namespaces independently.  Do not merge the
+        # dictionaries: entity and relationship identifiers are allowed to be
+        # identical, and ``{**entities, **relationships}`` silently discarded
+        # the entity-side rules for every overlapping key.
         rules = []
         entity_types = data.get('entity_types', {})
         relationships = data.get('relationships', {})
-        
-        for entity_name, entity_data in {**entity_types, **relationships}.items():
-            entity_rules = entity_data.get('business_rules', [])
-            for rule in entity_rules:
-                rule['source_entity'] = entity_name
-                rules.append(rule)
+
+        source_counts = {'entity_rules': 0, 'relationship_rules': 0}
+        for namespace, definitions in (
+            ('entity', entity_types),
+            ('relationship', relationships),
+        ):
+            for source_name, source_data in definitions.items():
+                source_rules = source_data.get('business_rules', [])
+                source_counts[f'{namespace}_rules'] += len(source_rules)
+                for candidate in source_rules:
+                    rule = dict(candidate)
+                    rule['source_entity'] = source_name
+                    rule['source_namespace'] = namespace
+                    rules.append(rule)
+
+        expected_count = sum(source_counts.values())
+        if len(rules) != expected_count:
+            raise RuntimeError(
+                f"Rule collection parity failure: loaded {len(rules)} of "
+                f"{expected_count} nested rules"
+            )
         
         print(f"\n✓ Loaded {len(rules)} business rules from {rules_file.name}")
-        return {'rules': rules, 'entity_types': entity_types, 'raw_data': data}
+        return {
+            'rules': rules,
+            'entity_types': entity_types,
+            'raw_data': data,
+            'source_counts': source_counts,
+            'expected_rule_count': expected_count,
+        }
     
     def load_source_documents(self, organized_dir: Path) -> List[Dict[str, str]]:
         """Load source documents for verification."""
@@ -137,7 +161,9 @@ class RuleValidationAgent:
                 "passed_count": 0,
                 "warning_count": 0,
                 "failure_count": 0,
-                "avg_confidence": 0
+                "avg_confidence": None,
+                "scored_rule_count": 0,
+                "unscored_rule_count": 0,
             }
         }
         
@@ -170,8 +196,15 @@ class RuleValidationAgent:
         validation_report['statistics']['failure_count'] = len(validation_report['failures'])
         
         # Calculate average confidence
-        confidences = [r.get('confidence_score', 0) for r in rules]
-        validation_report['statistics']['avg_confidence'] = sum(confidences) / len(confidences) if confidences else 0
+        confidences = [
+            float(r['confidence_score']) for r in rules
+            if isinstance(r.get('confidence_score'), (int, float))
+        ]
+        validation_report['statistics']['scored_rule_count'] = len(confidences)
+        validation_report['statistics']['unscored_rule_count'] = len(rules) - len(confidences)
+        validation_report['statistics']['avg_confidence'] = (
+            sum(confidences) / len(confidences) if confidences else None
+        )
         
         # Print summary
         self._print_validation_summary(validation_report)
@@ -223,7 +256,7 @@ class RuleValidationAgent:
             })
         
         print(f"  • Rules with low confidence (<70): {len(low_confidence_rules)}")
-        print(f"  • Rules missing confidence score: {len(missing_confidence)}")
+        print(f"  • Rules not independently scored: {len(missing_confidence)}")
     
     def _validate_numeric_consistency(self, rules: List[Dict], report: Dict):
         """Check for numeric threshold inconsistencies."""
@@ -523,39 +556,86 @@ class RuleValidationAgent:
         source_documents: List[Dict], 
         report: Dict
     ):
-        """Verify rules against source documents (sampling approach for efficiency)."""
-        # For efficiency, sample a subset of rules for deep verification
-        import random
-        
-        sample_size = min(10, len(rules))  # Validate up to 10 rules
-        sampled_rules = random.sample(rules, sample_size)
-        
-        print(f"  • Sampling {sample_size} rules for source verification...")
-        
+        """Verify every cited path, word span, and quote deterministically."""
+        documents_by_path = {
+            str(document.get('path', '')).replace('\\', '/'): document.get('content', '')
+            for document in source_documents
+            if document.get('path')
+        }
         verified_count = 0
-        
-        for rule in sampled_rules:
-            # This is a placeholder - full implementation would use LLM to verify
-            # For now, just check if the reference exists in documents
+        failed_count = 0
+
+        print(f"  • Verifying all {len(rules)} rule references...")
+
+        for rule in rules:
+            rule_id = str(rule.get('rule_id', 'UNKNOWN'))
             reference = rule.get('source_reference', rule.get('legacy_source_reference', ''))
-            
-            # Handle both structured and legacy string formats
-            if isinstance(reference, dict):
-                has_ref = bool(reference.get('chunk_path'))
-            elif isinstance(reference, str):
-                has_ref = bool(reference)
+            references = reference if isinstance(reference, list) else [reference]
+            issues = []
+            if not references or not all(isinstance(item, dict) for item in references):
+                issues.append('source_reference must be a structured object or list of objects')
             else:
-                has_ref = False
-            
-            if has_ref:
+                for index, item in enumerate(references):
+                    path = str(item.get('chunk_path', '')).replace('\\', '/')
+                    source_text = str(item.get('source_text', '')).strip()
+                    start = item.get('start_word_position')
+                    end = item.get('end_word_position')
+                    document = documents_by_path.get(path)
+                    prefix = f'reference[{index}]'
+                    if document is None:
+                        issues.append(f'{prefix} chunk_path not found: {path or "<empty>"}')
+                        continue
+                    words = document.split()
+                    if not isinstance(start, int) or not isinstance(end, int) or not (0 <= start < end <= len(words)):
+                        issues.append(f'{prefix} has invalid word positions: {start}:{end}')
+                        continue
+                    expected = ' '.join(words[start:end])
+                    actual = ' '.join(source_text.split())
+                    if not actual:
+                        issues.append(f'{prefix} has empty source_text')
+                    elif actual != expected:
+                        issues.append(f'{prefix} source_text does not match its cited word span')
+
+            field_evidence = rule.get('field_evidence')
+            if not isinstance(field_evidence, dict) or not field_evidence:
+                issues.append('field_evidence must be a non-empty object')
+            else:
+                for field_name, records in field_evidence.items():
+                    records = records if isinstance(records, list) else [records]
+                    if not records or not all(isinstance(item, dict) for item in records):
+                        issues.append(f'field_evidence.{field_name} must contain structured evidence')
+                        continue
+                    for index, item in enumerate(records):
+                        path = str(item.get('chunk_path', '')).replace('\\', '/')
+                        quote = ' '.join(str(item.get('source_text', item.get('quote', ''))).split())
+                        source = documents_by_path.get(path)
+                        prefix = f'field_evidence.{field_name}[{index}]'
+                        if source is None:
+                            issues.append(f'{prefix} chunk_path not found: {path or "<empty>"}')
+                        elif not quote:
+                            issues.append(f'{prefix} has empty source_text')
+                        elif quote not in ' '.join(source.split()):
+                            issues.append(f'{prefix} source_text is not verbatim in the cited document')
+
+            if issues:
+                failed_count += 1
+                report['failures'].append({
+                    'rule_id': rule_id,
+                    'check': 'source_verification',
+                    'severity': 'critical',
+                    'issue': '; '.join(issues),
+                    'recommendation': 'Repair or quarantine the citation before downstream processing',
+                })
+            else:
                 verified_count += 1
-        
-        report['passed'].append({
-            "check": "source_verification",
-            "message": f"Verified {verified_count}/{sample_size} sampled rules have valid references"
-        })
-        
-        print(f"  • Verified: {verified_count}/{sample_size} rules")
+
+        if failed_count == 0:
+            report['passed'].append({
+                "check": "source_verification",
+                "message": f"Verified authentic source spans for all {verified_count} rules",
+            })
+        print(f"  • Verified: {verified_count}/{len(rules)} rules")
+        print(f"  • Failed: {failed_count}/{len(rules)} rules")
     
     def _print_validation_summary(self, report: Dict):
         """Print validation summary."""
@@ -565,7 +645,9 @@ class RuleValidationAgent:
         print(f"✅ Passed checks: {report['statistics']['passed_count']}")
         print(f"⚠️  Warnings: {report['statistics']['warning_count']}")
         print(f"❌ Failures: {report['statistics']['failure_count']}")
-        print(f"📊 Average confidence: {report['statistics']['avg_confidence']:.1f}/100")
+        average = report['statistics']['avg_confidence']
+        average_label = f"{average:.1f}/100" if average is not None else "not scored"
+        print(f"📊 Average confidence: {average_label}")
         print(f"{'='*70}\n")
     
     def save_validation_report(self, report: Dict, output_dir: Path):
@@ -631,7 +713,11 @@ def main():
     
     # Save report
     validator.save_validation_report(report, Path(args.output_dir))
+    if report['statistics']['failure_count']:
+        print("Validation failed; downstream stages are blocked until critical findings are repaired.")
+        return 2
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

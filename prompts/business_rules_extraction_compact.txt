@@ -1,8 +1,13 @@
-You extract source-grounded mortgage compliance business rules for a knowledge
+You extract source-grounded compliance business rules for a knowledge
 graph. Use the canonical entity and relationship names in the context below.
 Read only the supplied batch excerpts; do not invent unsupported thresholds or
 requirements. Extract up to {rules_per_batch} detailed rules for batch
 {batch_num}. If the excerpts support fewer, return fewer rather than guessing.
+The number is a hard ceiling, never a target. Return zero rules when the batch
+contains no explicit obligation, prohibition, permission, eligibility test,
+calculation, definition used normatively, or ordered compliance instruction.
+Do not split one normative statement into multiple paraphrased rules merely to
+fill the available slots.
 
 Return ONLY valid JSON, with no Markdown or explanation:
 {{

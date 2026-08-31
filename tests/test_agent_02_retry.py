@@ -67,3 +67,37 @@ def test_entity_extraction_does_not_retry_non_transport_error(monkeypatch):
         raise AssertionError("non-transport error unexpectedly succeeded")
 
     assert agent.client.calls == 1
+
+
+def test_catalog_evidence_requires_verbatim_concept_and_relationship_quotes():
+    documents = [{
+        "path": "policy/one.txt",
+        "content": "A customer owns an account and must protect its credentials.",
+    }]
+    findings = {
+        "entity_types": {
+            "CUSTOMER": {
+                "source_evidence": [{
+                    "chunk_path": "policy/one.txt",
+                    "source_text": "A customer owns an account",
+                }],
+            },
+        },
+        "relationships": {
+            "CUSTOMER_OWNS_ACCOUNT": {
+                "source_evidence": [{
+                    "chunk_path": "policy/one.txt",
+                    "source_text": "customer owns an account",
+                }],
+            },
+        },
+    }
+
+    assert ComplianceEntityRelationshipAgent.validate_catalog_evidence(findings, documents) == []
+
+    findings["entity_types"]["CUSTOMER"].pop("source_evidence")
+    findings["relationships"]["CUSTOMER_OWNS_ACCOUNT"]["source_evidence"][0]["source_text"] = "invented relationship"
+    issues = ComplianceEntityRelationshipAgent.validate_catalog_evidence(findings, documents)
+
+    assert "entity_types.CUSTOMER.source_evidence is required" in issues
+    assert any("source_text is not verbatim" in issue for issue in issues)

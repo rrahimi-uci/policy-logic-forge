@@ -201,8 +201,8 @@ def test_confidence_score_records_its_provenance():
     )
 
     assert extractor._calculate_confidence_score({}) == {
-        "confidence_score": 75,
-        "confidence_source": "default_config",
+        "confidence_source": "not_scored",
+        "confidence_status": "unknown",
     }
     assert extractor._calculate_confidence_score({"confidence_score": 82})["confidence_source"] == "model_reported"
     assert extractor._calculate_confidence_score({"confidence_breakdown": {"clarity": 91}})["confidence_source"] == "derived_from_breakdown"

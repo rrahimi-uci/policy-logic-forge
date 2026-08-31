@@ -119,6 +119,68 @@ class TestRuleValidatorStructuredEnums:
         assert len(enum_warnings) == 2
 
 
+class TestRuleValidatorCoverageAndGrounding:
+    @staticmethod
+    def _rule(rule_id, path="doc.txt", start=0, end=6, text="The lender must retain source records"):
+        return {
+            "rule_id": rule_id,
+            "source_reference": {
+                "chunk_path": path,
+                "section_id": "s1",
+                "start_word_position": start,
+                "end_word_position": end,
+                "source_text": text,
+            },
+            "field_evidence": {
+                "description": [{
+                    "chunk_path": path,
+                    "section_id": "s1",
+                    "source_text": text,
+                }],
+            },
+        }
+
+    def test_load_rules_preserves_overlapping_entity_and_relationship_names(self, tmp_path):
+        graph = {
+            "entity_types": {
+                "LENDER": {"business_rules": [self._rule("entity-rule")]},
+            },
+            "relationships": {
+                "LENDER": {"business_rules": [self._rule("relationship-rule")]},
+            },
+        }
+        graph_path = tmp_path / "rules.json"
+        graph_path.write_text(json.dumps(graph), encoding="utf-8")
+
+        loaded = object.__new__(RuleValidationAgent).load_rules(graph_path)
+
+        assert [rule["rule_id"] for rule in loaded["rules"]] == [
+            "entity-rule", "relationship-rule",
+        ]
+        assert loaded["source_counts"] == {"entity_rules": 1, "relationship_rules": 1}
+        assert loaded["expected_rule_count"] == 2
+        assert {rule["source_namespace"] for rule in loaded["rules"]} == {
+            "entity", "relationship",
+        }
+
+    def test_source_verification_checks_every_rule_and_rejects_bad_span(self):
+        validator = object.__new__(RuleValidationAgent)
+        rules = [self._rule(f"R-{index}") for index in range(11)]
+        rules.append(self._rule("R-bad", start=1, end=6))
+        report = {"failures": [], "warnings": [], "passed": []}
+
+        validator._verify_against_sources(
+            rules,
+            [{"path": "doc.txt", "content": "The lender must retain source records"}],
+            report,
+        )
+
+        failures = [item for item in report["failures"] if item["check"] == "source_verification"]
+        assert [item["rule_id"] for item in failures] == ["R-bad"]
+        assert "source_text does not match its cited word span" in failures[0]["issue"]
+        assert not any(item["check"] == "source_verification" for item in report["passed"])
+
+
 # ── utils package: importing Config must not pull in the LLM client ──
 
 class TestLazyImport:

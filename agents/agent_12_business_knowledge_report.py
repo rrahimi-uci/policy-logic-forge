@@ -122,11 +122,12 @@ def _all_rule_refs(graph: Mapping[str, Any]) -> Iterable[tuple[str, Mapping[str,
 
 
 def _concepts(graph: Mapping[str, Any], profile: Mapping[str, Any]) -> list[dict[str, Any]]:
-    """Return every graph-supported concept, including rule variables.
+    """Return the governed SBVR vocabulary, excluding rule-local symbols.
 
-    The existing SBVR profile contains entity concepts and fact types.  Rules
-    also introduce decision variables and named related entities, so those are
-    promoted into the report vocabulary rather than silently omitted.
+    Decision variables are executable rule symbols, not automatically business
+    concepts.  Treating each predicate name as an SBVR concept inflated real
+    reports by thousands of mostly single-use propositions and attached a
+    rule's citation as if it were a concept definition.
     """
     concepts: dict[str, dict[str, Any]] = {}
 
@@ -161,18 +162,45 @@ def _concepts(graph: Mapping[str, Any], profile: Mapping[str, Any]) -> list[dict
         add(fact.get("subject_concept"), kind="business_object", refs=fact_refs)
         add(fact.get("object_concept"), kind="business_object", refs=fact_refs)
 
-    for _rid, rule in _all_rule_refs(graph):
-        refs = _rule_references(rule)
-        for entity in _list(rule.get("related_entities")) + [rule.get("source_entity"), rule.get("responsible_party"), rule.get("entity_type")]:
-            if entity:
-                add(entity, kind="actor_role" if entity == rule.get("responsible_party") else "business_object", refs=refs)
-        for variable in _list(rule.get("variables")):
-            if isinstance(variable, Mapping) and variable.get("name"):
-                add(variable.get("name"), kind="decision_variable", definition=f"{variable.get('role', 'policy')} variable of type {variable.get('type', 'unknown')}", refs=refs)
-        for outcome in _list(rule.get("outcomes")):
-            if isinstance(outcome, Mapping) and outcome.get("variable"):
-                add(outcome.get("variable"), kind="decision_variable", refs=refs)
     return [concepts[key] for key in sorted(concepts, key=str.casefold)]
+
+
+def _decision_variables(graph: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """Build a separate registry of executable symbols and their rule usage."""
+    registry: dict[str, dict[str, Any]] = {}
+    for rule_id, rule in _all_rule_refs(graph):
+        declarations = [item for item in _list(rule.get("variables")) if isinstance(item, Mapping)]
+        declared_names = {str(item.get("name")) for item in declarations if item.get("name")}
+        declarations.extend(
+            {"name": item.get("variable"), "role": "output", "type": item.get("value_type", "unknown")}
+            for item in _list(rule.get("outcomes"))
+            if isinstance(item, Mapping) and item.get("variable") and str(item.get("variable")) not in declared_names
+        )
+        for variable in declarations:
+            name = str(variable.get("name") or "").strip()
+            if not name:
+                continue
+            entry = registry.setdefault(name, {
+                "variable_id": name,
+                "types": set(),
+                "roles": set(),
+                "rule_ids": set(),
+            })
+            if variable.get("type"):
+                entry["types"].add(str(variable.get("type")))
+            if variable.get("role"):
+                entry["roles"].add(str(variable.get("role")))
+            entry["rule_ids"].add(rule_id)
+    return [
+        {
+            "variable_id": name,
+            "types": sorted(entry["types"], key=str.casefold),
+            "roles": sorted(entry["roles"], key=str.casefold),
+            "rule_ids": sorted(entry["rule_ids"], key=str.casefold),
+            "scope": "reusable" if len(entry["rule_ids"]) > 1 else "rule_local",
+        }
+        for name, entry in sorted(registry.items(), key=lambda item: item[0].casefold())
+    ]
 
 
 def _category(rule: Mapping[str, Any]) -> tuple[str, str]:
@@ -226,6 +254,7 @@ def _confidence_source_label(source: str) -> str:
         "derived_from_breakdown": "derived from breakdown",
         "model_reported": "model reported",
         "unattributed_score": "score origin not recorded",
+        "not_scored": "not independently scored",
         "not_reported": "not reported",
     }.get(source, source.replace("_", " "))
 
@@ -674,8 +703,9 @@ def generate(
     profile_path = models_dir / "semantic_vocabulary_profile.json"
     profile = json.loads(profile_path.read_text(encoding="utf-8")) if profile_path.exists() else build_sbvr_profile(graph)
     concepts = _concepts(graph, profile)
-    chunks, chunk_list = _source_chunks(organized_dir)
     rules = [dict(rule) for rule in _list(graph.get("business_rules")) if isinstance(rule, Mapping)]
+    decision_variables = _decision_variables(graph)
+    chunks, chunk_list = _source_chunks(organized_dir)
     source_blocks: dict[str, str] = {}
     rule_sources: dict[str, list[str]] = {}
     for rule in rules:
@@ -722,10 +752,11 @@ def generate(
         and not bool(_mapping(rule.get("review_route")).get("human_review_required"))
         for rule in rules
     )
-    grounded_count = sum(bool(_rule_references(rule)) for rule in rules)
+    source_pointer_count = sum(bool(_rule_references(rule)) for rule in rules)
+    grounded_count = sum(str(_mapping(rule.get("grounding")).get("status")) == "certified" for rule in rules)
     confidence_values = [value for rule in rules if (value := _confidence(rule)) is not None]
     confidence_buckets = Counter("90–100%" if value >= 90 else "75–89%" if value >= 75 else "50–74%" if value >= 50 else "0–49%" for value in confidence_values)
-    confidence_sources = Counter(_confidence_source(rule) for rule in rules if _confidence(rule) is not None)
+    confidence_sources = Counter(_confidence_source(rule) for rule in rules)
     grounding_status_counts = Counter(str(_mapping(rule.get("grounding")).get("status") or "not_reported") for rule in rules)
     grounding_claim_counts: Counter[str] = Counter()
     for rule in rules:
@@ -738,20 +769,17 @@ def generate(
     unresolved = sum(1 for rule in rules if _review_reasons(rule))
     source_documents = {str(ref.get("chunk_path") or ref.get("document") or "").split("/")[0] for rule in rules for ref in _rule_references(rule) if ref.get("chunk_path") or ref.get("document")}
     concept_supported = len(concepts)
-    vocabulary_coverage = 100.0 if concept_supported == len(concepts) else 0.0
     concept_ids = {str(concept.get("concept_id")) for concept in concepts}
     concept_kind_counts = Counter(str(concept.get("concept_kind") or "unresolved") for concept in concepts)
     concept_rule_usage: Counter[str] = Counter()
     for rule in rules:
         referenced = set(str(value) for value in _list(rule.get("related_entities")) if value)
-        referenced.update(str(value) for value in (rule.get("source_entity"), rule.get("responsible_party"), rule.get("entity_type")) if value)
         referenced.update(
-            str(item.get("name")) for item in _list(rule.get("variables"))
-            if isinstance(item, Mapping) and item.get("name")
-        )
-        referenced.update(
-            str(item.get("variable")) for item in _list(rule.get("outcomes"))
-            if isinstance(item, Mapping) and item.get("variable")
+            str(value) for value in (
+                rule.get("source_entity"),
+                rule.get("responsible_party"),
+                rule.get("entity_or_relationship"),
+            ) if value
         )
         for concept_id in referenced.intersection(concept_ids):
             concept_rule_usage[concept_id] += 1
@@ -763,6 +791,7 @@ def generate(
             if concept_id in concept_ids:
                 concept_fact_usage[concept_id] += 1
     concept_evidence_count = sum(bool(_references(concept.get("source_evidence"))) for concept in concepts)
+    vocabulary_coverage = _percent(concept_evidence_count, concept_supported)
     concept_orphan_count = sum(
         not concept_rule_usage.get(str(concept.get("concept_id")))
         and not concept_fact_usage.get(str(concept.get("concept_id")))
@@ -792,9 +821,11 @@ def generate(
         "quality_hold_count": review_count, "quality_hold_rate": round(review_count / max(1, len(rules)) * 100, 2),
         "nonhuman_quality_hold_count": nonhuman_quality_hold_count,
         "review_route_counts": dict(sorted(route_counts.items())),
+        "source_pointer_count": source_pointer_count,
+        "source_pointer_coverage_rate": round(source_pointer_count / max(1, len(rules)) * 100, 2),
         "grounded_rule_count": grounded_count, "grounding_coverage_rate": round(grounded_count / max(1, len(rules)) * 100, 2),
         "source_document_count": len(source_documents), "source_chunk_count": len(chunk_list),
-        "concept_coverage_rate": vocabulary_coverage, "concept_coverage_scope": "all concepts represented in the input graph",
+        "concept_coverage_rate": vocabulary_coverage, "concept_coverage_scope": "concepts with concept-specific source evidence",
         "concept_review_count": sum(str(concept.get("concept_kind")) == "unresolved" for concept in concepts),
         "concept_kind_counts": dict(sorted(concept_kind_counts.items())),
         "concepts_with_evidence": concept_evidence_count,
@@ -804,6 +835,9 @@ def generate(
         "fact_type_grounded_count": fact_grounded_count,
         "fact_type_grounding_rate": _percent(fact_grounded_count, len(fact_types)),
         "fact_type_status_counts": dict(sorted(fact_status_counts.items())),
+        "decision_variable_count": len(decision_variables),
+        "rule_local_decision_variable_count": sum(item["scope"] == "rule_local" for item in decision_variables),
+        "reusable_decision_variable_count": sum(item["scope"] == "reusable" for item in decision_variables),
         "top_concepts": top_concepts,
         "unresolved_item_count": unresolved,
         "confidence_distribution": dict(sorted(confidence_buckets.items())), "confidence_source_counts": dict(sorted(confidence_sources.items())), "categories": dict(categories),
@@ -835,6 +869,30 @@ def generate(
               <details><summary>Inspect concept relationships</summary><div class="concept-detail"><div><strong>Fact types</strong><div>{relation_links}</div></div><div><strong>Source evidence</strong><div>{refs}</div></div></div></details>
             </article>'''
         )
+    decision_variable_rows = []
+    for variable in decision_variables:
+        linked_rules = " ".join(
+            f'<a class="evidence-link" href="#rule-{_safe(_slug(rule_id))}">{_safe(rule_id)}</a>'
+            for rule_id in variable["rule_ids"][:12]
+        )
+        if len(variable["rule_ids"]) > 12:
+            linked_rules += f' <span class="muted">+{len(variable["rule_ids"]) - 12} more</span>'
+        decision_variable_rows.append(
+            f'<tr><td><code>{_safe(variable["variable_id"])}</code></td>'
+            f'<td>{_safe(", ".join(variable["types"]) or "unknown")}</td>'
+            f'<td>{_safe(", ".join(variable["roles"]) or "unknown")}</td>'
+            f'<td><span class="status status-{_safe(variable["scope"])}">{_safe(variable["scope"].replace("_", " "))}</span></td>'
+            f'<td>{linked_rules or "No linked rules"}</td></tr>'
+        )
+    concept_rows.append(
+        f'''<article class="panel decision-variable-registry" style="grid-column:1/-1">
+          <div class="eyebrow">Executable symbol registry</div>
+          <h3>Decision variables are not SBVR concepts</h3>
+          <p class="muted">These symbols implement predicates and outcomes. Reusable symbols may later be mapped to governed concepts, but rule-local propositions do not inflate vocabulary coverage.</p>
+          <div class="insight-grid"><div class="insight-card"><h3>Total symbols</h3><div class="metric-value">{len(decision_variables)}</div></div><div class="insight-card"><h3>Rule-local</h3><div class="metric-value">{report_data["rule_local_decision_variable_count"]}</div></div><div class="insight-card"><h3>Reusable</h3><div class="metric-value">{report_data["reusable_decision_variable_count"]}</div></div></div>
+          <details><summary>Explore decision-variable registry</summary><div class="table-wrap" style="margin-top:12px"><table><thead><tr><th>Variable</th><th>Types</th><th>Roles</th><th>Scope</th><th>Rules</th></tr></thead><tbody>{''.join(decision_variable_rows) or '<tr><td colspan="5">No decision variables were reported.</td></tr>'}</tbody></table></div></details>
+        </article>'''
+    )
     fact_rows = []
     for fact in fact_types:
         fact_id = str(fact.get("fact_type_id") or "unidentified")
@@ -915,9 +973,9 @@ def generate(
  .insight-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;margin:16px 0}}.insight-card{{background:linear-gradient(145deg,#f7fbff,#fff);border:1px solid var(--line);border-radius:14px;padding:16px}}.insight-card .metric-value{{font-size:24px}}.insight-card h3{{font-size:13px;margin:0 0 4px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}}.insight-bar-row{{margin:12px 0}}.insight-bar-label{{display:flex;justify-content:space-between;gap:12px;text-transform:capitalize}}.insight-bar-track{{height:8px;background:#edf1f7;border-radius:99px;overflow:hidden;margin:6px 0 3px}}.insight-bar-track span{{display:block;height:100%;border-radius:99px}}.insight-list{{margin:0;padding:0;list-style:none}}.insight-list li{{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid var(--line)}}.insight-list li:last-child{{border-bottom:0}}.concept-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(310px,1fr));gap:14px;margin-top:16px}}.concept-card{{background:#fff;border:1px solid var(--line);border-radius:16px;padding:18px;box-shadow:0 10px 28px rgba(23,37,61,.05);scroll-margin-top:20px}}.concept-card:hover{{border-color:#b9c4ff;box-shadow:0 14px 34px rgba(66,81,189,.12)}}.concept-card-head{{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}}.concept-term{{font-size:18px;font-weight:800;line-height:1.2}}.concept-card p{{color:#4e5e73;min-height:42px}}.concept-meta{{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0;color:var(--muted);font-size:12px}}.concept-meta span{{padding:5px 8px;background:#f5f7fb;border-radius:999px}}.concept-detail{{display:grid;gap:12px;padding-top:10px}}.concept-detail strong{{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}}.vocabulary-toolbar{{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:14px 0}}.vocabulary-toolbar input,.vocabulary-toolbar select{{border:1px solid var(--line);border-radius:9px;padding:9px 11px;background:#fff;min-width:190px}}.vocabulary-toolbar output{{color:var(--muted);font-size:12px}}.fact-table{{margin-top:18px}}.status-case_management{{background:#eef1ff;color:#4251bd}}.status-human_review{{background:#ffe8eb;color:#9d2937}}.status-machine_repair{{background:#e9f7f3;color:#087760}}.status-presented{{background:#e9f7f3;color:#087760}}.status-unverified{{background:#fff1df;color:#92570a}}.status-grounding-failed{{background:#ffe8eb;color:#9d2937}}.status-grounding-certified{{background:#e9f7f3;color:#087760}}.status-grounding-unknown{{background:#f0f2f6;color:#5d6b7e}}.status-stack{{display:flex;flex-wrap:wrap;gap:5px}}.confidence-score{{display:flex;align-items:baseline;gap:6px;margin-top:7px}}.logic-details{{min-width:250px}}.logic-details summary{{display:flex;align-items:center;justify-content:space-between;gap:8px}}.logic-summary{{font-weight:800;color:#4251bd}}.formal-logic{{padding:14px 0 4px}}.logic-expression{{padding:12px 14px;background:#17253d;color:#eef4ff;border-radius:10px;font:12px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;overflow:auto}}.logic-keyword{{color:#7de4ce;font-weight:900;margin:0 4px}}.logic-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;margin-top:14px}}.logic-grid h4{{margin:0 0 7px;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}}.logic-list{{border:1px solid var(--line);border-radius:10px;overflow:hidden}}.logic-row{{display:flex;align-items:flex-start;gap:8px;padding:8px 10px;border-bottom:1px solid var(--line);background:#fff}}.logic-row:last-child{{border-bottom:0}}.logic-index{{flex:0 0 auto;color:#4251bd;font:700 11px ui-monospace,SFMono-Regular,Menlo,monospace}}.logic-row code{{font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;overflow-wrap:anywhere}}.logic-type{{margin-left:auto;flex:0 0 auto;color:var(--muted);font-size:11px}}.logic-raw{{margin-top:12px}}.logic-raw pre{{max-height:260px}}.xml-details{{margin-top:16px;border-top:1px solid var(--line);padding-top:12px}}.xml-details>summary{{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border-radius:10px;background:#f4f7ff;color:#4251bd;font-weight:800;cursor:pointer;list-style:none}}.xml-details>summary::-webkit-details-marker{{display:none}}.xml-details>summary:after{{content:"＋";font-size:18px;line-height:1}}.xml-details[open]>summary:after{{content:"−"}}.xml-viewer{{margin-top:12px;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#101a2d}}.xml-toolbar{{display:flex;justify-content:space-between;gap:12px;padding:10px 14px;background:#17253d;color:#eef4ff;font-size:12px}}.xml-code{{margin:0;padding:10px 0;max-height:680px;overflow:auto;background:#101a2d;color:#dce7f7;counter-reset:xml-line;font:12px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace}}.xml-line{{display:grid;grid-template-columns:52px minmax(max-content,1fr);min-width:max-content;padding-right:18px}}.xml-line:hover{{background:rgba(124,131,253,.12)}}.xml-ln{{color:#687998;text-align:right;padding-right:14px;user-select:none}}.xml-source{{white-space:pre;padding-right:18px}}.xml-tag{{color:#7de4ce}}.xml-attr{{color:#f3a94b}}.xml-value{{color:#b9c4ff}}.xml-bracket{{color:#8e9bb2}}.xml-comment,.xml-declaration{{color:#8291aa;font-style:italic}}.xml-empty{{margin-top:12px;padding:16px;border:1px dashed var(--line);border-radius:10px;color:var(--muted);background:#f8fafd}}.dependency-graph-shell{{border:1px solid var(--line);border-radius:14px;background:#fbfcff;padding:16px;margin:16px 0}}.dependency-graph-toolbar{{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}}.dependency-graph-toolbar h3{{margin:0}}.dependency-graph-stats{{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}}.graph-layer-chip{{display:inline-flex;align-items:center;gap:4px;border-radius:999px;padding:6px 10px;background:#eef1ff;color:#4251bd;font-size:12px}}.dependency-graph-scroll{{overflow:auto;border:1px solid var(--line);border-radius:12px;background:#fff;max-height:760px}}.dependency-graph-svg{{display:block;max-width:none;background:#fff}}.dependency-lane{{fill:#f7f9fc;stroke:#e4eaf2}}.dependency-layer-label{{fill:#6f7d91;font:700 12px Inter,ui-sans-serif,system-ui,sans-serif}}.dependency-edge{{fill:none;stroke:#7c83fd;stroke-width:1.6;opacity:.62;vector-effect:non-scaling-stroke}}.dependency-edge:hover{{stroke:#4251bd;stroke-width:2.8;opacity:1}}.dependency-node-id{{fill:#17253d;font:700 12px ui-monospace,SFMono-Regular,Menlo,monospace}}.dependency-node-degree{{fill:#6f7d91;font:11px Inter,ui-sans-serif,system-ui,sans-serif}}.dependency-graph-empty{{padding:32px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:10px}}.dependency-graph-note{{margin:12px 0 0;color:var(--muted);font-size:12px}}
  </style></head><body><div class="shell">
 <header class="hero"><div class="eyebrow">Agent 12 · presentation and knowledge exploration</div><h1>Business knowledge, ready to review.</h1><p>A self-contained, source-traceable view of the extracted domain. Navigate from SBVR concepts to rules, decisions, workflows, review findings, and the exact evidence that supports each result.</p><div class="muted" style="color:#cbd9ee">Generated from {_safe(graph_file.name)} · no external assets or network calls required</div></header>
-<div class="metric-grid">{_metric_card('Business rules', len(rules), 'All extracted rules shown')}{_metric_card('SBVR concepts', concept_supported, f'{vocabulary_coverage:.1f}% graph-supported coverage')}{_metric_card('Human-review queue', f'{human_review_count} ({report_data["human_review_rate"]:.1f}%)', 'Explicit human judgment required')}{_metric_card('Quality holds', f'{review_count} ({report_data["quality_hold_rate"]:.1f}%)', 'Fail-closed evidence or contract findings')}{_metric_card('Case-management cases', route_counts.get('case_management', 0), 'Evidence work outside the human queue')}{_metric_card('Grounded rules', f'{grounded_count} ({report_data["grounding_coverage_rate"]:.1f}%)', 'At least one source pointer')}{_metric_card('Grounding claims', f'{grounding_claim_counts.get("supported", 0)} ({report_data["grounding_claim_support_rate"]:.1f}%)', 'Claim-level support; holds may be partial')}{_metric_card('Source documents', len(source_documents), f'{len(chunk_list)} indexed chunks')}{_metric_card('Dependencies', len(edges), 'DAG edges available')}</div>
+<div class="metric-grid">{_metric_card('Business rules', len(rules), 'All extracted rules shown')}{_metric_card('SBVR concepts', concept_supported, f'{vocabulary_coverage:.1f}% with concept-specific evidence')}{_metric_card('Decision variables', len(decision_variables), 'Executable symbols kept outside SBVR')}{_metric_card('Human-review queue', f'{human_review_count} ({report_data["human_review_rate"]:.1f}%)', 'Explicit human judgment required')}{_metric_card('Quality holds', f'{review_count} ({report_data["quality_hold_rate"]:.1f}%)', 'Fail-closed evidence or contract findings')}{_metric_card('Case-management cases', route_counts.get('case_management', 0), 'Evidence work outside the human queue')}{_metric_card('Grounding certified', f'{grounded_count} ({report_data["grounding_coverage_rate"]:.1f}%)', 'Independent claim-level certification')}{_metric_card('Source pointers', f'{source_pointer_count} ({report_data["source_pointer_coverage_rate"]:.1f}%)', 'Pointer presence, not grounding certification')}{_metric_card('Grounding claims', f'{grounding_claim_counts.get("supported", 0)} ({report_data["grounding_claim_support_rate"]:.1f}%)', 'Claim-level support; holds may be partial')}{_metric_card('Source documents', len(source_documents), f'{len(chunk_list)} indexed chunks')}{_metric_card('Dependencies', len(edges), 'DAG edges available')}</div>
 <nav class="tabs" aria-label="Report sections"><button class="active" data-tab="overview">Overview</button><button data-tab="vocabulary">SBVR vocabulary</button><button data-tab="rules">Rule explorer</button><button data-tab="models">Decision & process models</button><button data-tab="dependencies">Relationships</button><button data-tab="review">Review queue</button><button data-tab="sources">Source traceability</button></nav>
-<section id="overview" class="tab active"><div class="grid-2"><div class="panel"><div class="eyebrow">Executive summary</div><h2>What this domain contains</h2><p>The report presents <strong>{len(rules)}</strong> rules across <strong>{len(categories)}</strong> categories and <strong>{concept_supported}</strong> SBVR-aligned concepts. The source graph supports <strong>{len(source_documents)}</strong> document roots and <strong>{len(edges)}</strong> dependency relationships.</p><div class="callout">Every displayed rule and concept has an evidence link when the upstream graph provides a source pointer. Missing pointers stay visible as unresolved rather than being replaced by invented citations.</div></div><div class="panel"><div class="eyebrow">Coverage and quality</div><h2>At a glance</h2><table><tr><td>Concept coverage</td><td><strong>{vocabulary_coverage:.1f}%</strong></td></tr><tr><td>Rule source-pointer coverage</td><td><strong>{report_data["grounding_coverage_rate"]:.1f}%</strong></td></tr><tr><td>Grounding claims supported</td><td><strong>{grounding_claim_counts.get("supported", 0)}/{grounding_claim_total}</strong> ({report_data["grounding_claim_support_rate"]:.1f}%)</td></tr><tr><td>Human-review queue</td><td><strong>{report_data["human_review_rate"]:.1f}%</strong> ({human_review_count} rules)</td></tr><tr><td>Case-management route</td><td><strong>{route_counts.get("case_management", 0) / max(1, len(rules)) * 100:.1f}%</strong> ({route_counts.get("case_management", 0)} rules)</td></tr><tr><td>Quality holds</td><td><strong>{report_data["quality_hold_rate"]:.1f}%</strong> ({review_count} rules)</td></tr></table></div></div><div class="grid-2"><div class="panel"><h3>Rule categories</h3><div class="table-wrap"><table><thead><tr><th>Category</th><th>Rules</th><th>Share</th></tr></thead><tbody>{category_rows or '<tr><td colspan="3">No categories reported.</td></tr>'}</tbody></table></div></div><div class="panel"><h3>Confidence distribution</h3><div class="table-wrap"><table><thead><tr><th>Band</th><th>Rules</th></tr></thead><tbody>{confidence_rows}</tbody></table></div><p class="muted" style="margin-bottom:0">Confidence provenance: {_safe(confidence_source_summary)}</p></div></div></section>
+<section id="overview" class="tab active"><div class="grid-2"><div class="panel"><div class="eyebrow">Executive summary</div><h2>What this domain contains</h2><p>The report presents <strong>{len(rules)}</strong> rules across <strong>{len(categories)}</strong> categories, <strong>{concept_supported}</strong> governed SBVR concepts, and <strong>{len(decision_variables)}</strong> separately managed decision variables.</p><div class="callout">Concept evidence, rule source pointers, and independent grounding certification are reported as distinct signals. A pointer is never presented as proof of entailment.</div></div><div class="panel"><div class="eyebrow">Coverage and quality</div><h2>At a glance</h2><table><tr><td>Concept evidence coverage</td><td><strong>{vocabulary_coverage:.1f}%</strong></td></tr><tr><td>Rule source-pointer coverage</td><td><strong>{report_data["source_pointer_coverage_rate"]:.1f}%</strong></td></tr><tr><td>Rules grounding-certified</td><td><strong>{report_data["grounding_coverage_rate"]:.1f}%</strong> ({grounded_count} rules)</td></tr><tr><td>Grounding claims supported</td><td><strong>{grounding_claim_counts.get("supported", 0)}/{grounding_claim_total}</strong> ({report_data["grounding_claim_support_rate"]:.1f}%)</td></tr><tr><td>Human-review queue</td><td><strong>{report_data["human_review_rate"]:.1f}%</strong> ({human_review_count} rules)</td></tr><tr><td>Quality holds</td><td><strong>{report_data["quality_hold_rate"]:.1f}%</strong> ({review_count} rules)</td></tr></table></div></div><div class="grid-2"><div class="panel"><h3>Rule categories</h3><div class="table-wrap"><table><thead><tr><th>Category</th><th>Rules</th><th>Share</th></tr></thead><tbody>{category_rows or '<tr><td colspan="3">No categories reported.</td></tr>'}</tbody></table></div></div><div class="panel"><h3>Confidence distribution</h3><div class="table-wrap"><table><thead><tr><th>Band</th><th>Rules</th></tr></thead><tbody>{confidence_rows}</tbody></table></div><p class="muted" style="margin-bottom:0">Confidence provenance: {_safe(confidence_source_summary)}</p></div></div></section>
 <section id="vocabulary" class="tab"><div class="panel"><div class="eyebrow">SBVR-aligned business vocabulary</div><h2>Vocabulary workbench</h2><p>Explore the domain lexicon as typed concepts and fact types. The view is grounded in the input graph: definitions, usage counts, relationships, and evidence links are shown only when the upstream artifacts provide them.</p><div class="insight-grid"><div class="insight-card"><h3>Supported concepts</h3><div class="metric-value">{concept_supported}</div><div class="muted">{report_data["concept_coverage_rate"]:.1f}% graph-supported coverage</div></div><div class="insight-card"><h3>Evidence coverage</h3><div class="metric-value">{report_data["concept_evidence_coverage_rate"]:.1f}%</div><div class="muted">{concept_evidence_count} concepts have source evidence</div></div><div class="insight-card"><h3>Fact types</h3><div class="metric-value">{len(fact_types)}</div><div class="muted">{fact_grounded_count} grounded · {report_data["fact_type_grounding_rate"]:.1f}%</div></div><div class="insight-card"><h3>Unresolved / orphaned</h3><div class="metric-value">{report_data["concept_review_count"]} / {concept_orphan_count}</div><div class="muted">Unresolved kinds / no rule or fact links</div></div></div><div class="grid-2"><div class="panel"><h3>Concept type mix</h3><p class="muted">How the vocabulary is distributed across SBVR-aligned concept kinds.</p>{kind_bars}</div><div class="panel"><h3>Most connected concepts</h3><p class="muted">Concepts with the strongest links into rules and fact types.</p><ul class="insight-list">{top_concept_rows}</ul></div></div><div class="panel"><div class="eyebrow">Concept explorer</div><h3>Find a term, definition, or concept kind</h3><div class="vocabulary-toolbar"><input id="concept-search" type="search" placeholder="Search concepts and definitions…"><select id="concept-kind"><option value="">All kinds</option>{''.join(f'<option value="{_safe(kind)}">{_safe(kind.replace("_", " "))}</option>' for kind in sorted(concept_kind_counts, key=str.casefold))}</select><select id="concept-evidence"><option value="">All evidence states</option><option value="grounded">With source evidence</option><option value="unresolved">Evidence unresolved</option></select><output id="concept-count" for="concept-search"></output></div><div id="concept-grid" class="concept-grid">{''.join(concept_rows) or '<div class="empty">No concepts were reported.</div>'}</div></div><div id="fact-types" class="panel fact-table"><div class="eyebrow">SBVR fact types</div><h3>Relationships and grounding status</h3><p class="muted">Each endpoint links back to its concept card; evidence links land on the embedded source block.</p><div class="grid-2"><div class="table-wrap"><table><thead><tr><th>Grounding status</th><th>Fact types</th><th>Share</th></tr></thead><tbody>{fact_status_rows}</tbody></table></div><div class="callout"><strong>{len(fact_types)}</strong> fact types connect <strong>{len(concept_ids)}</strong> concepts. A fact type is a vocabulary relationship, not a workflow sequence.</div></div><div class="table-wrap" style="margin-top:14px"><table><thead><tr><th>Fact type</th><th>Subject</th><th>Verb</th><th>Object</th><th>Grounding and evidence</th></tr></thead><tbody>{''.join(fact_rows) or '<tr><td colspan="5">No fact types were reported.</td></tr>'}</tbody></table></div></div></div></section>
 <section id="rules" class="tab"><div class="panel"><div class="eyebrow">Structured rule explorer</div><h2>Business rules</h2><p class="muted">Readiness, grounding, and confidence are separate signals. A quality hold means the rule is fail-closed for execution; it does not mean every extracted statement is wrong. Expand <strong>IF / THEN</strong> to inspect the typed contract and the raw JSON when needed.</p><div class="toolbar"><input id="rule-search" type="search" placeholder="Search ID, title, statement, category…"><select id="rule-category"><option value="">All categories</option>{''.join(f'<option>{_safe(category)}</option>' for category in sorted(categories, key=str.casefold))}</select><select id="rule-status"><option value="">All statuses</option><option value="review_required">Quality hold</option><option value="verified">Verified</option><option value="unresolved">Unresolved</option></select><select id="rule-route"><option value="">All routes</option>{route_options}</select><label class="muted" style="padding:9px 0"><input id="review-only" type="checkbox"> quality holds only</label><span id="rule-count" class="muted" style="padding:9px 0"></span></div><div class="table-wrap"><table id="rules-table"><thead><tr><th>Rule</th><th>Category</th><th>Natural-language statement</th><th>Formal logic</th><th>Readiness, grounding and confidence</th><th>Review route</th><th>Source evidence</th></tr></thead><tbody>{''.join(rule_rows) or '<tr><td colspan="7">No rules were reported.</td></tr>'}</tbody></table></div></div></section>
 <section id="models" class="tab"><div class="panel"><div class="eyebrow">Business process and decision models</div><h2>Models generated by Agent 11</h2><p>DMN, BPMN, and CMMN are shown as review projections and linked by rule IDs. BPMN is displayed only when the upstream semantic-routing gate found explicit ordered workflow semantics; obvious rules remain in DMN/rule views without invented process flows.</p><div class="model-grid">{''.join(model_cards)}</div></div></section>
@@ -976,7 +1034,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"ERROR: business knowledge report generation failed: {exc}", flush=True)
         return 2
     print(f"Generated self-contained business knowledge report for {report['rule_count']} rules and {report['concept_count']} concepts: {output / REPORT_FILE_NAME}", flush=True)
-    print(f"Human-review queue: {report['human_review_count']} ({report['human_review_rate']}%); quality holds: {report['quality_hold_count']} ({report['quality_hold_rate']}%); source-pointer coverage: {report['grounding_coverage_rate']}%", flush=True)
+    print(f"Human-review queue: {report['human_review_count']} ({report['human_review_rate']}%); quality holds: {report['quality_hold_count']} ({report['quality_hold_rate']}%); grounding-certified: {report['grounding_coverage_rate']}%; source-pointer coverage: {report['source_pointer_coverage_rate']}%", flush=True)
     return 0
 
 
