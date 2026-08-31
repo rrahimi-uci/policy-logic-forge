@@ -190,3 +190,19 @@ def test_agent_three_checkpoint_fingerprint_changes_with_source_content():
     original = BusinessRulesExtractor._checkpoint_fingerprint(batches)
     batches[0][0]["content"] = "corrected source"
     assert BusinessRulesExtractor._checkpoint_fingerprint(batches) != original
+
+
+def test_confidence_score_records_its_provenance():
+    extractor = object.__new__(BusinessRulesExtractor)
+    extractor.global_config = SimpleNamespace(
+        get_rules_default_confidence_score=lambda: 75,
+        get_rules_confidence_weights=lambda: {"clarity": 1.0},
+        get_rules_low_confidence_threshold=lambda: 70,
+    )
+
+    assert extractor._calculate_confidence_score({}) == {
+        "confidence_score": 75,
+        "confidence_source": "default_config",
+    }
+    assert extractor._calculate_confidence_score({"confidence_score": 82})["confidence_source"] == "model_reported"
+    assert extractor._calculate_confidence_score({"confidence_breakdown": {"clarity": 91}})["confidence_source"] == "derived_from_breakdown"

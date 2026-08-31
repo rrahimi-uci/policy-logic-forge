@@ -886,6 +886,7 @@ class BusinessRulesExtractor:
             )
             
             rule['confidence_score'] = round(score, 2)
+            rule['confidence_source'] = 'derived_from_breakdown'
             
             # Flag low confidence rules
             if score < self.global_config.get_rules_low_confidence_threshold():
@@ -894,6 +895,12 @@ class BusinessRulesExtractor:
         elif 'confidence_score' not in rule:
             # Set default if missing
             rule['confidence_score'] = self.global_config.get_rules_default_confidence_score()
+            rule['confidence_source'] = 'default_config'
+        else:
+            # Preserve a model-supplied scalar while making its provenance
+            # explicit for downstream reports.  Older graphs may not have this
+            # field; report generation labels those values as unattributed.
+            rule.setdefault('confidence_source', 'model_reported')
         
         return rule
     
