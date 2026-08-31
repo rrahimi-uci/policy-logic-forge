@@ -2530,7 +2530,7 @@ class ExecutableReadinessCompleter:
 
 def main() -> None:
     config = get_config()
-    resolver = OpenAIEvidenceResolver(config.get_openai_api_key(), config.get_optimizer_model_name(), config.get_reasoning_effort())
+    resolver = OpenAIEvidenceResolver(config.get_api_key(), config.get_optimizer_model_name(), config.get_reasoning_effort())
     completer = ExecutableReadinessCompleter(resolver)
     baseline = config.get_rules_with_entities_dir() / "compliance_knowledge_graph.json"
     output_dir = config.get_optimized_dir()

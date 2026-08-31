@@ -1,7 +1,7 @@
 # CLI reference: `cli/extract.py`
 
 `cli/extract.py` is the extraction pipeline's orchestrator: it runs the
-twelve canonical agents (`agent_01`–`agent_12`) against a source-document
+eleven canonical agents (`agent_01`–`agent_11`) against a source-document
 directory and writes a grounding-certified, DMN/BPMN-ready knowledge graph
 under `pipeline-output/<batch-name>/`. This document is the complete,
 stand-alone reference for running it — commands, options, configuration,
@@ -21,7 +21,6 @@ computes internally.
 - [What the terminal display shows](#what-the-terminal-display-shows)
 - [The `run_metrics.json` artifact](#the-run_metricsjson-artifact)
 - [Configuration](#configuration)
-- [Agent 12 business knowledge report](#agent-12-business-knowledge-report)
 - [Common workflows](#common-workflows)
 - [Troubleshooting](#troubleshooting)
 
@@ -39,7 +38,7 @@ cp /path/to/your/*.txt compliance-files/nda_confidentiality/
 python3 cli/extract.py --dir nda_confidentiality --domain nda_confidentiality --target-rules 20
 ```
 
-This runs all twelve stages in order against
+This runs all eleven stages in order against
 `compliance-files/nda_confidentiality/`, writing to
 `pipeline-output/nda_confidentiality/` (the batch name defaults to `--dir`'s
 basename). You'll see a configuration panel, a live stage-by-stage progress
@@ -62,39 +61,21 @@ cli/extract.py --dir DIR --domain DOMAIN [options] [selector]
 | `--target-rules N` | no | Business rules `agent_03` tries to extract **per batch** (default `30`). Does **not** bound chunk/batch coverage — every organized chunk is still read and processed. Use `--pilot-batch-limit` to bound coverage for a cheap smoke run. |
 | `--pilot-batch-limit N` | no | Cap the number of word-balanced batches `agent_03` processes. Omit for full corpus coverage (the default). A capped run is never a coverage claim — see [`docs/pipeline_smoke.md`](pipeline_smoke.md) for an example smoke run. |
 | `--workers N` | no | Local scheduling workers. Default: `config.json`'s `pipeline.max_workers`. |
+| `--provider {openai,anthropic}` | no | Model provider for every agent subprocess this run. Default: `KG_PROVIDER` env var, then `config.json`'s `llm.provider`, then `openai`. See [Configuration](#configuration). |
 | `--skip-optimize` | no | Skip `agent_06`–`agent_08` (KG optimization, readiness, remediation). Independent `agent_09` grounding still runs before `agent_10` DAG generation. |
 | `--keep-going` | no | With `--stages`, run every selected stage even after an earlier one fails, instead of stopping at the first failure. No effect on a single-stage selector or a full run — see [Selecting stages](#selecting-stages). |
 | `--output {text,json}` | no | `text` (default): the polished interactive display below. `json`: line-delimited JSON events on stdout for automation — see [Output modes](#output-modes). |
-| `--agent AGENT_ID` | no* | Run exactly one agent by canonical id (`agent_01`–`agent_12`). |
-| `--stage N` | no* | Run exactly one stage by number (`1`–`12`; accepts `7` or `07`). Same agent as `--agent agent_07`. |
+| `--agent AGENT_ID` | no* | Run exactly one agent by canonical id (`agent_01`–`agent_11`). |
+| `--stage N` | no* | Run exactly one stage by number (`1`–`11`; accepts `7` or `07`). Same agent as `--agent agent_07`. |
 | `--stages RANGE` | no* | Run **multiple** stages in order — a range, a list, or a mix: `3-6`, `3,5,7`, `3-6,9,11`. See [Selecting stages](#selecting-stages). |
 | `--step ALIAS` | no* | Deprecated legacy selector (`1`, `3.5`, `5.7`, ...) from a prior ten-stage numbering. Prints the canonical stage it maps to. Prefer `--stage`/`--agent`. |
 
 \* `--agent`, `--stage`, `--stages`, and `--step` are mutually exclusive. Omit
-all four to run the full 12-stage pipeline (`run_all`).
+all four to run the full 11-stage pipeline (`run_all`).
 
 Run `python3 cli/extract.py --help` for the same reference from the tool
 itself, including the full per-stage summary table baked into its
 description.
-
-## Agent 12 business knowledge report
-
-Agent 12 is a post-pipeline presentation stage. It reads the optimized graph,
-the DAG artifact, Agent 11's DMN/BPMN/CMMN bundle, and the organized source
-chunks, then writes a single self-contained HTML report. It does not call an
-LLM or alter upstream artifacts.
-
-```bash
-KG_BATCH_NAME=nda-2026 KG_DOMAIN=nda_confidentiality \
-  .venv/bin/python agents/agent_12_business_knowledge_report.py
-```
-
-The default output is
-`pipeline-output/<batch-name>/agent_12-business-knowledge-report/business_knowledge_report.html`.
-Use `--graph`, `--dags`, `--models-dir`, `--organized-dir`, and `--output-dir`
-when reading from an explicitly selected bundle. The report embeds source
-chunks and its CSS, JavaScript, and SVG visualizations, so it can be opened
-directly from disk without a web server or network access.
 
 ## Selecting stages
 
@@ -115,13 +96,9 @@ Four ways to choose what runs, from broadest to narrowest:
 python3 cli/extract.py --dir nda_confidentiality --domain nda_confidentiality \
   --batch-name nda-2026 --stages 7-9
 
-# Re-run DAG/model generation and the report (10, 11, 12):
+# Re-run just DAG generation and model generation (10, 11):
 python3 cli/extract.py --dir nda_confidentiality --domain nda_confidentiality \
-  --batch-name nda-2026 --stages 10-12
-
-# Generate the self-contained Agent 12 report from an existing completed bundle:
-python3 cli/extract.py --dir nda_confidentiality --domain nda_confidentiality \
-  --batch-name nda-2026 --stage 12
+  --batch-name nda-2026 --stages 10,11
 
 # Non-contiguous: re-validate (4) and re-certify grounding (9) only:
 python3 cli/extract.py --dir nda_confidentiality --domain nda_confidentiality \
@@ -139,7 +116,7 @@ at the first problem:
 
 ```bash
 python3 cli/extract.py --dir nda_confidentiality --domain nda_confidentiality \
-  --batch-name nda-2026 --stages 7-12 --keep-going
+  --batch-name nda-2026 --stages 7-11 --keep-going
 ```
 
 **Reuse an existing batch's output**: `--stages`/`--stage`/`--agent` all
@@ -154,8 +131,7 @@ failure.
 
 **Numbering contract**: the stage number and agent identifier are always the
 same value — `--stage 9` and `--agent agent_09` run the identical thing
-(`agent_09`, independent grounding verification). `--stage 12` and
-`--agent agent_12` generate the report from the completed Agent 11 bundle. See
+(`agent_09`, independent grounding verification). See
 [README.md's numbering contract](../README.md#numbering-contract) for the
 full stage table.
 
@@ -355,6 +331,31 @@ run via `KG_*` environment variables without editing `config.json` — see
 KG_GROUNDING_LLM_CONCURRENCY=16 python3 cli/extract.py \
   --dir nda_confidentiality --domain nda_confidentiality --stage 9
 ```
+
+### Switching model provider (OpenAI ↔ Anthropic)
+
+```bash
+# One-off run against Claude instead of OpenAI:
+python3 cli/extract.py --dir nda_confidentiality --domain nda_confidentiality \
+  --batch-name nda-2026-claude --provider anthropic
+
+# Equivalent via environment variable (useful for a whole shell session/CI job):
+KG_PROVIDER=anthropic python3 cli/extract.py \
+  --dir nda_confidentiality --domain nda_confidentiality --batch-name nda-2026-claude
+```
+
+Requires `ANTHROPIC_API_KEY` (see `.env.example`) and an `anthropic.models.*`
+block in `config.json` (see `config.example.json`; defaults to
+`claude-opus-5` at `reasoning_effort: high`). Every agent subprocess reads
+the resolved provider automatically — no per-agent flags needed. OpenAI
+calls are unaffected either way: they always go through the OpenAI SDK
+directly; only Anthropic calls are routed through
+[litellm](https://docs.litellm.ai/). To pin one model regardless of
+provider defaults, set `KG_MODEL` (e.g. `KG_MODEL=claude-sonnet-5`).
+
+`--provider` is a per-invocation override, same precedence as `--stage`/
+`--agent`: `--provider` flag > `KG_PROVIDER` env var > `config.json`'s
+`llm.provider` > `openai`.
 
 Overridden values show up in the config panel/`run_metrics.json` exactly as
 resolved (env override applied), not the `config.json` default.

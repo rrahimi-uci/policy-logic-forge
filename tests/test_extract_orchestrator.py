@@ -3,6 +3,7 @@ import argparse
 import pytest
 
 from cli.extract import ExtractionPipeline, _PERFORMANCE_ENV, _parse_stage_arg, _parse_stages_arg
+from utils.config import Config
 
 
 def test_stage_argument_accepts_display_number_with_or_without_zero_padding():
@@ -383,3 +384,62 @@ def test_mortgage_domain_is_supported_for_pdf_runs(tmp_path, monkeypatch):
     assert pipeline.domain == "mortgage"
     assert pipeline.run_agent_01() is True
     assert calls == [("agent_01", [str(source), str(pipeline.organized_dir), "--files", "guide.pdf"])]
+
+
+def _reset_config_singleton():
+    """Reset BOTH singleton caches: Config._instance (Config.__new__'s own
+    pattern) and utils.config's module-level `_config` global that
+    get_config()/ExtractionPipeline actually read and mutate in place
+    (get_config() reuses that cached object's ._provider across calls when
+    provider=None, so a leftover "anthropic" from an earlier test silently
+    leaks into every later get_config() call in the same process otherwise)."""
+    import utils.config as config_module
+    config_module._config = None
+    Config._instance = None
+    Config._config = None
+    Config._provider = None
+    Config._source_file_name = None
+    Config._batch_name = None
+    Config._domain = None
+
+
+def test_env_propagates_default_openai_provider_to_every_agent_subprocess(tmp_path, monkeypatch):
+    """Regression: _env() used to hardcode KG_PROVIDER=openai unconditionally,
+    which would silently force every agent subprocess back to OpenAI even
+    when the resolved provider was something else."""
+    monkeypatch.delenv("KG_PROVIDER", raising=False)
+    _reset_config_singleton()
+    source = tmp_path / "src"
+    source.mkdir()
+    pipeline = ExtractionPipeline(
+        source_dir=source, domain="deonticbench", target_rules=30, max_workers=4,
+        skip_optimize=True, batch_name="provider-default-test",
+    )
+    assert pipeline._env()["KG_PROVIDER"] == "openai"
+
+
+def test_env_propagates_explicit_anthropic_provider_to_every_agent_subprocess(tmp_path, monkeypatch):
+    monkeypatch.delenv("KG_PROVIDER", raising=False)
+    _reset_config_singleton()
+    source = tmp_path / "src"
+    source.mkdir()
+    pipeline = ExtractionPipeline(
+        source_dir=source, domain="deonticbench", target_rules=30, max_workers=4,
+        skip_optimize=True, batch_name="provider-anthropic-test", provider="anthropic",
+    )
+    assert pipeline._env()["KG_PROVIDER"] == "anthropic"
+    assert pipeline.metrics.config["provider"] == "anthropic"
+    _reset_config_singleton()  # leave a clean singleton for tests that run after this one
+
+
+def test_env_propagates_provider_selected_via_kg_provider_env(tmp_path, monkeypatch):
+    monkeypatch.setenv("KG_PROVIDER", "anthropic")
+    _reset_config_singleton()
+    source = tmp_path / "src"
+    source.mkdir()
+    pipeline = ExtractionPipeline(
+        source_dir=source, domain="deonticbench", target_rules=30, max_workers=4,
+        skip_optimize=True, batch_name="provider-env-test",
+    )
+    assert pipeline._env()["KG_PROVIDER"] == "anthropic"
+    _reset_config_singleton()  # leave a clean singleton for tests that run after this one

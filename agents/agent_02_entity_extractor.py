@@ -646,7 +646,7 @@ def main():
     config = get_config()
     
     # Configuration from config file
-    OPENAI_API_KEY = config.get_openai_api_key()
+    OPENAI_API_KEY = config.get_api_key()
     EXTRACTION_MODEL = config.get_reasoning_model()
     REASONING_EFFORT = config.get_reasoning_effort()
     OPTIMIZER_MODEL = config.get_optimizer_model()

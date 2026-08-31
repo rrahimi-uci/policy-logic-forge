@@ -1294,7 +1294,7 @@ def main():
     config = get_config()
     
     # Configuration
-    API_KEY = config.get_openai_api_key()
+    API_KEY = config.get_api_key()
     MODEL = config.get_optimizer_model_name()  # From config.json optimizer.model
     REASONING_EFFORT = config.get_reasoning_effort()
     OUTPUT_DIR = config.get_optimized_dir()

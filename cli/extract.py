@@ -46,7 +46,7 @@ from utils.agent_names import (  # noqa: E402
     output_dir_name,
     stage_label,
 )
-from utils.config import get_config  # noqa: E402
+from utils.config import MODEL_PROVIDERS, get_config  # noqa: E402
 from utils.pipeline_metrics import (  # noqa: E402
     FAIL,
     PASS,
@@ -165,8 +165,8 @@ def _count_business_rules(data: dict) -> int:
 class ExtractionPipeline:
     def __init__(self, source_dir: Path, domain: str, target_rules: int, max_workers: int | None,
                  skip_optimize: bool, batch_name: str | None, pilot_batch_limit: int | None = None,
-                 output: str = "text"):
-        self.config = get_config(domain=domain)
+                 output: str = "text", provider: str | None = None):
+        self.config = get_config(domain=domain, provider=provider)
         self.source_dir = source_dir
         self.domain = domain
         self.target_rules = target_rules
@@ -225,7 +225,7 @@ class ExtractionPipeline:
         env.setdefault("KG_GLOBAL_LLM_STATE_FILE", self._limiter_state_file)
         for name, value in self._perf_env.items():
             env.setdefault(name, value)
-        env["KG_PROVIDER"] = "openai"
+        env["KG_PROVIDER"] = self.config.get_model_provider()
         env["KG_DOMAIN"] = self.domain
         env["KG_BATCH_NAME"] = self.batch_name
         if self.max_workers:
@@ -630,6 +630,11 @@ def main():
     parser.add_argument("--target-rules", type=int, default=30, help="Target business rules agent_03 tries to extract per batch (default: 30). Does NOT bound chunk/batch coverage -- see --pilot-batch-limit for that.")
     parser.add_argument("--pilot-batch-limit", type=int, default=None, help="Cap the number of word-balanced batches agent_03 processes, for a cheap smoke run. Omit for full coverage (default): every organized chunk is read whole and every batch is processed. A capped run is never corpus coverage.")
     parser.add_argument("--workers", type=int, default=None, help="Local scheduling workers (default: config.json pipeline.max_workers)")
+    parser.add_argument("--provider", choices=sorted(MODEL_PROVIDERS), default=None,
+                         help="Model provider for every agent subprocess this run (default: KG_PROVIDER env var, "
+                              "then config.json's llm.provider, then 'openai'). Requires the matching API key "
+                              "(OPENAI_API_KEY or ANTHROPIC_API_KEY) and, for anthropic, the model names under "
+                              "anthropic.models.* in config.json to actually be Claude models.")
     parser.add_argument("--skip-optimize", action="store_true", help="Skip agents agent_06 through agent_08 (optimization, readiness, remediation); independent agent_09 grounding still runs")
     parser.add_argument("--keep-going", action="store_true", help="With --stages, run every selected stage even after an earlier one fails, instead of stopping at the first failure")
     parser.add_argument("--output", choices=["text", "json"], default="text",
@@ -656,7 +661,7 @@ def main():
     pipeline = ExtractionPipeline(
         source_dir=source_dir, domain=args.domain, target_rules=args.target_rules,
         max_workers=args.workers, skip_optimize=args.skip_optimize, batch_name=args.batch_name,
-        pilot_batch_limit=args.pilot_batch_limit, output=args.output,
+        pilot_batch_limit=args.pilot_batch_limit, output=args.output, provider=args.provider,
     )
     if args.agent:
         ok = pipeline.run_stages([args.agent], selection_label=f"single agent ({stage_label(args.agent)})")

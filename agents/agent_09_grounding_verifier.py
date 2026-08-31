@@ -1330,7 +1330,7 @@ def certification_issues(
 def main() -> None:
     config = get_config()
     resolver = OpenAIGroundingResolver(
-        config.get_openai_api_key(), config.get_optimizer_model_name(), config.get_reasoning_effort()
+        config.get_api_key(), config.get_optimizer_model_name(), config.get_reasoning_effort()
     )
     output_dir = config.get_optimized_dir()
     report = GroundingVerifier(resolver).run(
