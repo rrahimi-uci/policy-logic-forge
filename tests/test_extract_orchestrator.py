@@ -73,6 +73,49 @@ def test_run_stages_all_pass_returns_true(monkeypatch):
     assert calls == ["agent_01", "agent_02"]
 
 
+def test_selective_readiness_failure_routes_through_remediation_and_recheck(monkeypatch):
+    pipeline = object.__new__(ExtractionPipeline)
+    pipeline._last_exit_codes = {}
+    calls = []
+
+    def run_agent(agent_id):
+        calls.append(agent_id)
+        if agent_id == "agent_07":
+            pipeline._last_exit_codes[agent_id] = 2
+            return False
+        return True
+
+    monkeypatch.setattr(pipeline, "run_agent", run_agent)
+    monkeypatch.setattr(pipeline, "_readiness_requests_remediation", lambda: True)
+    monkeypatch.setattr(
+        pipeline,
+        "run_agent_07",
+        lambda *, reuse_conflicts=False: calls.append("agent_07_recheck") or True,
+    )
+
+    assert pipeline.run_stages(["agent_07", "agent_08", "agent_09"]) is True
+    assert calls == ["agent_07", "agent_08", "agent_07_recheck", "agent_09"]
+
+
+def test_selective_grounding_review_with_complete_coverage_continues(monkeypatch):
+    pipeline = object.__new__(ExtractionPipeline)
+    pipeline._last_exit_codes = {}
+    calls = []
+
+    def run_agent(agent_id):
+        calls.append(agent_id)
+        if agent_id == "agent_09":
+            pipeline._last_exit_codes[agent_id] = 3
+            return False
+        return True
+
+    monkeypatch.setattr(pipeline, "run_agent", run_agent)
+    monkeypatch.setattr(pipeline, "_review_only_grounding", lambda: True)
+
+    assert pipeline.run_stages(["agent_09", "agent_10"]) is True
+    assert calls == ["agent_09", "agent_10"]
+
+
 def test_run_stages_is_safe_without_reporting_configured(monkeypatch):
     """object.__new__ test doubles have no self.metrics/self.reporter; run_stages must not crash."""
 
