@@ -10,6 +10,9 @@ from agents.agent_12_business_knowledge_report import (
     _outcome_cards_html,
     _outcome_chip_html,
     _outcome_kind,
+    _review_route_meta,
+    _route_badge_html,
+    _route_card_html,
     generate,
     main,
 )
@@ -263,6 +266,52 @@ def test_formal_logic_html_falls_back_when_no_outcomes_declared():
     html = _formal_logic_html({"condition_predicates": [], "outcomes": [], "exceptions": [], "variables": []})
     assert "evaluate outcome" in html
     assert "None declared" in html  # empty Outcomes panel
+
+
+def test_review_route_meta_covers_every_known_semantic_routing_value():
+    """utils/semantic_routing.py::classify_review_route only ever emits these
+    four routes, plus agent_12's own 'unclassified' fallback -- every one
+    must have a real icon/label/description, not the generic unknown-route
+    fallback."""
+
+    for route in ("none", "human_review", "machine_repair", "case_management", "unclassified"):
+        icon, label, description = _review_route_meta(route)
+        assert icon and label and description
+        assert label != _review_route_meta("totally-unknown-route")[1]
+
+
+def test_review_route_meta_falls_back_gracefully_for_an_unrecognized_route():
+    icon, label, description = _review_route_meta("some_future_route")
+    assert icon == "❔"
+    assert label == "Some future route"  # humanized, not a raw enum dump
+    assert description
+
+
+def test_route_badge_preserves_lowercase_route_text_for_filter_compatibility():
+    """The compact toolbar filter/data-route attribute rely on the raw,
+    lowercase, underscore-free route text still being present verbatim."""
+
+    html = _route_badge_html("case_management")
+    assert "case management" in html  # raw text preserved
+    assert "Case management" in html  # human label added
+    assert 'class="status status-case_management route-badge"' in html
+
+
+def test_route_card_shows_icon_label_description_and_hold_state():
+    html = _route_card_html("human_review", has_hold=True, reason_items=["Evidence contradicted the source"])
+    assert 'class="route-card route-human_review"' in html
+    assert "Human review" in html
+    assert "judgment call" in html  # the plain-language description
+    assert '<span class="route-hold route-hold-yes">Quality hold</span>' in html
+    assert "Evidence contradicted the source" in html
+    assert "Why (1)" in html
+
+
+def test_route_card_shows_no_hold_state_and_default_reason_for_a_clean_route():
+    html = _route_card_html("none", has_hold=False, reason_items=[])
+    assert '<span class="route-hold route-hold-no">No quality hold</span>' in html
+    assert "No review reason recorded." in html
+    assert "Why (0)" in html
 
 
 def test_agent_12_handles_missing_optional_upstream_models(tmp_path: Path):
