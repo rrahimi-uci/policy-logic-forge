@@ -14,9 +14,9 @@
   "anthropic": {
     "api_key": "${ANTHROPIC_API_KEY}",
     "models": {
-      "reasoning": "claude-opus-5",
+      "reasoning": "claude-sonnet-5",
       "reasoning_effort": "high",
-      "optimizer": "claude-opus-5"
+      "optimizer": "claude-sonnet-5"
     },
     "rate_limiting": {
       "max_retries": 1,

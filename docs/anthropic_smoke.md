@@ -11,7 +11,10 @@ pipeline outputs remain local-only and are gitignored.
 ## Configuration verified
 
 - provider: `anthropic` (`--provider anthropic`)
-- model: `claude-opus-5` (config default, no override)
+- model: `claude-opus-5` (was the config default at the time of this run;
+  the default has since changed to `claude-sonnet-5` — this is a dated
+  record of that specific run, not a claim about the current default. See
+  `config.example.json`/`docs/cli.md` for what's current.)
 - reasoning effort: `high`
 - optimizer skipped (`--skip-optimize`); no optimizer/grounding quality claim
 - one deterministic privacy-policy source file (`1017_sci-news.com.txt`,

@@ -346,12 +346,13 @@ KG_PROVIDER=anthropic python3 cli/extract.py \
 
 Requires `ANTHROPIC_API_KEY` (see `.env.example`) and an `anthropic.models.*`
 block in `config.json` (see `config.example.json`; defaults to
-`claude-opus-5` at `reasoning_effort: high`). Every agent subprocess reads
+`claude-sonnet-5` at `reasoning_effort: high`). Every agent subprocess reads
 the resolved provider automatically — no per-agent flags needed. OpenAI
 calls are unaffected either way: they always go through the OpenAI SDK
 directly; only Anthropic calls are routed through
 [litellm](https://docs.litellm.ai/). To pin one model regardless of
-provider defaults, set `KG_MODEL` (e.g. `KG_MODEL=claude-sonnet-5`).
+provider defaults, set `KG_MODEL` (e.g. `KG_MODEL=claude-opus-5` for the
+larger model, or an OpenAI model name when `--provider openai`).
 
 **Verified with a real `ANTHROPIC_API_KEY` against Anthropic's live
 API** — see [`docs/anthropic_smoke.md`](anthropic_smoke.md) for the full
