@@ -2203,7 +2203,7 @@ def main():
     
     try:
         config = get_config()
-        API_KEY = config.get_openai_api_key()
+        API_KEY = config.get_api_key()
         REASONING_MODEL = config.get_reasoning_model()
     except (FileNotFoundError, ValueError) as e:
         print(f"❌ Error: {e}")

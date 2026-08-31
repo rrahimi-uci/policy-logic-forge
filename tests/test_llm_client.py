@@ -1,4 +1,5 @@
-"""Unit tests for the OpenAI-backed LLM client wrapper."""
+"""Unit tests for the LLM client wrapper (OpenAI SDK + litellm/Anthropic)."""
+import json
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -52,11 +53,33 @@ class TestIsReasoningModel:
         ("o1", True), ("o1-mini", True), ("o3-mini", True), ("o4-mini", True),
         ("gpt-5.6-luna", True), ("gpt-5", True),
         ("gpt-4o", False), ("gpt-4o-mini", False), ("gpt-4.1", False),
+        ("claude-opus-5", True), ("claude-sonnet-5", True), ("anthropic/claude-opus-5", True),
         ("", False), (None, False),
     ])
     @allure.title("is_reasoning_model({model}) == {expected}")
     def test_classification(self, model, expected):
         assert LLMClient.is_reasoning_model(model) is expected
+
+
+@allure.feature("Pipeline LLM client")
+@allure.story("Provider routing")
+class TestProviderClassification:
+    @pytest.mark.parametrize("model,expected", [
+        ("claude-opus-5", True), ("Claude-Sonnet-5", True), ("anthropic/claude-opus-5", True),
+        ("gpt-5.6-luna", False), ("gpt-4o", False), ("o3-mini", False), ("", False), (None, False),
+    ])
+    @allure.title("is_anthropic_model({model}) == {expected}")
+    def test_is_anthropic_model(self, model, expected):
+        assert LLMClient.is_anthropic_model(model) is expected
+
+    @allure.title("Claude models are reasoning models but NOT OpenAI reasoning models")
+    def test_claude_is_reasoning_but_not_openai_reasoning(self):
+        # This distinction drives chat_completion's token-budget branch: only
+        # OpenAI reasoning models get the aggressive max_completion_tokens
+        # heuristic; Claude takes the plain max_tokens branch (see module
+        # docstring / is_openai_reasoning_model docstring).
+        assert LLMClient.is_reasoning_model("claude-opus-5") is True
+        assert LLMClient.is_openai_reasoning_model("claude-opus-5") is False
 
 
 @allure.feature("Pipeline LLM client")
@@ -190,3 +213,136 @@ class TestChatCompletionParams:
 
         limiter.acquire.assert_called_once_with(timeout=None)
         assert limiter.release.call_args.kwargs["request_seconds"] < 5
+
+
+@allure.feature("Pipeline LLM client")
+@allure.story("Anthropic call path (litellm)")
+class TestAnthropicViaLitellm:
+    """Claude models never touch the OpenAI SDK -- these tests mock
+    litellm.completion/completion_cost directly rather than client._client,
+    since _litellm_completion() does its own lazy `import litellm`."""
+
+    @staticmethod
+    def _litellm_response(*, cached_tokens=0, cache_read_input_tokens=None):
+        resp = MagicMock()
+        resp.choices = [MagicMock()]
+        resp.choices[0].message.content = "ok"
+        resp.choices[0].finish_reason = "stop"
+        resp.usage = MagicMock()
+        resp.usage.prompt_tokens = 1000
+        resp.usage.completion_tokens = 200
+        resp.usage.total_tokens = 1200
+        if cached_tokens:
+            resp.usage.prompt_tokens_details = MagicMock(cached_tokens=cached_tokens)
+        else:
+            resp.usage.prompt_tokens_details = None
+        resp.usage.cache_read_input_tokens = cache_read_input_tokens
+        return resp
+
+    @allure.title("A bare Claude model name is prefixed with anthropic/ for litellm")
+    def test_model_name_is_prefixed(self):
+        client = create_llm_client(api_key="sk-ant-test", model="claude-opus-5")
+        with patch("litellm.completion", return_value=self._litellm_response()) as mock_completion:
+            client.chat_completion([{"role": "user", "content": "hi"}], max_tokens=100)
+        assert mock_completion.call_args.kwargs["model"] == "anthropic/claude-opus-5"
+
+    @allure.title("An already-prefixed model name is not double-prefixed")
+    def test_already_prefixed_model_name_is_left_alone(self):
+        client = create_llm_client(api_key="sk-ant-test", model="anthropic/claude-opus-5")
+        with patch("litellm.completion", return_value=self._litellm_response()) as mock_completion:
+            client.chat_completion([{"role": "user", "content": "hi"}], max_tokens=100)
+        assert mock_completion.call_args.kwargs["model"] == "anthropic/claude-opus-5"
+
+    @allure.title("Claude call carries the explicit api_key and retry/timeout settings")
+    def test_call_carries_api_key_and_retry_settings(self):
+        client = create_llm_client(api_key="sk-ant-test", model="claude-opus-5", timeout=42, max_retries=5)
+        with patch("litellm.completion", return_value=self._litellm_response()) as mock_completion:
+            client.chat_completion([{"role": "user", "content": "hi"}], max_tokens=100)
+        kwargs = mock_completion.call_args.kwargs
+        assert kwargs["api_key"] == "sk-ant-test"
+        assert kwargs["max_retries"] == 5
+        assert kwargs["timeout"] == 42
+
+    @allure.title("Claude drops temperature and forwards reasoning_effort, like an OpenAI reasoning model")
+    def test_reasoning_effort_forwarded_and_temperature_dropped(self):
+        client = create_llm_client(api_key="sk-ant-test", model="claude-opus-5")
+        with patch("litellm.completion", return_value=self._litellm_response()) as mock_completion:
+            client.chat_completion(
+                [{"role": "user", "content": "hi"}], temperature=0.3, max_tokens=100, reasoning_effort="high",
+            )
+        kwargs = mock_completion.call_args.kwargs
+        assert "temperature" not in kwargs
+        assert kwargs["reasoning_effort"] == "high"
+
+    @allure.title("Claude uses plain max_tokens, NOT the OpenAI-reasoning max_completion_tokens heuristic")
+    def test_claude_uses_plain_max_tokens(self):
+        client = create_llm_client(api_key="sk-ant-test", model="claude-opus-5")
+        with patch("litellm.completion", return_value=self._litellm_response()) as mock_completion:
+            client.chat_completion(
+                [{"role": "user", "content": "hi"}], max_tokens=100, reasoning_effort="high",
+            )
+        kwargs = mock_completion.call_args.kwargs
+        assert kwargs["max_tokens"] == 100
+        assert "max_completion_tokens" not in kwargs
+
+    @allure.title("Response cost is estimated via litellm.completion_cost, not the OpenAI-only pricing table")
+    def test_cost_uses_litellm_completion_cost(self, capsys):
+        client = create_llm_client(api_key="sk-ant-test", model="claude-opus-5")
+        response = self._litellm_response()
+        with patch("litellm.completion", return_value=response), \
+             patch("litellm.completion_cost", return_value=0.0123) as mock_cost:
+            client.chat_completion([{"role": "user", "content": "hi"}], max_tokens=100)
+        mock_cost.assert_called_once_with(completion_response=response)
+        cost_line = next(line for line in capsys.readouterr().out.splitlines() if line.startswith("[LLM_COST]"))
+        assert json.loads(cost_line[len("[LLM_COST]"):])["cost"] == pytest.approx(0.0123)
+
+    @allure.title("A litellm.completion_cost failure yields 0.0 cost, never an exception")
+    def test_cost_estimation_failure_is_swallowed(self, capsys):
+        client = create_llm_client(api_key="sk-ant-test", model="claude-opus-5")
+        with patch("litellm.completion", return_value=self._litellm_response()), \
+             patch("litellm.completion_cost", side_effect=RuntimeError("unknown model")):
+            client.chat_completion([{"role": "user", "content": "hi"}], max_tokens=100)
+        cost_line = next(line for line in capsys.readouterr().out.splitlines() if line.startswith("[LLM_COST]"))
+        assert json.loads(cost_line[len("[LLM_COST]"):])["cost"] == 0.0
+
+    @allure.title("Cache-hit tokens fall back to Anthropic's native cache_read_input_tokens field")
+    def test_cache_tokens_fallback_to_anthropic_native_field(self, capsys):
+        # litellm does not (yet) normalize this into prompt_tokens_details.cached_tokens
+        # for Anthropic responses -- see this module's docstring and
+        # https://github.com/BerriAI/litellm/issues/27763
+        client = create_llm_client(api_key="sk-ant-test", model="claude-opus-5")
+        response = self._litellm_response(cached_tokens=0, cache_read_input_tokens=150)
+        with patch("litellm.completion", return_value=response), patch("litellm.completion_cost", return_value=0.0):
+            client.chat_completion([{"role": "user", "content": "hi"}], max_tokens=100)
+        cost_line = next(line for line in capsys.readouterr().out.splitlines() if line.startswith("[LLM_COST]"))
+        assert json.loads(cost_line[len("[LLM_COST]"):])["cached_tokens"] == 150
+
+    @allure.title("An OpenAI-shaped cached_tokens field, when present, is preferred over the Anthropic fallback")
+    def test_cache_tokens_prefers_normalized_field_when_present(self, capsys):
+        client = create_llm_client(api_key="sk-ant-test", model="claude-opus-5")
+        response = self._litellm_response(cached_tokens=90, cache_read_input_tokens=150)
+        with patch("litellm.completion", return_value=response), patch("litellm.completion_cost", return_value=0.0):
+            client.chat_completion([{"role": "user", "content": "hi"}], max_tokens=100)
+        cost_line = next(line for line in capsys.readouterr().out.splitlines() if line.startswith("[LLM_COST]"))
+        assert json.loads(cost_line[len("[LLM_COST]"):])["cached_tokens"] == 90
+
+    @allure.title("An OpenAI model call never touches litellm")
+    def test_openai_model_does_not_call_litellm(self):
+        client, mock_openai = self._client_with_mock_openai("gpt-4o-mini")
+        with patch("litellm.completion") as mock_completion:
+            client.chat_completion([{"role": "user", "content": "hi"}], max_tokens=100)
+        mock_completion.assert_not_called()
+        mock_openai.chat.completions.create.assert_called_once()
+
+    @staticmethod
+    def _client_with_mock_openai(model):
+        client = create_llm_client(api_key="sk-test", model=model)
+        mock_openai = MagicMock()
+        resp = MagicMock()
+        resp.choices = [MagicMock()]
+        resp.choices[0].message.content = "ok"
+        resp.choices[0].finish_reason = "stop"
+        resp.usage = None
+        mock_openai.chat.completions.create.return_value = resp
+        client._client = mock_openai
+        return client, mock_openai

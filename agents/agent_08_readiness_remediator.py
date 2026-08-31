@@ -650,7 +650,7 @@ class ReadinessRemediator:
 def main() -> None:
     config = get_config()
     resolver = OpenAIRemediationResolver(
-        config.get_openai_api_key(),
+        config.get_api_key(),
         config.get_optimizer_model_name(),
         config.get_reasoning_effort(),
     )

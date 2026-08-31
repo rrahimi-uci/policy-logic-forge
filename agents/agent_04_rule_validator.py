@@ -701,10 +701,15 @@ def main():
     
     args = parser.parse_args()
     
-    # Get API key
-    api_key = args.api_key or os.getenv('OPENAI_API_KEY', '')
+    # Get API key. Falls back to the configured provider's key (OPENAI_API_KEY
+    # or ANTHROPIC_API_KEY) so this standalone entry point stays in sync with
+    # every other agent instead of assuming OpenAI.
+    try:
+        api_key = args.api_key or get_config().get_api_key()
+    except ValueError:
+        api_key = ''
     if not api_key:
-        print("Error: API key required (--api-key or OPENAI_API_KEY)")
+        print("Error: API key required (--api-key, or OPENAI_API_KEY/ANTHROPIC_API_KEY for the configured provider)")
         sys.exit(1)
 
     # Initialize validator

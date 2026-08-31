@@ -1,9 +1,30 @@
 """
-LLM Client — thin wrapper over the official OpenAI Python SDK.
+LLM Client — OpenAI SDK for OpenAI models, litellm for everything else.
 
 Provides a consistent chat-completion interface for the pipeline, with support
 for both standard chat models (gpt-4o, gpt-4o-mini, …) and reasoning models
 (o1/o3/o4, gpt-5.x), plus token/cost accounting emitted for the UI runner.
+
+Two call paths, selected purely by `self.model`'s name (see
+`is_anthropic_model`), not a separate provider flag:
+
+- OpenAI models: the official `openai` SDK, exactly as before this module
+  supported a second provider — same client, same TCP-keepalive transport,
+  same watchdog thread. Zero behavior change for existing OpenAI runs.
+- Anthropic (Claude) models: routed through `litellm.completion()`, which
+  accepts and returns the same OpenAI-shaped request/response, so the rest of
+  this module (usage/cost tracking, error handling, the watchdog wrapper)
+  applies unchanged. `reasoning_effort` is passed straight through; litellm
+  translates it into Claude's own extended-thinking controls (the exact
+  mechanism is Claude-generation-dependent — see
+  https://docs.litellm.ai/docs/providers/anthropic_effort).
+
+Known gap, worth knowing about rather than silently trusting the number: as
+of writing, litellm does not normalize Anthropic's `cache_read_input_tokens`
+into the OpenAI-shaped `usage.prompt_tokens_details.cached_tokens` field
+(https://github.com/BerriAI/litellm/issues/27763). This module reads the
+Anthropic-native field directly as a fallback so cache-hit tracking still
+works, but confirm against a real response if precision matters here.
 """
 
 import json
@@ -124,7 +145,9 @@ def _estimate_cost(model: str, prompt_tokens: int, completion_tokens: int) -> fl
 
 
 class LLMClient:
-    """Unified chat-completion client backed by the OpenAI SDK."""
+    """Unified chat-completion client. OpenAI models use the OpenAI SDK
+    directly; Claude models are routed through litellm -- see this module's
+    docstring and `is_anthropic_model`."""
 
     def __init__(
         self,
@@ -138,7 +161,9 @@ class LLMClient:
         Initialize the client.
 
         Args:
-            api_key: OpenAI API key (defaults to config / OPENAI_API_KEY env var).
+            api_key: Provider API key (defaults to config / OPENAI_API_KEY or
+                ANTHROPIC_API_KEY env var, chosen by whether `model` is a
+                Claude model -- see `is_anthropic_model`).
             model: Model identifier (e.g. 'gpt-4o', 'o3-mini', 'gpt-5.6-luna').
             timeout: Request timeout in seconds.
             max_retries: Maximum number of retry attempts (handled by the SDK).
@@ -204,14 +229,22 @@ class LLMClient:
         blocked on the dead socket) is a daemon and never blocks process exit;
         TCP keep-alive tears its socket down shortly after.
         """
-        client = self._get_client()
         box: Dict[str, Any] = {}
 
-        def _call():
-            try:
-                box["resp"] = client.chat.completions.create(**params)
-            except BaseException as e:  # propagate any failure to the caller
-                box["err"] = e
+        if self.is_anthropic_model(self.model):
+            def _call():
+                try:
+                    box["resp"] = self._litellm_completion(params)
+                except BaseException as e:  # propagate any failure to the caller
+                    box["err"] = e
+        else:
+            client = self._get_client()
+
+            def _call():
+                try:
+                    box["resp"] = client.chat.completions.create(**params)
+                except BaseException as e:  # propagate any failure to the caller
+                    box["err"] = e
 
         worker = threading.Thread(target=_call, name="llm-call", daemon=True)
         worker.start()
@@ -244,6 +277,28 @@ class LLMClient:
             raise box["err"]
         return box["resp"]
 
+    def _litellm_model_name(self) -> str:
+        """litellm requires a provider-prefixed model string for non-OpenAI models."""
+        model = self.model or ""
+        if model.startswith("anthropic/"):
+            return model
+        return f"anthropic/{model}"
+
+    def _litellm_completion(self, params: Dict[str, Any]) -> Any:
+        """Anthropic call path: litellm.completion() with the same OpenAI-shaped
+        params chat_completion() already built, so callers/response handling
+        downstream don't need to know which transport served the request."""
+        import litellm  # deferred: keeps this an optional path, not an import-time cost
+
+        call_params = dict(params)
+        call_params["model"] = self._litellm_model_name()
+        api_key = self._api_key or _get_config_value('get_anthropic_api_key', None)
+        if api_key:
+            call_params["api_key"] = api_key
+        call_params.setdefault("max_retries", self.max_retries)
+        call_params.setdefault("timeout", self.timeout)
+        return litellm.completion(**call_params)
+
     def _reset_client(self) -> None:
         """Discard a failed transport without blocking the caller on close."""
         client = self._client
@@ -262,17 +317,37 @@ class LLMClient:
         close_thread.join(timeout=min(5, max(1, self.timeout)))
 
     @staticmethod
-    def is_reasoning_model(model: str) -> bool:
-        """Detect reasoning models that need max_completion_tokens instead of max_tokens.
+    def is_openai_reasoning_model(model: str) -> bool:
+        """Detect OpenAI reasoning models that need max_completion_tokens instead of max_tokens.
 
         Covers current and future OpenAI reasoning series (o1, o3, o4, …)
-        as well as gpt-5.x models.
+        as well as gpt-5.x models. This is deliberately narrower than
+        `is_reasoning_model`: the aggressive 4x/32768-floor token-budget
+        heuristic in `chat_completion` is tuned around how these models
+        specifically spend a *combined* hidden-reasoning + visible-output
+        budget. Claude's extended thinking is a separate, litellm-sized
+        budget on top of a normal `max_tokens` cap, so it must not take
+        this branch — see `is_reasoning_model` and `chat_completion` below.
         """
         model = model or ""
         return bool(
             re.match(r'^o\d', model, re.IGNORECASE)
             or 'gpt-5' in model.lower()
         )
+
+    @staticmethod
+    def is_anthropic_model(model: str) -> bool:
+        """Detect Claude models, routed through litellm instead of the OpenAI SDK."""
+        model = (model or "").lower()
+        return model.startswith("claude") or model.startswith("anthropic/")
+
+    @staticmethod
+    def is_reasoning_model(model: str) -> bool:
+        """True for any model that takes `reasoning_effort` instead of a plain
+        `temperature` — OpenAI's o-series/gpt-5.x models, and Claude models
+        (litellm maps `reasoning_effort` onto Claude's own extended-thinking
+        controls)."""
+        return LLMClient.is_openai_reasoning_model(model) or LLMClient.is_anthropic_model(model)
 
     def chat_completion(
         self,
@@ -290,12 +365,14 @@ class LLMClient:
             temperature: Sampling temperature (ignored for reasoning models).
             max_tokens: Maximum tokens to generate.
             response_format: e.g. {"type": "json_object"} for JSON mode.
-            **kwargs: Additional OpenAI parameters (e.g. reasoning_effort).
+            **kwargs: Additional parameters (e.g. reasoning_effort), passed
+                to the OpenAI SDK or litellm depending on `self.model`.
 
         Returns:
             The OpenAI ChatCompletion response object.
         """
         is_reasoning = self.is_reasoning_model(self.model)
+        is_openai_reasoning = self.is_openai_reasoning_model(self.model)
 
         params: Dict[str, Any] = {
             "model": self.model,
@@ -310,11 +387,15 @@ class LLMClient:
             params["reasoning_effort"] = kwargs.pop('reasoning_effort')
 
         # ── Token budget strategy ──
-        # Reasoning models need generous headroom for internal reasoning; give
-        # them 4× the requested budget (min 32768) so they don't truncate, while
-        # still capping runaway generations. Non-reasoning models honour the
-        # caller's max_tokens directly.
-        if is_reasoning:
+        # OpenAI reasoning models need generous headroom for internal
+        # reasoning; give them 4× the requested budget (min 32768) so they
+        # don't truncate, while still capping runaway generations. Claude
+        # models (is_reasoning but not is_openai_reasoning) size their
+        # thinking budget separately via litellm's reasoning_effort
+        # translation, so they take the plain max_tokens branch below like
+        # any non-reasoning model. Non-reasoning models honour the caller's
+        # max_tokens directly.
+        if is_openai_reasoning:
             completion_budget = max(max_tokens * 4, 32768) if max_tokens else 32768
             # A bounded, compact extraction run can opt out of the historical
             # 32k minimum. The default remains unchanged for existing callers.
@@ -410,13 +491,20 @@ class LLMClient:
                 getattr(usage, 'prompt_tokens_details', None),
                 'cached_tokens', 0,
             ) or 0
+            if not cached:
+                # litellm does not (yet) normalize Anthropic's own
+                # cache_read_input_tokens into the OpenAI-shaped
+                # prompt_tokens_details.cached_tokens field -- see this
+                # module's docstring. Read the Anthropic-native field
+                # directly so cache-hit tracking still works for Claude.
+                cached = getattr(usage, 'cache_read_input_tokens', 0) or 0
             if cached:
                 print(
                     f"  💾 Prompt cache hit: {cached} tokens cached "
                     f"(of {usage.prompt_tokens} prompt tokens)",
                     file=sys.stderr, flush=True,
                 )
-            cost = _estimate_cost(self.model, usage.prompt_tokens, usage.completion_tokens)
+            cost = self._estimate_response_cost(response, usage)
             cost_entry = {
                 "model": self.model,
                 "prompt_tokens": usage.prompt_tokens,
@@ -429,6 +517,25 @@ class LLMClient:
             print(f"[LLM_COST]{json.dumps(cost_entry)}", flush=True)
 
         return response
+
+    def _estimate_response_cost(self, response: Any, usage: Any) -> float:
+        """Best-effort USD cost for one response.
+
+        OpenAI models use this module's hand-maintained `_PRICING_PER_1M`
+        table (unchanged behavior). Anthropic models use litellm's own
+        maintained cost table (`litellm.completion_cost`), which already
+        knows current Claude pricing -- covers the model without hand-adding
+        entries here, and stays current with litellm upgrades. Falls back to
+        0.0 (never raises) if litellm's calculator doesn't recognize the
+        model or the response shape, matching `_estimate_cost`'s contract.
+        """
+        if self.is_anthropic_model(self.model):
+            try:
+                import litellm
+                return float(litellm.completion_cost(completion_response=response))
+            except Exception:
+                return 0.0
+        return _estimate_cost(self.model, usage.prompt_tokens, usage.completion_tokens)
 
     @staticmethod
     def _classify_backpressure_error(error: BaseException) -> tuple[bool, bool]:
@@ -480,7 +587,9 @@ def create_llm_client(
     max_retries: int = None,
     concurrency: int = None,
 ) -> LLMClient:
-    """Factory for an OpenAI-backed LLMClient."""
+    """Factory for an LLMClient. `model` picks the transport: an OpenAI model
+    name uses the OpenAI SDK; a Claude model name (`claude-...`) is routed
+    through litellm -- see LLMClient.is_anthropic_model."""
     return LLMClient(
         api_key=api_key,
         model=model,

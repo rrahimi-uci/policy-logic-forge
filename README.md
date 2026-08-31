@@ -86,6 +86,17 @@ own `domain-prompts/<domain>/` pack), and `mortgage` (uses the shared
 `prompts/` fallback). `--dir` accepts either an absolute path or a name under
 `compliance-files/`.
 
+**Model provider**: OpenAI by default. Pass `--provider anthropic` (or set
+`KG_PROVIDER=anthropic`) to run against Claude models instead — every agent
+subprocess picks it up automatically. Requires `ANTHROPIC_API_KEY` (see
+`.env.example`) and the `anthropic.models.*` block in `config.json` (see
+`config.example.json`; defaults to `claude-opus-5`). Anthropic calls are
+routed through [litellm](https://docs.litellm.ai/); OpenAI calls are
+unaffected — they still use the OpenAI SDK directly, exactly as before. See
+`utils/llm_client.py`'s module docstring for exactly what does and doesn't
+translate across providers (`reasoning_effort`, token budgets, cost/cache
+tracking).
+
 The default runtime profile is tuned for high-throughput execution: 80
 scheduling workers, 32 in-flight API requests (the shared adaptive limiter
 starts at 16 and ramps to 32), and 32 document workers. Stage pools can queue

@@ -11,7 +11,20 @@
       "timeout": 300
     }
   },
+  "anthropic": {
+    "api_key": "${ANTHROPIC_API_KEY}",
+    "models": {
+      "reasoning": "claude-opus-5",
+      "reasoning_effort": "high",
+      "optimizer": "claude-opus-5"
+    },
+    "rate_limiting": {
+      "max_retries": 1,
+      "timeout": 300
+    }
+  },
   "llm": {
+    "provider": "openai",
     "default_temperature": 0.7,
     "default_max_tokens": 8192,
     "default_model": "gpt-5.6-luna"

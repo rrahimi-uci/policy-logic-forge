@@ -28,6 +28,7 @@ if _root_env_path.exists():
     load_dotenv(dotenv_path=_root_env_path)
 
 REASONING_EFFORTS = frozenset({"none", "low", "medium", "high", "xhigh", "max"})
+MODEL_PROVIDERS = frozenset({"openai", "anthropic"})
 
 
 class Config:
@@ -52,7 +53,8 @@ class Config:
 
         Args:
             config_path: Path to config.json file. Defaults to config.json in project root.
-            provider: Explicitly set provider ('openai'). If None, auto-detects.
+            provider: Explicitly set provider ('openai' or 'anthropic'). If None,
+                reads KG_PROVIDER and then llm.provider.
             source_file_name: Name of the source file being processed (without extension).
                             When set, outputs are organized by this name.
             batch_name: Name of the batch/subdirectory being processed.
@@ -165,9 +167,30 @@ class Config:
             )
         return api_key
 
+    def get_anthropic_api_key(self) -> str:
+        """Get the Anthropic API key from config or environment."""
+        api_key = self.get('anthropic.api_key', '') or os.getenv('ANTHROPIC_API_KEY', '')
+        if not api_key:
+            raise ValueError(
+                "Anthropic API key not found. Set ANTHROPIC_API_KEY environment variable "
+                "or update config.json"
+            )
+        return api_key
+
+    def get_api_key(self) -> str:
+        """Return the credential for the selected model provider."""
+        if self.get_model_provider() == 'anthropic':
+            return self.get_anthropic_api_key()
+        return self.get_openai_api_key()
+
     def get_reasoning_model(self) -> str:
         """Get the configured reasoning model name."""
-        return self.get('openai.models.reasoning', 'gpt-5.6-luna')
+        override = os.getenv('KG_MODEL')
+        if override:
+            return override
+        provider = self.get_model_provider()
+        default = 'claude-opus-5' if provider == 'anthropic' else 'gpt-5.6-luna'
+        return self.get(f'{provider}.models.reasoning', default)
 
     def get_reasoning_effort(self) -> str:
         """Get reasoning effort level (none, low, medium, high, xhigh, max).
@@ -177,7 +200,10 @@ class Config:
         """
         effort = os.getenv(
             'KG_REASONING_EFFORT',
-            self.get('openai.models.reasoning_effort', 'high'),
+            self.get(
+                f'{self.get_model_provider()}.models.reasoning_effort',
+                self.get('openai.models.reasoning_effort', 'high'),
+            ),
         )
         if effort not in REASONING_EFFORTS:
             allowed = ", ".join(sorted(REASONING_EFFORTS))
@@ -185,8 +211,16 @@ class Config:
         return effort
 
     def get_model_provider(self) -> str:
-        """Return the model provider. This build is OpenAI-only."""
-        return 'openai'
+        """Return and validate the selected model provider."""
+        provider = (
+            self._provider
+            or os.getenv('KG_PROVIDER')
+            or self.get('llm.provider', 'openai')
+        ).strip().lower()
+        if provider not in MODEL_PROVIDERS:
+            allowed = ", ".join(sorted(MODEL_PROVIDERS))
+            raise ValueError(f"Unsupported model provider {provider!r}; expected one of: {allowed}")
+        return provider
 
     def get_pipeline_base_path(self) -> Path:
         """Get base path for pipeline outputs based on batch/source file name.
@@ -217,7 +251,11 @@ class Config:
 
     def get_optimizer_model(self) -> str:
         """Get optimizer model name (used for prompt-optimization meta-agent calls)."""
-        return self.get('openai.models.optimizer', 'gpt-5.6-luna')
+        override = os.getenv('KG_OPTIMIZER_MODEL') or os.getenv('KG_MODEL')
+        if override:
+            return override
+        provider = self.get_model_provider()
+        return self.get(f'{provider}.models.optimizer', self.get_reasoning_model())
 
     def get_source_dir(self) -> Path:
         """Get source directory path."""
@@ -298,17 +336,19 @@ class Config:
 
     def get_max_retries(self) -> int:
         """Get maximum number of API retries, with a run-time override."""
-        env_val = os.getenv('KG_OPENAI_MAX_RETRIES')
+        env_val = os.getenv('KG_LLM_MAX_RETRIES') or os.getenv('KG_OPENAI_MAX_RETRIES')
         if env_val:
             return int(env_val)
-        return self.get('openai.rate_limiting.max_retries', 3)
+        provider = self.get_model_provider()
+        return self.get(f'{provider}.rate_limiting.max_retries', 3)
 
     def get_timeout(self) -> int:
         """Get API timeout in seconds, with a run-time override."""
-        env_val = os.getenv('KG_OPENAI_TIMEOUT')
+        env_val = os.getenv('KG_LLM_TIMEOUT') or os.getenv('KG_OPENAI_TIMEOUT')
         if env_val:
             return int(env_val)
-        return self.get('openai.rate_limiting.timeout', 300)
+        provider = self.get_model_provider()
+        return self.get(f'{provider}.rate_limiting.timeout', 300)
 
     # -- LLM defaults --
 
@@ -319,7 +359,7 @@ class Config:
         return self.get('llm.default_max_tokens', 8192)
 
     def get_default_model(self) -> str:
-        return self.get('llm.default_model', 'gpt-5.6-luna')
+        return os.getenv('KG_MODEL') or self.get_reasoning_model()
 
     # -- Domain --
 
@@ -458,7 +498,7 @@ class Config:
     # -- Optimizer (agent_06) --
 
     def get_optimizer_model_name(self) -> str:
-        return self.get('optimizer.model', 'gpt-5.6-luna')
+        return self.get_optimizer_model()
 
     def get_optimizer_dedup_temperature(self) -> float:
         return self.get('optimizer.dedup_temperature', 0.2)
@@ -561,5 +601,11 @@ def reload_config(config_path: Optional[str] = None, source_file_name: Optional[
     Config._source_file_name = None
     Config._batch_name = None
     Config._domain = None
-    _config = Config(config_path, source_file_name=source_file_name, batch_name=batch_name, domain=domain)
+    _config = Config(
+        config_path,
+        provider=current_provider,
+        source_file_name=source_file_name,
+        batch_name=batch_name,
+        domain=domain,
+    )
     return _config

@@ -1833,7 +1833,7 @@ def main():
     config = get_config()
     
     # Configuration from config file
-    OPENAI_API_KEY = config.get_openai_api_key()
+    OPENAI_API_KEY = config.get_api_key()
     REASONING_EFFORT = config.get_reasoning_effort()
     REASONING_MODEL = config.get_reasoning_model()
     OPTIMIZER_MODEL = config.get_optimizer_model()
