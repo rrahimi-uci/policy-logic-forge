@@ -319,13 +319,24 @@ class LLMClient:
             # A bounded, compact extraction run can opt out of the historical
             # 32k minimum. The default remains unchanged for existing callers.
             cap = os.getenv("KG_REASONING_MAX_COMPLETION_TOKENS")
+            cap_override = kwargs.pop("reasoning_completion_cap_override", None)
             if cap:
                 completion_budget = min(completion_budget, int(cap))
+            if cap_override is not None:
+                # Recovery callers may deliberately raise the normal pipeline
+                # ceiling for a bounded retry after finish_reason=length. This
+                # is an explicit per-call cap, not permission for ordinary
+                # requests to bypass the configured global ceiling.
+                completion_budget = min(
+                    max(max_tokens * 4, 32768) if max_tokens else 32768,
+                    max(1, int(cap_override)),
+                )
             params["max_completion_tokens"] = completion_budget
             kwargs.pop('max_completion_tokens', None)
             kwargs.pop('max_tokens', None)
         elif max_tokens:
             params["max_tokens"] = max_tokens
+            kwargs.pop("reasoning_completion_cap_override", None)
 
         if response_format:
             params["response_format"] = response_format
