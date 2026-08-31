@@ -85,6 +85,16 @@ def test_agent_12_generates_self_contained_report_with_traceability(tmp_path: Pa
     assert "Quality holds outside the human queue (0)" in report
     assert "Explicit human judgment required" in report
     assert "data-tab=\"models\"" in report
+    assert report.count("Open highlighted XML") == 3
+    assert report.count('class="xml-viewer"') == 3
+    assert report.count('class="xml-line"') >= 3
+    assert 'class="xml-tag"' in report
+    assert 'class="xml-attr"' in report
+    assert 'class="xml-value"' in report
+    assert "0001" in report
+    assert "compliance_decisions.dmn" in report
+    assert "compliance_workflows.bpmn" in report
+    assert "compliance_reviews.cmmn" in report
     assert "report-data" in report
     assert 'href="#source-' in report
     assert "no external assets" in report.lower()
