@@ -333,20 +333,29 @@ class LLMClient:
         params.update(kwargs)
 
         lease = None
-        request_started = time.monotonic()
+        request_started = None
         try:
             with self._request_gate:
                 if self._adaptive_limiter is not None:
-                    lease = self._adaptive_limiter.acquire(
-                        timeout=self.timeout * (self.max_retries + 1) + self.watchdog_margin
-                    )
+                    # Queue admission is not an API request and must not inherit
+                    # the provider watchdog. When adaptive concurrency falls
+                    # sharply (for example 32 -> 1 after a transport incident),
+                    # healthy queued workers can legitimately wait longer than
+                    # one request's retry window. Expired and dead-owner leases
+                    # are reaped by AdaptiveRequestLimiter, so waiting here is
+                    # bounded by actual capacity recovery rather than falsely
+                    # failing an unissued request.
+                    lease = self._adaptive_limiter.acquire(timeout=None)
+                request_started = time.monotonic()
                 response = self._create_with_watchdog(params)
         except Exception as e:
             if lease is not None and self._adaptive_limiter is not None:
                 throttled, penalize = self._classify_backpressure_error(e)
                 snapshot = self._adaptive_limiter.release(
                     lease, success=False, penalize=penalize, throttled=throttled,
-                    request_seconds=time.monotonic() - request_started,
+                    request_seconds=(
+                        time.monotonic() - request_started if request_started is not None else 0
+                    ),
                 )
                 self._emit_request_metric(lease, snapshot, False, e)
             # A connection error can leave the keep-alive pool unusable. Reset
@@ -360,7 +369,11 @@ class LLMClient:
 
         if lease is not None and self._adaptive_limiter is not None:
             snapshot = self._adaptive_limiter.release(
-                lease, success=True, request_seconds=time.monotonic() - request_started
+                lease,
+                success=True,
+                request_seconds=(
+                    time.monotonic() - request_started if request_started is not None else 0
+                ),
             )
             self._emit_request_metric(lease, snapshot, True, None)
 

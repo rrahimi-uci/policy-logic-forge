@@ -155,3 +155,22 @@ class TestChatCompletionParams:
         assert caught.value.status_code == 503
         assert caught.value.error_type == "RuntimeError"
         assert caught.value.__cause__ is provider_error
+
+    @allure.title("Adaptive queue admission does not inherit the API watchdog")
+    def test_adaptive_queue_wait_has_no_request_timeout(self):
+        client, _ = self._client_with_mock("gpt-4o-mini")
+        limiter = MagicMock()
+        limiter.acquire.return_value = MagicMock(wait_seconds=123.0)
+        limiter.release.return_value = {
+            "current_limit": 1,
+            "active_leases": 0,
+            "total_success": 1,
+            "total_failure": 0,
+            "total_throttled": 0,
+        }
+        client._adaptive_limiter = limiter
+
+        client.chat_completion([{"role": "user", "content": "hi"}], max_tokens=8)
+
+        limiter.acquire.assert_called_once_with(timeout=None)
+        assert limiter.release.call_args.kwargs["request_seconds"] < 5
