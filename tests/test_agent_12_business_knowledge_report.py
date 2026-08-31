@@ -2,7 +2,17 @@ import json
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-from agents.agent_12_business_knowledge_report import _dependency_graph_layout, _dependency_graph_svg, generate, main
+from agents.agent_12_business_knowledge_report import (
+    _dependency_graph_layout,
+    _dependency_graph_svg,
+    _formal_logic_html,
+    _outcome_badge_html,
+    _outcome_cards_html,
+    _outcome_chip_html,
+    _outcome_kind,
+    generate,
+    main,
+)
 
 
 def _graph():
@@ -179,6 +189,80 @@ def test_agent_12_separates_human_queue_from_nonhuman_quality_holds(tmp_path: Pa
     assert "case management" in report
     assert 'id="rule-route"' in report
     assert 'data-route="case_management"' in report
+
+
+def test_outcome_kind_classifies_booleans_numbers_lists_and_text():
+    assert _outcome_kind(True, "boolean") == "true"
+    assert _outcome_kind(False, "boolean") == "false"
+    assert _outcome_kind("true", "boolean") == "true"  # value_type-declared boolean stored as a string
+    assert _outcome_kind(42, None) == "number"
+    assert _outcome_kind(3.5, "number") == "number"
+    assert _outcome_kind(["a", "b"], None) == "list"
+    assert _outcome_kind("manual_underwriting", "enum") == "text"
+
+
+def test_outcome_badge_renders_true_false_as_pills_not_raw_python_bool():
+    assert '<span class="outcome-badge type-true">TRUE</span>' == _outcome_badge_html(True, "boolean")
+    assert '<span class="outcome-badge type-false">FALSE</span>' == _outcome_badge_html(False, "boolean")
+
+
+def test_outcome_badge_explodes_a_list_into_individual_chips():
+    html = _outcome_badge_html(["financial condition", "staffing"], "list")
+    assert html.count("outcome-value-item") == 2
+    assert "financial condition" in html and "staffing" in html
+
+
+def test_outcome_cards_render_one_card_per_outcome_with_readable_and_raw_name():
+    outcomes = [
+        {"variable": "loan_eligible_for_sale", "value": True, "value_type": "boolean"},
+        {"variable": "minimum_down_payment_percentage", "value": 3, "value_type": "number"},
+    ]
+    html = _outcome_cards_html(outcomes)
+    assert html.count("outcome-card") == 2
+    assert "Loan eligible for sale" in html  # humanized label
+    assert "loan_eligible_for_sale" in html  # raw variable name retained
+    assert '<span class="outcome-badge type-true">TRUE</span>' in html
+    assert '<span class="outcome-badge type-number"' in html and ">3<" in html
+
+
+def test_outcome_cards_report_none_declared_for_empty_outcomes():
+    assert "None declared" in _outcome_cards_html([])
+
+
+def test_outcome_chip_marks_boolean_outcomes_for_banner_styling():
+    true_chip = _outcome_chip_html({"variable": "eligible", "value": True})
+    false_chip = _outcome_chip_html({"variable": "eligible", "value": False})
+    assert 'outcome-chip ov-true' in true_chip
+    assert 'outcome-chip ov-false' in false_chip
+    assert "eligible" in true_chip and "true" in true_chip
+
+
+def test_formal_logic_html_wraps_multiple_outcomes_as_separate_chips_and_cards():
+    """A rule with several outcomes must not collapse into one AND-joined
+    sentence -- each outcome gets its own banner chip and its own card in
+    the Outcomes panel."""
+
+    rule = {
+        "condition_predicates": [{"variable": "loan_secured_by_manufactured_home", "operator": "==", "value": True}],
+        "outcomes": [
+            {"variable": "underwriting_system", "value": "DU", "value_type": "enum"},
+            {"variable": "property_type_identification_required", "value": True, "value_type": "boolean"},
+            {"variable": "project_type_identification_required", "value": True, "value_type": "boolean"},
+        ],
+        "exceptions": [], "variables": [],
+    }
+    html = _formal_logic_html(rule)
+    assert html.count('class="outcome-chip') == 3  # one banner chip per outcome
+    assert html.count('class="outcome-card"') == 3  # one card per outcome
+    assert '<div class="logic-if">' in html and '<div class="logic-then-row">' in html
+    # No stray "?" placeholder where an outcome lacks an explicit operator.
+    assert " ? " not in html
+
+
+def test_formal_logic_html_falls_back_when_no_outcomes_declared():
+    html = _formal_logic_html({"condition_predicates": [], "outcomes": [], "exceptions": [], "variables": []})
+    assert "evaluate outcome" in html
+    assert "None declared" in html  # empty Outcomes panel
 
 
 def test_agent_12_handles_missing_optional_upstream_models(tmp_path: Path):
