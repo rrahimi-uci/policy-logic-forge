@@ -21,7 +21,17 @@ def _graph():
                 "outcomes": [{"variable": "processing_allowed", "operator": "=", "value": False}],
                 "variables": [{"name": "consent", "type": "boolean", "role": "input"}, {"name": "processing_allowed", "type": "boolean", "role": "output"}],
                 "related_entities": ["CUSTOMER"], "source_reference": {"chunk_path": "policy/001.txt", "section_id": "s1", "source_text": "Customer consent is required before processing."},
-                "grounding": {"status": "failed", "counts": {"supported": 4, "contradicted": 1, "insufficient_evidence": 2}, "invalid_evidence_records": 0},
+                "grounding": {
+                    "status": "failed",
+                    "counts": {"supported": 4, "contradicted": 1, "insufficient_evidence": 2},
+                    "invalid_evidence_records": 0,
+                    "relationship_status": "failed",
+                    "dimensions": {
+                        "core_rule": {"status": "failed"},
+                        "enrichment": {"status": "certified"},
+                        "contract": {"status": "certified"},
+                    },
+                },
                 "readiness": {"failed_sections": [7]}, "review_route": {"route": "human_review", "human_review_required": True, "reasons": ["Evidence needs confirmation"]},
             },
         ],
@@ -85,6 +95,10 @@ def test_agent_12_generates_self_contained_report_with_traceability(tmp_path: Pa
     assert manifest["confidence_source_counts"] == {"unattributed_score": 1}
     assert manifest["grounding_claim_counts"] == {"contradicted": 1, "insufficient_evidence": 2, "supported": 4}
     assert manifest["grounding_claim_support_rate"] == 57.1
+    assert manifest["grounding_dimensions"]["core_rule"]["failed_count"] == 1
+    assert manifest["grounding_dimensions"]["enrichment"]["certified_count"] == 1
+    assert manifest["grounding_dimensions"]["contract"]["certified_count"] == 1
+    assert manifest["grounding_dimensions"]["relationship"]["failed_count"] == 1
     assert manifest["grounded_rule_count"] == 0
     assert manifest["grounding_coverage_rate"] == 0.0
     assert manifest["source_pointer_count"] == 1
@@ -93,6 +107,8 @@ def test_agent_12_generates_self_contained_report_with_traceability(tmp_path: Pa
     assert "Vocabulary workbench" in report
     assert "Decision variables are not SBVR concepts" in report
     assert "Executable symbol registry" in report
+    assert "Core-rule holds" in report
+    assert "Enrichment holds" in report
     assert "Concept type mix" in report
     assert "Most connected concepts" in report
     assert 'id="concept-search"' in report

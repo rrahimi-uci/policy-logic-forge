@@ -41,6 +41,9 @@ VERDICTS = {"supported", "contradicted", "insufficient_evidence"}
 MODEL_CLAIM_TYPES = {
     "description", "condition", "outcome", "party", "scope", "exception",
 }
+CORE_CLAIM_TYPES = {"description", "condition", "outcome"}
+ENRICHMENT_CLAIM_TYPES = {"party", "scope", "exception"}
+GROUNDING_DIMENSIONS = ("core_rule", "enrichment", "contract")
 # condition_logic and test_vector are excluded on purpose: both are values the
 # pipeline DERIVES from a rule's own condition_predicates/outcomes rather than
 # facts a policy sentence ever states in those terms. Asking the grounding
@@ -612,16 +615,61 @@ class GroundingVerifier:
         return batches
 
     @staticmethod
-    def _quote_is_authentic(result: Mapping[str, Any], packet: Mapping[str, Any]) -> bool:
+    def _canonical_evidence(
+        result: Mapping[str, Any], packet: Mapping[str, Any]
+    ) -> Mapping[str, Any] | None:
+        """Resolve a verifier-selected immutable evidence record."""
         evidence_id = str(result.get("evidence_id") or "")
-        quote = str(result.get("supporting_quote") or "")
-        if not evidence_id or not quote:
-            return False
+        if not evidence_id:
+            return None
         evidence = next((item for item in packet.get("evidence", []) if item.get("evidence_id") == evidence_id), None)
         if not evidence or evidence.get("source_text_found_in_chunk") is not True:
-            return False
-        haystack = f"{evidence.get('source_text', '')}\n{evidence.get('context', '')}"
-        return _normalise_text(quote) in _normalise_text(haystack)
+            return None
+        return evidence
+
+    @classmethod
+    def _quote_is_authentic(cls, result: Mapping[str, Any], packet: Mapping[str, Any]) -> bool:
+        """Compatibility predicate: authenticity comes from the evidence ID.
+
+        The model selects an evidence record and judges entailment; deterministic
+        code owns the quotation.  Requiring the model to retranscribe an already
+        immutable source span created false failures when punctuation or spacing
+        drifted even though the selected evidence record was authentic.
+        """
+        return cls._canonical_evidence(result, packet) is not None
+
+    @staticmethod
+    def _claim_dimension(claim: Mapping[str, Any]) -> str:
+        claim_type = str(claim.get("claim_type") or "")
+        if claim_type in CORE_CLAIM_TYPES:
+            return "core_rule"
+        if claim_type in ENRICHMENT_CLAIM_TYPES:
+            return "enrichment"
+        return "contract"
+
+    @classmethod
+    def _dimension_summary(
+        cls, results: Iterable[Mapping[str, Any]], dimension: str
+    ) -> dict[str, Any]:
+        selected = [item for item in results if cls._claim_dimension(item) == dimension]
+        counts = {
+            verdict: sum(item.get("verdict") == verdict for item in selected)
+            for verdict in VERDICTS
+        }
+        status = (
+            "not_applicable" if not selected else
+            "certified" if counts["contradicted"] == 0 and counts["insufficient_evidence"] == 0 else
+            "failed"
+        )
+        return {
+            "status": status,
+            "claim_count": len(selected),
+            "counts": counts,
+            "failed_claim_ids": [
+                str(item.get("claim_id")) for item in selected
+                if item.get("verdict") != "supported"
+            ],
+        }
 
     @classmethod
     def _verdict_has_valid_evidence(
@@ -761,9 +809,13 @@ class GroundingVerifier:
             reason = str(item.get("reasoning", "")).strip()
             if verdict not in VERDICTS:
                 verdict, reason = "insufficient_evidence", "Verifier omitted this claim or returned an invalid verdict."
-            if verdict in {"supported", "contradicted"} and not cls._verdict_has_valid_evidence(item, claim, packet):
-                verdict = "insufficient_evidence"
-                reason = "Verifier did not provide an authentic quote from a source record present in the corpus."
+            canonical_evidence = None
+            if verdict in {"supported", "contradicted"}:
+                if not cls._verdict_has_valid_evidence(item, claim, packet):
+                    verdict = "insufficient_evidence"
+                    reason = "Verifier did not select an authentic evidence record present in the corpus."
+                else:
+                    canonical_evidence = cls._canonical_evidence(item, packet)
             finalized.append({
                 "claim_id": claim_id,
                 "field_path": claim.get("field_path"),
@@ -772,7 +824,13 @@ class GroundingVerifier:
                 "structured": deepcopy(claim.get("structured")),
                 "verdict": verdict,
                 "evidence_id": item.get("evidence_id"),
-                "supporting_quote": item.get("supporting_quote"),
+                "supporting_quote": (
+                    canonical_evidence.get("source_text")
+                    if canonical_evidence is not None else item.get("supporting_quote")
+                ),
+                "supporting_quote_source": (
+                    "canonical_evidence_record" if canonical_evidence is not None else "verifier_response"
+                ),
                 "reasoning": reason or "No verifier reasoning supplied.",
             })
         return finalized
@@ -926,6 +984,10 @@ class GroundingVerifier:
             invalid_records = len(packet["evidence"]) - authentic_records
             repaired_records = sum(item.get("source_text_repaired") is True for item in packet["evidence"])
             failed_relationship_ids = relationship_failures_by_rule.get(rule_id, [])
+            dimensions = {
+                dimension: self._dimension_summary(combined_results, dimension)
+                for dimension in GROUNDING_DIMENSIONS
+            }
             certified = (
                 bool(combined_results)
                 and counts["contradicted"] == 0
@@ -949,6 +1011,7 @@ class GroundingVerifier:
                 "duplicate_claim_responses": protocol["duplicates"],
                 "failed_relationship_ids": failed_relationship_ids,
                 "relationship_status": "failed" if failed_relationship_ids else "supported",
+                "dimensions": dimensions,
                 "claims": results,
                 "deterministic_claims": deterministic_results,
             }
@@ -988,6 +1051,41 @@ class GroundingVerifier:
         insufficient = sum(item["verdict"] == "insufficient_evidence" for item in model_results + deterministic_results)
         invalid_evidence = sum((rule.get("grounding") or {}).get("invalid_evidence_records", 0) for rule in rules)
         repaired_evidence = sum((rule.get("grounding") or {}).get("repaired_evidence_records", 0) for rule in rules)
+        dimension_report = {}
+        for dimension in GROUNDING_DIMENSIONS:
+            statuses = Counter(
+                (((rule.get("grounding") or {}).get("dimensions") or {}).get(dimension) or {}).get(
+                    "status", "not_reported"
+                )
+                for rule in rules
+            )
+            dimension_claims = Counter()
+            for rule in rules:
+                summary = (((rule.get("grounding") or {}).get("dimensions") or {}).get(dimension) or {})
+                dimension_claims.update({
+                    key: int(value) for key, value in (summary.get("counts") or {}).items()
+                })
+            dimension_report[dimension] = {
+                "rule_status_counts": dict(statuses),
+                "certified_rules": statuses.get("certified", 0),
+                "failed_rules": statuses.get("failed", 0),
+                "not_applicable_rules": statuses.get("not_applicable", 0),
+                "hold_rate": round(statuses.get("failed", 0) / max(1, len(rules)) * 100, 2),
+                "claim_counts": dict(dimension_claims),
+            }
+        relationship_dimension = {
+            "supported_rules": sum(
+                (rule.get("grounding") or {}).get("relationship_status") == "supported"
+                for rule in rules
+            ),
+            "failed_rules": sum(
+                (rule.get("grounding") or {}).get("relationship_status") == "failed"
+                for rule in rules
+            ),
+        }
+        relationship_dimension["hold_rate"] = round(
+            relationship_dimension["failed_rules"] / max(1, len(rules)) * 100, 2
+        )
         passed = (
             not failures
             and not relationship_failures
@@ -1035,6 +1133,10 @@ class GroundingVerifier:
             )),
             "rule_grounding_pass": not failures,
             "relationship_grounding_pass": not relationship_failures,
+            "grounding_dimensions": {
+                **dimension_report,
+                "relationship": relationship_dimension,
+            },
             "total_claims": total_claims,
             "model_claims": len(model_results),
             "deterministic_claims": len(deterministic_results),
@@ -1078,6 +1180,7 @@ class GroundingVerifier:
             f"- Human-review queue: {report.get('human_review_required_rules')} / {report.get('total_rules')} "
             f"({report.get('human_review_rate')}%)",
             f"- Review routes: {report.get('review_route_counts')}",
+            f"- Dimensional grounding: {report.get('grounding_dimensions')}",
             f"- Relationship grounding: {'PASS' if report.get('relationship_grounding_pass') else 'FAIL'}",
             f"- Claims supported: {report.get('supported_claims')} / {report.get('total_claims')}",
             f"- Contradicted claims: {report.get('contradicted_claims')}",

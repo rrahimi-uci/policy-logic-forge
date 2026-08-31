@@ -194,6 +194,83 @@ def test_supported_graph_is_certified_without_rewriting_rule_claims(tmp_path, mo
     assert certification_issues(final_graph, report, report["corpus_sha256"]) == []
 
 
+def test_verifier_selected_evidence_id_uses_canonical_quote_not_model_transcription():
+    packet = {
+        "rule_id": "R1",
+        "claims": [{
+            "claim_id": "description",
+            "claim_type": "description",
+            "field_path": "description",
+            "statement": "A lender retains records.",
+            "structured": "A lender retains records.",
+        }],
+        "evidence": [{
+            "evidence_id": "EV-1",
+            "source_text": "The lender must retain source records.",
+            "source_text_found_in_chunk": True,
+        }],
+    }
+    results = GroundingVerifier._finalize_rule_results(packet, [{
+        "rule_id": "R1",
+        "claim_id": "description",
+        "verdict": "supported",
+        "evidence_id": "EV-1",
+        "supporting_quote": "lender retain records",
+        "reasoning": "The selected evidence entails the description.",
+    }])
+
+    assert results[0]["verdict"] == "supported"
+    assert results[0]["supporting_quote"] == "The lender must retain source records."
+    assert results[0]["supporting_quote_source"] == "canonical_evidence_record"
+
+
+def test_unknown_evidence_id_remains_fail_closed():
+    packet = {
+        "rule_id": "R1",
+        "claims": [{"claim_id": "description", "claim_type": "description"}],
+        "evidence": [{
+            "evidence_id": "EV-real",
+            "source_text": SOURCE_TEXT,
+            "source_text_found_in_chunk": True,
+        }],
+    }
+    results = GroundingVerifier._finalize_rule_results(packet, [{
+        "rule_id": "R1", "claim_id": "description", "verdict": "supported",
+        "evidence_id": "EV-invented", "supporting_quote": SOURCE_TEXT,
+    }])
+
+    assert results[0]["verdict"] == "insufficient_evidence"
+    assert "authentic evidence record" in results[0]["reasoning"]
+
+
+def test_grounding_reports_core_enrichment_and_contract_dimensions(tmp_path):
+    organized = _organized_corpus(tmp_path)
+    graph = graph_with_two_rules()
+
+    class PartyFailingResolver(SupportingResolver):
+        def verify(self, packets):
+            results = super().verify(packets)
+            for result in results:
+                if result["claim_id"] == "responsible_party":
+                    result["verdict"] = "insufficient_evidence"
+                    result["reasoning"] = "The source does not identify the responsible party."
+            return results
+
+    final_graph, report = GroundingVerifier(PartyFailingResolver()).verify_graph(
+        graph, organized, tmp_path / "output"
+    )
+
+    for rule in final_graph["business_rules"]:
+        dimensions = rule["grounding"]["dimensions"]
+        assert dimensions["core_rule"]["status"] == "certified"
+        assert dimensions["enrichment"]["status"] == "failed"
+        assert dimensions["contract"]["status"] == "certified"
+        assert rule["grounding"]["status"] == "failed"
+    assert report["grounding_dimensions"]["core_rule"]["certified_rules"] == 2
+    assert report["grounding_dimensions"]["enrichment"]["failed_rules"] == 2
+    assert report["grounding_dimensions"]["contract"]["certified_rules"] == 2
+
+
 def test_invalid_source_quote_cannot_be_certified(tmp_path):
     organized = _organized_corpus(tmp_path)
     graph = graph_with_two_rules()
