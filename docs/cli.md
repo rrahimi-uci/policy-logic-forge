@@ -353,6 +353,20 @@ directly; only Anthropic calls are routed through
 [litellm](https://docs.litellm.ai/). To pin one model regardless of
 provider defaults, set `KG_MODEL` (e.g. `KG_MODEL=claude-sonnet-5`).
 
+**Verified with a real `ANTHROPIC_API_KEY` against Anthropic's live
+API** — see [`docs/anthropic_smoke.md`](anthropic_smoke.md) for the full
+result. Stage 01 (Document Organizer) passed cleanly end to end. Stage 02
+(Entity Extractor) currently fails closed on this domain: its grounding
+validator requires `source_evidence` for every entity, and Claude
+consistently (reproduced across two independent runs, including a 4x
+retry budget) omits it specifically for the domain's five schema-level
+entity *categories* (`FIRST_PARTY`, `USER`, etc. — not document-specific
+named instances, which extracted correctly every time). This is a real,
+reproducible content-compliance gap on this one extraction step, not a
+defect in provider selection, the API client, or the CLI wiring — read
+the smoke doc before relying on `--provider anthropic` for a full run
+through Stage 02+.
+
 `--provider` is a per-invocation override, same precedence as `--stage`/
 `--agent`: `--provider` flag > `KG_PROVIDER` env var > `config.json`'s
 `llm.provider` > `openai`.
