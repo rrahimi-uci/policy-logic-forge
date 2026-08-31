@@ -189,7 +189,7 @@ class Config:
         if override:
             return override
         provider = self.get_model_provider()
-        default = 'claude-opus-5' if provider == 'anthropic' else 'gpt-5.6-luna'
+        default = 'claude-sonnet-5' if provider == 'anthropic' else 'gpt-5.6-luna'
         return self.get(f'{provider}.models.reasoning', default)
 
     def get_reasoning_effort(self) -> str:

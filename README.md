@@ -90,7 +90,7 @@ own `domain-prompts/<domain>/` pack), and `mortgage` (uses the shared
 `KG_PROVIDER=anthropic`) to run against Claude models instead — every agent
 subprocess picks it up automatically. Requires `ANTHROPIC_API_KEY` (see
 `.env.example`) and the `anthropic.models.*` block in `config.json` (see
-`config.example.json`; defaults to `claude-opus-5`). Anthropic calls are
+`config.example.json`; defaults to `claude-sonnet-5`). Anthropic calls are
 routed through [litellm](https://docs.litellm.ai/); OpenAI calls are
 unaffected — they still use the OpenAI SDK directly, exactly as before. See
 `utils/llm_client.py`'s module docstring for exactly what does and doesn't

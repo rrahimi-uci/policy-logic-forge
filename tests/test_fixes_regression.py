@@ -174,16 +174,18 @@ class TestProvider:
         config_path = tmp_path / "config.json"
         config_path.write_text(json.dumps({}))
         cfg = self._fresh(config_path, provider="anthropic")
-        assert cfg.get_reasoning_model() == "claude-opus-5"
+        assert cfg.get_reasoning_model() == "claude-sonnet-5"
         assert cfg.get_reasoning_effort() == "high"  # provider-neutral fallback still applies
 
     def test_kg_model_override_wins_over_provider_default(self, monkeypatch, tmp_path):
-        monkeypatch.setenv("KG_MODEL", "claude-sonnet-5")
+        # Deliberately a different model than the anthropic default (claude-sonnet-5)
+        # so this actually proves override precedence, not just a coincidental match.
+        monkeypatch.setenv("KG_MODEL", "claude-opus-5")
         config_path = tmp_path / "config.json"
         config_path.write_text(json.dumps({}))
         cfg = self._fresh(config_path, provider="anthropic")
-        assert cfg.get_reasoning_model() == "claude-sonnet-5"
-        assert cfg.get_default_model() == "claude-sonnet-5"
+        assert cfg.get_reasoning_model() == "claude-opus-5"
+        assert cfg.get_default_model() == "claude-opus-5"
 
 
 class TestRuleValidatorStructuredEnums:
