@@ -23,6 +23,8 @@ Rules:
 - Add the minimum typed input variables needed to express an explicit source
   exception. Enum variables require non-empty allowed_values. String variables
   require free_text=true. Never add a variable merely to remove review status.
+- Never use an existing or newly added output variable, the opposite of the
+  rule outcome, or an ordinary firing condition as an exception.
 - Every explicit exception/scope value requires a direct evidence pointer from
   the supplied packet. Do not cite unshown text.
 - Use explicitly_none_in_source or genuinely_unscoped only when the packet

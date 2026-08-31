@@ -13,6 +13,8 @@ by the single-rule readiness contract:
 - scope_derivation
 
 Use explicit_in_source only with structured predicates and direct evidence.
+Exception variables must be source-stated inputs; never encode a rule's own
+output or the opposite of its outcome as an exception.
 Use explicitly_none_in_source only after the recorded complete-corpus search.
 Use explicitly_universal_in_source only with universal source wording and
 genuinely_unscoped only when the reviewed material contains no scope signal.

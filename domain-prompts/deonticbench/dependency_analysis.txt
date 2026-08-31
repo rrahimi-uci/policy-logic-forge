@@ -1,32 +1,30 @@
 # Deontic Legal Reasoning domain — dependency_analysis.txt
 # Benchmark corpus: DeonticBench (6,232 whole cases + 251 independently verified hard cases across SARA, airline, housing, and USCIS-AAO configurations)
 
-You are a legal-rule analyst who extracts explicit obligations, permissions,
-prohibitions, exceptions, conditions, and executable outcomes from statutes
-and case facts mapping dependencies across {total_rules} rules in a
-Deontic Legal Reasoning knowledge graph.
+You are an independent business-rule data-flow analyst for a
+Deontic Legal Reasoning knowledge graph. Build only executable, directed dependencies provable
+from the structured rule contracts. Do not use domain knowledge, typical
+workflow order, thematic similarity, shared entities, or plausible business
+practice as evidence.
 
-Identify how rules relate. Use exactly these seven dependency_type values:
-- prerequisite  — the target must hold before the source can apply
-- sequential    — the rules apply in a defined order over time
-- conditional   — the source applies only when the target is triggered
-- complementary — the rules reinforce each other without ordering
-- contradictory — the rules would require incompatible behaviour
-- override      — the source displaces the target in its scope
-- validation    — the source checks or bounds the target
+A dependency is valid only when a source outcome variable exactly matches a
+target condition-predicate variable. The direction is source producer to target
+consumer. Shared inputs, categories, scopes, parties, or words do not establish
+direction. Contradictory relationships belong in conflict analysis, not the
+dependency DAG. Explicit ordered processes belong in source-grounded
+workflow_semantics and must not be inferred here.
 
-TYPICAL DEPENDENCIES IN THIS DOMAIN
-- A condition is a prerequisite for the deontic rule it activates.
-- A calculation depends on every source-stated input, threshold, and unit.
-- An exception overrides the general obligation, permission, or prohibition it
-  names.
-- A filing deadline is sequential with the event that starts the statutory
-  clock.
-- A jurisdiction scope is a validation gate: do not apply a state statute to
-  another state.
-- A requested outcome depends on applying the rule chain to the stated case
-  facts; an unstated fact creates an unresolved dependency rather than a
-  guessed label.
+Use these dependency_type values only for a proven producer-consumer link:
+- prerequisite
+- sequential
+- conditional
+- complementary
+- override
+- validation
+
+The word contradictory is documented here only to make the boundary explicit:
+never return it as a dependency_type. Precision is more important than graph
+density; return zero dependencies when the contracts prove none.
 
 Return ONLY valid JSON, no Markdown:
 {{
@@ -35,9 +33,12 @@ Return ONLY valid JSON, no Markdown:
       "source_rule_id": "BR_SOURCE_001",
       "target_rule_id": "BR_TARGET_002",
       "dependency_type": "prerequisite",
-      "rationale": "why this dependency exists, citing both rules",
-      "impact": "what breaks if the dependency is ignored",
-      "strength": 4
+      "produced_variable": "exact source outcome variable",
+      "consumed_variable": "exact target predicate variable",
+      "rationale": "source produces X and target consumes X",
+      "impact": "target cannot evaluate this predicate until X is available",
+      "strength": 4,
+      "confidence": 95
     }}
   ],
   "dependency_chains": [
@@ -62,8 +63,8 @@ Return ONLY valid JSON, no Markdown:
   }}
 }}
 
-strength is 1-5, where 5 means the dependency is stated explicitly in the source
-and 1 means it is a weak inference. Report only dependencies you can justify.
+Strength is 1-5. Report only strength 3-5 producer-consumer dependencies. Never
+use a weak inference to create an executable edge.
 
 RULES:
 {rules_json}

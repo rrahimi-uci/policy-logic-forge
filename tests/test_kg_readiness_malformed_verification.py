@@ -21,6 +21,7 @@ corruption in in the first place).
 from copy import deepcopy
 from unittest.mock import MagicMock
 
+from agents.agent_07_executable_readiness import _sync_completion_field_evidence
 from tests.test_rule_contract import valid_rule
 from utils.kg_readiness import final_rule_issues
 
@@ -381,3 +382,29 @@ def test_wrong_typed_scope_key_is_still_rejected():
     issues = final_rule_issues(rule, ["SELLER_SERVICER", "FANNIE_MAE"])
 
     assert any("list-valued" in issue["reason"] for issue in issues)
+
+
+def test_completion_evidence_is_bound_to_exact_scope_and_exception_fields():
+    rule = _final_ready_rule()
+    pointer = {
+        "chunk_path": "a.txt",
+        "section_id": "S1",
+        "source_text": "Unless waived, conventional loans are covered.",
+        "source_text_found_in_chunk": True,
+    }
+    rule["exceptions"] = [{
+        "predicate_id": "e1",
+        "variable": "price_differential_amount",
+        "operator": ">=",
+        "value": 1,
+        "value_type": "number",
+    }]
+    rule["exception_verification"]["evidence"] = [pointer]
+    rule["scope_derivation"]["evidence"] = [pointer]
+    rule["field_evidence"].pop("exceptions")
+    rule["field_evidence"].pop("applicability_scope")
+
+    _sync_completion_field_evidence(rule)
+
+    assert rule["field_evidence"]["exceptions"] == [pointer]
+    assert rule["field_evidence"]["applicability_scope"] == [pointer]

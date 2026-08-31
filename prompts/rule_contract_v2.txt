@@ -93,6 +93,20 @@ container MUST use this structure:
         "source_text": "direct quote naming the party"
       }
     ],
+    "counterparties": [
+      {
+        "chunk_path": "exact input FILE path",
+        "section_id": "source section",
+        "source_text": "direct quote naming every counterparty"
+      }
+    ],
+    "applicability_scope": [
+      {
+        "chunk_path": "exact input FILE path",
+        "section_id": "source section",
+        "source_text": "direct quote supporting populated scope values"
+      }
+    ],
     "scope_basis": [
       {
         "chunk_path": "exact input FILE path",
@@ -134,8 +148,11 @@ Rules:
 3. Declare every predicate and outcome variable in `variables`. Use `string`
    only for genuine free text and add `"free_text": true`; use `enum` plus
    `allowed_values` for categories.
-4. `responsible_party` and `counterparties` must use an existing entity type
-   from the supplied entity context. Do not invent actor identifiers.
+4. `responsible_party` and `counterparties` must use an existing entity whose
+   `concept_kind` is `actor_role`. A loan, property, document, report, process,
+   decision variable, or other business object is never a party merely because
+   the rule concerns it. The source must name or unambiguously identify every
+   party, and non-empty counterparties require dedicated field evidence.
 5. At candidate extraction, use `exception_basis:
    "not_found_in_chunk_recheck_needed"` whenever the provided chunk cannot
    establish the exception result. agent_07 must later replace it through a
@@ -157,7 +174,14 @@ Rules:
     final readiness stage must use direct scope evidence, explicitly universal
     language, genuinely_unscoped after source review, or an explained
     unresolved state.
-11. `workflow_semantics` is optional and normally null. Populate it only when
+11. Every populated `applicability_scope` value requires dedicated
+    `field_evidence.applicability_scope`. Chapter context, dataset topic, and a
+    generic product word do not establish a narrower scope.
+12. An exception is a source-stated input circumstance that changes, waives,
+    or carves out the rule. Never encode the rule's own output variable, the
+    opposite of its outcome, or an ordinary condition as an exception. An
+    exception variable must have role `input` or `derived`, never `output`.
+13. `workflow_semantics` is optional and normally null. Populate it only when
     the source directly states a prescriptive trigger and ordered process. Its
     shape is `{"kind":"prescriptive_process","basis":"explicit_in_source",
     "trigger_event":"...","actor_role":"EXISTING_ENTITY_TYPE_ID",

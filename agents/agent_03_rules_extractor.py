@@ -27,7 +27,7 @@ from utils.llm_client import create_llm_client
 from utils.config import get_config
 from utils.rule_uniqueness import enforce_rule_uniqueness
 from utils.readiness import annotate_rule_readiness
-from utils.rule_contract import annotate_rule_contract
+from utils.rule_contract import annotate_rule_contract, quarantine_non_actor_counterparties
 
 # Helper for real-time output
 def _print(msg):
@@ -466,6 +466,7 @@ class BusinessRulesExtractor:
             for entity_name, entity_info in self.entity_definitions.items():
                 context += f"\n{entity_name}:\n"
                 context += f"  Definition: {entity_info.get('definition', 'N/A')}\n"
+                context += f"  Concept kind: {entity_info.get('concept_kind', 'unresolved')}\n"
                 context += f"  Attributes: {', '.join(entity_info.get('attributes', []))}\n"
         
         if self.relationship_definitions:
@@ -504,16 +505,15 @@ class BusinessRulesExtractor:
         )
         return f"{domain_prompt}\n\n{self.prompt_manager.load_rule_contract_v2()}"
 
-    def _entity_catalog(self) -> List[str]:
-        """Return the only identifiers that v2 party fields may reference."""
-        catalog = []
-        if isinstance(self.entity_definitions, dict):
-            catalog.extend(self.entity_definitions.keys())
-        return catalog
+    def _entity_catalog(self) -> Dict[str, Any]:
+        """Return typed concepts so the rule contract can enforce actor roles."""
+        return self.entity_definitions if isinstance(self.entity_definitions, dict) else {}
 
     def _annotate_v2_contract(self, rule: Dict[str, Any]) -> Dict[str, Any]:
         """Retain each candidate while recording v2 contract/readiness findings."""
-        annotated = annotate_rule_contract(rule, self._entity_catalog())
+        catalog = self._entity_catalog()
+        sanitized = quarantine_non_actor_counterparties(rule, catalog)
+        annotated = annotate_rule_contract(sanitized, catalog)
         return annotate_rule_readiness(annotated, self._entity_catalog())
 
     @staticmethod

@@ -48,6 +48,26 @@ def test_agent_three_retains_invalid_v2_candidate_for_review():
     assert annotated["readiness"]["status"] == "review_required"
 
 
+def test_agent_three_quarantines_known_non_actor_counterparties():
+    extractor = _extractor()
+    extractor.entity_definitions = {
+        "SELLER_SERVICER": {"concept_kind": "actor_role"},
+        "FANNIE_MAE": {"concept_kind": "actor_role"},
+        "MORTGAGE_LOAN": {"concept_kind": "business_object"},
+    }
+    candidate = valid_rule()
+    candidate["counterparties"] = ["MORTGAGE_LOAN"]
+
+    annotated = extractor._annotate_v2_contract(candidate)
+
+    assert annotated["counterparties"] == []
+    assert annotated["quarantined_claims"] == [{
+        "field_path": "counterparties",
+        "value": "MORTGAGE_LOAN",
+        "reason": "concept_kind business_object cannot bear a party role",
+    }]
+
+
 def test_agent_three_requests_json_mode_on_initial_and_parse_retry():
     """Rule extraction asks the provider for JSON on every parse attempt."""
 

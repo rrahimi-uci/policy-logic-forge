@@ -12,14 +12,9 @@ many were between rules that reference completely disjoint variables ("these
 are independent requirement checks... different predicates, neither
 references the other's outputs").
 
-Before this fix, `analyze_dependencies` accepted every dependency the LLM
-proposed with no deterministic check at all — acceptance was entirely "the
-LLM said so." `dependency_has_structural_support` adds the weakest possible
-deterministic signal (do the two rules share any variable name at all) and
-`annotate_dependency_structural_support` discounts confidence when that
-signal is absent, without ever silently dropping a dependency — a purely
-procedural dependency ("check eligibility before pricing") can be real and
-valid without sharing a variable, so this only flags, never deletes.
+The executable graph now accepts only directed producer-consumer links: a
+source outcome must be read by a target condition. Unsupported model proposals
+remain auditable in rejected_dependencies but cannot contaminate the DAG.
 """
 
 from unittest.mock import MagicMock
@@ -71,6 +66,12 @@ def test_disjoint_variables_are_not_structurally_supported():
     two rules whose predicates never reference each other."""
     source = _rule(condition_predicates=["existing_loan_ltv_ratio"])
     target = _rule(condition_predicates=["mers_rider_state"], outcomes=["postclosing_assignment_prohibited"])
+    assert dependency_has_structural_support(source, target) is False
+
+
+def test_shared_input_does_not_invent_dependency_direction():
+    source = _rule(condition_predicates=["loan_type"])
+    target = _rule(condition_predicates=["loan_type"])
     assert dependency_has_structural_support(source, target) is False
 
 
@@ -168,7 +169,7 @@ def _optimizer_with_dependencies(dependencies):
     return optimizer
 
 
-def test_analyze_dependencies_flags_a_structurally_unsupported_claim():
+def test_analyze_dependencies_quarantines_a_structurally_unsupported_claim():
     rules = [
         {"rule_id": "A", "condition_predicates": [{"variable": "existing_loan_ltv_ratio"}]},
         {"rule_id": "B", "condition_predicates": [{"variable": "mers_rider_state"}]},
@@ -183,13 +184,12 @@ def test_analyze_dependencies_flags_a_structurally_unsupported_claim():
     rules_with_deps, metadata = optimizer.analyze_dependencies(rules)
 
     rule_b = next(r for r in rules_with_deps if r["rule_id"] == "B")
-    dep_entry = rule_b["dependencies"][0]
-    assert dep_entry["structurally_supported"] is False
-    assert dep_entry["confidence"] <= 50
-    # The raw metadata (what optimize_parallel re-reads post-dedup) must carry
-    # the same annotation, not just the per-rule entry.
-    raw_dep = metadata["dependency_analysis"]["dependencies"][0]
-    assert raw_dep["structurally_supported"] is False
+    assert "dependencies" not in rule_b
+    assert metadata["total_dependencies"] == 0
+    assert metadata["rejected_dependencies"] == 1
+    rejected = metadata["dependency_analysis"]["rejected_dependencies"][0]
+    assert rejected["source_rule_id"] == "A"
+    assert "not consumed" in rejected["rejection_reason"]
 
 
 def test_analyze_dependencies_leaves_a_supported_claim_at_full_confidence():

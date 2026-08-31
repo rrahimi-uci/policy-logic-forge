@@ -51,6 +51,9 @@ Requirements:
   complete-corpus negative exception result, evidence_id and quote may be null.
 - `supporting_quote` must be copied verbatim from the selected evidence record.
   Do not invent quotes, evidence IDs, section IDs, or paths.
+- For each source-bearing claim, select only an evidence ID listed in that
+  claim's `eligible_evidence_ids`. Evidence attached to a different field is
+  not support merely because it appears in the same rule packet.
 - Ignore prior confidence scores, readiness labels, and review decisions.
 
 RULE CLAIM PACKETS:

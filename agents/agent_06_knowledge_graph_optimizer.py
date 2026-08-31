@@ -54,23 +54,29 @@ def _rule_variable_names(rule: Dict[str, Any]) -> set:
 
 
 def dependency_has_structural_support(source_rule: Any, target_rule: Any) -> bool:
-    """Whether two rules share any variable at all — the minimal, deterministic
-    signal that a claimed dependency between them has some basis in the rules'
-    own logic rather than being a purely thematic association.
+    """Return whether source output is consumed by a target predicate.
 
-    This is deliberately a weak, permissive test (any single shared name is
-    enough): plenty of real dependencies are procedural ("check eligibility
-    before pricing") without a shared variable, and this check exists only to
-    flag the clearest false positives — dependencies between rules whose
-    condition/outcome vocabularies are completely disjoint — not to replace
-    agent_09's independent, far stricter re-verification downstream.
+    Agent 06 builds an executable dependency graph, not a thematic association
+    graph. A directed edge is groundable from the supplied rule contracts only
+    when the source produces a variable that the target reads. Shared inputs,
+    entities, descriptions, or presumed workflow order do not prove direction.
 
     Returns False (no support) whenever either side isn't a real rule dict,
     so a bad or missing rule_id degrades to "unsupported" rather than raising.
     """
     if not isinstance(source_rule, dict) or not isinstance(target_rule, dict):
         return False
-    return bool(_rule_variable_names(source_rule) & _rule_variable_names(target_rule))
+    source_outputs = {
+        str(item.get("variable")).strip().lower()
+        for item in source_rule.get("outcomes", []) or []
+        if isinstance(item, dict) and item.get("variable")
+    }
+    target_inputs = {
+        str(item.get("variable")).strip().lower()
+        for item in target_rule.get("condition_predicates", []) or []
+        if isinstance(item, dict) and item.get("variable")
+    }
+    return bool(source_outputs & target_inputs)
 
 
 def annotate_dependency_structural_support(
@@ -85,6 +91,33 @@ def annotate_dependency_structural_support(
         if isinstance(confidence, (int, float)):
             entry["confidence"] = min(confidence, unsupported_confidence_cap)
     return entry
+
+
+def dependency_rejection_reason(
+    entry: Any,
+    rule_lookup: Dict[str, Dict[str, Any]],
+) -> Optional[str]:
+    """Explain why a proposed dependency cannot enter the executable graph."""
+    if not isinstance(entry, dict):
+        return "dependency is not an object"
+    source_id = entry.get("source_rule_id")
+    target_id = entry.get("target_rule_id")
+    if not source_id or not target_id:
+        return "dependency is missing source_rule_id or target_rule_id"
+    if source_id == target_id:
+        return "self-dependencies are not executable data flow"
+    if source_id not in rule_lookup or target_id not in rule_lookup:
+        return "dependency references an unknown rule"
+    dependency_type = entry.get("dependency_type")
+    if dependency_type == "contradictory":
+        return "contradictions belong in conflict analysis, not the dependency DAG"
+    if dependency_type not in {
+        "prerequisite", "conditional", "sequential", "complementary", "override", "validation",
+    }:
+        return "dependency_type is missing or unsupported"
+    if not dependency_has_structural_support(rule_lookup[source_id], rule_lookup[target_id]):
+        return "source outcome is not consumed by any target condition predicate"
+    return None
 
 
 class KnowledgeGraphOptimizer:
@@ -630,8 +663,16 @@ class KnowledgeGraphOptimizer:
         rule_dependencies_map = {}
         rule_dependents_map = {}
         rule_lookup = {r.get("rule_id"): r for r in rules}
+        rejected_dependencies = []
 
         for dep in dep_result.get("dependencies", []):
+            rejection_reason = dependency_rejection_reason(dep, rule_lookup)
+            if rejection_reason:
+                rejected_dependencies.append({
+                    **(dict(dep) if isinstance(dep, dict) else {"raw_dependency": dep}),
+                    "rejection_reason": rejection_reason,
+                })
+                continue
             source_id = dep["source_rule_id"]
             target_id = dep["target_rule_id"]
 
@@ -685,8 +726,20 @@ class KnowledgeGraphOptimizer:
             rules_with_deps.append(rule)
         
         metadata = {
-            "dependency_analysis": dep_result,
-            "total_dependencies": len(dep_result.get("dependencies", [])),
+            "dependency_analysis": {
+                **dep_result,
+                "dependencies": [
+                    dep for dep in dep_result.get("dependencies", [])
+                    if dependency_rejection_reason(dep, rule_lookup) is None
+                ],
+                "rejected_dependencies": rejected_dependencies,
+            },
+            "total_dependencies": sum(
+                dependency_rejection_reason(dep, rule_lookup) is None
+                for dep in dep_result.get("dependencies", [])
+            ),
+            "proposed_dependencies": len(dep_result.get("dependencies", [])),
+            "rejected_dependencies": len(rejected_dependencies),
             "dependency_chains": dep_result.get("dependency_chains", []),
             "circular_dependencies": dep_result.get("circular_dependencies", []),
             "conflicts": dep_result.get("conflict_groups", []),
@@ -697,7 +750,8 @@ class KnowledgeGraphOptimizer:
         print(f"\n{'='*50}", flush=True)
         print(f"✅ DEPENDENCY ANALYSIS COMPLETE", flush=True)
         print(f"{'='*50}", flush=True)
-        print(f"   • Dependencies found:      {len(dep_result.get('dependencies', [])):>5}", flush=True)
+        print(f"   • Dependencies accepted:   {metadata['total_dependencies']:>5}", flush=True)
+        print(f"   • Dependencies rejected:   {len(rejected_dependencies):>5}", flush=True)
         print(f"   • Dependency chains:       {len(dep_result.get('dependency_chains', [])):>5}", flush=True)
         print(f"   • Circular dependencies:   {len(dep_result.get('circular_dependencies', [])):>5}", flush=True)
         print(f"   • Potential conflicts:     {len(dep_result.get('conflict_groups', [])):>5}", flush=True)
@@ -839,17 +893,22 @@ class KnowledgeGraphOptimizer:
         rule_dependencies_map = {}
         rule_dependents_map = {}
         rule_lookup = {r.get("rule_id"): r for r in rules}
+        accepted_dependencies = []
+        rejected_dependencies = []
 
         for dep in all_dependencies:
             # The model occasionally returns a dependency object missing one of
             # the id keys. Skip those instead of letting a raw subscript raise a
             # KeyError that would abort the entire optimization run.
-            if not isinstance(dep, dict):
+            rejection_reason = dependency_rejection_reason(dep, rule_lookup)
+            if rejection_reason:
+                rejected_dependencies.append({
+                    **(dict(dep) if isinstance(dep, dict) else {"raw_dependency": dep}),
+                    "rejection_reason": rejection_reason,
+                })
                 continue
-            source_id = dep.get("source_rule_id")
-            target_id = dep.get("target_rule_id")
-            if not source_id or not target_id:
-                continue
+            source_id = dep["source_rule_id"]
+            target_id = dep["target_rule_id"]
 
             # Calculate confidence if breakdown provided
             if 'confidence' in dep and isinstance(dep['confidence'], dict):
@@ -865,6 +924,7 @@ class KnowledgeGraphOptimizer:
             # re-application (which reads the raw dependency_analysis
             # metadata, not this per-target map) sees the same signal.
             annotate_dependency_structural_support(dep, rule_lookup.get(source_id), rule_lookup.get(target_id))
+            accepted_dependencies.append(dep)
 
             # Track what this rule depends on
             if target_id not in rule_dependencies_map:
@@ -902,12 +962,15 @@ class KnowledgeGraphOptimizer:
         
         metadata = {
             "dependency_analysis": {
-                "dependencies": all_dependencies,
+                "dependencies": accepted_dependencies,
+                "rejected_dependencies": rejected_dependencies,
                 "batched_analysis": True,
                 "num_batches": num_batches,
                 "batch_size": batch_size
             },
-            "total_dependencies": len(all_dependencies),
+            "total_dependencies": len(accepted_dependencies),
+            "proposed_dependencies": len(all_dependencies),
+            "rejected_dependencies": len(rejected_dependencies),
             "dependency_chains": [],
             "circular_dependencies": [],
             "conflicts": [],
@@ -917,6 +980,7 @@ class KnowledgeGraphOptimizer:
         
         print(f"  • Rules with dependencies: {len(rule_dependencies_map)}", flush=True)
         print(f"  • Rules with dependents: {len(rule_dependents_map)}", flush=True)
+        print(f"  • Unsupported proposals rejected: {len(rejected_dependencies)}", flush=True)
         
         return rules_with_deps, metadata
     

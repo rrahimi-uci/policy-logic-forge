@@ -17,4 +17,8 @@ def test_v2_rule_contract_is_shared_and_not_overridden_by_domain_prompt():
     assert '"schema_version": "2.0"' in contract
     assert '"condition_predicates"' in contract
     assert '"field_evidence"' in contract
+    assert '"counterparties"' in contract
+    assert '"applicability_scope"' in contract
+    assert "`concept_kind` is `actor_role`" in contract
+    assert "never `output`" in contract
     assert "not_found_in_chunk_recheck_needed" in contract

@@ -243,6 +243,58 @@ def test_unknown_evidence_id_remains_fail_closed():
     assert "authentic evidence record" in results[0]["reasoning"]
 
 
+def test_evidence_from_another_field_cannot_ground_a_party_claim():
+    packet = {
+        "rule_id": "R1",
+        "claims": [{
+            "claim_id": "responsible_party",
+            "claim_type": "party",
+            "eligible_evidence_ids": ["EV-party"],
+        }],
+        "evidence": [
+            {
+                "evidence_id": "EV-description",
+                "source_text": "The policy concerns a loan.",
+                "source_text_found_in_chunk": True,
+            },
+            {
+                "evidence_id": "EV-party",
+                "source_text": "The lender must retain the record.",
+                "source_text_found_in_chunk": True,
+            },
+        ],
+    }
+
+    results = GroundingVerifier._finalize_rule_results(packet, [{
+        "rule_id": "R1",
+        "claim_id": "responsible_party",
+        "verdict": "supported",
+        "evidence_id": "EV-description",
+        "reasoning": "The packet mentions the policy object.",
+    }])
+
+    assert results[0]["verdict"] == "insufficient_evidence"
+
+
+def test_built_packet_binds_deduplicated_evidence_to_supported_fields(tmp_path):
+    organized = _organized_corpus(tmp_path)
+    rule = valid_rule()
+    packet = GroundingVerifier.build_packet(
+        rule, source_document_index(str(organized)), 8000
+    )
+    party_claim = next(
+        claim for claim in packet["claims"]
+        if claim["claim_id"] == "responsible_party"
+    )
+    evidence = next(
+        item for item in packet["evidence"]
+        if item["evidence_id"] in party_claim["eligible_evidence_ids"]
+    )
+
+    assert "responsible_party" in evidence["supports_fields"]
+    assert "counterparties" in evidence["supports_fields"]
+
+
 def test_grounding_reports_core_enrichment_and_contract_dimensions(tmp_path):
     organized = _organized_corpus(tmp_path)
     graph = graph_with_two_rules()

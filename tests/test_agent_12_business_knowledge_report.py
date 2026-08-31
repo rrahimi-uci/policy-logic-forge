@@ -21,6 +21,7 @@ def _graph():
                 "outcomes": [{"variable": "processing_allowed", "operator": "=", "value": False}],
                 "variables": [{"name": "consent", "type": "boolean", "role": "input"}, {"name": "processing_allowed", "type": "boolean", "role": "output"}],
                 "related_entities": ["CUSTOMER"], "source_reference": {"chunk_path": "policy/001.txt", "section_id": "s1", "source_text": "Customer consent is required before processing."},
+                "quarantined_claims": [{"field_path": "counterparties", "value": "POLICY_RECORD", "reason": "not an actor"}],
                 "grounding": {
                     "status": "failed",
                     "counts": {"supported": 4, "contradicted": 1, "insufficient_evidence": 2},
@@ -99,6 +100,8 @@ def test_agent_12_generates_self_contained_report_with_traceability(tmp_path: Pa
     assert manifest["grounding_dimensions"]["enrichment"]["certified_count"] == 1
     assert manifest["grounding_dimensions"]["contract"]["certified_count"] == 1
     assert manifest["grounding_dimensions"]["relationship"]["failed_count"] == 1
+    assert manifest["quarantined_claim_count"] == 1
+    assert manifest["rules_with_quarantined_claims"] == 1
     assert manifest["grounded_rule_count"] == 0
     assert manifest["grounding_coverage_rate"] == 0.0
     assert manifest["source_pointer_count"] == 1
@@ -109,6 +112,7 @@ def test_agent_12_generates_self_contained_report_with_traceability(tmp_path: Pa
     assert "Executable symbol registry" in report
     assert "Core-rule holds" in report
     assert "Enrichment holds" in report
+    assert "Quarantined claims" in report
     assert "Concept type mix" in report
     assert "Most connected concepts" in report
     assert 'id="concept-search"' in report
