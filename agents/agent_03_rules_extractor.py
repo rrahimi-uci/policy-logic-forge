@@ -893,9 +893,11 @@ class BusinessRulesExtractor:
                 rule['requires_review'] = True
                 rule['review_reason'] = 'Low confidence score'
         elif 'confidence_score' not in rule:
-            # Set default if missing
-            rule['confidence_score'] = self.global_config.get_rules_default_confidence_score()
-            rule['confidence_source'] = 'default_config'
+            # An absent measurement is not a middling measurement.  A synthetic
+            # default made every unscored extraction look independently
+            # assessed and caused the validator to report false confidence.
+            rule['confidence_source'] = 'not_scored'
+            rule['confidence_status'] = 'unknown'
         else:
             # Preserve a model-supplied scalar while making its provenance
             # explicit for downstream reports.  Older graphs may not have this
@@ -1668,37 +1670,12 @@ class BusinessRulesExtractor:
                     verified += 1
                     return
 
-            # 4. Last resort: try matching using the rule description as source_text
-            description = rule.get('description', '')
-            if description and len(description) > 30:
-                found = _find_text_in_words(words, description[:300], threshold=0.5)
-                if found:
-                    new_start, new_end, ratio = found
-                    ref['start_word_position'] = new_start
-                    ref['end_word_position'] = new_end
-                    ref['text_match_score'] = round(ratio, 3)
-                    ref['source_text'] = ' '.join(words[new_start:new_end])
-                    rule['reference_verified'] = True
-                    rule['reference_verification_note'] = 'ok_recovered_from_description'
-                    recovered += 1
-                    verified += 1
-                    return
-
-            # Last resort, unchanged in effect from before this file gained
-            # write-back: a >=0.5 fuzzy match at the stated positions is still
-            # accepted rather than newly rejecting a rule that previously
-            # passed. Reached only when both recovery searches above failed,
-            # so there is no better-located text to cite -- the model's own
-            # wording is kept, and the sub-1.0 text_match_score is what tells a
-            # reviewer (and agent_09) that it is not a verbatim quote.
-            if positions_valid and source_text and ratio >= 0.5:
-                ref['text_match_score'] = round(ratio, 3)
-                rule['reference_verified'] = True
-                rule['reference_verification_note'] = 'ok_lenient_unrecovered'
-                verified += 1
-                return
-
-            # All recovery attempts failed
+            # All source-text recovery attempts failed.  Do not use the rule's
+            # generated description as a search key and do not accept a merely
+            # similar transcription: both paths can manufacture a plausible
+            # citation for a claim the source never states.  Keep the candidate
+            # visible but explicitly unverified so the next stage can quarantine
+            # it before expensive grounding work.
             issues = []
             if not positions_valid:
                 if not isinstance(start_pos, int) or start_pos < 0:

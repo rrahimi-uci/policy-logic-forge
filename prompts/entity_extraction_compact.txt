@@ -1,14 +1,17 @@
-You build the small, source-grounded entity foundation for a mortgage compliance
+You build the small, source-grounded entity foundation for a compliance
 knowledge graph. Use only concepts supported by the excerpts below. Prefer
-concrete mortgage concepts over generic words, and do not invent a complete
+concrete governed concepts over generic words, and do not invent a complete
 domain model; detailed rule extraction happens later from the full corpus.
 
-Return ONLY one valid JSON object, with no Markdown or explanation. Return at
+Return ONLY one valid JSON object, with no Markdown or explanation. Return at most
 {max_entities} entity types and {max_relationships} relationships. Keep every definition
 under 20 words. Each entity needs exactly five short attribute names, one
-excerpt-grounded example, and one short business-rule summary. Each relationship
-needs source_entity, target_entity, definition, cardinality, one example, and
-one business-rule summary.
+excerpt-grounded example, one short business-rule summary, and at least one
+concept-specific source_evidence record. Each relationship needs source_entity,
+target_entity, definition, cardinality, one example, one business-rule summary,
+and at least one relationship-specific source_evidence record. Evidence must
+quote the exact words that establish the concept or relationship; a nearby rule
+citation is not concept evidence.
 
 Required JSON shape:
 {{
@@ -18,7 +21,8 @@ Required JSON shape:
       "concept_kind": "actor_role|business_object|evidence_object|event|decision_variable|process",
       "attributes": ["...", "...", "...", "...", "..."],
       "examples": ["..."],
-      "business_rules": ["..."]
+      "business_rules": ["..."],
+      "source_evidence": [{{"chunk_path": "exact File path", "source_text": "verbatim source quote"}}]
     }}
   }},
   "relationships": {{
@@ -28,7 +32,8 @@ Required JSON shape:
       "definition": "...",
       "cardinality": "one-to-one|one-to-many|many-to-many",
       "examples": ["..."],
-      "business_rules": ["..."]
+      "business_rules": ["..."],
+      "source_evidence": [{{"chunk_path": "exact File path", "source_text": "verbatim source quote"}}]
     }}
   }}
 }}
@@ -37,6 +42,10 @@ Required JSON shape:
 that can bear an obligation are `actor_role`; documents are `evidence_object`;
 activities are `process`; triggers are `event`; values used by decisions are
 `decision_variable`; other governed things are `business_object`.
+
+Do not create a concept solely because it appears as a rule-local predicate or
+outcome variable. If an item has no exact concept-specific evidence in the
+supplied excerpts, omit it. Return fewer than the maximum when appropriate.
 
 EXCERPTS:
 {sample_content}

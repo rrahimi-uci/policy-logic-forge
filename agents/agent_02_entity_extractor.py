@@ -308,6 +308,49 @@ class ComplianceEntityRelationshipAgent:
             raise RuntimeError("Entity extraction request failed") from e
 
     @staticmethod
+    def validate_catalog_evidence(
+        findings: Dict[str, Any], documents: List[Dict[str, str]]
+    ) -> List[str]:
+        """Require authentic, concept-specific evidence for every catalog item."""
+        document_index = {
+            str(document.get('path', '')).replace('\\', '/'): ' '.join(
+                str(document.get('content', '')).split()
+            )
+            for document in documents
+            if document.get('path')
+        }
+        issues: List[str] = []
+        for namespace in ('entity_types', 'relationships'):
+            definitions = findings.get(namespace, {}) or {}
+            if not isinstance(definitions, dict):
+                issues.append(f'{namespace} must be an object')
+                continue
+            for name, definition in definitions.items():
+                prefix = f'{namespace}.{name}'
+                if not isinstance(definition, dict):
+                    issues.append(f'{prefix} must be an object')
+                    continue
+                evidence = definition.get('source_evidence')
+                if not isinstance(evidence, list) or not evidence:
+                    issues.append(f'{prefix}.source_evidence is required')
+                    continue
+                for index, reference in enumerate(evidence):
+                    ref_prefix = f'{prefix}.source_evidence[{index}]'
+                    if not isinstance(reference, dict):
+                        issues.append(f'{ref_prefix} must be an object')
+                        continue
+                    path = str(reference.get('chunk_path', '')).replace('\\', '/')
+                    quote = ' '.join(str(reference.get('source_text', '')).split())
+                    source = document_index.get(path)
+                    if source is None:
+                        issues.append(f'{ref_prefix}.chunk_path not found: {path or "<empty>"}')
+                    elif not quote:
+                        issues.append(f'{ref_prefix}.source_text is empty')
+                    elif quote not in source:
+                        issues.append(f'{ref_prefix}.source_text is not verbatim in the cited document')
+        return issues
+
+    @staticmethod
     def merge_catalogs(accumulated: Dict[str, Any], findings: Dict[str, Any]) -> Dict[str, Any]:
         """Union entity/relationship definitions across extraction iterations."""
         merged = accumulated or {"entity_types": {}, "relationships": {}}
@@ -409,7 +452,29 @@ class ComplianceEntityRelationshipAgent:
             
             # Step 2: Extract entities and relationships using optimized prompt
             print(f"\n[Step 2] Entity & Relationship Extraction")
-            findings = self.extract_entities_and_relationships(optimized_prompt)
+            evidence_attempts = max(1, int(os.getenv('KG_ENTITY_EVIDENCE_ATTEMPTS', '2')))
+            evidence_issues: List[str] = []
+            for evidence_attempt in range(1, evidence_attempts + 1):
+                findings = self.extract_entities_and_relationships(optimized_prompt)
+                evidence_issues = self.validate_catalog_evidence(findings, documents)
+                if not evidence_issues:
+                    break
+                print(
+                    f"  ⚠️ Entity evidence validation failed on attempt "
+                    f"{evidence_attempt}/{evidence_attempts}: {len(evidence_issues)} finding(s)",
+                    flush=True,
+                )
+                optimized_prompt += (
+                    "\n\nEVIDENCE VALIDATION FAILED. Return the complete JSON again. "
+                    "Every entity and relationship requires an exact chunk_path and a "
+                    "verbatim source_text quote. Correct these findings:\n- "
+                    + "\n- ".join(evidence_issues[:25])
+                )
+            if evidence_issues:
+                raise RuntimeError(
+                    "Entity extraction did not produce a fully source-grounded catalog "
+                    f"after {evidence_attempts} attempt(s): " + "; ".join(evidence_issues[:5])
+                )
             
             # Add iteration metadata
             findings['iteration'] = iteration

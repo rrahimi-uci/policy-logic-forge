@@ -222,10 +222,8 @@ def test_already_exact_quote_is_verified_without_bridging(tmp_path):
     assert ref["source_text"] == exact, "an already-exact quote's text must be left untouched"
 
 
-def test_unbridgeable_fuzzy_match_falls_back_to_existing_lenient_acceptance(tmp_path):
-    """When bridging can't find a reliable exact span, behaviour must not
-    regress below what the pipeline already did: still accept a >=0.5 fuzzy
-    match rather than newly rejecting rules that previously passed.
+def test_unbridgeable_fuzzy_match_is_not_misrepresented_as_verified(tmp_path):
+    """Similarity alone must not turn a model transcription into evidence.
 
     This needs a quote with decent CHARACTER-level similarity (what the
     existing >=0.5 threshold measures) but no genuine contiguous WORD-level
@@ -248,12 +246,8 @@ def test_unbridgeable_fuzzy_match_falls_back_to_existing_lenient_acceptance(tmp_
 
     extractor._verify_source_references(str(tmp_path))
 
-    assert rule["reference_verified"] is True, "must not newly reject what previously passed"
-    # The note distinguishes this lenient, non-verbatim acceptance from an
-    # exact one ("ok"). It reaches this path only after both recovery searches
-    # failed, so there is no better-located chunk text to cite and the model's
-    # own wording is deliberately kept.
-    assert rule["reference_verification_note"] == "ok_lenient_unrecovered"
+    assert rule["reference_verified"] is False
+    assert rule["reference_verification_note"].startswith("text_mismatch")
     assert "source_text_bridged" not in rule["source_reference"]
     assert "source_text_rewritten_from_chunk" not in rule["source_reference"]
     assert rule["source_reference"]["source_text"] == quote, "unbridged text must be left as-is"

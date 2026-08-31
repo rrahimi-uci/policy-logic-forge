@@ -68,7 +68,10 @@ def test_agent_12_generates_self_contained_report_with_traceability(tmp_path: Pa
     report = (tmp_path / "report" / "business_knowledge_report.html").read_text(encoding="utf-8")
 
     assert manifest["rule_count"] == 1
-    assert manifest["concept_count"] >= 4  # entity, relationship endpoint, and rule variables
+    assert manifest["concept_count"] == 2  # governed concepts only: CUSTOMER and ACCOUNT
+    assert manifest["decision_variable_count"] == 2
+    assert manifest["rule_local_decision_variable_count"] == 2
+    assert manifest["reusable_decision_variable_count"] == 0
     assert manifest["concept_coverage_rate"] == 100.0
     assert manifest["review_required_rate"] == 100.0
     assert manifest["human_review_rate"] == 100.0
@@ -82,8 +85,14 @@ def test_agent_12_generates_self_contained_report_with_traceability(tmp_path: Pa
     assert manifest["confidence_source_counts"] == {"unattributed_score": 1}
     assert manifest["grounding_claim_counts"] == {"contradicted": 1, "insufficient_evidence": 2, "supported": 4}
     assert manifest["grounding_claim_support_rate"] == 57.1
+    assert manifest["grounded_rule_count"] == 0
+    assert manifest["grounding_coverage_rate"] == 0.0
+    assert manifest["source_pointer_count"] == 1
+    assert manifest["source_pointer_coverage_rate"] == 100.0
     assert "SBVR vocabulary" in report
     assert "Vocabulary workbench" in report
+    assert "Decision variables are not SBVR concepts" in report
+    assert "Executable symbol registry" in report
     assert "Concept type mix" in report
     assert "Most connected concepts" in report
     assert 'id="concept-search"' in report
