@@ -52,7 +52,20 @@ def test_agent_12_generates_self_contained_report_with_traceability(tmp_path: Pa
     assert manifest["quality_hold_count"] == 1
     assert manifest["quality_hold_rate"] == 100.0
     assert manifest["review_route_counts"] == {"human_review": 1}
+    assert manifest["fact_type_count"] == 1
+    assert manifest["fact_type_grounding_rate"] == 0.0
+    assert manifest["concept_evidence_coverage_rate"] == 100.0
     assert "SBVR vocabulary" in report
+    assert "Vocabulary workbench" in report
+    assert "Concept type mix" in report
+    assert "Most connected concepts" in report
+    assert 'id="concept-search"' in report
+    assert 'id="concept-grid"' in report
+    assert 'id="fact-types"' in report
+    assert "applyConceptFilters" in report
+    assert 'data-kind="actor_role"' in report
+    assert 'href="#concept-CUSTOMER"' in report
+    assert 'href="#fact-CUSTOMER_OWNS_ACCOUNT"' in report
     assert "Customer consent" in report
     assert "Customer consent is required before processing." in report
     assert "Human-review queue (1)" in report

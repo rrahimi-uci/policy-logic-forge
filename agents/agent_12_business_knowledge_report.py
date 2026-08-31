@@ -157,8 +157,9 @@ def _concepts(graph: Mapping[str, Any], profile: Mapping[str, Any]) -> list[dict
     for fact in _list(profile.get("fact_types")):
         if not isinstance(fact, Mapping):
             continue
-        add(fact.get("subject_concept"), kind="business_object")
-        add(fact.get("object_concept"), kind="business_object")
+        fact_refs = fact.get("source_evidence")
+        add(fact.get("subject_concept"), kind="business_object", refs=fact_refs)
+        add(fact.get("object_concept"), kind="business_object", refs=fact_refs)
 
     for _rid, rule in _all_rule_refs(graph):
         refs = _rule_references(rule)
@@ -282,9 +283,22 @@ def _metric_card(label: str, value: Any, detail: str = "") -> str:
     return f'<div class="metric-card"><div class="metric-value">{_safe(value)}</div><div class="metric-label">{_safe(label)}</div><div class="metric-detail">{_safe(detail)}</div></div>'
 
 
+def _percent(part: int | float, total: int | float) -> float:
+    return round(float(part) / max(1.0, float(total)) * 100, 1)
+
+
+def _progress_bar(label: str, value: int | float, total: int | float, color: str = "#27c2a5") -> str:
+    percentage = min(100.0, max(0.0, _percent(value, total)))
+    return (
+        f'<div class="insight-bar-row"><div class="insight-bar-label"><span>{_safe(label)}</span>'
+        f'<strong>{_safe(value)}</strong></div><div class="insight-bar-track"><span style="width:{percentage:.1f}%;background:{_safe(color)}"></span></div>'
+        f'<div class="muted">{percentage:.1f}% of vocabulary</div></div>'
+    )
+
+
 def _validate_report_html(document: str, rule_ids: Sequence[str], source_anchors: Sequence[str]) -> None:
     """Validate the non-network, single-document report contract."""
-    required = ('<!doctype html>', 'id="report-data"', 'data-tab="vocabulary"', 'data-tab="rules"', 'data-tab="models"', 'data-tab="review"', 'data-tab="sources"')
+    required = ('<!doctype html>', 'id="report-data"', 'data-tab="vocabulary"', 'data-tab="rules"', 'data-tab="models"', 'data-tab="review"', 'data-tab="sources"', 'id="concept-search"', 'id="concept-grid"', 'id="fact-types"')
     missing = [marker for marker in required if marker not in document]
     if missing:
         raise ValueError("business report missing required sections: " + ", ".join(missing))
@@ -371,6 +385,17 @@ def generate(
                 source_blocks[anchor] = _source_block(anchor, ref, _source_text(ref, chunks))
             concept_refs[str(concept.get("concept_id"))].append(anchor)
 
+    fact_types = [fact for fact in _list(profile.get("fact_types")) if isinstance(fact, Mapping)]
+    fact_refs: dict[str, list[str]] = defaultdict(list)
+    for fact in fact_types:
+        fact_id = str(fact.get("fact_type_id") or "")
+        for ref in _references(fact.get("source_evidence")):
+            anchor = _source_anchor(ref)
+            if anchor not in source_blocks:
+                source_blocks[anchor] = _source_block(anchor, ref, _source_text(ref, chunks))
+            if fact_id:
+                fact_refs[fact_id].append(anchor)
+
     model_info = _model_info(models_dir)
     edges = dependency_edges(graph)
     categories = Counter(_category(rule)[0] for rule in rules)
@@ -389,6 +414,51 @@ def generate(
     source_documents = {str(ref.get("chunk_path") or ref.get("document") or "").split("/")[0] for rule in rules for ref in _rule_references(rule) if ref.get("chunk_path") or ref.get("document")}
     concept_supported = len(concepts)
     vocabulary_coverage = 100.0 if concept_supported == len(concepts) else 0.0
+    concept_ids = {str(concept.get("concept_id")) for concept in concepts}
+    concept_kind_counts = Counter(str(concept.get("concept_kind") or "unresolved") for concept in concepts)
+    concept_rule_usage: Counter[str] = Counter()
+    for rule in rules:
+        referenced = set(str(value) for value in _list(rule.get("related_entities")) if value)
+        referenced.update(str(value) for value in (rule.get("source_entity"), rule.get("responsible_party"), rule.get("entity_type")) if value)
+        referenced.update(
+            str(item.get("name")) for item in _list(rule.get("variables"))
+            if isinstance(item, Mapping) and item.get("name")
+        )
+        referenced.update(
+            str(item.get("variable")) for item in _list(rule.get("outcomes"))
+            if isinstance(item, Mapping) and item.get("variable")
+        )
+        for concept_id in referenced.intersection(concept_ids):
+            concept_rule_usage[concept_id] += 1
+    concept_fact_usage: Counter[str] = Counter()
+    fact_status_counts = Counter(str(fact.get("grounding_status") or "unverified") for fact in fact_types)
+    for fact in fact_types:
+        for field in ("subject_concept", "object_concept"):
+            concept_id = str(fact.get(field) or "")
+            if concept_id in concept_ids:
+                concept_fact_usage[concept_id] += 1
+    concept_evidence_count = sum(bool(_references(concept.get("source_evidence"))) for concept in concepts)
+    concept_orphan_count = sum(
+        not concept_rule_usage.get(str(concept.get("concept_id")))
+        and not concept_fact_usage.get(str(concept.get("concept_id")))
+        for concept in concepts
+    )
+    fact_grounded_count = sum(
+        str(fact.get("grounding_status") or "").casefold() in {"supported", "certified"}
+        for fact in fact_types
+    )
+    top_concepts = sorted(
+        (
+            {
+                "concept_id": str(concept.get("concept_id")),
+                "preferred_term": str(concept.get("preferred_term") or concept.get("concept_id")),
+                "rule_links": concept_rule_usage.get(str(concept.get("concept_id")), 0),
+                "fact_links": concept_fact_usage.get(str(concept.get("concept_id")), 0),
+            }
+            for concept in concepts
+        ),
+        key=lambda item: (-item["rule_links"], -item["fact_links"], item["preferred_term"].casefold()),
+    )[:8]
     report_data = {
         "title": "Policy Logic Forge · Business Knowledge Report",
         "rule_count": len(rules), "concept_count": concept_supported,
@@ -401,6 +471,15 @@ def generate(
         "source_document_count": len(source_documents), "source_chunk_count": len(chunk_list),
         "concept_coverage_rate": vocabulary_coverage, "concept_coverage_scope": "all concepts represented in the input graph",
         "concept_review_count": sum(str(concept.get("concept_kind")) == "unresolved" for concept in concepts),
+        "concept_kind_counts": dict(sorted(concept_kind_counts.items())),
+        "concepts_with_evidence": concept_evidence_count,
+        "concept_evidence_coverage_rate": _percent(concept_evidence_count, concept_supported),
+        "concept_orphan_count": concept_orphan_count,
+        "fact_type_count": len(fact_types),
+        "fact_type_grounded_count": fact_grounded_count,
+        "fact_type_grounding_rate": _percent(fact_grounded_count, len(fact_types)),
+        "fact_type_status_counts": dict(sorted(fact_status_counts.items())),
+        "top_concepts": top_concepts,
         "unresolved_item_count": unresolved,
         "confidence_distribution": dict(sorted(confidence_buckets.items())), "categories": dict(categories),
         "model_info": model_info, "edge_count": len(edges), "source_graph": str(graph_file),
@@ -409,15 +488,37 @@ def generate(
     concept_rows = []
     for concept in concepts:
         cid = str(concept.get("concept_id"))
-        refs = " ".join(f'<a class="evidence-link" href="#{_safe(anchor)}">Evidence {index + 1}</a>' for index, anchor in enumerate(dict.fromkeys(concept_refs.get(cid, [])))) or '<span class="muted">Unresolved source</span>'
-        concept_status = "review_required" if str(concept.get("concept_kind")) == "unresolved" else "presented"
-        concept_rows.append(f'<tr><td>{_safe(concept.get("preferred_term"))}<div class="muted">{_safe(cid)}</div></td><td>{_safe(concept.get("concept_kind"))}</td><td>{_safe(concept.get("definition") or "Definition not provided by the source graph.")}</td><td><span class="status status-{concept_status}">{concept_status}</span></td><td>{refs}</td></tr>')
+        kind = str(concept.get("concept_kind") or "unresolved")
+        evidence_anchors = list(dict.fromkeys(concept_refs.get(cid, [])))
+        refs = " ".join(f'<a class="evidence-link" href="#{_safe(anchor)}">Evidence {index + 1}</a>' for index, anchor in enumerate(evidence_anchors)) or '<span class="muted">Unresolved source</span>'
+        fact_links = [
+            str(fact.get("fact_type_id")) for fact in fact_types
+            if str(fact.get("subject_concept") or "") == cid or str(fact.get("object_concept") or "") == cid
+        ]
+        relation_links = " ".join(f'<a class="evidence-link" href="#fact-{_safe(_slug(fact_id))}">{_safe(fact_id)}</a>' for fact_id in fact_links) or '<span class="muted">No fact types</span>'
+        rule_links = concept_rule_usage.get(cid, 0)
+        fact_link_count = concept_fact_usage.get(cid, 0)
+        concept_status = "review_required" if kind == "unresolved" else "presented"
+        concept_rows.append(
+            f'''<article class="concept-card" id="concept-{_safe(_slug(cid))}" data-kind="{_safe(kind)}" data-evidence="{'grounded' if evidence_anchors else 'unresolved'}" data-search="{_safe((cid + ' ' + str(concept.get('preferred_term') or '') + ' ' + str(concept.get('definition') or '') + ' ' + kind).casefold())}">
+              <div class="concept-card-head"><div><div class="concept-term">{_safe(concept.get("preferred_term"))}</div><div class="muted">{_safe(cid)}</div></div><span class="status status-{_safe(concept_status)}">{_safe(kind.replace('_', ' '))}</span></div>
+              <p>{_safe(concept.get("definition") or "Definition not provided by the source graph.")}</p>
+              <div class="concept-meta"><span><strong>{rule_links}</strong> rule links</span><span><strong>{fact_link_count}</strong> fact endpoints</span><span><strong>{len(evidence_anchors)}</strong> evidence links</span></div>
+              <details><summary>Inspect concept relationships</summary><div class="concept-detail"><div><strong>Fact types</strong><div>{relation_links}</div></div><div><strong>Source evidence</strong><div>{refs}</div></div></div></details>
+            </article>'''
+        )
     fact_rows = []
-    for fact in _list(profile.get("fact_types")):
-        if not isinstance(fact, Mapping):
-            continue
+    for fact in fact_types:
+        fact_id = str(fact.get("fact_type_id") or "unidentified")
+        subject = str(fact.get("subject_concept") or "")
+        object_concept = str(fact.get("object_concept") or "")
+        fact_status = str(fact.get("grounding_status") or "unverified")
+        fact_source_refs = list(dict.fromkeys(fact_refs.get(fact_id, [])))
+        fact_evidence = " ".join(f'<a class="evidence-link" href="#{_safe(anchor)}">Evidence</a>' for anchor in fact_source_refs) or '<span class="muted">No source evidence</span>'
+        subject_html = f'<a href="#concept-{_safe(_slug(subject))}">{_safe(subject)}</a>' if subject in concept_ids else _safe(subject)
+        object_html = f'<a href="#concept-{_safe(_slug(object_concept))}">{_safe(object_concept)}</a>' if object_concept in concept_ids else _safe(object_concept)
         fact_rows.append(
-            f'<tr><td>{_safe(fact.get("fact_type_id"))}</td><td>{_safe(fact.get("subject_concept"))}</td><td>{_safe(fact.get("verb_term"))}</td><td>{_safe(fact.get("object_concept"))}</td><td>{_safe(fact.get("grounding_status"))}</td></tr>'
+            f'<tr id="fact-{_safe(_slug(fact_id))}"><td><strong>{_safe(fact_id)}</strong><div class="muted">{_safe(fact.get("verb_term"))}</div></td><td>{subject_html}</td><td>{_safe(fact.get("verb_term"))}</td><td>{object_html}</td><td><span class="status status-{_safe(fact_status.casefold().replace(" ", "_"))}">{_safe(fact_status)}</span><div>{fact_evidence}</div></td></tr>'
         )
     rule_rows = [_rule_row(rule, rule_sources.get(str(rule.get("rule_id") or "unidentified"), [])) for rule in rules]
     human_review_rows: list[str] = []
@@ -449,6 +550,13 @@ def generate(
     confidence_rows = "".join(f'<tr><td>{_safe(bucket)}</td><td>{count}</td></tr>' for bucket, count in sorted(confidence_buckets.items())) or '<tr><td>Not reported</td><td>0</td></tr>'
     edge_rows = "".join(f'<tr><td>{_safe(edge.get("source_rule_id"))}</td><td>{_safe(edge.get("target_rule_id"))}</td><td>{_safe(edge.get("dependency_type", "unknown"))}</td></tr>' for edge in edges[:500]) or '<tr><td colspan="3">No dependency edges were reported.</td></tr>'
     route_options = "".join(f'<option value="{_safe(route)}">{_safe(route.replace("_", " "))}</option>' for route in sorted(route_counts, key=str.casefold))
+    kind_colors = {"actor_role": "#27c2a5", "business_object": "#7c83fd", "decision_variable": "#f3a94b", "evidence_object": "#5a8dee", "event": "#d85d69", "process": "#8f6be8", "unresolved": "#a9b3c3"}
+    kind_bars = "".join(_progress_bar(kind.replace("_", " "), count, concept_supported, kind_colors.get(kind, "#7c83fd")) for kind, count in sorted(concept_kind_counts.items(), key=lambda item: (-item[1], item[0])))
+    top_concept_rows = "".join(
+        f'<li><a href="#concept-{_safe(_slug(item["concept_id"]))}">{_safe(item["preferred_term"])}</a><span class="muted">{item["rule_links"]} rule links · {item["fact_links"]} fact endpoints</span></li>'
+        for item in top_concepts if item["rule_links"] or item["fact_links"]
+    ) or '<li class="muted">No connected concepts were reported.</li>'
+    fact_status_rows = "".join(f'<tr><td>{_safe(status)}</td><td>{count}</td><td>{_percent(count, len(fact_types)):.1f}%</td></tr>' for status, count in sorted(fact_status_counts.items(), key=lambda item: (-item[1], item[0]))) or '<tr><td>Not reported</td><td>0</td><td>0.0%</td></tr>'
     model_cards = []
     colors = {"DMN": "#27c2a5", "BPMN": "#7c83fd", "CMMN": "#f3a94b"}
     for kind in ("DMN", "BPMN", "CMMN"):
@@ -462,12 +570,13 @@ def generate(
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Business Knowledge Report</title>
 <style>
 :root{{--ink:#17253d;--muted:#6f7d91;--line:#e4eaf2;--paper:#fff;--wash:#f5f8fc;--teal:#27c2a5;--violet:#7c83fd;--amber:#f3a94b;--red:#d85d69;--shadow:0 18px 50px rgba(23,37,61,.08)}}*{{box-sizing:border-box}}body{{margin:0;color:var(--ink);background:var(--wash);font:14px/1.5 Inter,ui-sans-serif,system-ui,-apple-system,sans-serif}}a{{color:#4251bd;text-decoration:none}}a:hover{{text-decoration:underline}}button,input,select{{font:inherit}}.shell{{max-width:1560px;margin:auto;padding:26px}}header.hero{{background:linear-gradient(125deg,#17253d,#2b4169 55%,#5165ce);border-radius:24px;color:#fff;padding:34px;box-shadow:var(--shadow);position:relative;overflow:hidden}}header.hero:after{{content:"";position:absolute;width:320px;height:320px;border-radius:50%;right:-90px;top:-130px;background:rgba(39,194,165,.22)}}.eyebrow{{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--teal);font-weight:800}}.hero h1{{font-size:clamp(28px,4vw,48px);line-height:1.05;max-width:800px;margin:10px 0}}.hero p{{max-width:800px;color:#dce7f7;font-size:16px}}.metric-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin:18px 0 26px}}.metric-card,.panel,.model-card{{background:var(--paper);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow)}}.metric-card{{padding:18px}}.metric-value{{font-size:27px;font-weight:800}}.metric-label{{font-weight:750;margin-top:2px}}.metric-detail,.muted{{color:var(--muted);font-size:12px}}nav.tabs{{display:flex;gap:8px;flex-wrap:wrap;margin:20px 0}}nav.tabs button{{border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:999px;padding:10px 16px;cursor:pointer;font-weight:700}}nav.tabs button.active{{background:var(--ink);color:#fff;border-color:var(--ink)}}section.tab{{display:none}}section.tab.active{{display:block}}.panel{{padding:22px;margin:14px 0}}.panel h2,.panel h3{{margin-top:0}}.grid-2{{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px}}table{{width:100%;border-collapse:collapse}}th,td{{padding:11px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}}th{{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);background:#f8fafd;position:sticky;top:0;z-index:1}}tr:hover td{{background:#fbfcff}}.table-wrap{{overflow:auto;max-height:720px;border:1px solid var(--line);border-radius:12px}}.toolbar{{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0}}.toolbar input,.toolbar select{{border:1px solid var(--line);border-radius:9px;padding:9px 11px;background:#fff;min-width:190px}}.status{{display:inline-block;border-radius:999px;padding:3px 8px;font-size:11px;font-weight:800;background:#e9f7f3;color:#087760}}.status-review_required,.status-unresolved{{background:#fff1df;color:#92570a}}.status-fail,.status-contradicted{{background:#ffe8eb;color:#9d2937}}details summary{{cursor:pointer;color:#4251bd;font-weight:650}}pre{{white-space:pre-wrap;word-break:break-word;background:#f7f9fc;border-radius:9px;padding:12px;font:12px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace;max-height:360px;overflow:auto}}.evidence-link{{display:inline-block;margin:2px 4px 2px 0;padding:2px 7px;border-radius:99px;background:#eef1ff;font-size:11px}}.model-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:14px}}.model-card{{padding:18px}}.model-svg{{width:100%;height:auto;background:#fbfcff;border-radius:12px;margin-top:10px}}.svg-title{{font-size:16px;font-weight:800;fill:var(--ink)}}.svg-label{{font-size:11px;fill:var(--ink)}}.svg-empty{{font-size:12px;fill:var(--muted)}}.source-card{{border:1px solid var(--line);background:#fff;border-radius:12px;padding:16px;margin:10px 0;scroll-margin-top:20px}}.source-card h4{{margin:0 0 4px;font-size:14px;word-break:break-all}}.source-meta{{color:var(--muted);font-size:11px;margin-bottom:8px}}.callout{{border-left:4px solid var(--teal);padding:12px 16px;background:#effaf7;border-radius:8px}}.empty{{padding:30px;text-align:center;color:var(--muted)}}footer{{padding:28px 0;color:var(--muted);font-size:12px}}@media(max-width:700px){{.shell{{padding:12px}}header.hero{{padding:24px 20px}}th,td{{min-width:130px}}}}
-</style></head><body><div class="shell">
+ .insight-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;margin:16px 0}}.insight-card{{background:linear-gradient(145deg,#f7fbff,#fff);border:1px solid var(--line);border-radius:14px;padding:16px}}.insight-card .metric-value{{font-size:24px}}.insight-card h3{{font-size:13px;margin:0 0 4px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}}.insight-bar-row{{margin:12px 0}}.insight-bar-label{{display:flex;justify-content:space-between;gap:12px;text-transform:capitalize}}.insight-bar-track{{height:8px;background:#edf1f7;border-radius:99px;overflow:hidden;margin:6px 0 3px}}.insight-bar-track span{{display:block;height:100%;border-radius:99px}}.insight-list{{margin:0;padding:0;list-style:none}}.insight-list li{{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid var(--line)}}.insight-list li:last-child{{border-bottom:0}}.concept-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(310px,1fr));gap:14px;margin-top:16px}}.concept-card{{background:#fff;border:1px solid var(--line);border-radius:16px;padding:18px;box-shadow:0 10px 28px rgba(23,37,61,.05);scroll-margin-top:20px}}.concept-card:hover{{border-color:#b9c4ff;box-shadow:0 14px 34px rgba(66,81,189,.12)}}.concept-card-head{{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}}.concept-term{{font-size:18px;font-weight:800;line-height:1.2}}.concept-card p{{color:#4e5e73;min-height:42px}}.concept-meta{{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0;color:var(--muted);font-size:12px}}.concept-meta span{{padding:5px 8px;background:#f5f7fb;border-radius:999px}}.concept-detail{{display:grid;gap:12px;padding-top:10px}}.concept-detail strong{{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}}.vocabulary-toolbar{{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:14px 0}}.vocabulary-toolbar input,.vocabulary-toolbar select{{border:1px solid var(--line);border-radius:9px;padding:9px 11px;background:#fff;min-width:190px}}.vocabulary-toolbar output{{color:var(--muted);font-size:12px}}.fact-table{{margin-top:18px}}.status-case_management{{background:#eef1ff;color:#4251bd}}.status-human_review{{background:#ffe8eb;color:#9d2937}}.status-machine_repair{{background:#e9f7f3;color:#087760}}.status-presented{{background:#e9f7f3;color:#087760}}.status-unverified{{background:#fff1df;color:#92570a}}
+ </style></head><body><div class="shell">
 <header class="hero"><div class="eyebrow">Agent 12 · presentation and knowledge exploration</div><h1>Business knowledge, ready to review.</h1><p>A self-contained, source-traceable view of the extracted domain. Navigate from SBVR concepts to rules, decisions, workflows, review findings, and the exact evidence that supports each result.</p><div class="muted" style="color:#cbd9ee">Generated from {_safe(graph_file.name)} · no external assets or network calls required</div></header>
 <div class="metric-grid">{_metric_card('Business rules', len(rules), 'All extracted rules shown')}{_metric_card('SBVR concepts', concept_supported, f'{vocabulary_coverage:.1f}% graph-supported coverage')}{_metric_card('Human-review queue', f'{human_review_count} ({report_data["human_review_rate"]:.1f}%)', 'Explicit human judgment required')}{_metric_card('Quality holds', f'{review_count} ({report_data["quality_hold_rate"]:.1f}%)', 'Fail-closed evidence or contract findings')}{_metric_card('Case-management cases', route_counts.get('case_management', 0), 'Evidence work outside the human queue')}{_metric_card('Grounded rules', f'{grounded_count} ({report_data["grounding_coverage_rate"]:.1f}%)', 'At least one source pointer')}{_metric_card('Source documents', len(source_documents), f'{len(chunk_list)} indexed chunks')}{_metric_card('Dependencies', len(edges), 'DAG edges available')}</div>
 <nav class="tabs" aria-label="Report sections"><button class="active" data-tab="overview">Overview</button><button data-tab="vocabulary">SBVR vocabulary</button><button data-tab="rules">Rule explorer</button><button data-tab="models">Decision & process models</button><button data-tab="dependencies">Relationships</button><button data-tab="review">Review queue</button><button data-tab="sources">Source traceability</button></nav>
 <section id="overview" class="tab active"><div class="grid-2"><div class="panel"><div class="eyebrow">Executive summary</div><h2>What this domain contains</h2><p>The report presents <strong>{len(rules)}</strong> rules across <strong>{len(categories)}</strong> categories and <strong>{concept_supported}</strong> SBVR-aligned concepts. The source graph supports <strong>{len(source_documents)}</strong> document roots and <strong>{len(edges)}</strong> dependency relationships.</p><div class="callout">Every displayed rule and concept has an evidence link when the upstream graph provides a source pointer. Missing pointers stay visible as unresolved rather than being replaced by invented citations.</div></div><div class="panel"><div class="eyebrow">Coverage and quality</div><h2>At a glance</h2><table><tr><td>Concept coverage</td><td><strong>{vocabulary_coverage:.1f}%</strong></td></tr><tr><td>Rule source-pointer coverage</td><td><strong>{report_data["grounding_coverage_rate"]:.1f}%</strong></td></tr><tr><td>Human-review queue</td><td><strong>{report_data["human_review_rate"]:.1f}%</strong> ({human_review_count} rules)</td></tr><tr><td>Case-management route</td><td><strong>{route_counts.get("case_management", 0) / max(1, len(rules)) * 100:.1f}%</strong> ({route_counts.get("case_management", 0)} rules)</td></tr><tr><td>Quality holds</td><td><strong>{report_data["quality_hold_rate"]:.1f}%</strong> ({review_count} rules)</td></tr></table></div></div><div class="grid-2"><div class="panel"><h3>Rule categories</h3><div class="table-wrap"><table><thead><tr><th>Category</th><th>Rules</th><th>Share</th></tr></thead><tbody>{category_rows or '<tr><td colspan="3">No categories reported.</td></tr>'}</tbody></table></div></div><div class="panel"><h3>Confidence distribution</h3><div class="table-wrap"><table><thead><tr><th>Band</th><th>Rules</th></tr></thead><tbody>{confidence_rows}</tbody></table></div></div></div></section>
-<section id="vocabulary" class="tab"><div class="panel"><div class="eyebrow">SBVR-aligned business vocabulary</div><h2>Concepts, definitions, and fact types</h2><p>The vocabulary includes all concepts represented by entity types, relationship endpoints, rule parties, and declared decision variables in the source graph. This is 100% coverage of the concepts supported by the input graph; it does not claim to discover concepts that upstream extraction omitted. Each row is linked to source evidence where available.</p><div class="table-wrap"><table><thead><tr><th>Preferred term</th><th>Kind</th><th>Definition</th><th>Status</th><th>Evidence</th></tr></thead><tbody>{''.join(concept_rows) or '<tr><td colspan="5">No concepts were reported.</td></tr>'}</tbody></table></div><h3 style="margin-top:24px">SBVR fact types / relationships</h3><div class="table-wrap"><table><thead><tr><th>Fact type</th><th>Subject</th><th>Verb</th><th>Object</th><th>Grounding</th></tr></thead><tbody>{''.join(fact_rows) or '<tr><td colspan="5">No fact types were reported.</td></tr>'}</tbody></table></div></div></section>
+<section id="vocabulary" class="tab"><div class="panel"><div class="eyebrow">SBVR-aligned business vocabulary</div><h2>Vocabulary workbench</h2><p>Explore the domain lexicon as typed concepts and fact types. The view is grounded in the input graph: definitions, usage counts, relationships, and evidence links are shown only when the upstream artifacts provide them.</p><div class="insight-grid"><div class="insight-card"><h3>Supported concepts</h3><div class="metric-value">{concept_supported}</div><div class="muted">{report_data["concept_coverage_rate"]:.1f}% graph-supported coverage</div></div><div class="insight-card"><h3>Evidence coverage</h3><div class="metric-value">{report_data["concept_evidence_coverage_rate"]:.1f}%</div><div class="muted">{concept_evidence_count} concepts have source evidence</div></div><div class="insight-card"><h3>Fact types</h3><div class="metric-value">{len(fact_types)}</div><div class="muted">{fact_grounded_count} grounded · {report_data["fact_type_grounding_rate"]:.1f}%</div></div><div class="insight-card"><h3>Unresolved / orphaned</h3><div class="metric-value">{report_data["concept_review_count"]} / {concept_orphan_count}</div><div class="muted">Unresolved kinds / no rule or fact links</div></div></div><div class="grid-2"><div class="panel"><h3>Concept type mix</h3><p class="muted">How the vocabulary is distributed across SBVR-aligned concept kinds.</p>{kind_bars}</div><div class="panel"><h3>Most connected concepts</h3><p class="muted">Concepts with the strongest links into rules and fact types.</p><ul class="insight-list">{top_concept_rows}</ul></div></div><div class="panel"><div class="eyebrow">Concept explorer</div><h3>Find a term, definition, or concept kind</h3><div class="vocabulary-toolbar"><input id="concept-search" type="search" placeholder="Search concepts and definitions…"><select id="concept-kind"><option value="">All kinds</option>{''.join(f'<option value="{_safe(kind)}">{_safe(kind.replace("_", " "))}</option>' for kind in sorted(concept_kind_counts, key=str.casefold))}</select><select id="concept-evidence"><option value="">All evidence states</option><option value="grounded">With source evidence</option><option value="unresolved">Evidence unresolved</option></select><output id="concept-count" for="concept-search"></output></div><div id="concept-grid" class="concept-grid">{''.join(concept_rows) or '<div class="empty">No concepts were reported.</div>'}</div></div><div id="fact-types" class="panel fact-table"><div class="eyebrow">SBVR fact types</div><h3>Relationships and grounding status</h3><p class="muted">Each endpoint links back to its concept card; evidence links land on the embedded source block.</p><div class="grid-2"><div class="table-wrap"><table><thead><tr><th>Grounding status</th><th>Fact types</th><th>Share</th></tr></thead><tbody>{fact_status_rows}</tbody></table></div><div class="callout"><strong>{len(fact_types)}</strong> fact types connect <strong>{len(concept_ids)}</strong> concepts. A fact type is a vocabulary relationship, not a workflow sequence.</div></div><div class="table-wrap" style="margin-top:14px"><table><thead><tr><th>Fact type</th><th>Subject</th><th>Verb</th><th>Object</th><th>Grounding and evidence</th></tr></thead><tbody>{''.join(fact_rows) or '<tr><td colspan="5">No fact types were reported.</td></tr>'}</tbody></table></div></div></div></section>
 <section id="rules" class="tab"><div class="panel"><div class="eyebrow">Structured rule explorer</div><h2>Business rules</h2><div class="toolbar"><input id="rule-search" type="search" placeholder="Search ID, title, statement, category…"><select id="rule-category"><option value="">All categories</option>{''.join(f'<option>{_safe(category)}</option>' for category in sorted(categories, key=str.casefold))}</select><select id="rule-status"><option value="">All statuses</option><option value="review_required">Quality hold</option><option value="verified">Verified</option><option value="unresolved">Unresolved</option></select><select id="rule-route"><option value="">All routes</option>{route_options}</select><label class="muted" style="padding:9px 0"><input id="review-only" type="checkbox"> quality holds only</label><span id="rule-count" class="muted" style="padding:9px 0"></span></div><div class="table-wrap"><table id="rules-table"><thead><tr><th>Rule</th><th>Category</th><th>Natural-language statement</th><th>Formal logic</th><th>Confidence/status</th><th>Review route</th><th>Source evidence</th></tr></thead><tbody>{''.join(rule_rows) or '<tr><td colspan="7">No rules were reported.</td></tr>'}</tbody></table></div></div></section>
 <section id="models" class="tab"><div class="panel"><div class="eyebrow">Business process and decision models</div><h2>Models generated by Agent 11</h2><p>DMN, BPMN, and CMMN are shown as review projections and linked by rule IDs. BPMN is displayed only when the upstream semantic-routing gate found explicit ordered workflow semantics; obvious rules remain in DMN/rule views without invented process flows.</p><div class="model-grid">{''.join(model_cards)}</div></div></section>
 <section id="dependencies" class="tab"><div class="panel"><div class="eyebrow">Relationship and dependency view</div><h2>Rule-to-rule dependencies</h2><p>These are the dependency edges emitted by the knowledge-graph optimizer and DAG generator. They are not treated as BPMN sequence flows.</p>{_svg('Dependency coverage', [f'{edge.get("source_rule_id")} → {edge.get("target_rule_id")} · {edge.get("dependency_type", "unknown")}' for edge in edges], '#7c83fd')}<div class="table-wrap"><table><thead><tr><th>Source rule</th><th>Target rule</th><th>Type</th></tr></thead><tbody>{edge_rows}</tbody></table></div></div></section>
@@ -480,6 +589,9 @@ tabs.forEach(button=>button.addEventListener('click',()=>{{tabs.forEach(item=>it
 const rows=[...document.querySelectorAll('#rules-table tbody .rule-row')], search=document.getElementById('rule-search'), category=document.getElementById('rule-category'), status=document.getElementById('rule-status'), route=document.getElementById('rule-route'), review=document.getElementById('review-only'), count=document.getElementById('rule-count');
 function applyFilters(){{const query=(search.value||'').toLowerCase(), cat=category.value, state=status.value, selectedRoute=route.value, only=review.checked;let visible=0;rows.forEach(row=>{{const matches=(!query||row.dataset.search.includes(query))&&(!cat||row.dataset.category===cat)&&(!state||row.dataset.status===state)&&(!selectedRoute||row.dataset.route===selectedRoute)&&(!only||row.dataset.review==='true');row.hidden=!matches;if(matches)visible++;}});count.textContent=visible+' of '+rows.length+' rules shown';}}
 [search,category,status,route,review].forEach(control=>control&&control.addEventListener('input',applyFilters));applyFilters();
+const conceptCards=[...document.querySelectorAll('#concept-grid .concept-card')], conceptSearch=document.getElementById('concept-search'), conceptKind=document.getElementById('concept-kind'), conceptEvidence=document.getElementById('concept-evidence'), conceptCount=document.getElementById('concept-count');
+function applyConceptFilters(){{const query=(conceptSearch.value||'').toLowerCase(), kind=conceptKind.value, evidence=conceptEvidence.value;let visible=0;conceptCards.forEach(card=>{{const matches=(!query||card.dataset.search.includes(query))&&(!kind||card.dataset.kind===kind)&&(!evidence||card.dataset.evidence===evidence);card.hidden=!matches;if(matches)visible++;}});conceptCount.textContent=visible+' of '+conceptCards.length+' concepts shown';}}
+[conceptSearch,conceptKind,conceptEvidence].forEach(control=>control&&control.addEventListener('input',applyConceptFilters));applyConceptFilters();
 if(location.hash&&document.getElementById(location.hash.slice(1))&&document.getElementById(location.hash.slice(1)).classList.contains('tab'))document.querySelector('[data-tab="'+location.hash.slice(1)+'"]').click();
 </script></body></html>'''
     output_dir.mkdir(parents=True, exist_ok=True)
