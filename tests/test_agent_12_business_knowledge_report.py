@@ -16,11 +16,12 @@ def _graph():
         "business_rules": [
             {
                 "rule_id": "R-1", "rule_name": "Customer consent", "rule_type": "consent", "requires_review": True,
-                "description": "A customer must consent before processing.", "confidence": 0.91,
+                "description": "A customer must consent before processing.", "confidence_score": 75,
                 "condition_predicates": [{"variable": "consent", "operator": "==", "value": True}],
                 "outcomes": [{"variable": "processing_allowed", "operator": "=", "value": False}],
                 "variables": [{"name": "consent", "type": "boolean", "role": "input"}, {"name": "processing_allowed", "type": "boolean", "role": "output"}],
                 "related_entities": ["CUSTOMER"], "source_reference": {"chunk_path": "policy/001.txt", "section_id": "s1", "source_text": "Customer consent is required before processing."},
+                "grounding": {"status": "failed", "counts": {"supported": 4, "contradicted": 1, "insufficient_evidence": 2}, "invalid_evidence_records": 0},
                 "readiness": {"failed_sections": [7]}, "review_route": {"route": "human_review", "human_review_required": True, "reasons": ["Evidence needs confirmation"]},
             },
         ],
@@ -55,6 +56,10 @@ def test_agent_12_generates_self_contained_report_with_traceability(tmp_path: Pa
     assert manifest["fact_type_count"] == 1
     assert manifest["fact_type_grounding_rate"] == 0.0
     assert manifest["concept_evidence_coverage_rate"] == 100.0
+    assert manifest["confidence_distribution"] == {"75–89%": 1}
+    assert manifest["confidence_source_counts"] == {"unattributed_score": 1}
+    assert manifest["grounding_claim_counts"] == {"contradicted": 1, "insufficient_evidence": 2, "supported": 4}
+    assert manifest["grounding_claim_support_rate"] == 57.1
     assert "SBVR vocabulary" in report
     assert "Vocabulary workbench" in report
     assert "Concept type mix" in report
@@ -63,6 +68,14 @@ def test_agent_12_generates_self_contained_report_with_traceability(tmp_path: Pa
     assert 'id="concept-grid"' in report
     assert 'id="fact-types"' in report
     assert "applyConceptFilters" in report
+    assert "Readiness, grounding and confidence" in report
+    assert "logic-expression" in report
+    assert "Raw structured contract" in report
+    assert "75.0%" in report
+    assert "score origin not recorded" in report
+    assert "Grounding not certified" in report
+    assert "1 contradiction · 2 evidence gaps" in report
+    assert "4/7 claims supported" in report
     assert 'data-kind="actor_role"' in report
     assert 'href="#concept-CUSTOMER"' in report
     assert 'href="#fact-CUSTOMER_OWNS_ACCOUNT"' in report

@@ -192,7 +192,10 @@ def _rule_statement(rule: Mapping[str, Any]) -> str:
 
 
 def _confidence(rule: Mapping[str, Any]) -> float | None:
-    for key in ("confidence", "extraction_confidence", "grounding_confidence"):
+    # The extraction contract calls this field ``confidence_score``.  The
+    # shorter aliases are retained for older graph snapshots, but omitting the
+    # canonical field made every real report render a misleading "—" score.
+    for key in ("confidence", "extraction_confidence", "grounding_confidence", "confidence_score"):
         value = rule.get(key)
         try:
             if value is not None:
@@ -201,6 +204,124 @@ def _confidence(rule: Mapping[str, Any]) -> float | None:
         except (TypeError, ValueError):
             continue
     return None
+
+
+def _confidence_source(rule: Mapping[str, Any]) -> str:
+    source = str(rule.get("confidence_source") or "").strip()
+    if source:
+        return source
+    if isinstance(rule.get("confidence_breakdown"), Mapping):
+        return "derived_from_breakdown"
+    if "confidence_score" in rule:
+        return "unattributed_score"
+    for key in ("confidence", "extraction_confidence", "grounding_confidence"):
+        if key in rule:
+            return key
+    return "not_reported"
+
+
+def _confidence_source_label(source: str) -> str:
+    return {
+        "default_config": "default configured",
+        "derived_from_breakdown": "derived from breakdown",
+        "model_reported": "model reported",
+        "unattributed_score": "score origin not recorded",
+        "not_reported": "not reported",
+    }.get(source, source.replace("_", " "))
+
+
+def _logic_value(value: Any) -> str:
+    """Render a typed value without losing its formal shape."""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if value is None:
+        return "null"
+    if isinstance(value, (dict, list)):
+        return json.dumps(value, ensure_ascii=False, sort_keys=True)
+    return str(value)
+
+
+def _predicate_expression(predicate: Mapping[str, Any]) -> str:
+    return " ".join(
+        str(predicate.get(key) or "?")
+        for key in ("variable", "operator")
+    ) + " " + _logic_value(predicate.get("value"))
+
+
+def _condition_expression(predicates: Sequence[Mapping[str, Any]], logic: Any) -> str:
+    """Turn condition_logic references into a compact, readable expression."""
+    by_id = {
+        str(predicate.get("predicate_id") or index): _predicate_expression(predicate)
+        for index, predicate in enumerate(predicates)
+    }
+
+    def render(node: Any) -> str:
+        if isinstance(node, Mapping):
+            if "all" in node and isinstance(node["all"], list):
+                return "( " + " AND ".join(render(item) for item in node["all"]) + " )"
+            if "any" in node and isinstance(node["any"], list):
+                return "( " + " OR ".join(render(item) for item in node["any"]) + " )"
+            if "not" in node:
+                return "NOT " + render(node["not"])
+            if "predicate_ref" in node:
+                reference = str(node["predicate_ref"])
+                return by_id.get(reference, f"[{reference}]")
+            return _logic_value(node)
+        if isinstance(node, list):
+            return "( " + " AND ".join(render(item) for item in node) + " )"
+        return str(node)
+
+    if logic is not None:
+        return render(logic)
+    if predicates:
+        return " AND ".join(_predicate_expression(predicate) for predicate in predicates)
+    return "No structured conditions reported"
+
+
+def _logic_field_rows(items: Sequence[Any], kind: str) -> str:
+    rows: list[str] = []
+    for index, item in enumerate(items, 1):
+        if not isinstance(item, Mapping):
+            rows.append(f'<div class="logic-row"><span class="logic-index">{index}</span><code>{_safe(_logic_value(item))}</code></div>')
+            continue
+        prefix = str(item.get("predicate_id") or item.get("variable") or f"{kind}_{index}")
+        expression = _predicate_expression(item) if kind in {"condition", "exception"} else _logic_value(item.get("value"))
+        if kind == "outcome":
+            expression = f'{item.get("variable") or "?"} {item.get("operator") or "="} {_logic_value(item.get("value"))}'
+        value_type = item.get("value_type") or item.get("type")
+        type_html = f'<span class="logic-type">{_safe(value_type)}</span>' if value_type else ""
+        rows.append(f'<div class="logic-row"><span class="logic-index">{_safe(prefix)}</span><code>{_safe(expression)}</code>{type_html}</div>')
+    return "".join(rows) or '<div class="empty">None declared</div>'
+
+
+def _formal_logic_html(rule: Mapping[str, Any]) -> str:
+    predicates = [item for item in _list(rule.get("condition_predicates")) if isinstance(item, Mapping)]
+    outcomes = _list(rule.get("outcomes"))
+    exceptions = _list(rule.get("exceptions"))
+    variables = [item for item in _list(rule.get("variables")) if isinstance(item, Mapping)]
+    inputs = [item for item in variables if str(item.get("role") or "").casefold() == "input"]
+    outputs = [item for item in variables if str(item.get("role") or "").casefold() == "output"]
+    expression = _condition_expression(predicates, rule.get("condition_logic"))
+    return f'''<div class="formal-logic"><div class="logic-expression"><span class="logic-keyword">IF</span> {_safe(expression)} <span class="logic-keyword">THEN</span> {_safe(" AND ".join(_predicate_expression(item) for item in outcomes if isinstance(item, Mapping)) or "evaluate outcome")}</div><div class="logic-grid"><div><h4>Conditions</h4><div class="logic-list">{_logic_field_rows(predicates, "condition")}</div></div><div><h4>Outcomes</h4><div class="logic-list">{_logic_field_rows(outcomes, "outcome")}</div></div><div><h4>Exceptions</h4><div class="logic-list">{_logic_field_rows(exceptions, "exception")}</div></div><div><h4>Variables</h4><div class="logic-list"><div class="logic-row"><span class="logic-index">IN</span><code>{_safe(", ".join(str(item.get("name")) for item in inputs) or "none")}</code></div><div class="logic-row"><span class="logic-index">OUT</span><code>{_safe(", ".join(str(item.get("name")) for item in outputs) or "none")}</code></div></div></div></div><details class="logic-raw"><summary>Raw structured contract</summary><pre>{_safe(json.dumps({"conditions": rule.get("condition_predicates", []), "condition_logic": rule.get("condition_logic"), "outcomes": rule.get("outcomes", []), "exceptions": rule.get("exceptions", []), "dependencies": rule.get("dependencies", []), "related_entities": rule.get("related_entities", [])}, indent=2, ensure_ascii=False))}</pre></details></div>'''
+
+
+def _grounding_summary(rule: Mapping[str, Any], grounding_status: str) -> str:
+    grounding = _mapping(rule.get("grounding"))
+    counts = _mapping(grounding.get("counts"))
+    supported = counts.get("supported", 0)
+    claim_count = grounding.get("claim_count")
+    if claim_count is None and counts:
+        claim_count = sum(value for value in counts.values() if isinstance(value, (int, float)))
+    parts = [f'{supported}/{claim_count} claims supported'] if claim_count is not None else []
+    if counts.get("contradicted"):
+        parts.append(f'{counts["contradicted"]} contradiction' + ("s" if counts["contradicted"] != 1 else ""))
+    if counts.get("insufficient_evidence"):
+        parts.append(f'{counts["insufficient_evidence"]} evidence gap' + ("s" if counts["insufficient_evidence"] != 1 else ""))
+    if grounding.get("invalid_evidence_records"):
+        parts.append(f'{grounding["invalid_evidence_records"]} invalid citation' + ("s" if grounding["invalid_evidence_records"] != 1 else ""))
+    if grounding_status == "certified":
+        return parts[0] if parts else "All evaluated claims supported"
+    return " · ".join(parts) or "Certification incomplete"
 
 
 def _review_reasons(rule: Mapping[str, Any]) -> list[str]:
@@ -327,18 +448,21 @@ def _rule_row(rule: Mapping[str, Any], source_anchors: Sequence[str]) -> str:
     grounding = _mapping(rule.get("grounding"))
     grounding_status = str(grounding.get("status") or rule.get("extraction_status") or "unknown")
     status = "review_required" if review else ("verified" if grounding_status == "certified" else grounding_status)
+    status_label = "Quality hold" if review else ("Verified" if status == "verified" else status.replace("_", " ").title())
+    grounding_label = "Grounding certified" if grounding_status == "certified" else ("Grounding not certified" if grounding_status == "failed" else f"Grounding {grounding_status}")
     confidence = _confidence(rule)
     confidence_text = f"{confidence:.1f}%" if confidence is not None else "—"
+    confidence_source = _confidence_source(rule)
     reason_items = _review_reasons(rule)
     reasons = "".join(f"<li>{_safe(item)}</li>" for item in reason_items) or "<li>No review reason recorded.</li>"
     refs = " ".join(f'<a class="evidence-link" href="#{_safe(anchor)}">Evidence {index + 1}</a>' for index, anchor in enumerate(source_anchors)) or '<span class="muted">Unresolved source</span>'
-    formal = {"conditions": rule.get("condition_predicates", []), "outcomes": rule.get("outcomes", []), "exceptions": rule.get("exceptions", []), "dependencies": rule.get("dependencies", []), "related_entities": rule.get("related_entities", [])}
+    grounding_detail = _grounding_summary(rule, grounding_status)
     return f'''<tr id="rule-{_safe(_slug(rid))}" class="rule-row" data-category="{_safe(category)}" data-status="{_safe(status)}" data-route="{_safe(review_route)}" data-review="{str(review).lower()}" data-search="{_safe((rid + ' ' + str(rule.get('rule_name', '')) + ' ' + _rule_statement(rule) + ' ' + category + ' ' + subcategory).casefold())}">
       <td><a href="#rule-{_safe(_slug(rid))}">{_safe(rid)}</a><div class="muted">{_safe(rule.get('rule_name') or 'Untitled rule')}</div></td>
       <td>{_safe(category)}<div class="muted">{_safe(subcategory)}</div></td>
       <td>{_safe(_rule_statement(rule))}</td>
-      <td><details><summary>Inspect</summary><pre>{_safe(json.dumps(formal, indent=2, ensure_ascii=False))}</pre></details></td>
-      <td><span class="status status-{_safe(status.casefold().replace(' ', '_'))}">{_safe(status)}</span><div class="muted">grounding: {_safe(grounding_status)}</div><div>{confidence_text}</div></td>
+      <td><details class="logic-details"><summary><span class="logic-summary">IF / THEN</span><span class="muted">structured contract</span></summary>{_formal_logic_html(rule)}</details></td>
+      <td><div class="status-stack"><span class="status status-{_safe(status.casefold().replace(' ', '_'))}">{_safe(status_label)}</span><span class="status status-grounding-{_safe(grounding_status.casefold().replace(' ', '_'))}" title="Underlying claim-level grounding verdict">{_safe(grounding_label)}</span></div><div class="confidence-score"><strong>{confidence_text}</strong><span class="muted">{_safe(_confidence_source_label(confidence_source))}</span></div><div class="muted">{_safe(grounding_detail)}</div></td>
       <td><span class="status status-{_safe(review_route.casefold().replace(' ', '_'))}">{_safe(review_route.replace('_', ' '))}</span><div>{'Quality hold' if review else 'No quality hold'}</div><details><summary>Why</summary><ul>{reasons}</ul></details></td>
       <td>{refs}</td>
     </tr>'''
@@ -410,6 +534,16 @@ def generate(
     grounded_count = sum(bool(_rule_references(rule)) for rule in rules)
     confidence_values = [value for rule in rules if (value := _confidence(rule)) is not None]
     confidence_buckets = Counter("90–100%" if value >= 90 else "75–89%" if value >= 75 else "50–74%" if value >= 50 else "0–49%" for value in confidence_values)
+    confidence_sources = Counter(_confidence_source(rule) for rule in rules if _confidence(rule) is not None)
+    grounding_status_counts = Counter(str(_mapping(rule.get("grounding")).get("status") or "not_reported") for rule in rules)
+    grounding_claim_counts: Counter[str] = Counter()
+    for rule in rules:
+        grounding_claim_counts.update({
+            str(key): int(value)
+            for key, value in _mapping(_mapping(rule.get("grounding")).get("counts")).items()
+            if isinstance(value, (int, float))
+        })
+    grounding_claim_total = sum(grounding_claim_counts.values())
     unresolved = sum(1 for rule in rules if _review_reasons(rule))
     source_documents = {str(ref.get("chunk_path") or ref.get("document") or "").split("/")[0] for rule in rules for ref in _rule_references(rule) if ref.get("chunk_path") or ref.get("document")}
     concept_supported = len(concepts)
@@ -481,7 +615,10 @@ def generate(
         "fact_type_status_counts": dict(sorted(fact_status_counts.items())),
         "top_concepts": top_concepts,
         "unresolved_item_count": unresolved,
-        "confidence_distribution": dict(sorted(confidence_buckets.items())), "categories": dict(categories),
+        "confidence_distribution": dict(sorted(confidence_buckets.items())), "confidence_source_counts": dict(sorted(confidence_sources.items())), "categories": dict(categories),
+        "grounding_status_counts": dict(sorted(grounding_status_counts.items())),
+        "grounding_claim_counts": dict(sorted(grounding_claim_counts.items())),
+        "grounding_claim_support_rate": _percent(grounding_claim_counts.get("supported", 0), grounding_claim_total),
         "model_info": model_info, "edge_count": len(edges), "source_graph": str(graph_file),
     }
 
@@ -548,6 +685,7 @@ def generate(
             quality_hold_rows.append(row)
     category_rows = "".join(f'<tr><td>{_safe(category)}</td><td>{count}</td><td>{round(count / max(1, len(rules)) * 100, 1)}%</td></tr>' for category, count in sorted(categories.items(), key=lambda item: (-item[1], item[0].casefold())))
     confidence_rows = "".join(f'<tr><td>{_safe(bucket)}</td><td>{count}</td></tr>' for bucket, count in sorted(confidence_buckets.items())) or '<tr><td>Not reported</td><td>0</td></tr>'
+    confidence_source_summary = " · ".join(f'{_confidence_source_label(source)}: {count}' for source, count in sorted(confidence_sources.items())) or "Not reported"
     edge_rows = "".join(f'<tr><td>{_safe(edge.get("source_rule_id"))}</td><td>{_safe(edge.get("target_rule_id"))}</td><td>{_safe(edge.get("dependency_type", "unknown"))}</td></tr>' for edge in edges[:500]) or '<tr><td colspan="3">No dependency edges were reported.</td></tr>'
     route_options = "".join(f'<option value="{_safe(route)}">{_safe(route.replace("_", " "))}</option>' for route in sorted(route_counts, key=str.casefold))
     kind_colors = {"actor_role": "#27c2a5", "business_object": "#7c83fd", "decision_variable": "#f3a94b", "evidence_object": "#5a8dee", "event": "#d85d69", "process": "#8f6be8", "unresolved": "#a9b3c3"}
@@ -570,14 +708,14 @@ def generate(
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Business Knowledge Report</title>
 <style>
 :root{{--ink:#17253d;--muted:#6f7d91;--line:#e4eaf2;--paper:#fff;--wash:#f5f8fc;--teal:#27c2a5;--violet:#7c83fd;--amber:#f3a94b;--red:#d85d69;--shadow:0 18px 50px rgba(23,37,61,.08)}}*{{box-sizing:border-box}}body{{margin:0;color:var(--ink);background:var(--wash);font:14px/1.5 Inter,ui-sans-serif,system-ui,-apple-system,sans-serif}}a{{color:#4251bd;text-decoration:none}}a:hover{{text-decoration:underline}}button,input,select{{font:inherit}}.shell{{max-width:1560px;margin:auto;padding:26px}}header.hero{{background:linear-gradient(125deg,#17253d,#2b4169 55%,#5165ce);border-radius:24px;color:#fff;padding:34px;box-shadow:var(--shadow);position:relative;overflow:hidden}}header.hero:after{{content:"";position:absolute;width:320px;height:320px;border-radius:50%;right:-90px;top:-130px;background:rgba(39,194,165,.22)}}.eyebrow{{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--teal);font-weight:800}}.hero h1{{font-size:clamp(28px,4vw,48px);line-height:1.05;max-width:800px;margin:10px 0}}.hero p{{max-width:800px;color:#dce7f7;font-size:16px}}.metric-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin:18px 0 26px}}.metric-card,.panel,.model-card{{background:var(--paper);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow)}}.metric-card{{padding:18px}}.metric-value{{font-size:27px;font-weight:800}}.metric-label{{font-weight:750;margin-top:2px}}.metric-detail,.muted{{color:var(--muted);font-size:12px}}nav.tabs{{display:flex;gap:8px;flex-wrap:wrap;margin:20px 0}}nav.tabs button{{border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:999px;padding:10px 16px;cursor:pointer;font-weight:700}}nav.tabs button.active{{background:var(--ink);color:#fff;border-color:var(--ink)}}section.tab{{display:none}}section.tab.active{{display:block}}.panel{{padding:22px;margin:14px 0}}.panel h2,.panel h3{{margin-top:0}}.grid-2{{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px}}table{{width:100%;border-collapse:collapse}}th,td{{padding:11px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}}th{{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);background:#f8fafd;position:sticky;top:0;z-index:1}}tr:hover td{{background:#fbfcff}}.table-wrap{{overflow:auto;max-height:720px;border:1px solid var(--line);border-radius:12px}}.toolbar{{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0}}.toolbar input,.toolbar select{{border:1px solid var(--line);border-radius:9px;padding:9px 11px;background:#fff;min-width:190px}}.status{{display:inline-block;border-radius:999px;padding:3px 8px;font-size:11px;font-weight:800;background:#e9f7f3;color:#087760}}.status-review_required,.status-unresolved{{background:#fff1df;color:#92570a}}.status-fail,.status-contradicted{{background:#ffe8eb;color:#9d2937}}details summary{{cursor:pointer;color:#4251bd;font-weight:650}}pre{{white-space:pre-wrap;word-break:break-word;background:#f7f9fc;border-radius:9px;padding:12px;font:12px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace;max-height:360px;overflow:auto}}.evidence-link{{display:inline-block;margin:2px 4px 2px 0;padding:2px 7px;border-radius:99px;background:#eef1ff;font-size:11px}}.model-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:14px}}.model-card{{padding:18px}}.model-svg{{width:100%;height:auto;background:#fbfcff;border-radius:12px;margin-top:10px}}.svg-title{{font-size:16px;font-weight:800;fill:var(--ink)}}.svg-label{{font-size:11px;fill:var(--ink)}}.svg-empty{{font-size:12px;fill:var(--muted)}}.source-card{{border:1px solid var(--line);background:#fff;border-radius:12px;padding:16px;margin:10px 0;scroll-margin-top:20px}}.source-card h4{{margin:0 0 4px;font-size:14px;word-break:break-all}}.source-meta{{color:var(--muted);font-size:11px;margin-bottom:8px}}.callout{{border-left:4px solid var(--teal);padding:12px 16px;background:#effaf7;border-radius:8px}}.empty{{padding:30px;text-align:center;color:var(--muted)}}footer{{padding:28px 0;color:var(--muted);font-size:12px}}@media(max-width:700px){{.shell{{padding:12px}}header.hero{{padding:24px 20px}}th,td{{min-width:130px}}}}
- .insight-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;margin:16px 0}}.insight-card{{background:linear-gradient(145deg,#f7fbff,#fff);border:1px solid var(--line);border-radius:14px;padding:16px}}.insight-card .metric-value{{font-size:24px}}.insight-card h3{{font-size:13px;margin:0 0 4px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}}.insight-bar-row{{margin:12px 0}}.insight-bar-label{{display:flex;justify-content:space-between;gap:12px;text-transform:capitalize}}.insight-bar-track{{height:8px;background:#edf1f7;border-radius:99px;overflow:hidden;margin:6px 0 3px}}.insight-bar-track span{{display:block;height:100%;border-radius:99px}}.insight-list{{margin:0;padding:0;list-style:none}}.insight-list li{{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid var(--line)}}.insight-list li:last-child{{border-bottom:0}}.concept-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(310px,1fr));gap:14px;margin-top:16px}}.concept-card{{background:#fff;border:1px solid var(--line);border-radius:16px;padding:18px;box-shadow:0 10px 28px rgba(23,37,61,.05);scroll-margin-top:20px}}.concept-card:hover{{border-color:#b9c4ff;box-shadow:0 14px 34px rgba(66,81,189,.12)}}.concept-card-head{{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}}.concept-term{{font-size:18px;font-weight:800;line-height:1.2}}.concept-card p{{color:#4e5e73;min-height:42px}}.concept-meta{{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0;color:var(--muted);font-size:12px}}.concept-meta span{{padding:5px 8px;background:#f5f7fb;border-radius:999px}}.concept-detail{{display:grid;gap:12px;padding-top:10px}}.concept-detail strong{{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}}.vocabulary-toolbar{{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:14px 0}}.vocabulary-toolbar input,.vocabulary-toolbar select{{border:1px solid var(--line);border-radius:9px;padding:9px 11px;background:#fff;min-width:190px}}.vocabulary-toolbar output{{color:var(--muted);font-size:12px}}.fact-table{{margin-top:18px}}.status-case_management{{background:#eef1ff;color:#4251bd}}.status-human_review{{background:#ffe8eb;color:#9d2937}}.status-machine_repair{{background:#e9f7f3;color:#087760}}.status-presented{{background:#e9f7f3;color:#087760}}.status-unverified{{background:#fff1df;color:#92570a}}
+ .insight-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;margin:16px 0}}.insight-card{{background:linear-gradient(145deg,#f7fbff,#fff);border:1px solid var(--line);border-radius:14px;padding:16px}}.insight-card .metric-value{{font-size:24px}}.insight-card h3{{font-size:13px;margin:0 0 4px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}}.insight-bar-row{{margin:12px 0}}.insight-bar-label{{display:flex;justify-content:space-between;gap:12px;text-transform:capitalize}}.insight-bar-track{{height:8px;background:#edf1f7;border-radius:99px;overflow:hidden;margin:6px 0 3px}}.insight-bar-track span{{display:block;height:100%;border-radius:99px}}.insight-list{{margin:0;padding:0;list-style:none}}.insight-list li{{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid var(--line)}}.insight-list li:last-child{{border-bottom:0}}.concept-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(310px,1fr));gap:14px;margin-top:16px}}.concept-card{{background:#fff;border:1px solid var(--line);border-radius:16px;padding:18px;box-shadow:0 10px 28px rgba(23,37,61,.05);scroll-margin-top:20px}}.concept-card:hover{{border-color:#b9c4ff;box-shadow:0 14px 34px rgba(66,81,189,.12)}}.concept-card-head{{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}}.concept-term{{font-size:18px;font-weight:800;line-height:1.2}}.concept-card p{{color:#4e5e73;min-height:42px}}.concept-meta{{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0;color:var(--muted);font-size:12px}}.concept-meta span{{padding:5px 8px;background:#f5f7fb;border-radius:999px}}.concept-detail{{display:grid;gap:12px;padding-top:10px}}.concept-detail strong{{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}}.vocabulary-toolbar{{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:14px 0}}.vocabulary-toolbar input,.vocabulary-toolbar select{{border:1px solid var(--line);border-radius:9px;padding:9px 11px;background:#fff;min-width:190px}}.vocabulary-toolbar output{{color:var(--muted);font-size:12px}}.fact-table{{margin-top:18px}}.status-case_management{{background:#eef1ff;color:#4251bd}}.status-human_review{{background:#ffe8eb;color:#9d2937}}.status-machine_repair{{background:#e9f7f3;color:#087760}}.status-presented{{background:#e9f7f3;color:#087760}}.status-unverified{{background:#fff1df;color:#92570a}}.status-grounding-failed{{background:#ffe8eb;color:#9d2937}}.status-grounding-certified{{background:#e9f7f3;color:#087760}}.status-grounding-unknown{{background:#f0f2f6;color:#5d6b7e}}.status-stack{{display:flex;flex-wrap:wrap;gap:5px}}.confidence-score{{display:flex;align-items:baseline;gap:6px;margin-top:7px}}.logic-details{{min-width:250px}}.logic-details summary{{display:flex;align-items:center;justify-content:space-between;gap:8px}}.logic-summary{{font-weight:800;color:#4251bd}}.formal-logic{{padding:14px 0 4px}}.logic-expression{{padding:12px 14px;background:#17253d;color:#eef4ff;border-radius:10px;font:12px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;overflow:auto}}.logic-keyword{{color:#7de4ce;font-weight:900;margin:0 4px}}.logic-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;margin-top:14px}}.logic-grid h4{{margin:0 0 7px;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}}.logic-list{{border:1px solid var(--line);border-radius:10px;overflow:hidden}}.logic-row{{display:flex;align-items:flex-start;gap:8px;padding:8px 10px;border-bottom:1px solid var(--line);background:#fff}}.logic-row:last-child{{border-bottom:0}}.logic-index{{flex:0 0 auto;color:#4251bd;font:700 11px ui-monospace,SFMono-Regular,Menlo,monospace}}.logic-row code{{font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;overflow-wrap:anywhere}}.logic-type{{margin-left:auto;flex:0 0 auto;color:var(--muted);font-size:11px}}.logic-raw{{margin-top:12px}}.logic-raw pre{{max-height:260px}}
  </style></head><body><div class="shell">
 <header class="hero"><div class="eyebrow">Agent 12 · presentation and knowledge exploration</div><h1>Business knowledge, ready to review.</h1><p>A self-contained, source-traceable view of the extracted domain. Navigate from SBVR concepts to rules, decisions, workflows, review findings, and the exact evidence that supports each result.</p><div class="muted" style="color:#cbd9ee">Generated from {_safe(graph_file.name)} · no external assets or network calls required</div></header>
-<div class="metric-grid">{_metric_card('Business rules', len(rules), 'All extracted rules shown')}{_metric_card('SBVR concepts', concept_supported, f'{vocabulary_coverage:.1f}% graph-supported coverage')}{_metric_card('Human-review queue', f'{human_review_count} ({report_data["human_review_rate"]:.1f}%)', 'Explicit human judgment required')}{_metric_card('Quality holds', f'{review_count} ({report_data["quality_hold_rate"]:.1f}%)', 'Fail-closed evidence or contract findings')}{_metric_card('Case-management cases', route_counts.get('case_management', 0), 'Evidence work outside the human queue')}{_metric_card('Grounded rules', f'{grounded_count} ({report_data["grounding_coverage_rate"]:.1f}%)', 'At least one source pointer')}{_metric_card('Source documents', len(source_documents), f'{len(chunk_list)} indexed chunks')}{_metric_card('Dependencies', len(edges), 'DAG edges available')}</div>
+<div class="metric-grid">{_metric_card('Business rules', len(rules), 'All extracted rules shown')}{_metric_card('SBVR concepts', concept_supported, f'{vocabulary_coverage:.1f}% graph-supported coverage')}{_metric_card('Human-review queue', f'{human_review_count} ({report_data["human_review_rate"]:.1f}%)', 'Explicit human judgment required')}{_metric_card('Quality holds', f'{review_count} ({report_data["quality_hold_rate"]:.1f}%)', 'Fail-closed evidence or contract findings')}{_metric_card('Case-management cases', route_counts.get('case_management', 0), 'Evidence work outside the human queue')}{_metric_card('Grounded rules', f'{grounded_count} ({report_data["grounding_coverage_rate"]:.1f}%)', 'At least one source pointer')}{_metric_card('Grounding claims', f'{grounding_claim_counts.get("supported", 0)} ({report_data["grounding_claim_support_rate"]:.1f}%)', 'Claim-level support; holds may be partial')}{_metric_card('Source documents', len(source_documents), f'{len(chunk_list)} indexed chunks')}{_metric_card('Dependencies', len(edges), 'DAG edges available')}</div>
 <nav class="tabs" aria-label="Report sections"><button class="active" data-tab="overview">Overview</button><button data-tab="vocabulary">SBVR vocabulary</button><button data-tab="rules">Rule explorer</button><button data-tab="models">Decision & process models</button><button data-tab="dependencies">Relationships</button><button data-tab="review">Review queue</button><button data-tab="sources">Source traceability</button></nav>
-<section id="overview" class="tab active"><div class="grid-2"><div class="panel"><div class="eyebrow">Executive summary</div><h2>What this domain contains</h2><p>The report presents <strong>{len(rules)}</strong> rules across <strong>{len(categories)}</strong> categories and <strong>{concept_supported}</strong> SBVR-aligned concepts. The source graph supports <strong>{len(source_documents)}</strong> document roots and <strong>{len(edges)}</strong> dependency relationships.</p><div class="callout">Every displayed rule and concept has an evidence link when the upstream graph provides a source pointer. Missing pointers stay visible as unresolved rather than being replaced by invented citations.</div></div><div class="panel"><div class="eyebrow">Coverage and quality</div><h2>At a glance</h2><table><tr><td>Concept coverage</td><td><strong>{vocabulary_coverage:.1f}%</strong></td></tr><tr><td>Rule source-pointer coverage</td><td><strong>{report_data["grounding_coverage_rate"]:.1f}%</strong></td></tr><tr><td>Human-review queue</td><td><strong>{report_data["human_review_rate"]:.1f}%</strong> ({human_review_count} rules)</td></tr><tr><td>Case-management route</td><td><strong>{route_counts.get("case_management", 0) / max(1, len(rules)) * 100:.1f}%</strong> ({route_counts.get("case_management", 0)} rules)</td></tr><tr><td>Quality holds</td><td><strong>{report_data["quality_hold_rate"]:.1f}%</strong> ({review_count} rules)</td></tr></table></div></div><div class="grid-2"><div class="panel"><h3>Rule categories</h3><div class="table-wrap"><table><thead><tr><th>Category</th><th>Rules</th><th>Share</th></tr></thead><tbody>{category_rows or '<tr><td colspan="3">No categories reported.</td></tr>'}</tbody></table></div></div><div class="panel"><h3>Confidence distribution</h3><div class="table-wrap"><table><thead><tr><th>Band</th><th>Rules</th></tr></thead><tbody>{confidence_rows}</tbody></table></div></div></div></section>
+<section id="overview" class="tab active"><div class="grid-2"><div class="panel"><div class="eyebrow">Executive summary</div><h2>What this domain contains</h2><p>The report presents <strong>{len(rules)}</strong> rules across <strong>{len(categories)}</strong> categories and <strong>{concept_supported}</strong> SBVR-aligned concepts. The source graph supports <strong>{len(source_documents)}</strong> document roots and <strong>{len(edges)}</strong> dependency relationships.</p><div class="callout">Every displayed rule and concept has an evidence link when the upstream graph provides a source pointer. Missing pointers stay visible as unresolved rather than being replaced by invented citations.</div></div><div class="panel"><div class="eyebrow">Coverage and quality</div><h2>At a glance</h2><table><tr><td>Concept coverage</td><td><strong>{vocabulary_coverage:.1f}%</strong></td></tr><tr><td>Rule source-pointer coverage</td><td><strong>{report_data["grounding_coverage_rate"]:.1f}%</strong></td></tr><tr><td>Grounding claims supported</td><td><strong>{grounding_claim_counts.get("supported", 0)}/{grounding_claim_total}</strong> ({report_data["grounding_claim_support_rate"]:.1f}%)</td></tr><tr><td>Human-review queue</td><td><strong>{report_data["human_review_rate"]:.1f}%</strong> ({human_review_count} rules)</td></tr><tr><td>Case-management route</td><td><strong>{route_counts.get("case_management", 0) / max(1, len(rules)) * 100:.1f}%</strong> ({route_counts.get("case_management", 0)} rules)</td></tr><tr><td>Quality holds</td><td><strong>{report_data["quality_hold_rate"]:.1f}%</strong> ({review_count} rules)</td></tr></table></div></div><div class="grid-2"><div class="panel"><h3>Rule categories</h3><div class="table-wrap"><table><thead><tr><th>Category</th><th>Rules</th><th>Share</th></tr></thead><tbody>{category_rows or '<tr><td colspan="3">No categories reported.</td></tr>'}</tbody></table></div></div><div class="panel"><h3>Confidence distribution</h3><div class="table-wrap"><table><thead><tr><th>Band</th><th>Rules</th></tr></thead><tbody>{confidence_rows}</tbody></table></div><p class="muted" style="margin-bottom:0">Confidence provenance: {_safe(confidence_source_summary)}</p></div></div></section>
 <section id="vocabulary" class="tab"><div class="panel"><div class="eyebrow">SBVR-aligned business vocabulary</div><h2>Vocabulary workbench</h2><p>Explore the domain lexicon as typed concepts and fact types. The view is grounded in the input graph: definitions, usage counts, relationships, and evidence links are shown only when the upstream artifacts provide them.</p><div class="insight-grid"><div class="insight-card"><h3>Supported concepts</h3><div class="metric-value">{concept_supported}</div><div class="muted">{report_data["concept_coverage_rate"]:.1f}% graph-supported coverage</div></div><div class="insight-card"><h3>Evidence coverage</h3><div class="metric-value">{report_data["concept_evidence_coverage_rate"]:.1f}%</div><div class="muted">{concept_evidence_count} concepts have source evidence</div></div><div class="insight-card"><h3>Fact types</h3><div class="metric-value">{len(fact_types)}</div><div class="muted">{fact_grounded_count} grounded · {report_data["fact_type_grounding_rate"]:.1f}%</div></div><div class="insight-card"><h3>Unresolved / orphaned</h3><div class="metric-value">{report_data["concept_review_count"]} / {concept_orphan_count}</div><div class="muted">Unresolved kinds / no rule or fact links</div></div></div><div class="grid-2"><div class="panel"><h3>Concept type mix</h3><p class="muted">How the vocabulary is distributed across SBVR-aligned concept kinds.</p>{kind_bars}</div><div class="panel"><h3>Most connected concepts</h3><p class="muted">Concepts with the strongest links into rules and fact types.</p><ul class="insight-list">{top_concept_rows}</ul></div></div><div class="panel"><div class="eyebrow">Concept explorer</div><h3>Find a term, definition, or concept kind</h3><div class="vocabulary-toolbar"><input id="concept-search" type="search" placeholder="Search concepts and definitions…"><select id="concept-kind"><option value="">All kinds</option>{''.join(f'<option value="{_safe(kind)}">{_safe(kind.replace("_", " "))}</option>' for kind in sorted(concept_kind_counts, key=str.casefold))}</select><select id="concept-evidence"><option value="">All evidence states</option><option value="grounded">With source evidence</option><option value="unresolved">Evidence unresolved</option></select><output id="concept-count" for="concept-search"></output></div><div id="concept-grid" class="concept-grid">{''.join(concept_rows) or '<div class="empty">No concepts were reported.</div>'}</div></div><div id="fact-types" class="panel fact-table"><div class="eyebrow">SBVR fact types</div><h3>Relationships and grounding status</h3><p class="muted">Each endpoint links back to its concept card; evidence links land on the embedded source block.</p><div class="grid-2"><div class="table-wrap"><table><thead><tr><th>Grounding status</th><th>Fact types</th><th>Share</th></tr></thead><tbody>{fact_status_rows}</tbody></table></div><div class="callout"><strong>{len(fact_types)}</strong> fact types connect <strong>{len(concept_ids)}</strong> concepts. A fact type is a vocabulary relationship, not a workflow sequence.</div></div><div class="table-wrap" style="margin-top:14px"><table><thead><tr><th>Fact type</th><th>Subject</th><th>Verb</th><th>Object</th><th>Grounding and evidence</th></tr></thead><tbody>{''.join(fact_rows) or '<tr><td colspan="5">No fact types were reported.</td></tr>'}</tbody></table></div></div></div></section>
-<section id="rules" class="tab"><div class="panel"><div class="eyebrow">Structured rule explorer</div><h2>Business rules</h2><div class="toolbar"><input id="rule-search" type="search" placeholder="Search ID, title, statement, category…"><select id="rule-category"><option value="">All categories</option>{''.join(f'<option>{_safe(category)}</option>' for category in sorted(categories, key=str.casefold))}</select><select id="rule-status"><option value="">All statuses</option><option value="review_required">Quality hold</option><option value="verified">Verified</option><option value="unresolved">Unresolved</option></select><select id="rule-route"><option value="">All routes</option>{route_options}</select><label class="muted" style="padding:9px 0"><input id="review-only" type="checkbox"> quality holds only</label><span id="rule-count" class="muted" style="padding:9px 0"></span></div><div class="table-wrap"><table id="rules-table"><thead><tr><th>Rule</th><th>Category</th><th>Natural-language statement</th><th>Formal logic</th><th>Confidence/status</th><th>Review route</th><th>Source evidence</th></tr></thead><tbody>{''.join(rule_rows) or '<tr><td colspan="7">No rules were reported.</td></tr>'}</tbody></table></div></div></section>
+<section id="rules" class="tab"><div class="panel"><div class="eyebrow">Structured rule explorer</div><h2>Business rules</h2><p class="muted">Readiness, grounding, and confidence are separate signals. A quality hold means the rule is fail-closed for execution; it does not mean every extracted statement is wrong. Expand <strong>IF / THEN</strong> to inspect the typed contract and the raw JSON when needed.</p><div class="toolbar"><input id="rule-search" type="search" placeholder="Search ID, title, statement, category…"><select id="rule-category"><option value="">All categories</option>{''.join(f'<option>{_safe(category)}</option>' for category in sorted(categories, key=str.casefold))}</select><select id="rule-status"><option value="">All statuses</option><option value="review_required">Quality hold</option><option value="verified">Verified</option><option value="unresolved">Unresolved</option></select><select id="rule-route"><option value="">All routes</option>{route_options}</select><label class="muted" style="padding:9px 0"><input id="review-only" type="checkbox"> quality holds only</label><span id="rule-count" class="muted" style="padding:9px 0"></span></div><div class="table-wrap"><table id="rules-table"><thead><tr><th>Rule</th><th>Category</th><th>Natural-language statement</th><th>Formal logic</th><th>Readiness, grounding and confidence</th><th>Review route</th><th>Source evidence</th></tr></thead><tbody>{''.join(rule_rows) or '<tr><td colspan="7">No rules were reported.</td></tr>'}</tbody></table></div></div></section>
 <section id="models" class="tab"><div class="panel"><div class="eyebrow">Business process and decision models</div><h2>Models generated by Agent 11</h2><p>DMN, BPMN, and CMMN are shown as review projections and linked by rule IDs. BPMN is displayed only when the upstream semantic-routing gate found explicit ordered workflow semantics; obvious rules remain in DMN/rule views without invented process flows.</p><div class="model-grid">{''.join(model_cards)}</div></div></section>
 <section id="dependencies" class="tab"><div class="panel"><div class="eyebrow">Relationship and dependency view</div><h2>Rule-to-rule dependencies</h2><p>These are the dependency edges emitted by the knowledge-graph optimizer and DAG generator. They are not treated as BPMN sequence flows.</p>{_svg('Dependency coverage', [f'{edge.get("source_rule_id")} → {edge.get("target_rule_id")} · {edge.get("dependency_type", "unknown")}' for edge in edges], '#7c83fd')}<div class="table-wrap"><table><thead><tr><th>Source rule</th><th>Target rule</th><th>Type</th></tr></thead><tbody>{edge_rows}</tbody></table></div></div></section>
 <section id="review" class="tab"><div class="panel"><div class="eyebrow">Review management</div><h2>Human-review queue and quality holds</h2><p><strong>Human-review queue</strong> contains only rules explicitly routed to human judgment. <strong>Quality holds</strong> remain fail-closed when evidence, contract, or relationship checks are incomplete; those items are routed to case management or machine repair and are not counted as human-review work.</p><div class="grid-2"><div class="callout"><strong>{human_review_count}</strong> rules are in the human-review queue (<strong>{report_data["human_review_rate"]:.1f}%</strong>).</div><div class="callout"><strong>{review_count}</strong> rules have quality holds (<strong>{report_data["quality_hold_rate"]:.1f}%</strong>); <strong>{nonhuman_quality_hold_count}</strong> are outside the human queue.</div></div><h3 style="margin-top:24px">Human-review queue ({human_review_count})</h3><div class="table-wrap"><table><thead><tr><th>Rule</th><th>Route</th><th>Why flagged</th><th>Confidence</th><th>Evidence</th></tr></thead><tbody>{''.join(human_review_rows) or '<tr><td colspan="5">No rules are currently routed to human review.</td></tr>'}</tbody></table></div><h3 style="margin-top:24px">Quality holds outside the human queue ({nonhuman_quality_hold_count})</h3><p class="muted">These items retain their review flag for auditability but are intended for case-management or deterministic repair workflows.</p><div class="table-wrap"><table><thead><tr><th>Rule</th><th>Route</th><th>Why flagged</th><th>Confidence</th><th>Evidence</th></tr></thead><tbody>{''.join(quality_hold_rows) or '<tr><td colspan="5">No non-human quality holds are currently recorded.</td></tr>'}</tbody></table></div></div></section>
