@@ -421,6 +421,15 @@ class ExtractionPipeline:
             for value in invariants.values()
         ) and bool(report.get("rules_requiring_review"))
 
+    def _readiness_requests_remediation(self) -> bool:
+        """Return whether Agent 07 produced actionable rules for Agent 08."""
+        report_path = self.optimized_dir / "kg_readiness_report.json"
+        try:
+            report = json.loads(report_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return False
+        return bool(report.get("rules_requiring_review"))
+
     def _review_only_grounding(self) -> bool:
         """Return true for a complete, fail-closed grounding review.
 
@@ -469,15 +478,7 @@ class ExtractionPipeline:
             if not self.run_agent_07():
                 # agent_07 exits nonzero either on a hard invariant failure
                 # (unrecoverable here) or because rules need agent_08 remediation.
-                report_path = self.optimized_dir / "kg_readiness_report.json"
-                needs_remediation = False
-                if report_path.exists():
-                    try:
-                        report = json.loads(report_path.read_text())
-                        needs_remediation = bool(report.get("rules_requiring_review"))
-                    except (OSError, json.JSONDecodeError):
-                        pass
-                if not needs_remediation:
+                if not self._readiness_requests_remediation():
                     print("\nSTOPPED: agent_07 invariant failure (not remediable by agent_08).")
                     return False
                 print("\nagent_07 requested focused remediation -> running agent_08")
@@ -543,8 +544,56 @@ class ExtractionPipeline:
             selection_label = ", ".join(stage_ids)
         self._begin_run(stage_ids, selection_label)
         overall_ok = True
-        for agent_id in stage_ids:
-            if not self.run_agent(agent_id):
+        readiness_pending = False
+        for index, agent_id in enumerate(stage_ids):
+            ok = self.run_agent(agent_id)
+
+            if agent_id == "agent_07" and not ok:
+                has_remediator = "agent_08" in stage_ids[index + 1:]
+                if has_remediator and self._readiness_requests_remediation():
+                    readiness_pending = True
+                    print("\nagent_07 requested focused remediation -> continuing to selected agent_08")
+                    continue
+
+            if agent_id == "agent_08":
+                remediation_review_only = (
+                    not ok and self._last_exit_codes.get("agent_08") == 3
+                )
+                if not ok and not remediation_review_only:
+                    overall_ok = False
+                    if not keep_going:
+                        break
+                    continue
+
+                # A selective resume beginning at Agent 08 must perform the
+                # same readiness recheck as a full run before grounding.
+                should_recheck = readiness_pending or "agent_07" not in stage_ids[:index]
+                if should_recheck and any(
+                    selected in stage_ids[index + 1:]
+                    for selected in ("agent_09", "agent_10", "agent_11", "agent_12")
+                ):
+                    readiness_pending = False
+                    recheck_ok = self.run_agent_07(reuse_conflicts=True)
+                    if not recheck_ok and not (
+                        self._last_exit_codes.get("agent_07") == 3
+                        and self._review_only_readiness()
+                    ):
+                        overall_ok = False
+                        if not keep_going:
+                            break
+                    elif not recheck_ok:
+                        print("readiness remains review-gated; preserving review flags and continuing")
+                continue
+
+            if agent_id == "agent_09" and not ok:
+                if (
+                    self._last_exit_codes.get("agent_09") == 3
+                    and self._review_only_grounding()
+                ):
+                    print("grounding remains review-gated with complete response coverage; continuing fail-closed")
+                    continue
+
+            if not ok:
                 overall_ok = False
                 if not keep_going:
                     break

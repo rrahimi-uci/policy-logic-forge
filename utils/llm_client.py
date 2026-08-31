@@ -319,13 +319,24 @@ class LLMClient:
             # A bounded, compact extraction run can opt out of the historical
             # 32k minimum. The default remains unchanged for existing callers.
             cap = os.getenv("KG_REASONING_MAX_COMPLETION_TOKENS")
+            cap_override = kwargs.pop("reasoning_completion_cap_override", None)
             if cap:
                 completion_budget = min(completion_budget, int(cap))
+            if cap_override is not None:
+                # Recovery callers may deliberately raise the normal pipeline
+                # ceiling for a bounded retry after finish_reason=length. This
+                # is an explicit per-call cap, not permission for ordinary
+                # requests to bypass the configured global ceiling.
+                completion_budget = min(
+                    max(max_tokens * 4, 32768) if max_tokens else 32768,
+                    max(1, int(cap_override)),
+                )
             params["max_completion_tokens"] = completion_budget
             kwargs.pop('max_completion_tokens', None)
             kwargs.pop('max_tokens', None)
         elif max_tokens:
             params["max_tokens"] = max_tokens
+            kwargs.pop("reasoning_completion_cap_override", None)
 
         if response_format:
             params["response_format"] = response_format
@@ -333,20 +344,29 @@ class LLMClient:
         params.update(kwargs)
 
         lease = None
-        request_started = time.monotonic()
+        request_started = None
         try:
             with self._request_gate:
                 if self._adaptive_limiter is not None:
-                    lease = self._adaptive_limiter.acquire(
-                        timeout=self.timeout * (self.max_retries + 1) + self.watchdog_margin
-                    )
+                    # Queue admission is not an API request and must not inherit
+                    # the provider watchdog. When adaptive concurrency falls
+                    # sharply (for example 32 -> 1 after a transport incident),
+                    # healthy queued workers can legitimately wait longer than
+                    # one request's retry window. Expired and dead-owner leases
+                    # are reaped by AdaptiveRequestLimiter, so waiting here is
+                    # bounded by actual capacity recovery rather than falsely
+                    # failing an unissued request.
+                    lease = self._adaptive_limiter.acquire(timeout=None)
+                request_started = time.monotonic()
                 response = self._create_with_watchdog(params)
         except Exception as e:
             if lease is not None and self._adaptive_limiter is not None:
                 throttled, penalize = self._classify_backpressure_error(e)
                 snapshot = self._adaptive_limiter.release(
                     lease, success=False, penalize=penalize, throttled=throttled,
-                    request_seconds=time.monotonic() - request_started,
+                    request_seconds=(
+                        time.monotonic() - request_started if request_started is not None else 0
+                    ),
                 )
                 self._emit_request_metric(lease, snapshot, False, e)
             # A connection error can leave the keep-alive pool unusable. Reset
@@ -360,7 +380,11 @@ class LLMClient:
 
         if lease is not None and self._adaptive_limiter is not None:
             snapshot = self._adaptive_limiter.release(
-                lease, success=True, request_seconds=time.monotonic() - request_started
+                lease,
+                success=True,
+                request_seconds=(
+                    time.monotonic() - request_started if request_started is not None else 0
+                ),
             )
             self._emit_request_metric(lease, snapshot, True, None)
 

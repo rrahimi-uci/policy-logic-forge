@@ -131,6 +131,22 @@ class TestChatCompletionParams:
         kwargs = mock.chat.completions.create.call_args.kwargs
         assert kwargs["max_completion_tokens"] == 24576
 
+    @allure.title("A bounded recovery call can raise the normal reasoning cap")
+    def test_reasoning_completion_budget_recovery_override(self, monkeypatch):
+        client, mock = self._client_with_mock("gpt-5.6-luna")
+        monkeypatch.setenv("KG_REASONING_MAX_COMPLETION_TOKENS", "24576")
+
+        client.chat_completion(
+            [{"role": "user", "content": "retry compact JSON"}],
+            max_tokens=32768,
+            reasoning_effort="high",
+            reasoning_completion_cap_override=32768,
+        )
+
+        kwargs = mock.chat.completions.create.call_args.kwargs
+        assert kwargs["max_completion_tokens"] == 32768
+        assert "reasoning_completion_cap_override" not in kwargs
+
     @allure.title("get_text_response returns the message content")
     def test_get_text_response(self):
         client, _ = self._client_with_mock("gpt-4o-mini")
@@ -155,3 +171,22 @@ class TestChatCompletionParams:
         assert caught.value.status_code == 503
         assert caught.value.error_type == "RuntimeError"
         assert caught.value.__cause__ is provider_error
+
+    @allure.title("Adaptive queue admission does not inherit the API watchdog")
+    def test_adaptive_queue_wait_has_no_request_timeout(self):
+        client, _ = self._client_with_mock("gpt-4o-mini")
+        limiter = MagicMock()
+        limiter.acquire.return_value = MagicMock(wait_seconds=123.0)
+        limiter.release.return_value = {
+            "current_limit": 1,
+            "active_leases": 0,
+            "total_success": 1,
+            "total_failure": 0,
+            "total_throttled": 0,
+        }
+        client._adaptive_limiter = limiter
+
+        client.chat_completion([{"role": "user", "content": "hi"}], max_tokens=8)
+
+        limiter.acquire.assert_called_once_with(timeout=None)
+        assert limiter.release.call_args.kwargs["request_seconds"] < 5

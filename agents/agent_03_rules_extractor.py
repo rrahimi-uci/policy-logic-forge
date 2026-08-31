@@ -579,7 +579,10 @@ class BusinessRulesExtractor:
                             temperature=self.global_config.get_rules_temperature(),
                             max_tokens=completion_limit,
                             response_format={"type": "json_object"},
-                            reasoning_effort=self.reasoning_effort
+                            reasoning_effort=self.reasoning_effort,
+                            reasoning_completion_cap_override=(
+                                completion_limit if max_tokens_override is not None else None
+                            ),
                         )
                     else:
                         with request_gate:
@@ -588,7 +591,10 @@ class BusinessRulesExtractor:
                                 temperature=self.global_config.get_rules_temperature(),
                                 max_tokens=completion_limit,
                                 response_format={"type": "json_object"},
-                                reasoning_effort=self.reasoning_effort
+                                reasoning_effort=self.reasoning_effort,
+                                reasoning_completion_cap_override=(
+                                    completion_limit if max_tokens_override is not None else None
+                                ),
                             )
                     break
                 except Exception as exc:
@@ -655,6 +661,7 @@ class BusinessRulesExtractor:
                                 max_tokens=retry_completion_limit,
                                 response_format={"type": "json_object"},
                                 reasoning_effort=self.reasoning_effort,
+                                reasoning_completion_cap_override=retry_completion_limit,
                             )
                         else:
                             with request_gate:
@@ -664,6 +671,7 @@ class BusinessRulesExtractor:
                                     max_tokens=retry_completion_limit,
                                     response_format={"type": "json_object"},
                                     reasoning_effort=self.reasoning_effort,
+                                    reasoning_completion_cap_override=retry_completion_limit,
                                 )
                         content = response.choices[0].message.content
                         if content and getattr(response.choices[0], "finish_reason", None) != "length":
@@ -746,6 +754,11 @@ class BusinessRulesExtractor:
                             max_tokens=completion_limit,
                             response_format={"type": "json_object"},
                             reasoning_effort=self.reasoning_effort,
+                            reasoning_completion_cap_override=(
+                                retry_completion_limit
+                                if "compact_prompt" in locals()
+                                else (completion_limit if max_tokens_override is not None else None)
+                            ),
                         )
                     else:
                         with request_gate:
@@ -755,6 +768,11 @@ class BusinessRulesExtractor:
                                 max_tokens=completion_limit,
                                 response_format={"type": "json_object"},
                                 reasoning_effort=self.reasoning_effort,
+                                reasoning_completion_cap_override=(
+                                    retry_completion_limit
+                                    if "compact_prompt" in locals()
+                                    else (completion_limit if max_tokens_override is not None else None)
+                                ),
                             )
                     content = response.choices[0].message.content or ""
                     if getattr(response.choices[0], "finish_reason", None) == "length":

@@ -28,6 +28,16 @@ from utils.llm_client import create_llm_client
 from utils.config import get_config
 
 
+def validation_exit_code(report: Dict[str, Any]) -> int:
+    """Return the documented advisory-stage exit code.
+
+    Findings remain available to readiness, remediation, and grounding. Only
+    operational failures raised while loading, validating, or saving should
+    stop the pipeline before those authoritative gates can run.
+    """
+    return 0
+
+
 class RuleValidationAgent:
     """
     Validates extracted business rules for accuracy, consistency, and completeness.
@@ -714,9 +724,11 @@ def main():
     # Save report
     validator.save_validation_report(report, Path(args.output_dir))
     if report['statistics']['failure_count']:
-        print("Validation failed; downstream stages are blocked until critical findings are repaired.")
-        return 2
-    return 0
+        print(
+            "Validation findings recorded for downstream readiness, remediation, "
+            "and grounding review (advisory stage; pipeline continues)."
+        )
+    return validation_exit_code(report)
 
 
 if __name__ == "__main__":
