@@ -49,14 +49,44 @@ def test_agent_12_generates_self_contained_report_with_traceability(tmp_path: Pa
     assert manifest["concept_coverage_rate"] == 100.0
     assert manifest["review_required_rate"] == 100.0
     assert manifest["human_review_rate"] == 100.0
+    assert manifest["quality_hold_count"] == 1
+    assert manifest["quality_hold_rate"] == 100.0
+    assert manifest["review_route_counts"] == {"human_review": 1}
     assert "SBVR vocabulary" in report
     assert "Customer consent" in report
     assert "Customer consent is required before processing." in report
+    assert "Human-review queue (1)" in report
+    assert "Quality holds outside the human queue (0)" in report
+    assert "Explicit human judgment required" in report
     assert "data-tab=\"models\"" in report
     assert "report-data" in report
     assert 'href="#source-' in report
     assert "no external assets" in report.lower()
     assert json.loads((tmp_path / "report" / "business_knowledge_report_manifest.json").read_text())["validation"] == "pass"
+
+
+def test_agent_12_separates_human_queue_from_nonhuman_quality_holds(tmp_path: Path):
+    graph = _graph()
+    graph["business_rules"].append({
+        "rule_id": "R-2", "rule_name": "Evidence follow-up", "rule_type": "documentation",
+        "requires_review": True, "description": "Evidence must be confirmed.",
+        "review_route": {"route": "case_management", "human_review_required": False, "reasons": ["Evidence gap"]},
+    })
+    graph_file = tmp_path / "graph.json"
+    graph_file.write_text(json.dumps(graph), encoding="utf-8")
+
+    manifest = generate(graph_file, None, tmp_path / "models", tmp_path / "report")
+    report = (tmp_path / "report" / "business_knowledge_report.html").read_text(encoding="utf-8")
+
+    assert manifest["review_required_count"] == 2
+    assert manifest["human_review_count"] == 1
+    assert manifest["nonhuman_quality_hold_count"] == 1
+    assert manifest["review_route_counts"] == {"case_management": 1, "human_review": 1}
+    assert "Human-review queue (1)" in report
+    assert "Quality holds outside the human queue (1)" in report
+    assert "case management" in report
+    assert 'id="rule-route"' in report
+    assert 'data-route="case_management"' in report
 
 
 def test_agent_12_handles_missing_optional_upstream_models(tmp_path: Path):
