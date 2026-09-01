@@ -484,6 +484,13 @@ def _validate_exception_effects(
             _issue(issues, 6, "invalid_exception_effect_value_type", f"{path}.value_type", "Exception effect value_type is invalid.")
         elif value_type == "variable_reference" and _normalise_name(effect.get("value")) not in variables:
             _issue(issues, 6, "undefined_exception_effect_reference", f"{path}.value", "Exception effect variable reference must resolve to a declared variable.")
+        elif value_type == "number" and not _is_number(effect.get("value")):
+            _issue(issues, 6, "invalid_exception_effect_number", f"{path}.value", "Numeric exception effects require a numeric value.")
+        elif value_type == "time" and not (
+            isinstance(effect.get("value"), str)
+            and ISO_LOCAL_TIME_RE.fullmatch(effect["value"].strip())
+        ):
+            _issue(issues, 6, "invalid_exception_effect_time", f"{path}.value", "Time exception effects require an ISO local time such as 21:00 or 21:00:00.")
 
 
 def _validate_exceptions(

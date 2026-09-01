@@ -421,112 +421,83 @@ def _grounding_summary(rule: Mapping[str, Any], grounding_status: str) -> str:
     return " · ".join(parts) or "Certification incomplete"
 
 
-def _review_reasons(rule: Mapping[str, Any]) -> list[str]:
-    reasons: list[str] = []
-    readiness = _mapping(rule.get("readiness"))
-    for section in _list(readiness.get("failed_sections")) + _list(readiness.get("pending_sections")):
-        reasons.append(f"Readiness section {section} is unresolved")
-    for issue in _list(readiness.get("failed_requirements")):
-        if isinstance(issue, Mapping):
-            reasons.append(str(issue.get("message") or issue.get("reason") or issue.get("requirement") or "Unresolved requirement"))
-        elif issue:
-            reasons.append(str(issue))
-    for key in ("contract_issues", "grounding_issues", "review_reasons", "issues"):
-        value = rule.get(key)
-        if isinstance(value, list):
-            for issue in value:
-                if isinstance(issue, Mapping):
-                    reasons.append(str(issue.get("message") or issue.get("reason") or issue.get("requirement") or "Unresolved issue"))
-                elif issue:
-                    reasons.append(str(issue))
-    route = _mapping(rule.get("review_route"))
-    reasons.extend(str(item) for item in _list(route.get("reasons")) if item)
-    return list(dict.fromkeys(reasons))
-
-
-#: No explicit severity/priority field exists anywhere in the data contract
-#: (confirmed: the graph carries review_route + grounding status, not a
-#: standalone severity). Derived here from those two signals so Human Review
-#: can be triaged without a reviewer having to read every reason list first.
-#: case_management and a contradicted grounding verdict outrank a plain
-#: human_review route -- both represent a positively wrong or stuck state,
-#: not an open judgment call.
-_SEVERITY_META: dict[str, tuple[str, str]] = {
-    "critical": ("🟥", "Critical"),
-    "high": ("🟧", "High"),
-    "medium": ("🟨", "Medium"),
-    "low": ("🟩", "Low"),
-}
-_SEVERITY_ORDER = ("critical", "high", "medium", "low")
-
-
-def _review_severity(rule: Mapping[str, Any]) -> str:
-    if not rule.get("requires_review"):
-        return "none"
-    route = str(_mapping(rule.get("review_route")).get("route") or "unclassified")
-    grounding_status = str(_mapping(rule.get("grounding")).get("status") or "")
-    if route == "case_management" or grounding_status == "contradicted":
-        return "critical"
-    if route in ("human_review", "unclassified"):
-        return "high"
-    if route == "machine_repair":
-        return "medium"
-    return "low"
-
-
-def _severity_badge_html(severity: str) -> str:
-    icon, label = _SEVERITY_META.get(severity, ("⬜", "None"))
-    return f'<span class="severity-badge severity-{_safe(severity)}"><span aria-hidden="true">{icon}</span>{_safe(label)}</span>'
-
-
-#: Grounded in utils/semantic_routing.py::classify_review_route -- the actual
-#: decision logic behind each route -- plus agent_12's own "unclassified"
-#: fallback for a review-flagged rule whose graph predates route
-#: classification. Icon + one-line description turn the raw enum value into
-#: something a reviewer can act on without reading source code.
-_ROUTE_META: dict[str, tuple[str, str, str]] = {
-    "none": ("✅", "No review needed", "No open findings — this rule is not on any review or repair queue."),
-    "human_review": ("🧑‍⚖️", "Human review", "A person must confirm this: evidence conflict, ambiguity, or a policy-owner judgment call was detected."),
-    "machine_repair": ("🛠️", "Machine repair", "A deterministic structural issue (contract, execution, naming, or test vectors) — repairable without human judgment."),
-    "case_management": ("🗂️", "Case management", "Needs handling as a case, such as an evidence gap — doesn't require a policy-owner judgment call."),
-    "unclassified": ("❔", "Unclassified", "Flagged for review, but no route classification was recorded for this rule."),
+_READINESS_WEIGHTS: dict[str, float] = {
+    "Core grounding": 40.0,
+    "Context grounding": 20.0,
+    "Contract integrity": 15.0,
+    "Evidence integrity": 10.0,
+    "Executability": 10.0,
+    "Relationship support": 5.0,
 }
 
 
-def _review_route_meta(route: str) -> tuple[str, str, str]:
-    return _ROUTE_META.get(route, ("❔", _humanize(route) or "Unclassified", "This route is not part of the known classification set."))
+def _claim_support_score(dimension: Mapping[str, Any]) -> float:
+    counts = _mapping(dimension.get("counts"))
+    claim_count = dimension.get("claim_count")
+    if isinstance(claim_count, (int, float)) and claim_count > 0:
+        return min(100.0, max(0.0, float(counts.get("supported", 0)) / float(claim_count) * 100.0))
+    status = str(dimension.get("status") or "").casefold()
+    return 100.0 if status in {"certified", "supported"} else 0.0
 
 
-def _route_badge_html(route: str) -> str:
-    """A compact icon + label pill for dense contexts (the Review Queue table)."""
-    icon, label, _description = _review_route_meta(route)
-    route_class = _safe(route.casefold().replace(" ", "_"))
-    return (
-        f'<span class="status status-{route_class} route-badge">'
-        f'<span class="route-icon" aria-hidden="true">{icon}</span>{_safe(route.replace("_", " "))}</span>'
-        f'<div class="muted route-badge-label">{_safe(label)}</div>'
+def _automation_readiness(rule: Mapping[str, Any]) -> dict[str, Any]:
+    """Return a policy-neutral 0–100 measurement and its auditable factors.
+
+    The score deliberately does not consume ``requires_review`` or a routing
+    label.  Those are policy decisions.  It measures only the completeness of
+    source support, contract structure, evidence protocol, executable
+    projection, and relationship support present in the graph.
+    """
+    grounding = _mapping(rule.get("grounding"))
+    dimensions = _mapping(grounding.get("dimensions"))
+    core = _claim_support_score(_mapping(dimensions.get("core_rule")))
+    context = _claim_support_score(_mapping(dimensions.get("enrichment")))
+    contract = _claim_support_score(_mapping(dimensions.get("contract")))
+
+    evidence_records = grounding.get("evidence_records")
+    invalid = int(grounding.get("invalid_evidence_records") or 0)
+    missing = int(grounding.get("missing_claim_responses") or 0)
+    duplicates = int(grounding.get("duplicate_claim_responses") or 0)
+    if isinstance(evidence_records, (int, float)) and evidence_records > 0:
+        evidence = max(0.0, (float(evidence_records) - invalid - missing - duplicates) / float(evidence_records) * 100.0)
+    else:
+        evidence = 100.0 if invalid == missing == duplicates == 0 else 0.0
+
+    execution = _mapping(rule.get("execution"))
+    targets = [str(value).upper() for value in _list(execution.get("targets")) if value]
+    execution_checks = [
+        bool(targets),
+        bool(targets) and all(isinstance(execution.get(target.casefold()), Mapping) for target in targets),
+        bool(_list(rule.get("test_vectors"))),
+        bool(_list(rule.get("variables"))) and bool(_list(rule.get("outcomes"))),
+    ]
+    executable = sum(execution_checks) / len(execution_checks) * 100.0
+    relationship = 100.0 if str(grounding.get("relationship_status") or "").casefold() == "supported" else 0.0
+
+    components = {
+        "Core grounding": round(core, 1),
+        "Context grounding": round(context, 1),
+        "Contract integrity": round(contract, 1),
+        "Evidence integrity": round(evidence, 1),
+        "Executability": round(executable, 1),
+        "Relationship support": round(relationship, 1),
+    }
+    score = sum(components[name] * weight / 100.0 for name, weight in _READINESS_WEIGHTS.items())
+    return {"score": round(score, 1), "components": components, "weights": dict(_READINESS_WEIGHTS)}
+
+
+def _readiness_score_html(readiness: Mapping[str, Any]) -> str:
+    score = float(readiness.get("score") or 0.0)
+    components = _mapping(readiness.get("components"))
+    rows = "".join(
+        f'<div class="score-factor"><span>{_safe(name)}</span><strong>{float(value):.1f}</strong>'
+        f'<span class="score-factor-track"><i style="width:{min(100.0, max(0.0, float(value))):.1f}%"></i></span></div>'
+        for name, value in components.items()
     )
-
-
-def _route_card_html(route: str, *, has_hold: bool, reason_items: Sequence[str]) -> str:
-    """The fuller review-route presentation for the Rule Explorer's own column:
-    an icon-led route badge, a plain-language description of what the route
-    actually means, whether it carries a quality hold, and the specific
-    reasons in a styled (not bare-<ul>) callout instead of a plain list."""
-    icon, label, description = _review_route_meta(route)
-    route_class = _safe(route.casefold().replace(" ", "_"))
-    reasons_html = "".join(f'<li>{_safe(item)}</li>' for item in reason_items) or "<li>No review reason recorded.</li>"
-    hold_class = "route-hold-yes" if has_hold else "route-hold-no"
-    hold_text = "Quality hold" if has_hold else "No quality hold"
     return (
-        f'<div class="route-card route-{route_class}">'
-        f'<div class="route-head"><span class="route-icon" aria-hidden="true">{icon}</span>'
-        f'<div><span class="status status-{route_class}">{_safe(route.replace("_", " "))}</span>'
-        f'<div class="route-title">{_safe(label)}</div></div></div>'
-        f'<p class="route-desc">{_safe(description)}</p>'
-        f'<span class="route-hold {hold_class}">{hold_text}</span>'
-        f'<details class="route-reasons"><summary>Why ({len(reason_items)})</summary><ul class="reason-list">{reasons_html}</ul></details>'
-        f'</div>'
+        f'<div class="readiness-score"><div class="score-number">{score:.1f}<span>/100</span></div>'
+        f'<div class="score-track" aria-label="Automation readiness score {score:.1f} out of 100"><i style="width:{score:.1f}%"></i></div>'
+        f'<details><summary>Score factors</summary><div class="score-factors">{rows}</div></details></div>'
     )
 
 
@@ -1047,10 +1018,10 @@ def _validate_report_html(document: str, rule_ids: Sequence[str], source_anchors
     """Validate the non-network, single-document report contract."""
     required = (
         '<!doctype html>', 'id="report-data"',
-        'data-tab="overview"', 'data-tab="vocabulary"', 'data-tab="rules"', 'data-tab="dependencies"', 'data-tab="review"', 'data-tab="sources"',
+        'data-tab="overview"', 'data-tab="vocabulary"', 'data-tab="rules"', 'data-tab="dependencies"', 'data-tab="scores"', 'data-tab="sources"',
         'id="concept-search"', 'id="concept-grid"', 'id="fact-types"',
         'dependency-graph-shell', 'dependency-graph-scroll', 'id="dep-side-panel"',
-        'model-badges', 'severity-badge', 'trace-path',
+        'model-badges', 'readiness-score', 'score-factors', 'trace-path',
     )
     missing = [marker for marker in required if marker not in document]
     if missing:
@@ -1170,17 +1141,12 @@ def _rule_row(
 ) -> str:
     rid = str(rule.get("rule_id") or "unidentified")
     category, subcategory = _category(rule)
-    review = bool(rule.get("requires_review", False))
-    review_route = str(_mapping(rule.get("review_route")).get("route") or ("unclassified" if review else "none"))
     grounding = _mapping(rule.get("grounding"))
     grounding_status = str(grounding.get("status") or rule.get("extraction_status") or "unknown")
-    status = "review_required" if review else ("verified" if grounding_status == "certified" else grounding_status)
-    status_label = "Quality hold" if review else ("Verified" if status == "verified" else status.replace("_", " ").title())
-    grounding_label = "Grounding certified" if grounding_status == "certified" else ("Grounding not certified" if grounding_status == "failed" else f"Grounding {grounding_status}")
     confidence = _confidence(rule)
     confidence_text = f"{confidence:.1f}%" if confidence is not None else "—"
     confidence_source = _confidence_source(rule)
-    reason_items = _review_reasons(rule)
+    readiness = _automation_readiness(rule)
     refs = " ".join(f'<a class="evidence-link" href="#{_safe(anchor)}">Evidence {index + 1}</a>' for index, anchor in enumerate(source_anchors)) or '<span class="muted">Unresolved source</span>'
     grounding_detail = _grounding_summary(rule, grounding_status)
     has_dmn = "true" if rid in model_rule_ids.get("DMN", ()) else "false"
@@ -1191,13 +1157,12 @@ def _rule_row(
         + _formal_logic_html(rule)
         + _rule_model_diagrams_html(rid, model_item_lookup)
     )
-    return f'''<tr id="rule-{_safe(_slug(rid))}" class="rule-row" data-category="{_safe(category)}" data-status="{_safe(status)}" data-route="{_safe(review_route)}" data-review="{str(review).lower()}" data-has-dmn="{has_dmn}" data-has-bpmn="{has_bpmn}" data-has-cmmn="{has_cmmn}" data-search="{_safe((rid + ' ' + str(rule.get('rule_name', '')) + ' ' + _rule_statement(rule) + ' ' + category + ' ' + subcategory).casefold())}">
+    return f'''<tr id="rule-{_safe(_slug(rid))}" class="rule-row" data-category="{_safe(category)}" data-score="{readiness['score']:.1f}" data-has-dmn="{has_dmn}" data-has-bpmn="{has_bpmn}" data-has-cmmn="{has_cmmn}" data-search="{_safe((rid + ' ' + str(rule.get('rule_name', '')) + ' ' + _rule_statement(rule) + ' ' + category + ' ' + subcategory).casefold())}">
       <td><a href="#rule-{_safe(_slug(rid))}">{_safe(rid)}</a><div class="muted">{_safe(rule.get('rule_name') or 'Untitled rule')}</div>{_model_badges_html(rid, model_rule_ids)}</td>
       <td>{_safe(category)}<div class="muted">{_safe(subcategory)}</div></td>
       <td>{_safe(_rule_statement(rule))}</td>
       <td><details class="logic-details"><summary><span class="logic-summary">IF / THEN</span><span class="muted">contract, traceability & models</span></summary>{details_body}</details></td>
-      <td><div class="status-stack"><span class="status status-{_safe(status.casefold().replace(' ', '_'))}">{_safe(status_label)}</span><span class="status status-grounding-{_safe(grounding_status.casefold().replace(' ', '_'))}" title="Underlying claim-level grounding verdict">{_safe(grounding_label)}</span></div><div class="confidence-score"><strong>{confidence_text}</strong><span class="muted">{_safe(_confidence_source_label(confidence_source))}</span></div><div class="muted">{_safe(grounding_detail)}</div></td>
-      <td>{_route_card_html(review_route, has_hold=review, reason_items=reason_items)}</td>
+      <td>{_readiness_score_html(readiness)}<div class="confidence-score"><strong>{confidence_text}</strong><span class="muted">confidence · {_safe(_confidence_source_label(confidence_source))}</span></div><div class="muted">{_safe(grounding_detail)}</div></td>
       <td>{refs}</td>
     </tr>'''
 
@@ -1284,13 +1249,15 @@ def generate(
         rule_adjacency[source].add(target)
         rule_adjacency[target].add(source)
     categories = Counter(_category(rule)[0] for rule in rules)
-    review_count = sum(bool(rule.get("requires_review")) for rule in rules)
-    human_review_count = sum(bool(_mapping(rule.get("review_route")).get("human_review_required")) for rule in rules)
-    route_counts = Counter(str(_mapping(rule.get("review_route")).get("route") or ("unclassified" if rule.get("requires_review") else "none")) for rule in rules)
-    nonhuman_quality_hold_count = sum(
-        bool(rule.get("requires_review"))
-        and not bool(_mapping(rule.get("review_route")).get("human_review_required"))
+    readiness_by_id = {
+        str(rule.get("rule_id") or "unidentified"): _automation_readiness(rule)
         for rule in rules
+    }
+    readiness_scores = [float(item["score"]) for item in readiness_by_id.values()]
+    readiness_distribution = Counter(
+        f"{lower}–{lower + 9}" if lower < 90 else "90–100"
+        for score in readiness_scores
+        for lower in (min(90, int(score // 10) * 10),)
     )
     source_pointer_count = sum(bool(_rule_references(rule)) for rule in rules)
     grounded_count = sum(str(_mapping(rule.get("grounding")).get("status")) == "certified" for rule in rules)
@@ -1308,7 +1275,7 @@ def generate(
             "status_counts": dict(sorted(statuses.items())),
             "certified_count": statuses.get("certified", 0),
             "failed_count": statuses.get("failed", 0),
-            "hold_rate": _percent(statuses.get("failed", 0), len(rules)),
+            "support_rate": _percent(statuses.get("certified", 0), len(rules)),
         }
     relationship_statuses = Counter(
         str(_mapping(rule.get("grounding")).get("relationship_status") or "not_reported")
@@ -1318,7 +1285,7 @@ def generate(
         "status_counts": dict(sorted(relationship_statuses.items())),
         "certified_count": relationship_statuses.get("supported", 0),
         "failed_count": relationship_statuses.get("failed", 0),
-        "hold_rate": _percent(relationship_statuses.get("failed", 0), len(rules)),
+        "support_rate": _percent(relationship_statuses.get("supported", 0), len(rules)),
     }
     grounding_claim_counts: Counter[str] = Counter()
     for rule in rules:
@@ -1334,7 +1301,6 @@ def generate(
     rules_with_quarantined_claims = sum(
         bool(_list(rule.get("quarantined_claims"))) for rule in rules
     )
-    unresolved = sum(1 for rule in rules if _review_reasons(rule))
     source_documents = {str(ref.get("chunk_path") or ref.get("document") or "").split("/")[0] for rule in rules for ref in _rule_references(rule) if ref.get("chunk_path") or ref.get("document")}
     concept_supported = len(concepts)
     concept_ids = {str(concept.get("concept_id")) for concept in concepts}
@@ -1384,13 +1350,13 @@ def generate(
     report_data = {
         "title": "Policy Logic Forge · Business Knowledge Report",
         "rule_count": len(rules), "concept_count": concept_supported,
-        "review_required_count": review_count, "review_required_rate": round(review_count / max(1, len(rules)) * 100, 2),
-        "human_review_count": human_review_count, "human_review_rate": round(human_review_count / max(1, len(rules)) * 100, 2),
-        "quality_hold_count": review_count, "quality_hold_rate": round(review_count / max(1, len(rules)) * 100, 2),
-        "nonhuman_quality_hold_count": nonhuman_quality_hold_count,
+        "automation_readiness_score_average": round(sum(readiness_scores) / max(1, len(readiness_scores)), 1),
+        "automation_readiness_score_minimum": round(min(readiness_scores), 1) if readiness_scores else 0.0,
+        "automation_readiness_score_maximum": round(max(readiness_scores), 1) if readiness_scores else 0.0,
+        "automation_readiness_score_distribution": dict(sorted(readiness_distribution.items())),
+        "automation_readiness_score_weights": dict(_READINESS_WEIGHTS),
         "quarantined_claim_count": quarantined_claim_count,
         "rules_with_quarantined_claims": rules_with_quarantined_claims,
-        "review_route_counts": dict(sorted(route_counts.items())),
         "source_pointer_count": source_pointer_count,
         "source_pointer_coverage_rate": round(source_pointer_count / max(1, len(rules)) * 100, 2),
         "grounded_rule_count": grounded_count, "grounding_coverage_rate": round(grounded_count / max(1, len(rules)) * 100, 2),
@@ -1409,7 +1375,6 @@ def generate(
         "rule_local_decision_variable_count": sum(item["scope"] == "rule_local" for item in decision_variables),
         "reusable_decision_variable_count": sum(item["scope"] == "reusable" for item in decision_variables),
         "top_concepts": top_concepts,
-        "unresolved_item_count": unresolved,
         "confidence_distribution": dict(sorted(confidence_buckets.items())), "confidence_source_counts": dict(sorted(confidence_sources.items())), "categories": dict(categories),
         "grounding_status_counts": dict(sorted(grounding_status_counts.items())),
         "grounding_dimensions": grounding_dimension_metrics,
@@ -1434,10 +1399,9 @@ def generate(
                 "slug": _slug(rid),
                 "name": str(rule.get("rule_name") or ""),
                 "category": _category(rule)[0],
-                "status": ("Quality hold" if rule.get("requires_review") else ("Verified" if str(_mapping(rule.get("grounding")).get("status")) == "certified" else str(_mapping(rule.get("grounding")).get("status") or "unknown").replace("_", " ").title())),
+                "automation_readiness_score": readiness_by_id[rid]["score"],
+                "automation_readiness_components": readiness_by_id[rid]["components"],
                 "confidence": _confidence(rule),
-                "route": str(_mapping(rule.get("review_route")).get("route") or ("unclassified" if rule.get("requires_review") else "none")),
-                "severity": _review_severity(rule),
                 "degree": len(rule_adjacency.get(rid, ())),
             }
             for rule in rules
@@ -1506,47 +1470,30 @@ def generate(
         )
     rule_rows = [_rule_row(rule, rule_sources.get(str(rule.get("rule_id") or "unidentified"), []), model_rule_ids, model_item_lookup) for rule in rules]
 
-    # Unified, severity-triaged Human Review dashboard -- replaces the old
-    # split human-review-queue / quality-holds-outside-queue tables (§5 of
-    # the redesign). Route + confidence stay visible for context; severity
-    # is the new primary sort/filter signal since neither of those alone
-    # told a reviewer what to look at first.
-    review_rows: list[str] = []
+    score_rows: list[str] = []
     for rule in rules:
-        if not rule.get("requires_review"):
-            continue
         rid = str(rule.get("rule_id") or "unidentified")
-        review_route = str(_mapping(rule.get("review_route")).get("route") or "unclassified")
-        severity = _review_severity(rule)
-        reasons = _review_reasons(rule) or ["Review flag set without a detailed reason."]
-        reason_html = "".join(f"<li>{_safe(reason)}</li>" for reason in reasons)
+        readiness = readiness_by_id[rid]
         evidence_html = " ".join(
             f'<a class="evidence-link" href="#{_safe(anchor)}">Evidence</a>'
             for anchor in rule_sources.get(rid, [])
         ) or "Unresolved source"
         confidence = _confidence(rule)
-        related = sorted(rule_adjacency.get(rid, ()))
-        related_html = "".join(f'<a class="trace-chip trace-chip-link" href="#rule-{_safe(_slug(r))}">{_safe(r)}</a>' for r in related[:8]) or '<span class="trace-chip trace-chip-empty">None</span>'
-        if len(related) > 8:
-            related_html += f'<span class="muted trace-more">+{len(related) - 8} more</span>'
-        human_required = bool(_mapping(rule.get("review_route")).get("human_review_required"))
-        review_rows.append(
-            f'<tr class="review-row" data-severity="{_safe(severity)}" data-route="{_safe(review_route)}" data-human="{str(human_required).lower()}" '
+        score_rows.append(
+            f'<tr class="score-row" data-score="{readiness["score"]:.1f}" '
             f'data-search="{_safe((rid + " " + str(rule.get("rule_name", ""))).casefold())}">'
-            f'<td>{_severity_badge_html(severity)}</td>'
             f'<td><a href="#rule-{_safe(_slug(rid))}">{_safe(rid)}</a><div class="muted">{_safe(rule.get("rule_name") or "Untitled rule")}</div></td>'
-            f'<td>{_route_badge_html(review_route)}</td>'
-            f'<td><ul class="reason-list">{reason_html}</ul></td>'
+            f'<td>{_readiness_score_html(readiness)}</td>'
             f'<td>{_safe(f"{confidence:.1f}%" if confidence is not None else "—")}</td>'
             f'<td>{evidence_html}</td>'
-            f'<td><div class="trace-chip-row">{related_html}</div></td></tr>'
+            f'</tr>'
         )
     # Overview / Rule Analytics chart data (§4 of the redesign) -- rendered
     # as SVG bar/donut charts below, replacing the old plain KPI tables.
     category_chart = _bar_chart_svg(sorted(categories.items(), key=lambda item: (-item[1], item[0].casefold())), color="#7c83fd")
     confidence_chart = _bar_chart_svg(sorted(confidence_buckets.items()), color="#27c2a5")
     confidence_source_summary = " · ".join(f'{_confidence_source_label(source)}: {count}' for source, count in sorted(confidence_sources.items())) or "Not reported"
-    route_donut = _donut_chart_svg([(route.replace("_", " ").title(), count) for route, count in sorted(route_counts.items(), key=lambda item: -item[1])])
+    readiness_chart = _bar_chart_svg(list(sorted(readiness_distribution.items())), color="#7c83fd")
     model_type_chart = _bar_chart_svg([(kind, len(model_info[kind]["rule_ids"])) for kind in ("DMN", "BPMN", "CMMN")], color="#5a8dee")
     degree_chart = _bar_chart_svg(list(connectivity["degree_buckets"].items()), color="#f3a94b")
     most_connected_html = "".join(
@@ -1569,7 +1516,6 @@ def generate(
         "Cyclic or rootless components use a deterministic degree-0 anchor; "
         "arrows always follow source_rule_id → target_rule_id."
     )
-    route_options = "".join(f'<option value="{_safe(route)}">{_safe(route.replace("_", " "))}</option>' for route in sorted(route_counts, key=str.casefold))
     kind_colors = {"actor_role": "#27c2a5", "business_object": "#7c83fd", "decision_variable": "#f3a94b", "evidence_object": "#5a8dee", "event": "#d85d69", "process": "#8f6be8", "unresolved": "#a9b3c3"}
     kind_bars = "".join(_progress_bar(kind.replace("_", " "), count, concept_supported, kind_colors.get(kind, "#7c83fd")) for kind, count in sorted(concept_kind_counts.items(), key=lambda item: (-item[1], item[0])))
     top_concept_rows = "".join(
@@ -1587,36 +1533,36 @@ def generate(
 .rule-model-diagrams{{margin-top:14px;display:grid;gap:12px}}.rule-model-block{{border:1px solid var(--line);border-radius:10px;padding:12px;background:#fbfcff}}.rule-model-kind{{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:6px}}
 .trace-path{{display:flex;flex-wrap:wrap;align-items:stretch;gap:0;margin-bottom:16px;padding:14px;background:#f7f9fc;border:1px solid var(--line);border-radius:12px}}.trace-step{{display:flex;align-items:center}}.trace-arrow{{display:flex;align-items:center;padding:0 8px;color:#9aa5b8;font-weight:900;font-size:15px}}.trace-node{{display:flex;flex-direction:column;gap:4px;min-width:120px;max-width:230px}}a.trace-node{{color:inherit}}a.trace-node:hover{{text-decoration:none}}a.trace-node .trace-node-label{{text-decoration:underline}}.trace-node-kind{{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}}.trace-node-label{{font-weight:700;font-size:12.5px;word-break:break-word}}.trace-node-excerpt{{font-size:11px;color:var(--muted);font-style:italic;line-height:1.4}}.trace-node.trace-empty{{color:var(--muted);font-style:italic;justify-content:center}}.trace-chip-row{{display:flex;flex-wrap:wrap;gap:4px;margin-top:2px}}.trace-chip{{display:inline-flex;padding:3px 8px;border-radius:999px;background:#eef1ff;color:#4251bd;font-size:11px;font-weight:700}}.trace-chip-link{{background:#eef1ff}}.trace-chip-model{{background:#eef7f3;color:#087760}}.trace-chip-empty{{background:#f0f2f6;color:#a9b3c3;font-weight:400}}.trace-more{{align-self:center;font-size:11px}}
 .chart-empty{{padding:26px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:10px}}.chart-svg{{max-width:100%}}.bar-chart{{width:100%;height:auto}}.chart-label{{font:11px Inter,ui-sans-serif,system-ui,sans-serif;fill:var(--ink)}}.chart-value{{font:700 11px Inter,ui-sans-serif,system-ui,sans-serif;fill:var(--muted)}}.chart-bar{{transition:opacity .15s}}.chart-bar:hover{{opacity:.8}}.donut-wrap{{display:flex;align-items:center;gap:18px;flex-wrap:wrap}}.chart-donut-seg{{transition:opacity .15s}}.chart-donut-seg:hover{{opacity:.8}}.chart-donut-total{{font:800 22px Inter,ui-sans-serif,system-ui,sans-serif;fill:var(--ink)}}.chart-donut-caption{{font:11px Inter,ui-sans-serif,system-ui,sans-serif;fill:var(--muted)}}.chart-legend{{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}}.chart-legend li{{display:flex;align-items:center;gap:8px;font-size:12.5px}}.chart-legend-dot{{width:10px;height:10px;border-radius:3px;display:inline-block;flex:0 0 auto}}
-.severity-badge{{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:999px;font-size:11px;font-weight:800}}.severity-critical{{background:#ffe8eb;color:#9d2937}}.severity-high{{background:#fff1df;color:#92570a}}.severity-medium{{background:#fff8e1;color:#8a6d1c}}.severity-low{{background:#eef1ff;color:#4251bd}}
+.readiness-score{{min-width:180px}}.score-number{{font-size:25px;font-weight:850;letter-spacing:-.03em}}.score-number span{{font-size:11px;color:var(--muted);letter-spacing:0;margin-left:3px}}.score-track,.score-factor-track{{display:block;height:8px;border-radius:99px;background:#e9edf5;overflow:hidden}}.score-track{{margin:5px 0 8px}}.score-track i,.score-factor-track i{{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,var(--violet),var(--teal))}}.score-factors{{display:grid;gap:7px;margin-top:9px}}.score-factor{{display:grid;grid-template-columns:minmax(115px,1fr) 38px;gap:4px 8px;align-items:center;font-size:11px}}.score-factor strong{{text-align:right}}.score-factor-track{{grid-column:1/-1;height:5px}}
  </style></head><body><div class="shell">
-<header class="hero"><div class="eyebrow">Agent 12 · presentation and knowledge exploration</div><h1>Business knowledge, ready to review.</h1><p>A self-contained, source-traceable view of the extracted domain. Navigate from SBVR concepts to rules, decisions, workflows, review findings, and the exact evidence that supports each result.</p><div class="muted" style="color:#cbd9ee">Generated from {_safe(graph_file.name)} · no external assets or network calls required</div></header>
-<div class="metric-grid">{_metric_card('Business rules', len(rules), 'All extracted rules shown')}{_metric_card('SBVR concepts', concept_supported, f'{vocabulary_coverage:.1f}% with concept-specific evidence')}{_metric_card('Decision variables', len(decision_variables), 'Executable symbols kept outside SBVR')}{_metric_card('Human-review queue', f'{human_review_count} ({report_data["human_review_rate"]:.1f}%)', 'Explicit human judgment required')}{_metric_card('Quality holds', f'{review_count} ({report_data["quality_hold_rate"]:.1f}%)', 'Strict whole-rule execution holds')}{_metric_card('Quarantined claims', quarantined_claim_count, f'Ontology-invalid enrichment removed from {rules_with_quarantined_claims} rules')}{_metric_card('Core-rule holds', f'{grounding_dimension_metrics["core_rule"]["failed_count"]} ({grounding_dimension_metrics["core_rule"]["hold_rate"]:.1f}%)', 'Description, conditions, or outcomes')}{_metric_card('Enrichment holds', f'{grounding_dimension_metrics["enrichment"]["failed_count"]} ({grounding_dimension_metrics["enrichment"]["hold_rate"]:.1f}%)', 'Party, scope, or exception evidence')}{_metric_card('Contract holds', f'{grounding_dimension_metrics["contract"]["failed_count"]} ({grounding_dimension_metrics["contract"]["hold_rate"]:.1f}%)', 'Derived structural projections')}{_metric_card('Relationship holds', f'{grounding_dimension_metrics["relationship"]["failed_count"]} ({grounding_dimension_metrics["relationship"]["hold_rate"]:.1f}%)', 'Graph relationship grounding')}{_metric_card('Grounding certified', f'{grounded_count} ({report_data["grounding_coverage_rate"]:.1f}%)', 'Independent whole-rule certification')}{_metric_card('Source pointers', f'{source_pointer_count} ({report_data["source_pointer_coverage_rate"]:.1f}%)', 'Pointer presence, not grounding certification')}{_metric_card('Grounding claims', f'{grounding_claim_counts.get("supported", 0)} ({report_data["grounding_claim_support_rate"]:.1f}%)', 'Claim-level support; holds may be partial')}{_metric_card('Source documents', len(source_documents), 'Documents referenced by rule evidence')}{_metric_card('Dependencies', len(edges), 'DAG edges available')}</div>
-<nav class="tabs" aria-label="Report sections"><button class="active" data-tab="overview">Overview</button><button data-tab="vocabulary">SBVR vocabulary</button><button data-tab="rules">Rule explorer</button><button data-tab="dependencies">Relationships</button><button data-tab="review">Review queue</button><button data-tab="sources">Source traceability</button></nav>
-<section id="overview" class="tab active"><div class="grid-2"><div class="panel"><div class="eyebrow">Executive summary</div><h2>What this domain contains</h2><p>The report presents <strong>{len(rules)}</strong> rules across <strong>{len(categories)}</strong> categories, <strong>{concept_supported}</strong> governed SBVR concepts, and <strong>{len(decision_variables)}</strong> separately managed decision variables.</p><div class="callout">Concept evidence, rule source pointers, and independent grounding certification are reported as distinct signals. A pointer is never presented as proof of entailment.</div></div><div class="panel"><div class="eyebrow">Coverage and quality</div><h2>At a glance</h2><table><tr><td>Concept evidence coverage</td><td><strong>{vocabulary_coverage:.1f}%</strong></td></tr><tr><td>Rule source-pointer coverage</td><td><strong>{report_data["source_pointer_coverage_rate"]:.1f}%</strong></td></tr><tr><td>Rules grounding-certified</td><td><strong>{report_data["grounding_coverage_rate"]:.1f}%</strong> ({grounded_count} rules)</td></tr><tr><td>Grounding claims supported</td><td><strong>{grounding_claim_counts.get("supported", 0)}/{grounding_claim_total}</strong> ({report_data["grounding_claim_support_rate"]:.1f}%)</td></tr><tr><td>Human-review queue</td><td><strong>{report_data["human_review_rate"]:.1f}%</strong> ({human_review_count} rules)</td></tr><tr><td>Quality holds</td><td><strong>{report_data["quality_hold_rate"]:.1f}%</strong> ({review_count} rules)</td></tr></table></div></div>
+<header class="hero"><div class="eyebrow">Agent 12 · presentation and knowledge exploration</div><h1>Business knowledge, measured transparently.</h1><p>A self-contained, source-traceable view of the extracted domain. Every rule has a neutral 0–100 automation-readiness score; your environment and domain policy determine what score is acceptable.</p><div class="muted" style="color:#cbd9ee">Generated from {_safe(graph_file.name)} · no external assets or network calls required</div></header>
+<div class="metric-grid">{_metric_card('Business rules', len(rules), 'All extracted rules shown')}{_metric_card('Average readiness score', f'{report_data["automation_readiness_score_average"]:.1f}/100', 'No report-defined pass threshold')}{_metric_card('Score range', f'{report_data["automation_readiness_score_minimum"]:.1f}–{report_data["automation_readiness_score_maximum"]:.1f}', 'Observed across all rules')}{_metric_card('SBVR concepts', concept_supported, f'{vocabulary_coverage:.1f}% with concept-specific evidence')}{_metric_card('Decision variables', len(decision_variables), 'Executable symbols kept outside SBVR')}{_metric_card('Quarantined claims', quarantined_claim_count, f'Ontology-invalid enrichment excluded from {rules_with_quarantined_claims} rules')}{_metric_card('Core support', f'{grounding_dimension_metrics["core_rule"]["support_rate"]:.1f}%', 'Description, conditions, and outcomes')}{_metric_card('Context support', f'{grounding_dimension_metrics["enrichment"]["support_rate"]:.1f}%', 'Party, scope, and exception evidence')}{_metric_card('Contract integrity', f'{grounding_dimension_metrics["contract"]["support_rate"]:.1f}%', 'Derived structural projections')}{_metric_card('Relationship support', f'{grounding_dimension_metrics["relationship"]["support_rate"]:.1f}%', 'Graph relationship grounding')}{_metric_card('Source pointers', f'{source_pointer_count} ({report_data["source_pointer_coverage_rate"]:.1f}%)', 'Pointer presence, not proof')}{_metric_card('Grounding claims', f'{grounding_claim_counts.get("supported", 0)} ({report_data["grounding_claim_support_rate"]:.1f}%)', 'Claim-level source support')}{_metric_card('Source documents', len(source_documents), 'Documents referenced by rule evidence')}{_metric_card('Dependencies', len(edges), 'DAG edges available')}</div>
+<nav class="tabs" aria-label="Report sections"><button class="active" data-tab="overview">Overview</button><button data-tab="vocabulary">SBVR vocabulary</button><button data-tab="rules">Rule explorer</button><button data-tab="dependencies">Relationships</button><button data-tab="scores">Scores</button><button data-tab="sources">Source traceability</button></nav>
+<section id="overview" class="tab active"><div class="grid-2"><div class="panel"><div class="eyebrow">Executive summary</div><h2>What this domain contains</h2><p>The report presents <strong>{len(rules)}</strong> rules across <strong>{len(categories)}</strong> categories, <strong>{concept_supported}</strong> governed SBVR concepts, and <strong>{len(decision_variables)}</strong> separately managed decision variables.</p><div class="callout">The readiness score measures observed grounding, contract, evidence, execution, and relationship signals. It is not an accuracy probability and does not authorize automation. A score of 100 means every measured component is complete; this report applies no acceptance threshold.</div></div><div class="panel"><div class="eyebrow">Coverage and quality</div><h2>At a glance</h2><table><tr><td>Average automation-readiness score</td><td><strong>{report_data["automation_readiness_score_average"]:.1f}/100</strong></td></tr><tr><td>Concept evidence coverage</td><td><strong>{vocabulary_coverage:.1f}%</strong></td></tr><tr><td>Rule source-pointer coverage</td><td><strong>{report_data["source_pointer_coverage_rate"]:.1f}%</strong></td></tr><tr><td>Rules grounding-certified</td><td><strong>{report_data["grounding_coverage_rate"]:.1f}%</strong> ({grounded_count} rules)</td></tr><tr><td>Grounding claims supported</td><td><strong>{grounding_claim_counts.get("supported", 0)}/{grounding_claim_total}</strong> ({report_data["grounding_claim_support_rate"]:.1f}%)</td></tr></table></div></div>
 <div class="grid-2"><div class="panel"><h3>Rule categories</h3><p class="muted">How the extracted rules are distributed across business categories.</p>{category_chart}</div><div class="panel"><h3>Confidence distribution</h3><p class="muted">Confidence provenance: {_safe(confidence_source_summary)}</p>{confidence_chart}</div></div>
-<div class="grid-2"><div class="panel"><h3>Review route distribution</h3><p class="muted">Where each rule that needs attention is routed -- human judgment, deterministic repair, or case management.</p>{route_donut}</div><div class="panel"><h3>Executable model coverage</h3><p class="muted">How many rules have a generated DMN decision, BPMN process, or CMMN case.</p>{model_type_chart}</div></div>
+<div class="grid-2"><div class="panel"><h3>Readiness score distribution</h3><p class="muted">Numeric distribution only; no band is interpreted as acceptable or unacceptable.</p>{readiness_chart}</div><div class="panel"><h3>Executable model coverage</h3><p class="muted">How many rules have a generated DMN decision, BPMN process, or CMMN case.</p>{model_type_chart}</div></div>
 <div class="grid-2"><div class="panel"><h3>Dependency degree distribution</h3><p class="muted">Total in+out dependency edges per rule -- a rule with more edges is more structurally central to the domain.</p>{degree_chart}</div><div class="panel"><h3>Most connected rules</h3><p class="muted">The rules with the most direct dependency edges -- start here to understand the domain's structural core.</p><ol class="insight-list">{most_connected_html}</ol></div></div>
 <div class="grid-2"><div class="panel"><h3>Isolated rules ({len(isolated_ids)})</h3><p class="muted">Rules with no dependency edges at all -- self-contained, or possibly missing an expected relationship.</p><details><summary>View isolated rules</summary><div class="trace-chip-row" style="margin-top:8px">{isolated_chips}</div></details></div><div class="panel"><h3>Dependency depth & complexity</h3><p class="muted">Shortest-path depth from root rules, and how many rules sit in a cyclic or rootless component.</p><div class="insight-grid"><div class="insight-card"><h3>Max depth</h3><div class="metric-value">{max_dependency_depth}</div></div><div class="insight-card"><h3>Cyclic/rootless anchors</h3><div class="metric-value">{cyclic_component_count}</div></div><div class="insight-card"><h3>Dependency edges</h3><div class="metric-value">{len(edges)}</div></div></div></div></div>
 </section>
 <section id="vocabulary" class="tab"><div class="panel"><div class="eyebrow">SBVR-aligned business vocabulary</div><h2>Vocabulary workbench</h2><p>Explore the domain lexicon as typed concepts and fact types. The view is grounded in the input graph: definitions, usage counts, relationships, and evidence links are shown only when the upstream artifacts provide them.</p><div class="insight-grid"><div class="insight-card"><h3>Supported concepts</h3><div class="metric-value">{concept_supported}</div><div class="muted">{report_data["concept_coverage_rate"]:.1f}% graph-supported coverage</div></div><div class="insight-card"><h3>Evidence coverage</h3><div class="metric-value">{report_data["concept_evidence_coverage_rate"]:.1f}%</div><div class="muted">{concept_evidence_count} concepts have source evidence</div></div><div class="insight-card"><h3>Fact types</h3><div class="metric-value">{len(fact_types)}</div><div class="muted">{fact_grounded_count} grounded · {report_data["fact_type_grounding_rate"]:.1f}%</div></div><div class="insight-card"><h3>Unresolved / orphaned</h3><div class="metric-value">{report_data["concept_review_count"]} / {concept_orphan_count}</div><div class="muted">Unresolved kinds / no rule or fact links</div></div></div><div class="grid-2"><div class="panel"><h3>Concept type mix</h3><p class="muted">How the vocabulary is distributed across SBVR-aligned concept kinds.</p>{kind_bars}</div><div class="panel"><h3>Most connected concepts</h3><p class="muted">Concepts with the strongest links into rules and fact types.</p><ul class="insight-list">{top_concept_rows}</ul></div></div><div class="panel"><div class="eyebrow">Concept explorer</div><h3>Find a term, definition, or concept kind</h3><div class="vocabulary-toolbar"><input id="concept-search" type="search" placeholder="Search concepts and definitions…"><select id="concept-kind"><option value="">All kinds</option>{''.join(f'<option value="{_safe(kind)}">{_safe(kind.replace("_", " "))}</option>' for kind in sorted(concept_kind_counts, key=str.casefold))}</select><select id="concept-evidence"><option value="">All evidence states</option><option value="grounded">With source evidence</option><option value="unresolved">Evidence unresolved</option></select><output id="concept-count" for="concept-search"></output></div><div id="concept-grid" class="concept-grid">{''.join(concept_rows) or '<div class="empty">No concepts were reported.</div>'}</div></div><div id="fact-types" class="panel fact-table"><div class="eyebrow">SBVR fact types</div><h3>Relationships and grounding status</h3><p class="muted">Each endpoint links back to its concept card; evidence links land on the embedded source block.</p><div class="grid-2"><div class="table-wrap"><table><thead><tr><th>Grounding status</th><th>Fact types</th><th>Share</th></tr></thead><tbody>{fact_status_rows}</tbody></table></div><div class="callout"><strong>{len(fact_types)}</strong> fact types connect <strong>{len(concept_ids)}</strong> concepts. A fact type is a vocabulary relationship, not a workflow sequence.</div></div><div class="table-wrap" style="margin-top:14px"><table><thead><tr><th>Fact type</th><th>Subject</th><th>Verb</th><th>Object</th><th>Grounding and evidence</th></tr></thead><tbody>{''.join(fact_rows) or '<tr><td colspan="5">No fact types were reported.</td></tr>'}</tbody></table></div></div></div></section>
-<section id="rules" class="tab"><div class="panel"><div class="eyebrow">Structured rule explorer</div><h2>Business rules</h2><p class="muted">Readiness, grounding, and confidence are separate signals. A quality hold means the rule is fail-closed for execution; it does not mean every extracted statement is wrong. Expand <strong>IF / THEN</strong> to inspect the typed contract, traceability path, and any generated DMN/BPMN/CMMN model.</p><div class="toolbar"><input id="rule-search" type="search" placeholder="Search ID, title, statement, category…"><select id="rule-category"><option value="">All categories</option>{''.join(f'<option>{_safe(category)}</option>' for category in sorted(categories, key=str.casefold))}</select><select id="rule-status"><option value="">All statuses</option><option value="review_required">Quality hold</option><option value="verified">Verified</option><option value="unresolved">Unresolved</option></select><select id="rule-route"><option value="">All routes</option>{route_options}</select><label class="muted" style="padding:9px 0"><input id="review-only" type="checkbox"> quality holds only</label><label class="muted" style="padding:9px 0"><input id="filter-has-dmn" type="checkbox"> has DMN</label><label class="muted" style="padding:9px 0"><input id="filter-has-bpmn" type="checkbox"> has BPMN</label><label class="muted" style="padding:9px 0"><input id="filter-has-cmmn" type="checkbox"> has CMMN</label><span id="rule-count" class="muted" style="padding:9px 0"></span></div><div class="table-wrap"><table id="rules-table"><thead><tr><th>Rule</th><th>Category</th><th>Natural-language statement</th><th>Contract, traceability & models</th><th>Readiness, grounding and confidence</th><th>Review route</th><th>Source evidence</th></tr></thead><tbody>{''.join(rule_rows) or '<tr><td colspan="7">No rules were reported.</td></tr>'}</tbody></table></div></div></section>
+<section id="rules" class="tab"><div class="panel"><div class="eyebrow">Structured rule explorer</div><h2>Business rules</h2><p class="muted">The score is a transparent measurement, separate from extraction confidence. Choose a minimum and maximum score based on your operating environment, risk tolerance, and domain policy. Expand <strong>IF / THEN</strong> to inspect the typed contract, traceability path, score factors, and generated models.</p><div class="toolbar"><input id="rule-search" type="search" placeholder="Search ID, title, statement, category…"><select id="rule-category"><option value="">All categories</option>{''.join(f'<option>{_safe(category)}</option>' for category in sorted(categories, key=str.casefold))}</select><input id="rule-score-min" type="number" min="0" max="100" step="1" value="0" aria-label="Minimum readiness score" placeholder="Minimum score"><input id="rule-score-max" type="number" min="0" max="100" step="1" value="100" aria-label="Maximum readiness score" placeholder="Maximum score"><label class="muted" style="padding:9px 0"><input id="filter-has-dmn" type="checkbox"> has DMN</label><label class="muted" style="padding:9px 0"><input id="filter-has-bpmn" type="checkbox"> has BPMN</label><label class="muted" style="padding:9px 0"><input id="filter-has-cmmn" type="checkbox"> has CMMN</label><span id="rule-count" class="muted" style="padding:9px 0"></span></div><div class="table-wrap"><table id="rules-table"><thead><tr><th>Rule</th><th>Category</th><th>Natural-language statement</th><th>Contract, traceability & models</th><th>Automation readiness & confidence</th><th>Source evidence</th></tr></thead><tbody>{''.join(rule_rows) or '<tr><td colspan="6">No rules were reported.</td></tr>'}</tbody></table></div></div></section>
 <section id="dependencies" class="tab"><div class="panel"><div class="eyebrow">Relationship and dependency view</div><h2>Directed rule relationship graph</h2><p>These are the dependency edges emitted by the knowledge-graph optimizer and DAG generator. They are not treated as BPMN sequence flows. The graph preserves the emitted direction and groups nodes into degree layers for readable traversal. <strong>Click a rule</strong> to highlight it and its direct connections; everything else dims. Scroll to zoom, drag to pan.</p><div class="dependency-graph-shell"><div class="dependency-graph-toolbar"><h3>Dependency topology</h3><span class="muted">{len(dependency_layout["nodes"])} nodes · {len(dependency_layout["edges"])} unique directed edges · {len(dependency_layers)} degree layers</span></div><div class="dependency-graph-stats">{dependency_layer_chips}<span class="graph-layer-chip"><strong>isolated</strong> · {len(dependency_layout["isolated_nodes"])} nodes</span></div><div class="dependency-graph-layout"><div class="dependency-graph-scroll">{dependency_graph}</div><aside id="dep-side-panel" class="dep-side-panel" hidden></aside></div><p class="dependency-graph-note">{_safe(dependency_graph_note)} Hover an edge for its dependency type and full source → target direction.</p></div><div class="table-wrap"><table><thead><tr><th>Source rule</th><th>Target rule</th><th>Type</th></tr></thead><tbody>{edge_rows}</tbody></table></div></div></section>
-<section id="review" class="tab"><div class="panel"><div class="eyebrow">Review management</div><h2>Human review, triaged by severity</h2><p>Every rule with an open review flag, in one dashboard. <strong>Severity</strong> is derived from review route and grounding status (a case-management route or a contradicted grounding verdict is <em>Critical</em>; a plain human-review route is <em>High</em>; machine-repair is <em>Medium</em>; everything else is <em>Low</em>) -- it is not a separately extracted field, so treat it as a triage aid, not ground truth.</p><div class="grid-2"><div class="callout"><strong>{human_review_count}</strong> rules are in the human-review queue (<strong>{report_data["human_review_rate"]:.1f}%</strong>).</div><div class="callout"><strong>{review_count}</strong> rules have quality holds (<strong>{report_data["quality_hold_rate"]:.1f}%</strong>); <strong>{nonhuman_quality_hold_count}</strong> are outside the human queue.</div></div><div class="toolbar"><input id="review-search" type="search" placeholder="Search rule ID or name…"><select id="review-severity"><option value="">All severities</option><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select><select id="review-route"><option value="">All routes</option>{route_options}</select><label class="muted" style="padding:9px 0"><input id="review-human-only" type="checkbox"> human-review only</label><span id="review-count" class="muted" style="padding:9px 0"></span></div><div class="table-wrap"><table id="review-table"><thead><tr><th>Severity</th><th>Rule</th><th>Route</th><th>Why flagged</th><th>Confidence</th><th>Evidence</th><th>Related rules</th></tr></thead><tbody>{''.join(review_rows) or '<tr><td colspan="7">No rules currently require review.</td></tr>'}</tbody></table></div></div></section>
-<section id="sources" class="tab"><div class="panel"><div class="eyebrow">Source traceability</div><h2>Embedded source chunks</h2><p>These source blocks are embedded in this HTML file. Links from concepts, rules, and review items land on the exact referenced chunk/section without requiring filesystem access.</p>{''.join(source_blocks.values()) or '<div class="empty">No source references were present in the graph.</div>'}</div></section>
+<section id="scores" class="tab"><div class="panel"><div class="eyebrow">Policy-neutral measurement</div><h2>Automation readiness scores</h2><p>All rules are included. A score of <strong>100</strong> means all measured components are complete. The report deliberately provides no pass/fail label and no universal threshold; deployment owners decide what is acceptable for their environment and domain.</p><div class="toolbar"><input id="score-search" type="search" placeholder="Search rule ID or name…"><input id="score-min" type="number" min="0" max="100" step="1" value="0" aria-label="Minimum score"><input id="score-max" type="number" min="0" max="100" step="1" value="100" aria-label="Maximum score"><span id="score-count" class="muted" style="padding:9px 0"></span></div><div class="table-wrap"><table id="score-table"><thead><tr><th>Rule</th><th>Automation readiness score</th><th>Extraction confidence</th><th>Evidence</th></tr></thead><tbody>{''.join(score_rows) or '<tr><td colspan="4">No rules were reported.</td></tr>'}</tbody></table></div></div></section>
+<section id="sources" class="tab"><div class="panel"><div class="eyebrow">Source traceability</div><h2>Embedded source chunks</h2><p>These source blocks are embedded in this HTML file. Links from concepts, rules, and score details land on the exact referenced chunk/section without requiring filesystem access.</p>{''.join(source_blocks.values()) or '<div class="empty">No source references were present in the graph.</div>'}</div></section>
 <footer>Policy Logic Forge Agent 12 · presentation-only artifact · source graph SHA-256: {_safe(hashlib.sha256(graph_file.read_bytes()).hexdigest())}</footer></div>
 <script type="application/json" id="report-data">{_json_for_script(report_data)}</script><script>
 const tabs=[...document.querySelectorAll('[data-tab]')], sections=[...document.querySelectorAll('section.tab')];
 function activateTab(tabId){{tabs.forEach(item=>item.classList.toggle('active',item.dataset.tab===tabId));sections.forEach(section=>section.classList.toggle('active',section.id===tabId));}}
 tabs.forEach(button=>button.addEventListener('click',()=>{{activateTab(button.dataset.tab);history.replaceState(null,'','#'+button.dataset.tab);}}));
-const rows=[...document.querySelectorAll('#rules-table tbody .rule-row')], search=document.getElementById('rule-search'), category=document.getElementById('rule-category'), status=document.getElementById('rule-status'), route=document.getElementById('rule-route'), review=document.getElementById('review-only'), hasDmn=document.getElementById('filter-has-dmn'), hasBpmn=document.getElementById('filter-has-bpmn'), hasCmmn=document.getElementById('filter-has-cmmn'), count=document.getElementById('rule-count');
-function applyFilters(){{const query=(search.value||'').toLowerCase(), cat=category.value, state=status.value, selectedRoute=route.value, only=review.checked;let visible=0;rows.forEach(row=>{{const matches=(!query||row.dataset.search.includes(query))&&(!cat||row.dataset.category===cat)&&(!state||row.dataset.status===state)&&(!selectedRoute||row.dataset.route===selectedRoute)&&(!only||row.dataset.review==='true')&&(!hasDmn.checked||row.dataset.hasDmn==='true')&&(!hasBpmn.checked||row.dataset.hasBpmn==='true')&&(!hasCmmn.checked||row.dataset.hasCmmn==='true');row.hidden=!matches;if(matches)visible++;}});count.textContent=visible+' of '+rows.length+' rules shown';}}
-[search,category,status,route,review,hasDmn,hasBpmn,hasCmmn].forEach(control=>control&&control.addEventListener('input',applyFilters));applyFilters();
+const rows=[...document.querySelectorAll('#rules-table tbody .rule-row')], search=document.getElementById('rule-search'), category=document.getElementById('rule-category'), scoreMin=document.getElementById('rule-score-min'), scoreMax=document.getElementById('rule-score-max'), hasDmn=document.getElementById('filter-has-dmn'), hasBpmn=document.getElementById('filter-has-bpmn'), hasCmmn=document.getElementById('filter-has-cmmn'), count=document.getElementById('rule-count');
+function applyFilters(){{const query=(search.value||'').toLowerCase(), cat=category.value, min=Number(scoreMin.value||0), max=Number(scoreMax.value||100);let visible=0;rows.forEach(row=>{{const score=Number(row.dataset.score||0),matches=(!query||row.dataset.search.includes(query))&&(!cat||row.dataset.category===cat)&&score>=min&&score<=max&&(!hasDmn.checked||row.dataset.hasDmn==='true')&&(!hasBpmn.checked||row.dataset.hasBpmn==='true')&&(!hasCmmn.checked||row.dataset.hasCmmn==='true');row.hidden=!matches;if(matches)visible++;}});count.textContent=visible+' of '+rows.length+' rules shown';}}
+[search,category,scoreMin,scoreMax,hasDmn,hasBpmn,hasCmmn].forEach(control=>control&&control.addEventListener('input',applyFilters));applyFilters();
 const conceptCards=[...document.querySelectorAll('#concept-grid .concept-card')], conceptSearch=document.getElementById('concept-search'), conceptKind=document.getElementById('concept-kind'), conceptEvidence=document.getElementById('concept-evidence'), conceptCount=document.getElementById('concept-count');
 function applyConceptFilters(){{const query=(conceptSearch.value||'').toLowerCase(), kind=conceptKind.value, evidence=conceptEvidence.value;let visible=0;conceptCards.forEach(card=>{{const matches=(!query||card.dataset.search.includes(query))&&(!kind||card.dataset.kind===kind)&&(!evidence||card.dataset.evidence===evidence);card.hidden=!matches;if(matches)visible++;}});conceptCount.textContent=visible+' of '+conceptCards.length+' concepts shown';}}
 [conceptSearch,conceptKind,conceptEvidence].forEach(control=>control&&control.addEventListener('input',applyConceptFilters));applyConceptFilters();
-const reviewRows=[...document.querySelectorAll('#review-table tbody .review-row')], reviewSearch=document.getElementById('review-search'), reviewSeverity=document.getElementById('review-severity'), reviewRoute=document.getElementById('review-route'), reviewHumanOnly=document.getElementById('review-human-only'), reviewCount=document.getElementById('review-count');
-function applyReviewFilters(){{if(!reviewRows.length)return;const query=(reviewSearch.value||'').toLowerCase(), sev=reviewSeverity.value, selectedRoute=reviewRoute.value, humanOnly=reviewHumanOnly.checked;let visible=0;reviewRows.forEach(row=>{{const matches=(!query||row.dataset.search.includes(query))&&(!sev||row.dataset.severity===sev)&&(!selectedRoute||row.dataset.route===selectedRoute)&&(!humanOnly||row.dataset.human==='true');row.hidden=!matches;if(matches)visible++;}});reviewCount.textContent=visible+' of '+reviewRows.length+' review items shown';}}
-[reviewSearch,reviewSeverity,reviewRoute,reviewHumanOnly].forEach(control=>control&&control.addEventListener('input',applyReviewFilters));applyReviewFilters();
+const scoreRows=[...document.querySelectorAll('#score-table tbody .score-row')], scoreSearch=document.getElementById('score-search'), scoreFloor=document.getElementById('score-min'), scoreCeiling=document.getElementById('score-max'), scoreCount=document.getElementById('score-count');
+function applyScoreFilters(){{const query=(scoreSearch.value||'').toLowerCase(), min=Number(scoreFloor.value||0), max=Number(scoreCeiling.value||100);let visible=0;scoreRows.forEach(row=>{{const score=Number(row.dataset.score||0),matches=(!query||row.dataset.search.includes(query))&&score>=min&&score<=max;row.hidden=!matches;if(matches)visible++;}});scoreCount.textContent=visible+' of '+scoreRows.length+' rules shown';}}
+[scoreSearch,scoreFloor,scoreCeiling].forEach(control=>control&&control.addEventListener('input',applyScoreFilters));applyScoreFilters();
 function revealTarget(id){{const el=document.getElementById(id);if(!el)return false;const tabSection=el.closest('section.tab');if(tabSection)activateTab(tabSection.id);let node=el.parentElement;while(node){{if(node.tagName==='DETAILS'&&!node.open)node.open=true;node=node.parentElement;}}el.scrollIntoView({{behavior:'smooth',block:'start'}});el.classList.add('nav-highlight');setTimeout(()=>el.classList.remove('nav-highlight'),1600);return true;}}
 document.addEventListener('click',event=>{{const anchor=event.target.closest('a[href^="#"]');if(!anchor)return;const id=anchor.getAttribute('href').slice(1);if(!id||!document.getElementById(id))return;event.preventDefault();revealTarget(id);history.replaceState(null,'','#'+id);}});
 if(location.hash)revealTarget(location.hash.slice(1));
@@ -1638,7 +1584,8 @@ if(location.hash)revealTarget(location.hash.slice(1));
     const info=ruleSummary[id]||{{}};
     const items=[...neighbors].sort().map(n=>{{const ninfo=ruleSummary[n]||{{}};return '<li><a href="#" data-dep-jump="'+esc(n)+'">'+esc(n)+'</a><span class="muted">'+esc(ninfo.category||'')+'</span></li>';}}).join('')||'<li class="muted">No direct connections</li>';
     const conf=(info.confidence!=null)?Number(info.confidence).toFixed(1)+'%':'—';
-    panel.innerHTML='<div class="dep-panel-head"><strong>'+esc(id)+'</strong><button type="button" class="dep-panel-close" aria-label="Close">×</button></div><div class="muted">'+esc(info.name||'')+'</div><div class="dep-panel-meta"><span>'+esc(info.category||'Uncategorized')+'</span><span>'+esc(info.status||'')+'</span><span>'+esc(conf)+'</span></div><a class="evidence-link" href="#rule-'+esc(info.slug||id)+'">Open rule →</a><h4>Direct connections ('+neighbors.size+')</h4><ul class="dep-panel-list">'+items+'</ul>';
+    const readiness=(info.automation_readiness_score!=null)?Number(info.automation_readiness_score).toFixed(1)+'/100':'—';
+    panel.innerHTML='<div class="dep-panel-head"><strong>'+esc(id)+'</strong><button type="button" class="dep-panel-close" aria-label="Close">×</button></div><div class="muted">'+esc(info.name||'')+'</div><div class="dep-panel-meta"><span>'+esc(info.category||'Uncategorized')+'</span><span>'+esc(readiness)+'</span><span>'+esc(conf)+'</span></div><a class="evidence-link" href="#rule-'+esc(info.slug||id)+'">Open rule →</a><h4>Direct connections ('+neighbors.size+')</h4><ul class="dep-panel-list">'+items+'</ul>';
     panel.hidden=false;
     panel.querySelectorAll('[data-dep-jump]').forEach(a=>a.addEventListener('click',e=>{{e.preventDefault();selectDepNode(a.dataset.depJump);}}));
     const closeBtn=panel.querySelector('.dep-panel-close');
@@ -1700,7 +1647,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"ERROR: business knowledge report generation failed: {exc}", flush=True)
         return 2
     print(f"Generated self-contained business knowledge report for {report['rule_count']} rules and {report['concept_count']} concepts: {output / REPORT_FILE_NAME}", flush=True)
-    print(f"Human-review queue: {report['human_review_count']} ({report['human_review_rate']}%); quality holds: {report['quality_hold_count']} ({report['quality_hold_rate']}%); grounding-certified: {report['grounding_coverage_rate']}%; source-pointer coverage: {report['source_pointer_coverage_rate']}%", flush=True)
+    print(f"Automation readiness: average {report['automation_readiness_score_average']}/100, range {report['automation_readiness_score_minimum']}–{report['automation_readiness_score_maximum']}; grounding-certified: {report['grounding_coverage_rate']}%; source-pointer coverage: {report['source_pointer_coverage_rate']}%", flush=True)
     return 0
 
 

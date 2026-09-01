@@ -32,10 +32,12 @@ frontend or backend service.
 **Agent 12 report layer** — after Agent 11 has produced its model bundle,
 `agents/agent_12_business_knowledge_report.py` creates one self-contained
 `business_knowledge_report.html`. The report provides tabbed SBVR vocabulary,
-rule exploration, review management, DMN/BPMN/CMMN coverage, dependency views,
-embedded source chunks, search/filter controls, and inline SVG visualizations.
-It uses only graph-derived facts; missing evidence remains explicitly
-unresolved.
+rule and score exploration, DMN/BPMN/CMMN coverage, dependency views, embedded
+source chunks, search/filter controls, and inline SVG visualizations. Each rule
+receives a transparent 0–100 automation-readiness score derived from grounding,
+contract, evidence, execution, and relationship signals. Agent 12 assigns no
+pass/fail label or universal threshold; deployment owners interpret the score
+for their environment and domain. It uses only graph-derived facts.
 
 ### Engineering fixes made along the way
 
