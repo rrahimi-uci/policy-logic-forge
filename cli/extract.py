@@ -33,6 +33,7 @@ import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 _ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_ROOT))
@@ -62,6 +63,25 @@ DOMAINS = [
     "nda_confidentiality", "privacy_policy", "mobile_app_privacy", "commercial_contracts",
     "deonticbench", "mortgage",
 ]
+
+PACIFIC_TIME_ZONE = ZoneInfo("America/Los_Angeles")
+
+
+def default_batch_name(source_dir: Path, *, now: datetime | None = None) -> str:
+    """Build the default output-folder name for a fresh pipeline run.
+
+    The timestamp uses the US Pacific civil clock (PST/PDT as applicable), so
+    the folder name is easy to correlate with the operator's local terminal:
+    ``mortgage-run-2026-09-01-09-05``.  An explicit ``--batch-name`` remains
+    the stable choice when resuming a previous run.
+    """
+
+    run_time = now or datetime.now(PACIFIC_TIME_ZONE)
+    if run_time.tzinfo is None:
+        run_time = run_time.replace(tzinfo=PACIFIC_TIME_ZONE)
+    else:
+        run_time = run_time.astimezone(PACIFIC_TIME_ZONE)
+    return f"{Path(source_dir).name}-run-{run_time:%Y-%m-%d-%H-%M}"
 
 
 def _parse_stage_arg(value: str) -> str:
@@ -172,7 +192,7 @@ class ExtractionPipeline:
         self.target_rules = target_rules
         self.max_workers = max_workers
         self.skip_optimize = skip_optimize
-        self.batch_name = batch_name or source_dir.name
+        self.batch_name = batch_name or default_batch_name(source_dir)
         self.pilot_batch_limit = pilot_batch_limit
         self.config.set_batch_name(self.batch_name)
 
@@ -641,7 +661,12 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--dir", required=True, help="Directory of source documents under compliance-files/")
     parser.add_argument("--domain", required=True, choices=DOMAINS)
-    parser.add_argument("--batch-name", default=None, help="Output folder name under pipeline-output/ (default: --dir's basename)")
+    parser.add_argument(
+        "--batch-name", default=None,
+        help="Output folder name under pipeline-output/. Default: "
+             "<source-basename>-run-YYYY-MM-DD-HH-MM in US Pacific time "
+             "(PST/PDT); pass an explicit name to resume a prior run.",
+    )
     parser.add_argument("--target-rules", type=int, default=30, help="Target business rules agent_03 tries to extract per batch (default: 30). Does NOT bound chunk/batch coverage -- see --pilot-batch-limit for that.")
     parser.add_argument("--pilot-batch-limit", type=int, default=None, help="Cap the number of word-balanced batches agent_03 processes, for a cheap smoke run. Omit for full coverage (default): every organized chunk is read whole and every batch is processed. A capped run is never corpus coverage.")
     parser.add_argument("--workers", type=int, default=None, help="Local scheduling workers (default: config.json pipeline.max_workers)")
