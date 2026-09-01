@@ -155,7 +155,7 @@ sequenceDiagram
 
     CLI->>A7: run_agent_07()
     A7->>FS: read optimized graph
-    A7-->>CLI: exit 0 (ready) or exit 3 (review signal)
+    A7-->>CLI: exit 0 (ready), exit 3 (review), or exit 2 (failed invariant)
 
     alt rules need remediation
         CLI->>A8: run_agent_08()
@@ -176,7 +176,11 @@ sequenceDiagram
     CLI-->>Op: COMPLETE — optimized graph, DAGs, executable models
 ```
 
-**Readiness exit code 3 is a review signal, not a crash.** The full
+**Readiness exit code 3 is a review signal, not a crash.** Exit code 2 may
+enter remediation only when the current report proves `schema_consistency`
+is the sole failed invariant. Exit 1 (configuration/runtime failure) and
+non-schema invariant failures stop even if an older readiness report is
+present. The full
 orchestrator runs remediation, then continues to independent grounding and
 DAG generation once all four readiness invariants pass; affected rules
 remain `requires_review: true` in the final artifacts rather than blocking
@@ -243,11 +247,12 @@ exception.
 | Field | Notes |
 | --- | --- |
 | `condition_predicates[]` | `predicate_id, variable, operator (==, !=, >, >=, <, <=, in, not_in), value, value_type` |
-| `condition_logic` | Boolean tree over predicate refs (`all`/`any`/`predicate_ref`) |
-| `outcomes[]` | `variable, operator="=", value, value_type` |
+| `condition_logic` | Boolean tree over predicate refs (`all`/`any`/`predicate_ref`), or `{"constant": true}` only for a direct, explicitly unconditional source assertion |
+| `outcomes[]` | `variable, operator="=", value, value_type`; validated numeric arithmetic may use canonical `feel_expression` |
 | `variables[]` | `name, type, role (input\|derived\|output), unit?, allowed_range?, allowed_values?` |
 | `scope_basis` | One of `explicit`, `explicit_in_source`, `explicitly_none_in_source`, `explicitly_universal_in_source`, `genuinely_unscoped`, `inferred`, `unresolved_after_source_review` |
-| `exceptions[]`, `exception_basis` | Same shape as predicates; 5-value basis enum |
+| `exceptions[]`, `exception_basis` | Input-side exception triggers use the predicate shape and a 5-value basis enum |
+| `exception_effects[]` | Preserves source-backed alternate output assignments separately from exception triggers; remains review-gated until branch lowering is available |
 | `source_reference`, `field_evidence` | Chunk path, section id, exact quoted source text |
 | `test_vectors[]` | Input/output example pairs for the rule |
 
@@ -342,6 +347,8 @@ Its findings are never read by any other agent or by the orchestrator's control 
 
 - Evidence retrieval builds an inverted token index (words, path tokens, exception markers like "except"/"unless"/"notwithstanding") over the organized corpus *before* any LLM call, so the search record can prove the whole corpus was inspected.
 - Each `(rule, evidence packet)` pair is fingerprinted (SHA-256) and checkpointed to JSONL; a resumed run rejects checkpoint rows whose rule no longer exists or whose recorded corpus hash doesn't match.
+- Cache/resume paths revalidate nested exception/scope citations against the organized corpus before syncing them into `field_evidence`; cached evidence never bypasses the citation gate.
+- Deterministic normalization aliases legacy operators/types, preserves alternate exception effects, compiles only a conservative arithmetic subset to FEEL, and derives test vectors only when the condition and expected output are mechanically evaluable.
 
 #### `agent_08` — Readiness Remediator
 
@@ -425,7 +432,7 @@ The full run order and gating logic, tying every stage above together:
 1. `agent_01` → `agent_02` → `agent_03` — each a hard gate.
 2. `agent_04` — called, but its return value is discarded; advisory only.
 3. `agent_05` → `agent_06` — hard gates (unless `--skip-optimize`, which skips `agent_06`–`agent_08` entirely).
-4. `agent_07` — on failure, checks whether any rule needs review: if none, hard stop (unrecoverable invariant failure); if some do, runs `agent_08` then re-verifies with `agent_07`. A repeat exit-3 that is still fully invariant-passing is tolerated and the pipeline continues with rules flagged `requires_review`.
+4. `agent_07` — exit 3 with a valid readiness report enters `agent_08`; exit 2 may also enter only for a schema-only invariant failure. Both paths are followed by an `agent_07` recheck. Exit 1 and non-schema invariant failures stop immediately and cannot be misrouted by stale artifacts. A repeat exit-3 that is still fully invariant-passing is tolerated and the pipeline continues with rules flagged `requires_review`.
 5. `agent_09` — exit-3 tolerated only if the report shows complete, fail-closed coverage; otherwise hard stop.
 6. `agent_10` → `agent_11` — hard gates.
 

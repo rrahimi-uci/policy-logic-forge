@@ -118,7 +118,22 @@ def classify_review_route(issues: Iterable[Mapping[str, Any]]) -> dict[str, Any]
         return any(marker in reason for marker in ("source conflict", "legal ambiguity", "policy owner decision"))
 
     human = any(is_material_grounding_conflict(item) for item in findings)
-    requirements = {str(item.get("requirement", "")) for item in findings}
+    def operational_requirement(issue: Mapping[str, Any]) -> str:
+        requirement = str(issue.get("requirement", "")).strip()
+        if requirement:
+            return requirement
+        code = str(issue.get("code", "")).strip()
+        if not code:
+            return "unclassified"
+        if "evidence" in code or code in {"missing_source_reference", "invalid_source_reference"}:
+            return "evidence"
+        # validate_rule_v2 findings use ``code``/``path`` instead of the
+        # final-readiness layer's ``requirement`` field. They are still
+        # deterministic contract defects and should not be misrouted to case
+        # management merely because the two schemas use different keys.
+        return "contract"
+
+    requirements = {operational_requirement(item) for item in findings}
     machine_only = requirements <= {"contract", "execution", "naming", "test_vectors"} and not any(
         item.get("evidence_limited") is True for item in findings
     )

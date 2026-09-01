@@ -109,6 +109,20 @@ def test_unsupported_type_is_refused_without_partial_rule():
     assert validate_ir(ir) == []
 
 
+def test_exception_effects_are_preserved_as_explicit_lowering_refusal():
+    rule = _rule(exception_effects=[{
+        "effect_id": "alternate", "variable": "decision", "operator": "=",
+        "value": "deny", "value_type": "enum",
+    }])
+
+    ir = lower_graph([rule], source_sha256=SOURCE_HASH)
+
+    assert ir["rules"] == []
+    assert ir["refusals"][0]["code"] == "UNREPRESENTABLE_EXCEPTION_EFFECT"
+    assert ir["refusals"][0]["construct"] == "exception_effects"
+    assert validate_ir(ir) == []
+
+
 def test_non_executable_annotations_are_accounted_for_not_dropped():
     rule = _rule(description="annotation", confidence_score=42, test_vectors=[])
     ir = lower_graph([rule], source_sha256=SOURCE_HASH)

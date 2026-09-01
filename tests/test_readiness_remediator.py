@@ -173,6 +173,26 @@ def test_agent_08_batches_list_shaped_source_reference():
     assert batches[0][0]["rule"]["rule_id"] == rule["rule_id"]
 
 
+def test_agent_08_routes_contract_exception_codes_into_rule_batches():
+    rule = graph_with_two_rules()["business_rules"][0]
+    rule["requires_review"] = True
+    rule["readiness"] = {
+        "failed_requirements": [{
+            "code": "exception_uses_output_variable",
+            "path": "exceptions[0].variable",
+            "message": "Exception uses an output variable.",
+        }],
+    }
+
+    batches = ReadinessRemediator(None)._rule_batches([rule], {}, 1)
+
+    assert len(batches) == 1
+    packet = batches[0][0]
+    assert "exceptions" in packet["failed_requirements"]
+    assert "code:exception_uses_output_variable" in packet["failed_requirements"]
+    assert packet["failed_findings"][0]["code"] == "exception_uses_output_variable"
+
+
 def test_multi_value_output_contract_is_graph_wide_and_resolves_collect_collision():
     graph = graph_with_two_rules()
     left, right = graph["business_rules"]

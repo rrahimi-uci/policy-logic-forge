@@ -214,6 +214,34 @@ def test_scope_derivation_evidence_drift_is_repaired_from_the_corpus(tmp_path):
         assert "solar company" not in evidence["source_text"], "resolver's paraphrase must not survive"
 
 
+def test_skip_evidence_revalidates_and_syncs_cached_scope_citations(tmp_path):
+    organized = tmp_path / "organized" / "B2-1-01"
+    organized.mkdir(parents=True)
+    source_text = "A seller servicer must limit conventional loan pools to three."
+    (organized / "001.txt").write_text(source_text, encoding="utf-8")
+    graph = graph_with_two_rules()
+    for rule in graph["business_rules"]:
+        rule["applicability_scope"] = {
+            "loan_types": ["conventional"], "occupancy_types": [], "transaction_types": [],
+        }
+        rule["scope_derivation"] = {
+            "status": "explicit",
+            "evidence": [{
+                "chunk_path": "B2-1-01/001.txt", "section_id": "B2-1-01", "source_text": source_text,
+            }],
+        }
+        rule["field_evidence"]["applicability_scope"] = []
+
+    final_graph, _ = ExecutableReadinessCompleter().complete(
+        graph, graph, str(tmp_path / "organized"), skip_evidence=True, skip_conflicts=True,
+    )
+
+    for rule in final_graph["business_rules"]:
+        pointer = rule["field_evidence"]["applicability_scope"][0]
+        assert pointer["source_text"] == source_text
+        assert pointer["source_text_found_in_chunk"] is True
+
+
 def test_unrelated_exception_evidence_is_left_as_is_not_dropped(tmp_path):
     """A citation with no real relationship to the chunk cannot be repaired
     without fabricating evidence -- it must be left exactly as-is (agent_09
@@ -426,6 +454,16 @@ def test_variable_type_gets_the_same_legacy_alias_normalisation_as_value_type():
     assert rule["variables"][-1]["type"] == "list"
 
 
+def test_integer_variable_type_normalises_to_contract_number():
+    rule = valid_rule()
+    rule["variables"][0]["type"] = "integer"
+
+    normalise_rule_contract(rule)
+
+    assert rule["variables"][0]["type"] == "number"
+    assert not any(issue.code == "invalid_variable_type" for issue in validate_rule_v2(rule, {"SELLER_SERVICER", "FANNIE_MAE"}))
+
+
 def test_contains_any_operator_normalises_to_in():
     rule = valid_rule()
     rule["condition_predicates"].append({
@@ -439,6 +477,26 @@ def test_contains_any_operator_normalises_to_in():
     normalise_rule_contract(rule)
 
     assert rule["condition_predicates"][-1]["operator"] == "in"
+
+
+def test_spaced_not_in_and_boolean_is_applicable_operators_are_canonicalized():
+    rule = valid_rule()
+    rule["variables"].append({"name": "renewal_premium_applies", "type": "boolean", "role": "input"})
+    rule["condition_predicates"].extend([
+        {
+            "predicate_id": "p2", "variable": "price_differential_amount",
+            "operator": "not in", "value": [1, 2], "value_type": "list",
+        },
+        {
+            "predicate_id": "p3", "variable": "renewal_premium_applies",
+            "operator": "is_applicable", "value": True, "value_type": "boolean",
+        },
+    ])
+
+    normalise_rule_contract(rule)
+
+    assert rule["condition_predicates"][-2]["operator"] == "not_in"
+    assert rule["condition_predicates"][-1]["operator"] == "=="
 
 
 def test_string_array_variable_type_no_longer_fails_v2_validation():
@@ -576,6 +634,132 @@ def test_unsupported_computed_outcome_value_types_are_deliberately_not_normalise
     assert any(issue.code == "invalid_outcome_value_type" for issue in issues)
 
 
+def test_source_backed_numeric_formula_compiles_to_validated_feel():
+    rule = valid_rule()
+    rule["variables"] = [
+        {"name": "new_refinance_loan_balance", "type": "number", "role": "input", "unit": "USD"},
+        {"name": "maximum_reimbursement_cash_out_amount", "type": "number", "role": "output", "unit": "USD"},
+    ]
+    rule["condition_predicates"] = [{
+        "predicate_id": "p1", "variable": "new_refinance_loan_balance", "operator": ">",
+        "value": 0, "value_type": "number",
+    }]
+    rule["condition_logic"] = {"predicate_ref": "p1"}
+    rule["outcomes"] = [{
+        "variable": "maximum_reimbursement_cash_out_amount", "operator": "=",
+        "value": "min(0.10 * new_refinance_loan_balance, 15000)", "value_type": "expression",
+    }]
+
+    normalise_rule_contract(rule)
+    issues = validate_rule_v2(rule, {"SELLER_SERVICER", "FANNIE_MAE"})
+
+    assert rule["outcomes"][0]["value_type"] == "feel_expression"
+    assert rule["outcomes"][0]["source_expression"] == "min(0.10 * new_refinance_loan_balance, 15000)"
+    assert not any(issue.code in {"invalid_outcome_value_type", "invalid_feel_expression"} for issue in issues)
+
+
+def test_missing_equality_test_vector_is_derived_without_inventing_values():
+    rule = valid_rule()
+    rule["condition_predicates"] = [{
+        "predicate_id": "p1", "variable": "price_differential_amount",
+        "operator": "==", "value": 100000, "value_type": "number",
+    }]
+    rule["condition_logic"] = {"predicate_ref": "p1"}
+    rule["test_vectors"] = []
+
+    normalise_rule_contract(rule)
+
+    assert rule["test_vectors"] == [{
+        "inputs": {"price_differential_amount": 100000},
+        "expected_output": {"maximum_number_of_pools": 3},
+        "vector_basis": "derived_from_source",
+        "boundary_condition": False,
+    }]
+
+
+def test_equality_vector_evaluates_validated_feel_with_declared_numeric_inputs():
+    rule = valid_rule()
+    rule["variables"] = [
+        {"name": "enabled", "type": "boolean", "role": "input"},
+        {"name": "first_amount", "type": "number", "role": "input"},
+        {"name": "second_amount", "type": "number", "role": "input"},
+        {"name": "total_amount", "type": "number", "role": "output"},
+    ]
+    rule["condition_predicates"] = [{
+        "predicate_id": "p1", "variable": "enabled", "operator": "==",
+        "value": True, "value_type": "boolean",
+    }]
+    rule["condition_logic"] = {"predicate_ref": "p1"}
+    rule["outcomes"] = [{
+        "variable": "total_amount", "operator": "=",
+        "value": "first_amount + second_amount", "value_type": "formula",
+    }]
+    rule["test_vectors"] = []
+
+    normalise_rule_contract(rule)
+
+    assert rule["outcomes"][0]["value_type"] == "feel_expression"
+    assert rule["test_vectors"] == [{
+        "inputs": {"enabled": True, "first_amount": 1, "second_amount": 1},
+        "expected_output": {"total_amount": 2},
+        "vector_basis": "derived_from_source",
+        "boundary_condition": False,
+    }]
+
+
+def test_equality_vector_resolves_declared_input_reference_outcome():
+    rule = valid_rule()
+    rule["variables"].insert(-1, {"name": "configured_limit", "type": "number", "role": "input"})
+    rule["condition_predicates"] = [{
+        "predicate_id": "p1", "variable": "price_differential_amount",
+        "operator": "==", "value": 100000, "value_type": "number",
+    }]
+    rule["condition_logic"] = {"predicate_ref": "p1"}
+    rule["outcomes"][0].update({"value": "configured_limit", "value_type": "variable_reference"})
+    rule["test_vectors"] = []
+
+    normalise_rule_contract(rule)
+
+    assert rule["test_vectors"][0]["inputs"]["configured_limit"] == 1
+    assert rule["test_vectors"][0]["expected_output"] == {"maximum_number_of_pools": 1}
+
+
+def test_non_equality_rule_does_not_invent_a_test_vector():
+    rule = valid_rule()
+    rule["test_vectors"] = []
+
+    normalise_rule_contract(rule)
+
+    assert rule["test_vectors"] == []
+
+
+def test_explicit_unconditional_modal_becomes_constant_true_condition():
+    rule = valid_rule()
+    rule["condition_predicates"] = []
+    rule["condition_logic"] = {"all": []}
+    rule["source_reference"]["source_text"] = "The lender must maintain a complete loan file."
+
+    normalise_rule_contract(rule)
+    issues = validate_rule_v2(rule, {"SELLER_SERVICER", "FANNIE_MAE"})
+
+    assert rule["condition_logic"] == {"constant": True}
+    assert rule["condition_basis"] == "unconditional_explicit_in_source"
+    assert not any(issue.code in {"missing_condition_predicates", "empty_condition_logic_branch"} for issue in issues)
+
+
+def test_conditional_source_never_becomes_unconditional_from_missing_predicates():
+    rule = valid_rule()
+    rule["condition_predicates"] = []
+    rule["condition_logic"] = {"all": []}
+    rule["source_reference"]["source_text"] = "When the borrower applies, the lender must review the file."
+
+    normalise_rule_contract(rule)
+    issues = validate_rule_v2(rule, {"SELLER_SERVICER", "FANNIE_MAE"})
+
+    assert rule.get("condition_basis") != "unconditional_explicit_in_source"
+    assert any(issue.code == "missing_condition_predicates" for issue in issues)
+
+
 def test_deferred_computed_outcomes_do_not_block_readiness_remediation(tmp_path):
     organized = tmp_path / "organized" / "B2-1-01"
     organized.mkdir(parents=True)
@@ -649,6 +833,45 @@ def test_typo_equivalent_outcome_reference_is_reconciled_to_declared_variable():
     assert not any(issue.code == "undefined_outcome_variable" for issue in validate_rule_v2(rule, {"SELLER_SERVICER", "FANNIE_MAE"}))
 
 
+def test_variable_reference_outcome_declares_output_from_compact_input_alias():
+    rule = valid_rule()
+    rule["variables"][-1] = {"name": "regular_employment_income", "type": "number", "role": "input"}
+    rule["outcomes"][0] = {
+        "variable": "total_qualifying_income", "operator": "=",
+        "value": "regular employment income", "value_type": "variable_reference",
+    }
+
+    normalise_rule_contract(rule)
+
+    by_name = {item["name"]: item for item in rule["variables"]}
+    assert rule["outcomes"][0]["value"] == "regular_employment_income"
+    assert by_name["total_qualifying_income"]["type"] == "number"
+    assert by_name["total_qualifying_income"]["role"] == "output"
+    assert not any(issue.code == "undefined_outcome_variable" for issue in validate_rule_v2(rule, {"SELLER_SERVICER", "FANNIE_MAE"}))
+
+
+def test_output_shaped_exception_is_preserved_as_non_executable_effect():
+    rule = valid_rule()
+    rule["exceptions"] = [{
+        "predicate_id": "ex1", "variable": "maximum_number_of_pools",
+        "operator": "==", "value": 5, "value_type": "number",
+    }]
+    rule["exception_basis"] = "explicit_in_source"
+    rule["exception_verification"] = {"status": "explicit_in_source", "searched_chunk_count": 1}
+
+    normalise_rule_contract(rule)
+    issues = validate_rule_v2(rule, {"SELLER_SERVICER", "FANNIE_MAE"})
+
+    assert rule["exceptions"] == []
+    assert rule["exception_effects"] == [{
+        "effect_id": "ex1", "variable": "maximum_number_of_pools",
+        "operator": "=", "value": 5, "value_type": "number",
+    }]
+    assert rule["exception_basis"] == "unresolved_after_full_document_search"
+    assert "no source-stated input trigger" in rule["exception_verification"]["unresolved_reason"]
+    assert not any(issue.code == "exception_uses_output_variable" for issue in issues)
+
+
 def test_complete_no_cue_search_promotes_empty_explicit_exception_state():
     rule = valid_rule()
     rule["exceptions"] = []
@@ -663,6 +886,36 @@ def test_complete_no_cue_search_promotes_empty_explicit_exception_state():
 
     assert rule["exception_basis"] == "no_exception_cue_found_in_complete_search"
     assert rule["exception_verification"]["status"] == "no_exception_cue_found_in_complete_search"
+
+
+def test_complete_search_canonicalizes_negative_evidence_statuses():
+    rule = valid_rule()
+    rule["exceptions"] = []
+    rule["exception_basis"] = "explicitly_none_in_source"
+    rule["exception_verification"] = {
+        "status": "verified_none", "searched_chunk_count": 2, "corpus_sha256": "digest",
+    }
+    rule["scope_basis"] = "genuinely_unscoped"
+    rule["scope_derivation"] = {
+        "status": "verified", "reviewed_chunk_count": 2, "corpus_sha256": "digest",
+    }
+
+    normalise_final_evidence_states(rule, {"chunk_count": 2, "corpus_sha256": "digest"})
+
+    assert rule["exception_verification"]["status"] == "explicitly_none_in_source"
+    assert rule["scope_derivation"]["status"] == "genuinely_unscoped"
+
+
+def test_negative_evidence_statuses_are_not_canonicalized_from_stale_search():
+    rule = valid_rule()
+    rule["exception_basis"] = "explicitly_none_in_source"
+    rule["exception_verification"] = {
+        "status": "verified_none", "searched_chunk_count": 1, "corpus_sha256": "old",
+    }
+
+    normalise_final_evidence_states(rule, {"chunk_count": 2, "corpus_sha256": "digest"})
+
+    assert rule["exception_verification"]["status"] == "verified_none"
 
 
 def test_scope_with_direct_evidence_promotes_unresolved_dimension_state():

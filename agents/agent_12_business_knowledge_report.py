@@ -292,6 +292,8 @@ def _condition_expression(predicates: Sequence[Mapping[str, Any]], logic: Any) -
 
     def render(node: Any) -> str:
         if isinstance(node, Mapping):
+            if node.get("constant") is True and len(node) == 1:
+                return "ALWAYS (explicitly stated in the source)"
             if "all" in node and isinstance(node["all"], list):
                 return "( " + " AND ".join(render(item) for item in node["all"]) + " )"
             if "any" in node and isinstance(node["any"], list):
@@ -390,12 +392,14 @@ def _formal_logic_html(rule: Mapping[str, Any]) -> str:
     outcomes = _list(rule.get("outcomes"))
     outcome_mappings = [item for item in outcomes if isinstance(item, Mapping)]
     exceptions = _list(rule.get("exceptions"))
+    exception_effects = [item for item in _list(rule.get("exception_effects")) if isinstance(item, Mapping)]
     variables = [item for item in _list(rule.get("variables")) if isinstance(item, Mapping)]
     inputs = [item for item in variables if str(item.get("role") or "").casefold() == "input"]
     outputs = [item for item in variables if str(item.get("role") or "").casefold() == "output"]
     expression = _condition_expression(predicates, rule.get("condition_logic"))
     then_html = "".join(_outcome_chip_html(item) for item in outcome_mappings) or '<span class="outcome-chip">evaluate outcome</span>'
-    return f'''<div class="formal-logic"><div class="logic-expression"><div class="logic-if"><span class="logic-keyword">IF</span> {_safe(expression)}</div><div class="logic-then-row"><span class="logic-keyword">THEN</span><div class="logic-then">{then_html}</div></div></div><div class="logic-grid"><div><h4>Conditions</h4><div class="logic-list">{_logic_field_rows(predicates, "condition")}</div></div><div><h4>Outcomes</h4><div class="outcome-grid">{_outcome_cards_html(outcome_mappings)}</div></div><div><h4>Exceptions</h4><div class="logic-list">{_logic_field_rows(exceptions, "exception")}</div></div><div><h4>Variables</h4><div class="logic-list"><div class="logic-row"><span class="logic-index">IN</span><code>{_safe(", ".join(str(item.get("name")) for item in inputs) or "none")}</code></div><div class="logic-row"><span class="logic-index">OUT</span><code>{_safe(", ".join(str(item.get("name")) for item in outputs) or "none")}</code></div></div></div></div><details class="logic-raw"><summary>Raw structured contract</summary><pre>{_safe(json.dumps({"conditions": rule.get("condition_predicates", []), "condition_logic": rule.get("condition_logic"), "outcomes": rule.get("outcomes", []), "exceptions": rule.get("exceptions", []), "dependencies": rule.get("dependencies", []), "related_entities": rule.get("related_entities", [])}, indent=2, ensure_ascii=False))}</pre></details></div>'''
+    effect_html = _outcome_cards_html(exception_effects) if exception_effects else '<div class="empty">None declared</div>'
+    return f'''<div class="formal-logic"><div class="logic-expression"><div class="logic-if"><span class="logic-keyword">IF</span> {_safe(expression)}</div><div class="logic-then-row"><span class="logic-keyword">THEN</span><div class="logic-then">{then_html}</div></div></div><div class="logic-grid"><div><h4>Conditions</h4><div class="logic-list">{_logic_field_rows(predicates, "condition")}</div></div><div><h4>Outcomes</h4><div class="outcome-grid">{_outcome_cards_html(outcome_mappings)}</div></div><div><h4>Exception triggers</h4><div class="logic-list">{_logic_field_rows(exceptions, "exception")}</div></div><div><h4>Preserved exception effects</h4><div class="outcome-grid">{effect_html}</div></div><div><h4>Variables</h4><div class="logic-list"><div class="logic-row"><span class="logic-index">IN</span><code>{_safe(", ".join(str(item.get("name")) for item in inputs) or "none")}</code></div><div class="logic-row"><span class="logic-index">OUT</span><code>{_safe(", ".join(str(item.get("name")) for item in outputs) or "none")}</code></div></div></div></div><details class="logic-raw"><summary>Raw structured contract</summary><pre>{_safe(json.dumps({"conditions": rule.get("condition_predicates", []), "condition_logic": rule.get("condition_logic"), "outcomes": rule.get("outcomes", []), "exceptions": rule.get("exceptions", []), "exception_effects": rule.get("exception_effects", []), "dependencies": rule.get("dependencies", []), "related_entities": rule.get("related_entities", [])}, indent=2, ensure_ascii=False))}</pre></details></div>'''
 
 
 def _grounding_summary(rule: Mapping[str, Any], grounding_status: str) -> str:

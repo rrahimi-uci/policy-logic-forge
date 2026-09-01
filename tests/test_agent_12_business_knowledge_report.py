@@ -5,6 +5,7 @@ from agents.agent_12_business_knowledge_report import (
     _bar_chart_svg,
     _bpmn_flow_html,
     _cmmn_plan_html,
+    _condition_expression,
     _dependency_graph_layout,
     _dependency_graph_svg,
     _dmn_table_html,
@@ -625,6 +626,13 @@ def test_agent_12_handles_missing_optional_upstream_models(tmp_path: Path):
     manifest = generate(graph_file, None, tmp_path / "missing-models", tmp_path / "report")
     assert manifest["rule_count"] == 0
     assert manifest["model_info"]["DMN"]["exists"] is False
+
+
+def test_condition_expression_renders_explicit_unconditional_rule():
+    assert (
+        _condition_expression([], {"constant": True})
+        == "ALWAYS (explicitly stated in the source)"
+    )
 
 
 def test_agent_12_main_reports_missing_graph(tmp_path, monkeypatch):

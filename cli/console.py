@@ -246,7 +246,11 @@ class TextReporter:
             summary_lines.append(f"[bold]log flags[/bold]       {totals['warnings']} warning(s), {totals['errors']} error line(s)")
         self.console.print(Panel(
             "\n".join(summary_lines),
-            title=f"{'🎉' if run.overall_status == PASS else '🛑'} Run summary",
+            title=(
+                "🎉 Run summary" if run.overall_status == PASS
+                else "🔎 Review summary" if run.overall_status == REVIEW
+                else "🛑 Run summary"
+            ),
             border_style=style,
             expand=True,
         ))

@@ -28,8 +28,8 @@ SUPPORTED_THEORIES = {"bool", "int", "real", "enum", "string"}
 SUPPORTED_MODALITIES = {"obligation", "permission", "prohibition", "definition", "none"}
 SUPPORTED_HIT_POLICIES = {"UNIQUE", "ANY", "PRIORITY", "COLLECT"}
 CONSUMED_FIELDS = {
-    "schema_version", "rule_id", "id", "rule_type", "condition_predicates", "condition_logic", "outcomes", "variables",
-    "recommended_hit_policy", "applicability_scope", "scope_basis", "responsible_party", "counterparties", "exceptions",
+    "schema_version", "rule_id", "id", "rule_type", "condition_predicates", "condition_logic", "condition_basis", "outcomes", "variables",
+    "recommended_hit_policy", "applicability_scope", "scope_basis", "responsible_party", "counterparties", "exceptions", "exception_effects",
     "exception_basis", "mandatory", "effective_date", "expiration_date", "versioning_status", "jurisdiction",
     "source_reference", "field_evidence",
 }
@@ -295,6 +295,12 @@ def _formula_for_predicate(predicate: Mapping[str, Any], variables: Mapping[str,
 
 
 def _logic(node: Any, predicates: Mapping[str, Mapping[str, Any]], variables: Mapping[str, Mapping[str, Any]]) -> dict[str, Any]:
+    if node == {"constant": True} and not predicates:
+        return {
+            "op": "eq",
+            "left": {"literal": True, "type": "bool"},
+            "right": {"literal": True, "type": "bool"},
+        }
     if isinstance(node, str) and node in {"AND", "OR"}:
         op = "and" if node == "AND" else "or"
         return {"op": op, "args": [_formula_for_predicate(item, variables) for item in predicates.values()]}
@@ -459,6 +465,12 @@ def _lower_rule(rule: Mapping[str, Any], source_sha256: str) -> tuple[dict[str, 
     unknown_fields = set(rule) - CONSUMED_FIELDS - set(IGNORED_FIELD_REASONS)
     if unknown_fields:
         raise LoweringRefusal("UNCLASSIFIED_FIELD", "rule", f"Input fields require an explicit classification: {sorted(unknown_fields)}.")
+    if rule.get("exception_effects"):
+        raise LoweringRefusal(
+            "UNREPRESENTABLE_EXCEPTION_EFFECT",
+            "exception_effects",
+            "Alternate exception outcomes require conditional branch semantics that LExec IR v1 does not represent.",
+        )
     hit_policy = str(rule.get("recommended_hit_policy") or "UNIQUE")
     if hit_policy not in SUPPORTED_HIT_POLICIES:
         raise LoweringRefusal("UNSUPPORTED_HIT_POLICY", "recommended_hit_policy", f"Hit policy {hit_policy!r} is not supported.")
@@ -467,7 +479,11 @@ def _lower_rule(rule: Mapping[str, Any], source_sha256: str) -> tuple[dict[str, 
     if not variables:
         raise LoweringRefusal("MISSING_VARIABLES", "variables", "Every lowered rule requires typed variables.")
     predicates = {str(item.get("predicate_id")): item for item in (rule.get("condition_predicates") or []) if isinstance(item, Mapping) and item.get("predicate_id")}
-    if not predicates:
+    unconditional = (
+        rule.get("condition_logic") == {"constant": True}
+        and rule.get("condition_basis") == "unconditional_explicit_in_source"
+    )
+    if not predicates and not unconditional:
         raise LoweringRefusal("MISSING_PREDICATES", "condition_predicates", "Every lowered rule requires one atomic predicate.")
     symbols: list[dict[str, Any]] = []
     for variable in variables.values():

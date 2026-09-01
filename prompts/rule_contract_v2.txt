@@ -24,6 +24,7 @@ container MUST use this structure:
     }
   ],
   "condition_logic": {"predicate_ref": "p1"},
+  "condition_basis": "explicit_predicates",
   "outcomes": [
     {
       "variable": "maximum_number_of_pools",
@@ -145,9 +146,14 @@ Rules:
    copy a prose condition into multiple values.
 2. Use a nested tree for mixed logic such as A AND (B OR C):
    `{"all": [{"predicate_ref": "p1"}, {"any": [{"predicate_ref": "p2"}, {"predicate_ref": "p3"}]}]}`.
+   When the quoted source states a genuinely unconditional obligation, use an
+   empty `condition_predicates` array, `{"constant": true}` condition logic,
+   and `condition_basis: "unconditional_explicit_in_source"`. Never use this
+   shape merely because extraction failed to identify a condition.
 3. Declare every predicate and outcome variable in `variables`. Use `string`
    only for genuine free text and add `"free_text": true`; use `enum` plus
-   `allowed_values` for categories.
+   `allowed_values` for categories. Use `time` only for ISO local-time values
+   such as `21:00`; use `date_time` for an ISO timestamp with a date.
 4. `responsible_party` and `counterparties` must use an existing entity whose
    `concept_kind` is `actor_role`. A loan, property, document, report, process,
    decision variable, or other business object is never a party merely because
@@ -181,6 +187,9 @@ Rules:
     or carves out the rule. Never encode the rule's own output variable, the
     opposite of its outcome, or an ordinary condition as an exception. An
     exception variable must have role `input` or `derived`, never `output`.
+    When an exception assigns alternate consequences, extract that branch as a
+    separate rule whose ordinary conditions are the exception circumstances;
+    do not place alternate outcome assignments inside `exceptions`.
 13. `workflow_semantics` is optional and normally null. Populate it only when
     the source directly states a prescriptive trigger and ordered process. Its
     shape is `{"kind":"prescriptive_process","basis":"explicit_in_source",

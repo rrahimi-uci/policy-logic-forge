@@ -163,6 +163,34 @@ def test_exception_cannot_be_the_rules_own_output_or_its_negation():
     assert any(issue.code == "exception_uses_output_variable" for issue in result.issues)
 
 
+def test_iso_local_time_is_a_valid_contract_type():
+    candidate = valid_rule()
+    candidate["variables"].append({"name": "submission_time", "type": "time", "role": "input"})
+    candidate["condition_predicates"].append({
+        "predicate_id": "p2", "variable": "submission_time", "operator": "<=",
+        "value": "21:00", "value_type": "time",
+    })
+    candidate["condition_logic"] = {"all": [{"predicate_ref": "p1"}, {"predicate_ref": "p2"}]}
+
+    result = parse_rule_v2(candidate, {"SELLER_SERVICER", "FANNIE_MAE"})
+
+    assert not any(issue.code in {"invalid_variable_type", "invalid_predicate_value_type", "invalid_time_value"} for issue in result.issues)
+
+
+def test_non_iso_time_stays_fail_closed():
+    candidate = valid_rule()
+    candidate["variables"].append({"name": "submission_time", "type": "time", "role": "input"})
+    candidate["condition_predicates"].append({
+        "predicate_id": "p2", "variable": "submission_time", "operator": "<=",
+        "value": "nine at night", "value_type": "time",
+    })
+    candidate["condition_logic"] = {"all": [{"predicate_ref": "p1"}, {"predicate_ref": "p2"}]}
+
+    result = parse_rule_v2(candidate, {"SELLER_SERVICER", "FANNIE_MAE"})
+
+    assert any(issue.code == "invalid_time_value" for issue in result.issues)
+
+
 def test_typed_party_catalog_rejects_business_objects_as_parties():
     candidate = valid_rule()
     candidate["counterparties"] = ["MORTGAGE_LOAN"]

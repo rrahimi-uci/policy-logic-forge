@@ -186,6 +186,12 @@ def extract_claims(rule: Mapping[str, Any], graph: Mapping[str, Any] | None = No
         predicate_id = str(exception.get("predicate_id") or index)
         statement = f"Exception when {exception.get('variable')} {exception.get('operator')} {_json_value(exception.get('value'))}"
         add(f"exception:{predicate_id}", f"exceptions[{index}]", "exception", statement, exception)
+    for index, effect in enumerate(rule.get("exception_effects", []) or []):
+        if not isinstance(effect, Mapping):
+            continue
+        effect_id = str(effect.get("effect_id") or index)
+        statement = f"Exception effect {effect.get('variable')} {effect.get('operator')} {_json_value(effect.get('value'))}"
+        add(f"exception_effect:{effect_id}", f"exception_effects[{index}]", "exception", statement, effect)
     if rule.get("exception_basis") == "explicitly_none_in_source":
         add(
             "exception_basis", "exception_basis", "exception",
@@ -480,6 +486,7 @@ class GroundingVerifier:
                 "condition_logic": rule.get("condition_logic"),
                 "outcomes": rule.get("outcomes"),
                 "exceptions": rule.get("exceptions"),
+                "exception_effects": rule.get("exception_effects"),
             },
             "search_provenance": {
                 "current_corpus_sha256": corpus.get("corpus_sha256"),
@@ -499,7 +506,7 @@ class GroundingVerifier:
             return "counterparties"
         if field_path.startswith("applicability_scope"):
             return "applicability_scope"
-        if field_path.startswith("exceptions"):
+        if field_path.startswith("exceptions") or field_path.startswith("exception_effects"):
             return "exceptions"
         return field_path.split("[", 1)[0].split(".", 1)[0]
 
@@ -525,6 +532,7 @@ class GroundingVerifier:
                 "condition_logic": rule.get("condition_logic"),
                 "outcomes": rule.get("outcomes"),
                 "exceptions": rule.get("exceptions"),
+                "exception_effects": rule.get("exception_effects"),
                 "applicability_scope": rule.get("applicability_scope"),
             }
 
@@ -848,10 +856,37 @@ class GroundingVerifier:
             item = dict(returned.get(claim_id, {}))
             verdict = str(item.get("verdict", ""))
             reason = str(item.get("reasoning", "")).strip()
-            if verdict not in VERDICTS:
+            provenance = packet.get("search_provenance") or {}
+            current_digest = provenance.get("current_corpus_sha256")
+            current_count = provenance.get("current_chunk_count")
+            negative_provenance = None
+            if claim_id == "exception_basis" and claim.get("structured") == "explicitly_none_in_source":
+                negative_provenance = provenance.get("exception_verification") or {}
+            elif claim_id == "scope_basis" and claim.get("structured") == "genuinely_unscoped":
+                negative_provenance = provenance.get("scope_derivation") or {}
+            provenance_certified = bool(
+                isinstance(negative_provenance, Mapping)
+                and current_digest
+                and negative_provenance.get("status") == claim.get("structured")
+                and negative_provenance.get("corpus_sha256") == current_digest
+                and negative_provenance.get(
+                    "searched_chunk_count" if claim_id == "exception_basis" else "reviewed_chunk_count"
+                ) == current_count
+            )
+            if provenance_certified:
+                # Absence claims cannot be grounded by quoting one sentence.
+                # A complete, corpus-hash-bound search is the evidence. This
+                # overrides an LLM's expected "insufficient" verdict without
+                # weakening any positive source claim.
+                verdict = "supported"
+                reason = (
+                    "Certified deterministically from matching complete-corpus search provenance "
+                    "bound to the current corpus hash and chunk count."
+                )
+            elif verdict not in VERDICTS:
                 verdict, reason = "insufficient_evidence", "Verifier omitted this claim or returned an invalid verdict."
             canonical_evidence = None
-            if verdict in {"supported", "contradicted"}:
+            if verdict in {"supported", "contradicted"} and not provenance_certified:
                 if not cls._verdict_has_valid_evidence(item, claim, packet):
                     verdict = "insufficient_evidence"
                     reason = "Verifier did not select an authentic evidence record present in the corpus."
@@ -1033,7 +1068,6 @@ class GroundingVerifier:
                 bool(combined_results)
                 and counts["contradicted"] == 0
                 and counts["insufficient_evidence"] == 0
-                and invalid_records == 0
                 and protocol["missing"] == 0
                 and protocol["duplicates"] == 0
             )

@@ -129,6 +129,56 @@ def test_selective_readiness_failure_routes_through_remediation_and_recheck(monk
     assert calls == ["agent_07", "agent_08", "agent_07_recheck", "agent_09"]
 
 
+def test_selective_readiness_runtime_failure_never_uses_stale_remediation_report(monkeypatch):
+    pipeline = object.__new__(ExtractionPipeline)
+    pipeline._last_exit_codes = {}
+    calls = []
+
+    def run_agent(agent_id):
+        calls.append(agent_id)
+        pipeline._last_exit_codes[agent_id] = 1
+        return False
+
+    monkeypatch.setattr(pipeline, "run_agent", run_agent)
+    monkeypatch.setattr(pipeline, "_readiness_requests_remediation", lambda: True)
+
+    assert pipeline.run_stages(["agent_07", "agent_08", "agent_09"]) is False
+    assert calls == ["agent_07"]
+
+
+def test_single_readiness_review_is_nonblocking_when_invariants_pass(monkeypatch):
+    pipeline = object.__new__(ExtractionPipeline)
+    pipeline._last_exit_codes = {}
+
+    def run_agent(agent_id):
+        pipeline._last_exit_codes[agent_id] = 3
+        return False
+
+    monkeypatch.setattr(pipeline, "run_agent", run_agent)
+    monkeypatch.setattr(pipeline, "_review_only_readiness", lambda: True)
+
+    assert pipeline.run_stages(["agent_07"]) is True
+
+
+def test_resume_from_agent_08_plans_automatic_readiness_recheck(monkeypatch):
+    pipeline = object.__new__(ExtractionPipeline)
+    pipeline._last_exit_codes = {}
+    planned = {}
+
+    def begin(stage_ids, label):
+        planned["ids"] = stage_ids
+        planned["label"] = label
+
+    monkeypatch.setattr(pipeline, "_begin_run", begin)
+    monkeypatch.setattr(pipeline, "_end_run", lambda overall_status: None)
+    monkeypatch.setattr(pipeline, "run_agent", lambda agent_id: True)
+    monkeypatch.setattr(pipeline, "run_agent_07", lambda *, reuse_conflicts=False: True)
+
+    assert pipeline.run_stages(["agent_08", "agent_09", "agent_10"]) is True
+    assert planned["ids"] == ["agent_08", "agent_07", "agent_09", "agent_10"]
+    assert "automatic agent_07 recheck" in planned["label"]
+
+
 def test_selective_grounding_review_with_complete_coverage_continues(monkeypatch):
     pipeline = object.__new__(ExtractionPipeline)
     pipeline._last_exit_codes = {}
@@ -177,6 +227,30 @@ def test_failed_readiness_invariant_remains_blocking(tmp_path):
         '"rules_requiring_review": 2}'
     )
     assert pipeline._review_only_readiness() is False
+
+
+def test_remediation_request_rejects_non_schema_invariant_failures(tmp_path):
+    pipeline = object.__new__(ExtractionPipeline)
+    pipeline.optimized_dir = tmp_path
+    (tmp_path / "kg_readiness_report.json").write_text(
+        '{"invariants": {"corpus_integrity": {"pass": false}, '
+        '"schema_consistency": {"pass": false}}, "rules_requiring_review": 2}'
+    )
+
+    assert pipeline._readiness_requests_remediation() is False
+
+
+def test_remediation_request_accepts_schema_only_failure(tmp_path):
+    pipeline = object.__new__(ExtractionPipeline)
+    pipeline.optimized_dir = tmp_path
+    (tmp_path / "kg_readiness_report.json").write_text(
+        '{"invariants": {"corpus_integrity": {"pass": true}, '
+        '"naming_consistency": {"pass": true}, '
+        '"schema_consistency": {"pass": false}, '
+        '"referential_integrity": {"pass": true}}, "rules_requiring_review": 2}'
+    )
+
+    assert pipeline._readiness_requests_remediation() is True
 
 
 def test_complete_fail_closed_grounding_is_allowed_to_reach_dag(tmp_path):
