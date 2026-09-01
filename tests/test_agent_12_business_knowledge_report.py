@@ -236,9 +236,8 @@ def test_agent_12_generates_self_contained_report_with_traceability(tmp_path: Pa
     assert "Vocabulary workbench" in report
     assert "Decision variables are not SBVR concepts" in report
     assert "Executable symbol registry" in report
-    assert "Core support" in report
-    assert "Context support" in report
-    assert "Quarantined claims" in report
+    for removed_card in ("Quarantined claims", "Core support", "Context support", "Source documents", "Dependencies"):
+        assert f'<div class="metric-label">{removed_card}</div>' not in report
     assert "Concept type mix" in report
     assert "Most connected concepts" in report
     assert 'id="concept-search"' in report
