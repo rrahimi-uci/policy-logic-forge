@@ -437,6 +437,34 @@ decisions belong to the deployment environment and domain policy. The source
 graph retains the pipeline's internal findings and routing metadata for audit
 and downstream model generation.
 
+The score is calculated from normalized component values in the inclusive
+range 0–100. Components and the final weighted result are rounded to one decimal
+place.
+
+| Component | Weight | Exact component calculation | What 100 means | What 0 means |
+| --- | ---: | --- | --- | --- |
+| Core grounding | 40% | `supported core claims / evaluated core claims × 100`; if claim counts are absent, a `certified` or `supported` status maps to 100 and any other status maps to 0. | Every evaluated description, condition, and outcome claim is supported. | No evaluated core claim is supported, or support was not reported. |
+| Context grounding | 20% | `supported enrichment claims / evaluated enrichment claims × 100`, with the same status fallback as core grounding. | Every evaluated party, scope, and exception claim is supported. | No evaluated contextual claim is supported, or support was not reported. |
+| Contract integrity | 15% | `supported contract claims / evaluated contract claims × 100`, with the same status fallback as core grounding. | Every evaluated structural contract claim is internally supported. | No evaluated contract claim is supported, or support was not reported. |
+| Evidence integrity | 10% | `max(0, evidence records - invalid records - missing responses - duplicate responses) / evidence records × 100`. If no evidence records exist, zero recorded protocol defects maps to 100 and any recorded defect maps to 0. This measures verifier-protocol cleanliness, not source coverage. | The verifier recorded no invalid citations, missing responses, or duplicate responses. | Recorded evidence/protocol defects consume the available evidence-record count, or defects exist without evidence records. |
+| Executability | 10% | Four checks worth 25 points each: at least one execution target; a projection for every target; at least one test vector; and declared variables plus outcomes. | All four executable-projection checks are present. | None of the four executable-projection checks is present. |
+| Relationship support | 5% | `relationship_status == "supported" ? 100 : 0`. | Emitted rule relationships are supported. | Relationship support is absent, failed, or unreported. |
+
+For component scores \(C_{core}\), \(C_{context}\), \(C_{contract}\),
+\(C_{evidence}\), \(C_{execution}\), and \(C_{relationship}\), the final score
+is:
+
+\[
+ARS = 0.40C_{core} + 0.20C_{context} + 0.15C_{contract}
+    + 0.10C_{evidence} + 0.10C_{execution} + 0.05C_{relationship}
+\]
+
+`ARS = 100` means all six measured components are complete under these
+definitions. It does **not** mean the rule is guaranteed correct, and it does
+not authorize automation. Each deployment defines its own acceptable score or
+additional gates based on domain risk, legal obligations, and operating
+controls.
+
 ### 2.4 Orchestration summary
 
 The full run order and gating logic, tying every stage above together:
