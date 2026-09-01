@@ -105,19 +105,20 @@
   .problem-card p{color:var(--muted); font-size:14.5px; margin:0}
 
   /* ---- pipeline ---- */
-  .pipeline-figure{border-radius:14px; overflow:hidden; border:1px solid var(--line); box-shadow:var(--shadow); margin:28px 0}
-  .stage-strip{
-    display:flex; flex-wrap:wrap; gap:8px; margin-top:20px;
+  .pipeline-figure{
+    border-radius:14px; overflow-x:auto; overflow-y:hidden; border:1px solid var(--line);
+    box-shadow:var(--shadow); margin:28px 0; background:#fff; padding:20px 8px;
   }
-  .stage-chip{
-    display:flex; align-items:center; gap:8px; border:1px solid var(--line);
-    background:#fff; border-radius:999px; padding:7px 13px 7px 8px; font-size:13px; font-weight:600;
-  }
-  .stage-chip b{
-    width:22px; height:22px; border-radius:999px; background:var(--wash); color:var(--ink);
-    display:inline-flex; align-items:center; justify-content:center; font-size:11px; font-weight:800;
-  }
-  .stage-chip.gate b{background:#fff1df; color:var(--amber)}
+  .pipeline-figure pre.mermaid{margin:0; min-width:760px}
+  .pipeline-figure svg{max-width:none !important}
+  .table-wrap{overflow-x:auto; border:1px solid var(--line); border-radius:12px; margin-top:16px}
+  table.stage-table{width:100%; border-collapse:collapse; font-size:13.5px; min-width:640px}
+  table.stage-table th, table.stage-table td{padding:10px 14px; text-align:left; border-bottom:1px solid var(--line); white-space:nowrap}
+  table.stage-table td:nth-child(3){white-space:normal}
+  table.stage-table th{font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); background:var(--wash)}
+  table.stage-table tbody tr:last-child td{border-bottom:0}
+  table.stage-table tr.gate-row{background:#fff9ef}
+  table.stage-table code{font-size:12px; color:var(--violet)}
 
   /* ---- results ---- */
   .results-layout{display:grid; grid-template-columns:1fr 1fr; gap:44px; align-items:center}
@@ -134,6 +135,14 @@
     border-left:4px solid var(--teal); background:#effaf7; border-radius:8px;
     padding:14px 18px; font-size:14.5px; color:#0b5c4c; margin-top:20px;
   }
+  .results-chart svg{width:100%; height:auto; overflow:visible}
+  .rc-label{font-size:11.5px; font-weight:700; fill:var(--ink)}
+  .rc-value{font-size:12px; font-weight:800; fill:var(--ink)}
+  .rc-track{fill:var(--wash)}
+  .rc-fill.rc-teal{fill:var(--teal)}
+  .rc-fill.rc-violet{fill:var(--violet)}
+  .rc-fill.rc-amber{fill:var(--amber)}
+  .muted-note{color:var(--muted); font-size:13px; margin:18px 0 0}
 
   /* ---- verification ---- */
   .verify-block{display:grid; grid-template-columns:1fr 1fr; gap:36px; align-items:start}
@@ -262,29 +271,52 @@
       model — and back again: model element → rule → claim → the exact
       passage that supports it. Every stage writes its own checkpointed
       artifacts; nothing downstream trusts an upstream claim without its
-      own verification pass.</p>
+      own verification pass. This is the real pipeline topology, not an
+      illustration of it.</p>
     <div class="pipeline-figure">
-      <img src="assets/evidence-spine.webp" width="1200" height="800" alt="A twelve-stage policy pipeline connected by a continuous evidence spine and selective human-review checkpoints">
-    </div>
-    <div class="stage-strip">
-      <span class="stage-chip"><b>01</b>Organize documents</span>
-      <span class="stage-chip"><b>02</b>Extract entities</span>
-      <span class="stage-chip"><b>03</b>Extract rules</span>
-      <span class="stage-chip"><b>04</b>Validate</span>
-      <span class="stage-chip"><b>05</b>Merge</span>
-      <span class="stage-chip"><b>06</b>Optimize + dedupe</span>
-      <span class="stage-chip gate"><b>07</b>Readiness gate</span>
-      <span class="stage-chip"><b>08</b>Remediate</span>
-      <span class="stage-chip gate"><b>09</b>Ground independently</span>
-      <span class="stage-chip"><b>10</b>Dependency DAGs</span>
-      <span class="stage-chip"><b>11</b>DMN · BPMN · CMMN · SBVR</span>
-      <span class="stage-chip"><b>12</b>Knowledge report</span>
+      <pre class="mermaid">
+flowchart LR
+    classDef stage fill:#eef1ff,stroke:#5b5bd6,color:#232a55,stroke-width:1.3px
+    classDef gate fill:#fff2dc,stroke:#c8790f,color:#4a2f04,stroke-width:1.3px
+    classDef io fill:#e6f7f2,stroke:#0f9d80,color:#0b3b30,stroke-width:1.3px
+
+    DOCS([Source documents]):::io
+    A1[01 · Organize]:::stage --> A2[02 · Entities]:::stage --> A3[03 · Rules]:::stage
+    A3 --> A4[04 · Validate]:::stage --> A5[05 · Merge]:::stage --> A6[06 · Optimize]:::stage
+    A6 --> A7{{07 · Readiness gate}}:::gate
+    A7 -. review .-> A8[08 · Remediate]:::stage
+    A8 -. re-check .-> A7
+    A7 --> A9{{09 · Ground independently}}:::gate --> A10[10 · Dependency DAGs]:::stage --> A11[11 · DMN·BPMN·CMMN·SBVR]:::stage --> A12[12 · Knowledge report]:::stage
+    DOCS --> A1
+    A12 --> OUT([Certified graph + review-ready models]):::io
+      </pre>
     </div>
     <p class="callout">Stage 09 (Grounding Verifier) is deliberately
       independent of extraction: it rebuilds evidence from the raw corpus
       itself rather than trusting a stored citation. A hallucinated
       citation cannot pass. See
       <a href="https://github.com/rrahimi-uci/policy-logic-forge/blob/main/ARCHITECTURE.md#22-execution-flow-including-the-readinessremediation-loop">the full execution flow in ARCHITECTURE.md</a>.</p>
+
+    <h3 style="margin-top:36px">Stage-by-stage reference</h3>
+    <div class="table-wrap">
+      <table class="stage-table">
+        <thead><tr><th>Stage</th><th>Agent</th><th>Responsibility</th><th>Primary output</th></tr></thead>
+        <tbody>
+          <tr><td>01/12</td><td><code>agent_01</code></td><td>Document organization</td><td><code>agent_01-organized-documents/</code></td></tr>
+          <tr><td>02/12</td><td><code>agent_02</code></td><td>Entity &amp; relationship extraction</td><td><code>agent_02-entities/</code></td></tr>
+          <tr><td>03/12</td><td><code>agent_03</code></td><td>Business-rule extraction</td><td><code>agent_03-rules/</code></td></tr>
+          <tr><td>04/12</td><td><code>agent_04</code></td><td>Advisory rule validation</td><td><code>agent_04-validation/</code></td></tr>
+          <tr><td>05/12</td><td><code>agent_05</code></td><td>Rules/entities merge</td><td><code>agent_05-rules-with-entities/</code></td></tr>
+          <tr><td>06/12</td><td><code>agent_06</code></td><td>Knowledge-graph optimization (dedup + dependency analysis)</td><td><code>optimized_compliance_knowledge_graph.json</code></td></tr>
+          <tr class="gate-row"><td>07/12</td><td><code>agent_07</code></td><td>Executable-readiness gate — four invariants</td><td>readiness report</td></tr>
+          <tr><td>08/12</td><td><code>agent_08</code></td><td>Readiness remediation (only if agent_07 requests it)</td><td>focused rule fix-ups</td></tr>
+          <tr class="gate-row"><td>09/12</td><td><code>agent_09</code></td><td>Independent, claim-level grounding verification</td><td>grounding certification report</td></tr>
+          <tr><td>10/12</td><td><code>agent_10</code></td><td>Dependency-DAG generation — 100%-coverage guarantee</td><td><code>dependency_dags.json</code></td></tr>
+          <tr><td>11/12</td><td><code>agent_11</code></td><td>DMN/BPMN/CMMN/SBVR generation + LExec compile</td><td><code>agent_11-executable-models/</code></td></tr>
+          <tr><td>12/12</td><td><code>agent_12</code></td><td>Self-contained business knowledge report</td><td><code>business_knowledge_report.html</code></td></tr>
+        </tbody>
+      </table>
+    </div>
   </div>
 </section>
 
@@ -306,8 +338,15 @@
           <li class="headline"><span class="metric-num">83.1%</span><span class="metric-label">remained on an automated quality hold — a fail-closed default, not a failure report</span></li>
         </ul>
       </div>
-      <div class="panel" style="padding:0;overflow:hidden">
-        <img src="assets/quality-holds.webp" width="1200" height="800" alt="Supported claims flow into whole-rule quality gates, while a separate, much smaller path represents genuine human review">
+      <div class="panel results-chart">
+        <svg viewBox="0 0 460 260" role="img" aria-label="Bar chart: 100% source pointers, 91.9% claims supported, 17.7% grounding certified, 13.1% human review, 83.1% quality hold">
+          <g class="rc-bar"><text x="0" y="14" class="rc-label">Source pointers</text><rect x="0" y="22" width="460" height="20" rx="5" class="rc-track"/><rect x="0" y="22" width="460" height="20" rx="5" class="rc-fill rc-teal"/><text x="466" y="38" class="rc-value">100%</text></g>
+          <g class="rc-bar" transform="translate(0,48)"><text x="0" y="14" class="rc-label">Claims supported</text><rect x="0" y="22" width="460" height="20" rx="5" class="rc-track"/><rect x="0" y="22" width="422.7" height="20" rx="5" class="rc-fill rc-teal"/><text x="428.7" y="38" class="rc-value">91.9%</text></g>
+          <g class="rc-bar" transform="translate(0,96)"><text x="0" y="14" class="rc-label">Whole-rule grounding-certified</text><rect x="0" y="22" width="460" height="20" rx="5" class="rc-track"/><rect x="0" y="22" width="81.4" height="20" rx="5" class="rc-fill rc-violet"/><text x="87.4" y="38" class="rc-value">17.7%</text></g>
+          <g class="rc-bar" transform="translate(0,144)"><text x="0" y="14" class="rc-label">True human-review rate</text><rect x="0" y="22" width="460" height="20" rx="5" class="rc-track"/><rect x="0" y="22" width="60.3" height="20" rx="5" class="rc-fill rc-violet"/><text x="66.3" y="38" class="rc-value">13.1%</text></g>
+          <g class="rc-bar" transform="translate(0,192)"><text x="0" y="14" class="rc-label">Quality hold (fail-closed default)</text><rect x="0" y="22" width="460" height="20" rx="5" class="rc-track"/><rect x="0" y="22" width="382.3" height="20" rx="5" class="rc-fill rc-amber"/><text x="388.3" y="38" class="rc-value">83.1%</text></g>
+        </svg>
+        <p class="muted-note">Same run, same 628 rules — five different, honestly separated questions. Source: the pipeline's own grounding and readiness reports.</p>
       </div>
     </div>
   </div>
@@ -412,5 +451,22 @@
   </div>
 </footer>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/10.9.3/mermaid.min.js"></script>
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: "base",
+    securityLevel: "strict",
+    themeVariables: {
+      fontFamily: "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif",
+      fontSize: "14px",
+      primaryColor: "#eef1ff",
+      primaryBorderColor: "#5b5bd6",
+      primaryTextColor: "#101826",
+      lineColor: "#8b93ab",
+      edgeLabelBackground: "#f6f8fb"
+    }
+  });
+</script>
 </body>
 </html>
