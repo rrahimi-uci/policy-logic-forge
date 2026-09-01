@@ -25,6 +25,17 @@ into the OpenAI-shaped `usage.prompt_tokens_details.cached_tokens` field
 (https://github.com/BerriAI/litellm/issues/27763). This module reads the
 Anthropic-native field directly as a fallback so cache-hit tracking still
 works, but confirm against a real response if precision matters here.
+
+Corrected assumption, worth knowing about because it was wrong once
+already: Claude's extended-thinking tokens are NOT a separate allowance on
+top of `max_tokens` — they're drawn from the same ceiling as the visible
+completion (Anthropic's own API semantics for the legacy budget_tokens
+mechanism). An earlier version of this module assumed otherwise and left
+Claude's `max_tokens` uninflated; confirmed via a real call
+(`max_tokens=12000`, `reasoning_effort="high"`) that came back with
+`finish_reason="length"` and empty content — the entire budget went to
+thinking. Both provider families now get the same generous 4x/32768-floor
+headroom in `chat_completion`; only the resulting parameter name differs.
 """
 
 import json
@@ -321,13 +332,14 @@ class LLMClient:
         """Detect OpenAI reasoning models that need max_completion_tokens instead of max_tokens.
 
         Covers current and future OpenAI reasoning series (o1, o3, o4, …)
-        as well as gpt-5.x models. This is deliberately narrower than
-        `is_reasoning_model`: the aggressive 4x/32768-floor token-budget
-        heuristic in `chat_completion` is tuned around how these models
-        specifically spend a *combined* hidden-reasoning + visible-output
-        budget. Claude's extended thinking is a separate, litellm-sized
-        budget on top of a normal `max_tokens` cap, so it must not take
-        this branch — see `is_reasoning_model` and `chat_completion` below.
+        as well as gpt-5.x models. `chat_completion`'s generous 4x/32768-
+        floor token-budget heuristic applies to every reasoning model
+        (OpenAI's and Claude's alike — both draw their internal reasoning/
+        thinking tokens from the same ceiling as the visible completion,
+        not a separate allowance on top of it); this narrower check exists
+        only to pick the right *parameter name* for that budget
+        (`max_completion_tokens` here vs. plain `max_tokens` for Claude via
+        litellm) — see `is_reasoning_model` and `chat_completion` below.
         """
         model = model or ""
         return bool(
@@ -387,15 +399,21 @@ class LLMClient:
             params["reasoning_effort"] = kwargs.pop('reasoning_effort')
 
         # ── Token budget strategy ──
-        # OpenAI reasoning models need generous headroom for internal
-        # reasoning; give them 4× the requested budget (min 32768) so they
-        # don't truncate, while still capping runaway generations. Claude
-        # models (is_reasoning but not is_openai_reasoning) size their
-        # thinking budget separately via litellm's reasoning_effort
-        # translation, so they take the plain max_tokens branch below like
-        # any non-reasoning model. Non-reasoning models honour the caller's
-        # max_tokens directly.
-        if is_openai_reasoning:
+        # Reasoning models need generous headroom: an internal reasoning/
+        # thinking budget is drawn from the same ceiling as the visible
+        # completion, not a separate allowance on top of it. This was
+        # originally believed to be OpenAI-only -- Claude was assumed to
+        # size its thinking budget separately via litellm's reasoning_effort
+        # translation (a plain max_tokens, uninflated, was passed through).
+        # That assumption was wrong: a real remediation call at
+        # max_tokens=12000, reasoning_effort="high" against claude-sonnet-5
+        # came back with finish_reason="length" and EMPTY content -- the
+        # entire budget was consumed by thinking before any visible JSON
+        # could be produced. Both provider families get the same 4x/32768-
+        # floor headroom now; only the resulting parameter NAME differs,
+        # since litellm/Anthropic don't recognize OpenAI's
+        # max_completion_tokens.
+        if is_reasoning:
             completion_budget = max(max_tokens * 4, 32768) if max_tokens else 32768
             # A bounded, compact extraction run can opt out of the historical
             # 32k minimum. The default remains unchanged for existing callers.
@@ -412,9 +430,13 @@ class LLMClient:
                     max(max_tokens * 4, 32768) if max_tokens else 32768,
                     max(1, int(cap_override)),
                 )
-            params["max_completion_tokens"] = completion_budget
-            kwargs.pop('max_completion_tokens', None)
-            kwargs.pop('max_tokens', None)
+            if is_openai_reasoning:
+                params["max_completion_tokens"] = completion_budget
+                kwargs.pop('max_completion_tokens', None)
+                kwargs.pop('max_tokens', None)
+            else:
+                params["max_tokens"] = completion_budget
+                kwargs.pop('max_completion_tokens', None)
         elif max_tokens:
             params["max_tokens"] = max_tokens
             kwargs.pop("reasoning_completion_cap_override", None)

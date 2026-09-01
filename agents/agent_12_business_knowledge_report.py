@@ -1154,8 +1154,8 @@ def _traceability_html(
         f'<span class="trace-node"><span class="trace-node-kind">Executable model</span><span class="trace-chip-row">{model_html}</span></span>',
     ]
     arrow = '<span class="trace-arrow" aria-hidden="true">→</span>'
-    trace_steps = arrow.join(f'<div class="trace-step">{step}</div>' for step in steps)
-    return f'<div class="trace-path">{trace_steps}</div>'
+    steps_html = arrow.join(f'<div class="trace-step">{step}</div>' for step in steps)
+    return f'<div class="trace-path">{steps_html}</div>'
 
 
 def _rule_row(
@@ -1620,10 +1620,26 @@ if(location.hash)revealTarget(location.hash.slice(1));
   const reportData=JSON.parse(document.getElementById('report-data').textContent);
   const edges=reportData.dependency_edges||[], ruleSummary=reportData.rule_summary||{{}};
   const adjacency={{}};
-  edges.forEach(e=>{{const s=e.source_rule_id,t=e.target_rule_id;(adjacency[s]=adjacency[s]||new Set()).add(t);(adjacency[t]=adjacency[t]||new Set()).add(s);}});
+  const esc=value=>String(value==null?'':value).replace(/[&<>"']/g,c=>({{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}}[c]));
+  edges.forEach(e=>{{
+    const s=String(e.source_rule_id||''), t=String(e.target_rule_id||'');
+    if(!s||!t||s===t) return;
+    (adjacency[s]=adjacency[s]||new Set()).add(t);
+    (adjacency[t]=adjacency[t]||new Set()).add(s);
+  }});
   const panel=document.getElementById('dep-side-panel');
   function clearDepSelection(){{document.querySelectorAll('.dependency-node,.dependency-edge').forEach(el=>el.classList.remove('selected','neighbor','dimmed','active'));if(panel)panel.hidden=true;}}
-  function renderDepPanel(id,neighbors){{if(!panel)return;const info=ruleSummary[id]||{{}};const items=[...neighbors].sort().map(n=>{{const ninfo=ruleSummary[n]||{{}};return '<li><a href="#" data-dep-jump="'+n+'">'+n+'</a><span class="muted">'+(ninfo.category||'')+'</span></li>';}}).join('')||'<li class="muted">No direct connections</li>';const conf=(info.confidence!=null)?info.confidence.toFixed(1)+'%':'—';panel.innerHTML='<div class="dep-panel-head"><strong>'+id+'</strong><button type="button" class="dep-panel-close" aria-label="Close">×</button></div><div class="muted">'+(info.name||'')+'</div><div class="dep-panel-meta"><span>'+(info.category||'Uncategorized')+'</span><span>'+(info.status||'')+'</span><span>'+conf+'</span></div><a class="evidence-link" href="#rule-'+(info.slug||id)+'">Open rule →</a><h4>Direct connections ('+neighbors.size+')</h4><ul class="dep-panel-list">'+items+'</ul>';panel.hidden=false;panel.querySelectorAll('[data-dep-jump]').forEach(a=>a.addEventListener('click',e=>{{e.preventDefault();selectDepNode(a.dataset.depJump);}}));const closeBtn=panel.querySelector('.dep-panel-close');if(closeBtn)closeBtn.addEventListener('click',clearDepSelection);}}
+  function renderDepPanel(id,neighbors){{
+    if(!panel) return;
+    const info=ruleSummary[id]||{{}};
+    const items=[...neighbors].sort().map(n=>{{const ninfo=ruleSummary[n]||{{}};return '<li><a href="#" data-dep-jump="'+esc(n)+'">'+esc(n)+'</a><span class="muted">'+esc(ninfo.category||'')+'</span></li>';}}).join('')||'<li class="muted">No direct connections</li>';
+    const conf=(info.confidence!=null)?Number(info.confidence).toFixed(1)+'%':'—';
+    panel.innerHTML='<div class="dep-panel-head"><strong>'+esc(id)+'</strong><button type="button" class="dep-panel-close" aria-label="Close">×</button></div><div class="muted">'+esc(info.name||'')+'</div><div class="dep-panel-meta"><span>'+esc(info.category||'Uncategorized')+'</span><span>'+esc(info.status||'')+'</span><span>'+esc(conf)+'</span></div><a class="evidence-link" href="#rule-'+esc(info.slug||id)+'">Open rule →</a><h4>Direct connections ('+neighbors.size+')</h4><ul class="dep-panel-list">'+items+'</ul>';
+    panel.hidden=false;
+    panel.querySelectorAll('[data-dep-jump]').forEach(a=>a.addEventListener('click',e=>{{e.preventDefault();selectDepNode(a.dataset.depJump);}}));
+    const closeBtn=panel.querySelector('.dep-panel-close');
+    if(closeBtn) closeBtn.addEventListener('click',clearDepSelection);
+  }}
   function selectDepNode(id){{const neighbors=adjacency[id]||new Set();document.querySelectorAll('.dependency-node').forEach(node=>{{const nid=node.dataset.nodeId;node.classList.toggle('selected',nid===id);node.classList.toggle('neighbor',neighbors.has(nid));node.classList.toggle('dimmed',nid!==id&&!neighbors.has(nid));}});document.querySelectorAll('.dependency-edge').forEach(edge=>{{const active=edge.dataset.source===id||edge.dataset.target===id;edge.classList.toggle('active',active);edge.classList.toggle('dimmed',!active);}});renderDepPanel(id,neighbors);}}
   document.querySelectorAll('.dependency-node').forEach(node=>node.addEventListener('click',event=>{{event.stopPropagation();selectDepNode(node.dataset.nodeId);}}));
   const svg=document.querySelector('.dependency-graph-svg');

@@ -61,7 +61,7 @@ _STATUS_STYLE: dict[str, tuple[str, str]] = {
 # The raw stage label remains unchanged in JSON events and persisted metrics.
 _STAGE_ICON: dict[str, str] = {
     "agent_01": "📚",  # organize source documents
-    "agent_02": "🔎",  # extract entities
+    "agent_02": "🧩",  # extract entities
     "agent_03": "📐",  # extract rules
     "agent_04": "🧪",  # validate rules
     "agent_05": "🔗",  # merge graph
@@ -75,10 +75,16 @@ _STAGE_ICON: dict[str, str] = {
 }
 
 
+def _status_style(status: str) -> tuple[str, str]:
+    """Return the style and icon for a pipeline status, including a fallback."""
+
+    return _STATUS_STYLE.get(status, ("dim", "❔"))
+
+
 def status_icon(status: str) -> str:
     """Return the human-facing icon for a pipeline status."""
 
-    return _STATUS_STYLE.get(status, ("dim", "❔"))[1]
+    return _status_style(status)[1]
 
 
 def stage_icon(stage_id: str) -> str:
@@ -108,7 +114,7 @@ class Reporter(Protocol):
 
 
 def _status_cell(status: str) -> Text:
-    style, icon = _STATUS_STYLE.get(status, ("dim", "?"))
+    style, icon = _status_style(status)
     return Text(f"{icon} {status}", style=style)
 
 
@@ -197,7 +203,7 @@ class TextReporter:
             self.console.print(line.rstrip("\n"), markup=False, highlight=False)
 
     def stage_end(self, stage: StageMetrics, run: RunMetrics) -> None:
-        style, icon = _STATUS_STYLE.get(stage.status, ("dim", "?"))
+        style, icon = _status_style(stage.status)
         bits = [f"{icon} {_display_stage_label(stage)}: {stage.status.upper()}"]
         if stage.exit_code is not None:
             bits.append(f"(exit {stage.exit_code})")
@@ -221,7 +227,7 @@ class TextReporter:
         self.console.print(_plan_table(run, title="Progress"))
 
     def run_end(self, run: RunMetrics) -> None:
-        style, icon = _STATUS_STYLE.get(run.overall_status or PASS, ("bold", "?"))
+        style, icon = _status_style(run.overall_status or PASS)
         self.console.print()
         self.console.print(_plan_table(run, title="Final stage summary"))
         totals = run.to_dict()["totals"]
