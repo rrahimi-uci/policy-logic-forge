@@ -42,3 +42,7 @@ compliance-files/mortgage-v2/
 .DS_Store
 .idea/
 .vscode/
+
+# Local Playwright MCP debug artifacts (screenshots/snapshots from manual
+# browser verification) -- disposable, never part of a change.
+.playwright-mcp/

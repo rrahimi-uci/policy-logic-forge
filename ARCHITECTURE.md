@@ -42,20 +42,21 @@ flowchart LR
         EXTRACT["ExtractionPipeline"]
     end
 
-    subgraph PIPELINE["11-Agent Pipeline (agents/)"]
+    subgraph PIPELINE["12-Agent Pipeline (agents/)"]
         direction LR
         A1["01<br/>Organize"] --> A2["02<br/>Entities"] --> A3["03<br/>Rules"]
         A3 --> A4["04<br/>Validate"] --> A5["05<br/>Merge"] --> A6["06<br/>Optimize"]
         A6 --> A7["07<br/>Readiness"]
         A7 -.->|"review"| A8["08<br/>Remediate"]
         A8 -.->|"re-check"| A7
-        A7 --> A9["09<br/>Ground"] --> A10["10<br/>DAG"] --> A11["11<br/>Models"]
+        A7 --> A9["09<br/>Ground"] --> A10["10<br/>DAG"] --> A11["11<br/>Models"] --> A12["12<br/>Report"]
     end
 
     subgraph OUTPUTS["Outputs (pipeline-output/&lt;batch&gt;/)"]
         GRAPH["optimized graph"]
         DAGS["dependency DAGs"]
         MODELS["DMN·BPMN·CMMN·SBVR"]
+        REPORT["business knowledge report"]
     end
 
     DOCS --> EXTRACT
@@ -64,6 +65,7 @@ flowchart LR
     A6 -.-> GRAPH
     A10 -.-> DAGS
     A11 -.-> MODELS
+    A12 -.-> REPORT
 
     subgraph SUPPORT["Support layers, used throughout the pipeline"]
         direction TB
@@ -86,11 +88,11 @@ flowchart LR
 
     class DOCS,CFG input
     class EXTRACT orchestration
-    class A1,A2,A3,A4,A5,A6,A7,A8,A9,A10,A11 agent
+    class A1,A2,A3,A4,A5,A6,A7,A8,A9,A10,A11,A12 agent
     class SHARED,PROMPTS shared
     class COMPILER compiler
     class RE regdelta
-    class GRAPH,DAGS,MODELS output
+    class GRAPH,DAGS,MODELS,REPORT output
 ```
 
 Two things worth noticing immediately:
@@ -142,6 +144,7 @@ sequenceDiagram
     participant A8 as agent_08<br/>Remediator
     participant A9 as agent_09<br/>Grounding
     participant A10 as agent_10/11<br/>DAG + Models
+    participant A12 as agent_12<br/>Report
     participant FS as pipeline output
 
     Op->>CLI: extract.py --dir --domain --resume
@@ -426,6 +429,14 @@ Its findings are never read by any other agent or by the orchestrator's control 
 A per-rule gate, `bpmn_eligibility`, decides DMN/CMMN-only vs. also-BPMN: it requires `workflow_semantics.kind == "prescriptive_process"`, `basis == "explicit_in_source"`, a non-empty trigger event and actor role, and direct evidence — "a party plus an outcome is not a process." Rules failing this stay visible in DMN/CMMN, with the omission reason recorded in `bpmn_omissions`.
 
 #### `agent_12` — Business Knowledge Report
+
+| | |
+| --- | --- |
+| **File** | `agents/agent_12_business_knowledge_report.py` |
+| **Purpose** | Renders the certified graph into a single, self-contained, source-traceable HTML dashboard for human exploration and review — never invents rules, concepts, or process semantics. |
+| **Inputs** | Optimized graph (`agent_06`–`09`), `agent_11-executable-models/` (DMN/BPMN/CMMN + SBVR profile), organized-document text (for source-passage fallback lookup). Fails fast (exit 2) if the optimized graph is missing. |
+| **Outputs** | `business_knowledge_report.html` (zero external network calls — inline CSS/JS/SVG, no CDN, no webfonts) and `business_knowledge_report_manifest.json`. Six tabs: Overview (chart-based analytics — category/confidence/route/model-type/dependency-degree distributions, most-connected and isolated rules), SBVR vocabulary, Rule explorer (per-rule traceability breadcrumb and inline DMN/BPMN/CMMN diagrams), Relationships (click-to-highlight dependency graph with pan/zoom), Review queue (severity-triaged), and Source traceability. |
+| **Exit codes** | 0 on success; **2** if the optimized graph is missing or generation raises. |
 
 Agent 12 is a presentation-only stage. It renders every rule with a neutral
 0–100 automation-readiness score composed of core grounding (40%), contextual

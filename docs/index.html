@@ -1,0 +1,416 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Policy Logic Forge</title>
+<meta name="description" content="Turns compliance policy text into a typed, source-grounded knowledge graph — with claim-level independent verification, honest quality metrics, and real DMN/BPMN/CMMN/SBVR output.">
+<style>
+  :root{
+    --ink:#101826; --muted:#5b6b83; --line:#e3e8f0; --paper:#fff; --wash:#f6f8fb;
+    --teal:#0f9d80; --violet:#5b5bd6; --amber:#c8790f; --red:#c0374a;
+    --hero-a:#0b1220; --hero-b:#151f3a; --hero-c:#26306b;
+    --shadow:0 18px 48px rgba(16,24,38,.08);
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0; color:var(--ink); background:var(--paper);
+    font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  a{color:var(--violet); text-decoration:none}
+  a:hover{text-decoration:underline}
+  img{max-width:100%; display:block}
+  .wrap{max-width:1080px; margin:0 auto; padding:0 24px}
+  section{padding:88px 0}
+  section.tight{padding:56px 0}
+  h1,h2,h3{line-height:1.15; letter-spacing:-.01em}
+  h2{font-size:clamp(26px,3.4vw,36px); margin:0 0 14px}
+  h3{font-size:19px; margin:0 0 8px}
+  p{margin:0 0 14px}
+  .eyebrow{
+    display:inline-block; font-size:12px; font-weight:800; letter-spacing:.12em;
+    text-transform:uppercase; color:var(--teal); margin-bottom:12px;
+  }
+  .lede{font-size:18px; color:var(--muted); max-width:640px}
+  code, .mono{font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+
+  /* ---- nav ---- */
+  header.site-nav{
+    position:sticky; top:0; z-index:20; background:rgba(255,255,255,.88);
+    backdrop-filter:saturate(180%) blur(10px); border-bottom:1px solid var(--line);
+  }
+  .nav-inner{
+    max-width:1080px; margin:0 auto; padding:14px 24px; display:flex;
+    align-items:center; justify-content:space-between; gap:16px;
+  }
+  .brand{display:flex; align-items:center; gap:9px; font-weight:800; color:var(--ink); font-size:15px}
+  .brand-mark{
+    width:22px; height:22px; border-radius:6px;
+    background:linear-gradient(135deg,var(--teal),var(--violet)); flex:0 0 auto;
+  }
+  .brand:hover{text-decoration:none}
+  nav.links{display:flex; gap:22px; font-size:14px; font-weight:600}
+  nav.links a{color:var(--muted)}
+  nav.links a:hover{color:var(--ink); text-decoration:none}
+  .nav-cta{
+    font-size:13px; font-weight:700; padding:8px 14px; border-radius:8px;
+    background:var(--ink); color:#fff;
+  }
+  .nav-cta:hover{background:#000; text-decoration:none}
+
+  /* ---- hero ---- */
+  .hero{
+    background:radial-gradient(1100px 520px at 15% -10%,var(--hero-c),transparent),
+               linear-gradient(160deg,var(--hero-a),var(--hero-b) 60%);
+    color:#eef2fb; padding:76px 0 0;
+  }
+  .hero .wrap{display:grid; grid-template-columns:1.05fr .95fr; gap:48px; align-items:center}
+  .hero .eyebrow{color:#7ee9cf}
+  .hero h1{font-size:clamp(32px,4.6vw,50px); color:#fff; margin:0 0 18px}
+  .hero p.lede{color:#c4cde5; font-size:18px; max-width:none}
+  .hero-stats{display:flex; gap:28px; margin-top:28px; flex-wrap:wrap}
+  .hero-stat b{display:block; font-size:26px; color:#fff}
+  .hero-stat span{font-size:12.5px; color:#93a1c4}
+  .hero-actions{margin-top:30px; display:flex; gap:12px; flex-wrap:wrap}
+  .btn{
+    display:inline-block; padding:12px 20px; border-radius:10px; font-weight:700;
+    font-size:14.5px;
+  }
+  .btn-primary{background:#fff; color:var(--hero-a)}
+  .btn-primary:hover{background:#e9edf7; text-decoration:none}
+  .btn-ghost{border:1px solid rgba(255,255,255,.28); color:#fff}
+  .btn-ghost:hover{border-color:rgba(255,255,255,.55); text-decoration:none}
+  .hero-figure{
+    border-radius:16px; overflow:hidden; box-shadow:0 30px 70px rgba(0,0,0,.45);
+    border:1px solid rgba(255,255,255,.12); align-self:end;
+  }
+  .hero-figure img{width:100%}
+  .hero-spacer{height:56px}
+
+  /* ---- generic panels ---- */
+  .panel{
+    background:var(--paper); border:1px solid var(--line); border-radius:16px;
+    box-shadow:var(--shadow); padding:28px;
+  }
+  .grid-2{display:grid; grid-template-columns:1fr 1fr; gap:20px}
+  .grid-3{display:grid; grid-template-columns:repeat(3,1fr); gap:18px}
+  section.wash{background:var(--wash)}
+
+  /* ---- problem cards ---- */
+  .problem-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:18px; margin-top:32px}
+  .problem-card{border:1px solid var(--line); border-radius:14px; padding:22px; background:#fff}
+  .problem-card .q{font-size:22px; margin-bottom:8px}
+  .problem-card h3{font-size:16px}
+  .problem-card p{color:var(--muted); font-size:14.5px; margin:0}
+
+  /* ---- pipeline ---- */
+  .pipeline-figure{border-radius:14px; overflow:hidden; border:1px solid var(--line); box-shadow:var(--shadow); margin:28px 0}
+  .stage-strip{
+    display:flex; flex-wrap:wrap; gap:8px; margin-top:20px;
+  }
+  .stage-chip{
+    display:flex; align-items:center; gap:8px; border:1px solid var(--line);
+    background:#fff; border-radius:999px; padding:7px 13px 7px 8px; font-size:13px; font-weight:600;
+  }
+  .stage-chip b{
+    width:22px; height:22px; border-radius:999px; background:var(--wash); color:var(--ink);
+    display:inline-flex; align-items:center; justify-content:center; font-size:11px; font-weight:800;
+  }
+  .stage-chip.gate b{background:#fff1df; color:var(--amber)}
+
+  /* ---- results ---- */
+  .results-layout{display:grid; grid-template-columns:1fr 1fr; gap:44px; align-items:center}
+  .metric-list{list-style:none; margin:22px 0 0; padding:0; display:grid; gap:14px}
+  .metric-list li{
+    display:grid; grid-template-columns:76px 1fr; gap:16px; align-items:center;
+    padding:12px 0; border-bottom:1px solid var(--line);
+  }
+  .metric-list li:last-child{border-bottom:0}
+  .metric-num{font-size:26px; font-weight:800; color:var(--ink)}
+  .metric-label{font-size:14px; color:var(--muted)}
+  .metric-list li.headline .metric-num{color:var(--amber)}
+  .callout{
+    border-left:4px solid var(--teal); background:#effaf7; border-radius:8px;
+    padding:14px 18px; font-size:14.5px; color:#0b5c4c; margin-top:20px;
+  }
+
+  /* ---- verification ---- */
+  .verify-block{display:grid; grid-template-columns:1fr 1fr; gap:36px; align-items:start}
+  .verify-stat{
+    display:inline-flex; align-items:baseline; gap:10px; background:var(--ink); color:#fff;
+    border-radius:12px; padding:16px 20px; margin-top:6px;
+  }
+  .verify-stat b{font-size:30px}
+  .verify-stat span{font-size:13px; color:#c3cbdb}
+
+  /* ---- standards ---- */
+  .standards-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-top:26px}
+  .standard-card{
+    border:1px solid var(--line); border-radius:14px; padding:20px; text-align:left; background:#fff;
+  }
+  .standard-card .tag{
+    display:inline-block; font:800 11px/1 ui-monospace,SFMono-Regular,Menlo,monospace;
+    letter-spacing:.04em; color:var(--violet); background:#eef1ff; border-radius:6px;
+    padding:5px 8px; margin-bottom:10px;
+  }
+  .standard-card p{font-size:13.5px; color:var(--muted); margin:0}
+
+  /* ---- regdelta ---- */
+  .regdelta{
+    border-radius:16px; padding:36px; background:linear-gradient(135deg,#fff5f6,#fff);
+    border:1px solid #f3d9dd;
+  }
+
+  /* ---- footer ---- */
+  footer{border-top:1px solid var(--line); padding:44px 0; background:var(--wash)}
+  .footer-grid{display:flex; justify-content:space-between; align-items:flex-start; gap:24px; flex-wrap:wrap}
+  footer .brand{margin-bottom:10px}
+  footer .muted{color:var(--muted); font-size:13.5px}
+  footer .links{display:flex; gap:18px; font-size:13.5px; flex-wrap:wrap}
+
+  @media (max-width:860px){
+    section{padding:56px 0}
+    .hero .wrap{grid-template-columns:1fr}
+    .hero-figure{order:-1}
+    nav.links{display:none}
+    .grid-2, .grid-3, .problem-grid, .standards-grid{grid-template-columns:1fr}
+    .results-layout, .verify-block{grid-template-columns:1fr}
+  }
+</style>
+</head>
+<body>
+
+<header class="site-nav">
+  <div class="nav-inner">
+    <a class="brand" href="#top"><span class="brand-mark" aria-hidden="true"></span>Policy Logic Forge</a>
+    <nav class="links">
+      <a href="#how-it-works">How it works</a>
+      <a href="#results">Results</a>
+      <a href="#verification">Verification</a>
+      <a href="#standards">Standards output</a>
+    </nav>
+    <a class="nav-cta" href="https://github.com/rrahimi-uci/policy-logic-forge">View on GitHub</a>
+  </div>
+</header>
+
+<div id="top"></div>
+<section class="hero">
+  <div class="wrap">
+    <div>
+      <span class="eyebrow">Open source · MIT licensed</span>
+      <h1>83.1% of the rules went on hold. That was the useful result.</h1>
+      <p class="lede">Policy Logic Forge turns compliance policy text into a typed,
+        source-grounded knowledge graph — every rule independently verified
+        against the source document, not just cited. It separates
+        "does this point to a source," "is each claim supported," and "is
+        this rule safe to auto-execute" into three different, honestly
+        reported numbers instead of collapsing them into one.</p>
+      <div class="hero-stats">
+        <div class="hero-stat"><b>100%</b><span>rules with source pointers</span></div>
+        <div class="hero-stat"><b>91.9%</b><span>grounding claims supported</span></div>
+        <div class="hero-stat"><b>13.1%</b><span>true human-review rate</span></div>
+      </div>
+      <div class="hero-actions">
+        <a class="btn btn-primary" href="https://github.com/rrahimi-uci/policy-logic-forge">Explore the code</a>
+        <a class="btn btn-ghost" href="https://github.com/rrahimi-uci/policy-logic-forge/blob/main/ARCHITECTURE.md">Read the architecture</a>
+      </div>
+    </div>
+    <div class="hero-figure">
+      <img src="assets/hero.webp" width="1600" height="1066" alt="Policy documents transformed into traceable business knowledge, with a human reviewer inspecting the evidence" loading="eager">
+    </div>
+  </div>
+  <div class="hero-spacer"></div>
+</section>
+
+<section class="tight">
+  <div class="wrap">
+    <span class="eyebrow">The problem</span>
+    <h2>One quality number usually hides three different questions</h2>
+    <p class="lede">On a real 1,191-page mortgage policy guide, 522 of 628
+      extracted rules — 83.1% — landed on a quality hold. Read on its own,
+      that looks like a system that mostly doesn't work. It isn't; it's a
+      single number standing in for questions that need separate answers.</p>
+    <div class="problem-grid">
+      <div class="problem-card">
+        <div class="q">📎</div>
+        <h3>Does it point to a source?</h3>
+        <p>Every rule needs a citation — but a citation isn't proof the
+          claim it supports is actually true.</p>
+      </div>
+      <div class="problem-card">
+        <div class="q">✅</div>
+        <h3>Is each claim supported?</h3>
+        <p>A claim-by-claim check, independent of extraction, against the
+          real corpus text — not the model's memory of it.</p>
+      </div>
+      <div class="problem-card">
+        <div class="q">🔒</div>
+        <h3>Is the whole rule safe to execute?</h3>
+        <p>Strict, whole-rule certification is a much higher bar than any
+          single supported claim — and the two get conflated constantly.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="how-it-works" class="wash">
+  <div class="wrap">
+    <span class="eyebrow">How it works</span>
+    <h2>Twelve agents, one continuous evidence spine</h2>
+    <p class="lede">Source passage → concept → rule → decision or process
+      model — and back again: model element → rule → claim → the exact
+      passage that supports it. Every stage writes its own checkpointed
+      artifacts; nothing downstream trusts an upstream claim without its
+      own verification pass.</p>
+    <div class="pipeline-figure">
+      <img src="assets/evidence-spine.webp" width="1200" height="800" alt="A twelve-stage policy pipeline connected by a continuous evidence spine and selective human-review checkpoints">
+    </div>
+    <div class="stage-strip">
+      <span class="stage-chip"><b>01</b>Organize documents</span>
+      <span class="stage-chip"><b>02</b>Extract entities</span>
+      <span class="stage-chip"><b>03</b>Extract rules</span>
+      <span class="stage-chip"><b>04</b>Validate</span>
+      <span class="stage-chip"><b>05</b>Merge</span>
+      <span class="stage-chip"><b>06</b>Optimize + dedupe</span>
+      <span class="stage-chip gate"><b>07</b>Readiness gate</span>
+      <span class="stage-chip"><b>08</b>Remediate</span>
+      <span class="stage-chip gate"><b>09</b>Ground independently</span>
+      <span class="stage-chip"><b>10</b>Dependency DAGs</span>
+      <span class="stage-chip"><b>11</b>DMN · BPMN · CMMN · SBVR</span>
+      <span class="stage-chip"><b>12</b>Knowledge report</span>
+    </div>
+    <p class="callout">Stage 09 (Grounding Verifier) is deliberately
+      independent of extraction: it rebuilds evidence from the raw corpus
+      itself rather than trusting a stored citation. A hallucinated
+      citation cannot pass. See
+      <a href="https://github.com/rrahimi-uci/policy-logic-forge/blob/main/ARCHITECTURE.md#22-execution-flow-including-the-readinessremediation-loop">the full execution flow in ARCHITECTURE.md</a>.</p>
+  </div>
+</section>
+
+<section id="results">
+  <div class="wrap">
+    <span class="eyebrow">Real results, decomposed honestly</span>
+    <h2>The same run, reported as five separate signals</h2>
+    <div class="results-layout">
+      <div>
+        <p class="lede">This is the actual snapshot from the 628-rule
+          mortgage run that produced the 83.1% headline number above —
+          broken into the questions that number was quietly averaging
+          together.</p>
+        <ul class="metric-list">
+          <li><span class="metric-num">100%</span><span class="metric-label">of rules had a source pointer</span></li>
+          <li><span class="metric-num">91.9%</span><span class="metric-label">of individual grounding claims were supported</span></li>
+          <li><span class="metric-num">17.7%</span><span class="metric-label">of complete rules passed strict whole-rule grounding certification</span></li>
+          <li><span class="metric-num">13.1%</span><span class="metric-label">of rules required actual human judgment</span></li>
+          <li class="headline"><span class="metric-num">83.1%</span><span class="metric-label">remained on an automated quality hold — a fail-closed default, not a failure report</span></li>
+        </ul>
+      </div>
+      <div class="panel" style="padding:0;overflow:hidden">
+        <img src="assets/quality-holds.webp" width="1200" height="800" alt="Supported claims flow into whole-rule quality gates, while a separate, much smaller path represents genuine human review">
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="verification" class="wash">
+  <div class="wrap">
+    <span class="eyebrow">Independent verification</span>
+    <h2>The system is built to catch its own mistakes</h2>
+    <div class="verify-block">
+      <div>
+        <p class="lede">A deterministic guard checks whether two rules in a
+          claimed dependency share any variable name at all — deliberately
+          weak, catching only the clearest false positives. It exists
+          because it isn't the last line of defense: independent grounding
+          verification is.</p>
+        <p>On a real mortgage-domain run, that independent pass — <code>agent_09</code>,
+          run separately from extraction — found that a large share of
+          claimed dependency/conflict relationships did not actually hold
+          up once checked structurally, despite having already passed the
+          pipeline's own deterministic guard.</p>
+      </div>
+      <div>
+        <div class="verify-stat"><b>44%</b><span>of dependency/conflict claims did not<br>hold up under independent verification</span></div>
+        <p style="margin-top:16px;color:var(--muted);font-size:14px">Every model verdict of <em>supported</em>/<em>contradicted</em>
+          is downgraded to <em>insufficient evidence</em> unless the cited
+          quote resolves to a genuine substring of the real corpus text —
+          a hallucinated citation cannot pass, even if the model insists
+          it's supported.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="standards">
+  <div class="wrap">
+    <span class="eyebrow">Real standards output</span>
+    <h2>DMN, BPMN, CMMN, and SBVR — generated, not approximated</h2>
+    <p class="lede">Every run emits real, standards-conformant artifacts
+      grounded in the certified graph — reviewable by a business analyst,
+      importable into a real decision-modeling tool, not a bespoke JSON
+      shape invented for this project.</p>
+    <div class="standards-grid">
+      <div class="standard-card">
+        <span class="tag">DMN 1.3</span>
+        <p>One decision table per rule — real input/output columns and a
+          FEEL-expressed rule row, not a diagram approximation.</p>
+      </div>
+      <div class="standard-card">
+        <span class="tag">BPMN 2.0</span>
+        <p>Generated only where a rule has an explicit, source-evidenced
+          trigger, actor, and at least two ordered steps. A party plus an
+          outcome is not a process — sometimes the most accurate diagram
+          is no diagram.</p>
+      </div>
+      <div class="standard-card">
+        <span class="tag">CMMN 1.1</span>
+        <p>Review-and-remediation cases for anything routed to human
+          judgment or case management, with a real task and milestone
+          structure.</p>
+      </div>
+      <div class="standard-card">
+        <span class="tag">SBVR</span>
+        <p>A governed business vocabulary kept honestly separate from
+          executable decision variables — one run: 26 governed concepts
+          alongside 3,148 rule-local decision variables, not the same
+          number wearing two names.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="tight wash">
+  <div class="wrap">
+    <div class="regdelta">
+      <span class="eyebrow" style="color:var(--red)">Also included</span>
+      <h2>RegDelta — know exactly what changed between two policy versions</h2>
+      <p class="lede">A differential-execution engine layered on top of the
+        pipeline: compile two versions of a policy to a shared
+        intermediate representation, align their rules, classify what
+        semantically changed, and propagate the impact through the
+        dependency graph — so a policy update tells you which downstream
+        rules and cases actually need re-review, not just that something
+        changed.</p>
+      <a class="btn btn-ghost" style="color:var(--ink);border-color:#e0b7bf" href="https://github.com/rrahimi-uci/policy-logic-forge/blob/main/ARCHITECTURE.md#5-regdelta-differential-execution-engine">Read the RegDelta architecture →</a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap footer-grid">
+    <div>
+      <a class="brand" href="#top"><span class="brand-mark" aria-hidden="true"></span>Policy Logic Forge</a>
+      <p class="muted">© 2026 Reza Rahimi. MIT Licensed.</p>
+    </div>
+    <div class="links">
+      <a href="https://github.com/rrahimi-uci/policy-logic-forge">GitHub</a>
+      <a href="https://github.com/rrahimi-uci/policy-logic-forge/blob/main/README.md">README</a>
+      <a href="https://github.com/rrahimi-uci/policy-logic-forge/blob/main/ARCHITECTURE.md">Architecture</a>
+      <a href="https://github.com/rrahimi-uci/policy-logic-forge/blob/main/LICENSE">License</a>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

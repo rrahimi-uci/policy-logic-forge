@@ -1,5 +1,7 @@
 # Policy Logic Forge
 
+**Live site:** [rrahimi-uci.github.io/policy-logic-forge](https://rrahimi-uci.github.io/policy-logic-forge/)
+
 Turns compliance policy text into a typed, source-grounded knowledge graph:
 every rule is extracted with structured conditions and outcomes,
 independently verified against the source document, and partitioned into
@@ -227,3 +229,8 @@ graphs and prompt files, not live extraction runs.
 
 For a provider-backed one-document configuration smoke run, follow
 [`docs/pipeline_smoke.md`](docs/pipeline_smoke.md).
+
+## Author & License
+
+© 2026 [Reza Rahimi](https://github.com/rrahimi-uci). Licensed under the
+[MIT License](LICENSE).
