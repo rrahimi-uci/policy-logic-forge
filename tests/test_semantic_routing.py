@@ -50,6 +50,17 @@ def test_review_route_keeps_fail_closed_status_but_reserves_human_queue_for_judg
     assert classify_review_route([])["route"] == "none"
 
 
+def test_contract_code_findings_route_to_machine_repair_not_case_management():
+    routed = mark_readiness({}, [{
+        "code": "invalid_exception_operator",
+        "path": "exceptions[0].operator",
+        "message": "Exception operator is invalid.",
+    }])
+
+    assert routed["requires_review"] is True
+    assert routed["review_route"]["route"] == "machine_repair"
+
+
 def test_zero_grounding_contradictions_stay_in_case_management():
     """A zero count in Agent 09's summary must not trigger human review."""
     case = mark_readiness({}, [{

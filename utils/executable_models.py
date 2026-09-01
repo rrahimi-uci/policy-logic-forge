@@ -32,14 +32,36 @@ def _id(value: Any, prefix: str) -> str:
     return text
 
 
-def _feel(value: Any) -> str:
+def _feel(value: Any, value_type: Any = None) -> str:
+    if value_type == "feel_expression" and isinstance(value, str):
+        return value
     if isinstance(value, bool):
         return "true" if value else "false"
     if value is None:
         return "null"
     if isinstance(value, (int, float)) and not isinstance(value, bool):
         return str(value)
+    if isinstance(value, str):
+        constructor = {
+            "date": "date",
+            "date_time": "date and time",
+            "time": "time",
+            "duration": "duration",
+        }.get(str(value_type or ""))
+        if constructor:
+            return f"{constructor}({json.dumps(value, ensure_ascii=False)})"
     return json.dumps(str(value), ensure_ascii=False)
+
+
+def _dmn_type_ref(variable_type: Any) -> str:
+    return {
+        "boolean": "boolean",
+        "number": "number",
+        "date": "date",
+        "date_time": "date and time",
+        "time": "time",
+        "duration": "days and time duration",
+    }.get(str(variable_type or ""), "string")
 
 
 def _predicate_test(predicate: Mapping[str, Any]) -> str | None:
@@ -48,12 +70,15 @@ def _predicate_test(predicate: Mapping[str, Any]) -> str | None:
     if not variable:
         return None
     value = predicate.get("value")
+    value_type = predicate.get("value_type")
     if operator in {"==", "="}:
-        return _feel(value)
+        return _feel(value, value_type)
     if operator in {"!=", "<>", "<", "<=", ">", ">="}:
-        return f"{operator if operator != '<>' else '!='} {_feel(value)}"
+        return f"{operator if operator != '<>' else '!='} {_feel(value, value_type)}"
     if operator == "in" and isinstance(value, list):
-        return "[" + ", ".join(_feel(item) for item in value) + "]"
+        return "[" + ", ".join(_feel(item, value_type) for item in value) + "]"
+    if operator == "not_in" and isinstance(value, list):
+        return "not(" + ", ".join(_feel(item, value_type) for item in value) + ")"
     if operator == "contains":
         return f'contains(?, {_feel(value)})'
     return None
@@ -96,18 +121,18 @@ def build_graph_dmn(graph: Mapping[str, Any], *, model_name: str = "Policy Logic
         for p in predicates:
             var = str(p.get("variable"))
             inp = ET.SubElement(table, f"{{{DMN_NS}}}input", {"id": _id(f"input_{rid}_{var}", "input")})
-            expr = ET.SubElement(inp, f"{{{DMN_NS}}}inputExpression", {"typeRef": "boolean" if variables.get(var, {}).get("type") == "boolean" else "string"})
+            expr = ET.SubElement(inp, f"{{{DMN_NS}}}inputExpression", {"typeRef": _dmn_type_ref(variables.get(var, {}).get("type"))})
             ET.SubElement(expr, f"{{{DMN_NS}}}text").text = var
         for o in outcomes:
             var = str(o.get("variable"))
-            ET.SubElement(table, f"{{{DMN_NS}}}output", {"id": _id(f"output_{rid}_{var}", "output"), "name": var, "typeRef": "string"})
+            ET.SubElement(table, f"{{{DMN_NS}}}output", {"id": _id(f"output_{rid}_{var}", "output"), "name": var, "typeRef": _dmn_type_ref(variables.get(var, {}).get("type"))})
         row = ET.SubElement(table, f"{{{DMN_NS}}}rule", {"id": _id(f"row_{rid}", f"row_{index}")})
         for p in predicates:
             entry = ET.SubElement(row, f"{{{DMN_NS}}}inputEntry")
             ET.SubElement(entry, f"{{{DMN_NS}}}text").text = _predicate_test(p) or "false"
         for o in outcomes:
             entry = ET.SubElement(row, f"{{{DMN_NS}}}outputEntry")
-            ET.SubElement(entry, f"{{{DMN_NS}}}text").text = _feel(o.get("value"))
+            ET.SubElement(entry, f"{{{DMN_NS}}}text").text = _feel(o.get("value"), o.get("value_type"))
     return ET.tostring(root, encoding="utf-8", xml_declaration=True)
 
 

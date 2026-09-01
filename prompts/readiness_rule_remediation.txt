@@ -8,8 +8,8 @@ Return JSON only:
   "remediations": [
     {{
       "rule_id": "exact supplied ID",
-      "variables_to_add": [{{"name":"snake_case", "type":"boolean | enum | number | date | date_time | duration | string", "role":"input", "allowed_values":[]}}],
-      "exceptions": [{{"predicate_id":"ex1", "variable":"declared or newly added variable", "operator":"== | != | > | >= | < | <= | in | not_in", "value":true, "value_type":"boolean | enum | number | date | date_time | duration | string | list | variable_reference"}}],
+      "variables_to_add": [{{"name":"snake_case", "type":"boolean | enum | number | date | date_time | time | duration | string", "role":"input", "allowed_values":[]}}],
+      "exceptions": [{{"predicate_id":"ex1", "variable":"declared or newly added variable", "operator":"== | != | > | >= | < | <= | in | not_in", "value":true, "value_type":"boolean | enum | number | date | date_time | time | duration | string | list | variable_reference"}}],
       "exception_basis": "explicit_in_source | explicitly_none_in_source | no_exception_cue_found_in_complete_search | unresolved_after_full_document_search",
       "exception_verification": {{"status":"explicit_in_source | explicitly_none_in_source | no_exception_cue_found_in_complete_search | unresolved", "evidence":[{{"chunk_path":"...", "section_id":"...", "source_text":"direct quote"}}], "unresolved_reason":null}},
       "applicability_scope": {{"loan_types":[], "occupancy_types":[], "transaction_types":[]}},
@@ -20,6 +20,9 @@ Return JSON only:
 }}
 
 Rules:
+- `failed_findings` may contain final-readiness `requirement` values or v2
+  contract `code` values. Treat both as authoritative descriptions of what
+  failed; never ignore a finding merely because it uses the other schema.
 - Add the minimum typed input variables needed to express an explicit source
   exception. Enum variables require non-empty allowed_values. String variables
   require free_text=true. Never add a variable merely to remove review status.

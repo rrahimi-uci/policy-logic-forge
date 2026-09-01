@@ -342,6 +342,91 @@ def test_invalid_source_quote_cannot_be_certified(tmp_path):
     assert all(rule["requires_review"] is True for rule in final_graph["business_rules"])
 
 
+def test_complete_corpus_provenance_certifies_negative_exception_and_scope_claims():
+    packet = {
+        "rule_id": "BR-1",
+        "claims": [
+            {
+                "claim_id": "exception_basis", "field_path": "exception_basis",
+                "claim_type": "exception", "statement": "No exception", "structured": "explicitly_none_in_source",
+            },
+            {
+                "claim_id": "scope_basis", "field_path": "scope_basis",
+                "claim_type": "scope", "statement": "No narrower scope", "structured": "genuinely_unscoped",
+            },
+        ],
+        "search_provenance": {
+            "current_corpus_sha256": "corpus-hash", "current_chunk_count": 12,
+            "exception_verification": {
+                "status": "explicitly_none_in_source",
+                "corpus_sha256": "corpus-hash",
+                "searched_chunk_count": 12,
+            },
+            "scope_derivation": {
+                "status": "genuinely_unscoped",
+                "corpus_sha256": "corpus-hash",
+                "reviewed_chunk_count": 12,
+            },
+        },
+        "evidence": [],
+    }
+    raw = [
+        {
+            "rule_id": "BR-1", "claim_id": claim["claim_id"],
+            "verdict": "insufficient_evidence", "reasoning": "Absence cannot be proven by one quote.",
+        }
+        for claim in packet["claims"]
+    ]
+
+    results = GroundingVerifier._finalize_rule_results(packet, raw)
+
+    assert [item["verdict"] for item in results] == ["supported", "supported"]
+    assert all("complete-corpus search provenance" in item["reasoning"] for item in results)
+
+
+def test_complete_corpus_provenance_requires_matching_negative_status():
+    packet = {
+        "rule_id": "BR-1",
+        "claims": [{
+            "claim_id": "exception_basis", "field_path": "exception_basis",
+            "claim_type": "exception", "statement": "No exception", "structured": "explicitly_none_in_source",
+        }],
+        "search_provenance": {
+            "current_corpus_sha256": "corpus-hash", "current_chunk_count": 12,
+            "exception_verification": {
+                "status": "unresolved_after_full_document_search",
+                "corpus_sha256": "corpus-hash",
+                "searched_chunk_count": 12,
+            },
+        },
+        "evidence": [],
+    }
+
+    results = GroundingVerifier._finalize_rule_results(packet, [{
+        "rule_id": "BR-1", "claim_id": "exception_basis",
+        "verdict": "insufficient_evidence", "reasoning": "The search remained unresolved.",
+    }])
+
+    assert results[0]["verdict"] == "insufficient_evidence"
+
+
+def test_unused_invalid_duplicate_citation_is_reported_without_failing_grounded_claims(tmp_path):
+    organized = _organized_corpus(tmp_path)
+    graph = graph_with_two_rules()
+    for rule in graph["business_rules"]:
+        rule["field_evidence"]["audit_note"] = [{
+            "chunk_path": "B2-1-01/001.txt", "section_id": "B2-1-01",
+            "source_text": "This unrelated duplicate quotation is not in the corpus.",
+        }]
+
+    final_graph, report = GroundingVerifier(SupportingResolver()).verify_graph(
+        graph, organized, tmp_path / "output"
+    )
+
+    assert report["invalid_evidence_records"] >= 2
+    assert all(rule["grounding"]["status"] == "certified" for rule in final_graph["business_rules"])
+
+
 # ─────────────────────────────────────────────────────────────────────────
 # Near-match citation repair: an extraction agent's attached source_text is
 # supposed to be a verbatim quote, but real production runs show it's often

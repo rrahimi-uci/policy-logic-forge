@@ -8,9 +8,11 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import dataclass
+import re
 from typing import Any, Iterable, Mapping
 
 from utils.semantic_routing import WORKFLOW_STEP_KINDS
+from utils.feel_expression import compile_feel_expression
 
 RULE_SCHEMA_VERSION = "2.0"
 VALUE_TYPES = {
@@ -19,6 +21,7 @@ VALUE_TYPES = {
     "enum",
     "date",
     "date_time",
+    "time",
     "duration",
     "string",
     "range",
@@ -31,6 +34,7 @@ VARIABLE_TYPES = {
     "enum",
     "date",
     "date_time",
+    "time",
     "duration",
     "string",
     "list",
@@ -68,6 +72,7 @@ EXCEPTION_BASES = {
     "unresolved_after_full_document_search",
 }
 HIT_POLICIES = {"UNIQUE", "FIRST", "PRIORITY", "COLLECT", "ANY"}
+ISO_LOCAL_TIME_RE = re.compile(r"^(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?$")
 
 
 @dataclass(frozen=True)
@@ -207,6 +212,9 @@ def _walk_logic(
             referenced_ids.append(predicate_id)
         return
 
+    if set(node) == {"constant"} and node.get("constant") is True and not predicate_ids:
+        return
+
     branch_names = [name for name in ("all", "any") if name in node]
     if len(branch_names) != 1 or len(node) != 1:
         _issue(
@@ -238,7 +246,11 @@ def _validate_predicates(
     variables: Mapping[str, Mapping[str, Any]],
     path: str,
     issues: list[ContractIssue],
+    *,
+    allow_empty: bool = False,
 ) -> set[str]:
+    if isinstance(predicates, list) and not predicates and allow_empty:
+        return set()
     if not isinstance(predicates, list) or not predicates:
         _issue(issues, 1, "missing_condition_predicates", path, "At least one atomic predicate is required.")
         return set()
@@ -302,6 +314,11 @@ def _validate_predicates(
             _issue(issues, 1, "invalid_numeric_value", f"{predicate_path}.value", "Number predicates require a numeric value.")
         elif value_type == "boolean" and not isinstance(predicate.get("value"), bool):
             _issue(issues, 1, "invalid_boolean_value", f"{predicate_path}.value", "Boolean predicates require true or false.")
+        elif value_type == "time" and not (
+            isinstance(predicate.get("value"), str)
+            and ISO_LOCAL_TIME_RE.fullmatch(predicate["value"].strip())
+        ):
+            _issue(issues, 1, "invalid_time_value", f"{predicate_path}.value", "Time predicates require an ISO local time such as 21:00 or 21:00:00.")
 
     return predicate_ids
 
@@ -415,10 +432,58 @@ def _validate_outcomes(
         if outcome.get("operator") != "=":
             _issue(issues, 1, "invalid_outcome_operator", f"{outcome_path}.operator", "Outcome operator must be =.")
         value_type = outcome.get("value_type")
-        if value_type not in VALUE_TYPES:
+        if value_type == "feel_expression":
+            if compile_feel_expression(
+                outcome.get("value"), variables.values(), output_variable=str(outcome.get("variable") or "")
+            ) is None:
+                _issue(issues, 1, "invalid_feel_expression", f"{outcome_path}.value", "Computed outcome is outside the validated FEEL arithmetic subset.")
+        elif value_type not in VALUE_TYPES:
             _issue(issues, 1, "invalid_outcome_value_type", f"{outcome_path}.value_type", "Outcome value_type is invalid.")
         elif value_type == "number" and not _is_number(outcome.get("value")):
             _issue(issues, 1, "invalid_outcome_number", f"{outcome_path}.value", "Numeric outcomes require a numeric value.")
+        elif value_type == "time" and not (
+            isinstance(outcome.get("value"), str)
+            and ISO_LOCAL_TIME_RE.fullmatch(outcome["value"].strip())
+        ):
+            _issue(issues, 1, "invalid_outcome_time", f"{outcome_path}.value", "Time outcomes require an ISO local time such as 21:00 or 21:00:00.")
+
+
+def _validate_exception_effects(
+    effects: Any,
+    variables: Mapping[str, Mapping[str, Any]],
+    issues: list[ContractIssue],
+) -> None:
+    """Validate preserved alternate outcomes without treating them as triggers.
+
+    Older model responses sometimes placed the *effect* of an exception in
+    ``exceptions``.  Readiness normalization separates those assignments into
+    this audit field so they cannot be evaluated as input predicates.  They
+    remain non-executable until a source-backed trigger and branch association
+    are available, but their structure must still be internally valid.
+    """
+
+    if effects is None:
+        return
+    if not isinstance(effects, list):
+        _issue(issues, 6, "invalid_exception_effects", "exception_effects", "exception_effects must be an array.")
+        return
+    for index, effect in enumerate(effects):
+        path = f"exception_effects[{index}]"
+        if not isinstance(effect, Mapping):
+            _issue(issues, 6, "invalid_exception_effect", path, "Exception effect must be an outcome object.")
+            continue
+        variable = variables.get(_normalise_name(effect.get("variable")))
+        if variable is None:
+            _issue(issues, 6, "undefined_exception_effect_variable", f"{path}.variable", "Exception effect variables must be declared.")
+        elif variable.get("role") != "output":
+            _issue(issues, 6, "exception_effect_variable_not_output", f"{path}.variable", "Exception effects must assign declared output variables.")
+        if effect.get("operator") != "=":
+            _issue(issues, 6, "invalid_exception_effect_operator", f"{path}.operator", "Exception effect operator must be =.")
+        value_type = effect.get("value_type")
+        if value_type not in VALUE_TYPES:
+            _issue(issues, 6, "invalid_exception_effect_value_type", f"{path}.value_type", "Exception effect value_type is invalid.")
+        elif value_type == "variable_reference" and _normalise_name(effect.get("value")) not in variables:
+            _issue(issues, 6, "undefined_exception_effect_reference", f"{path}.value", "Exception effect variable reference must resolve to a declared variable.")
 
 
 def _validate_exceptions(
@@ -574,7 +639,15 @@ def validate_rule_v2(
             if not isinstance(evidence, list) or not evidence:
                 _issue(issues, 7, "missing_workflow_evidence", "workflow_semantics.evidence", "Source-explicit workflow order requires direct evidence.")
     variables = _validate_variables(rule, issues)
-    predicate_ids = _validate_predicates(rule.get("condition_predicates"), variables, "condition_predicates", issues)
+    unconditional = (
+        rule.get("condition_logic") == {"constant": True}
+        and rule.get("condition_basis") == "unconditional_explicit_in_source"
+        and bool(rule.get("source_reference"))
+    )
+    predicate_ids = _validate_predicates(
+        rule.get("condition_predicates"), variables, "condition_predicates", issues,
+        allow_empty=unconditional,
+    )
 
     condition_logic = rule.get("condition_logic")
     if isinstance(condition_logic, str) and condition_logic in {"AND", "OR"}:
@@ -601,6 +674,7 @@ def validate_rule_v2(
 
     _validate_outcomes(rule.get("outcomes"), variables, issues)
     _validate_exceptions(rule.get("exceptions"), variables, issues)
+    _validate_exception_effects(rule.get("exception_effects"), variables, issues)
     _validate_rule_metadata(rule, entity_catalog, issues)
 
     evidence = rule.get("field_evidence")

@@ -48,6 +48,31 @@ def test_graph_dmn_is_valid_and_unsupported_predicates_fail_closed():
     assert rows[1].find(f"{{{DMN_NS}}}inputEntry/{{{DMN_NS}}}text").text == "false"
 
 
+def test_graph_dmn_preserves_time_type_and_typed_unary_test():
+    graph = {"business_rules": [{
+        "rule_id": "R-TIME", "requires_review": False,
+        "variables": [
+            {"name": "submission_time", "type": "time", "role": "input"},
+            {"name": "accepted", "type": "boolean", "role": "output"},
+        ],
+        "condition_predicates": [{
+            "predicate_id": "p1", "variable": "submission_time", "operator": "<=",
+            "value": "21:00", "value_type": "time",
+        }],
+        "outcomes": [{"variable": "accepted", "operator": "=", "value": True, "value_type": "boolean"}],
+        "execution": {"dmn": {"hit_policy": "UNIQUE"}},
+    }]}
+
+    root = ET.fromstring(build_graph_dmn(graph))
+    expression = next(root.iter(f"{{{DMN_NS}}}inputExpression"))
+    input_text = next(root.iter(f"{{{DMN_NS}}}inputEntry")).find(f"{{{DMN_NS}}}text")
+    output = next(root.iter(f"{{{DMN_NS}}}output"))
+
+    assert expression.get("typeRef") == "time"
+    assert input_text.text == '<= time("21:00")'
+    assert output.get("typeRef") == "boolean"
+
+
 def test_bpmn_uses_only_explicit_workflow_order_and_omits_dependency_only_rules():
     graph = _graph()
     graph["business_rules"][0]["responsible_party"] = "SELLER_SERVICER"

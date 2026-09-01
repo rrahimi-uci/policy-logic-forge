@@ -19,6 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from utils.citations import normalise_text, repair_citation
 from utils.config import get_config
+from utils.feel_expression import compile_feel_expression, evaluate_feel_expression
 from utils.kg_readiness import (
     CANONICAL_ENTITY_RE,
     cited_sections,
@@ -254,9 +255,9 @@ class OpenAIEvidenceResolver:
 
 _READINESS_RULE_FIELDS = (
     "rule_id", "rule_name", "rule_type", "description", "condition_predicates",
-    "condition_logic", "outcomes", "variables", "recommended_hit_policy",
+    "condition_logic", "condition_basis", "outcomes", "variables", "recommended_hit_policy",
     "versioning_status", "applicability_scope", "scope_basis", "inference_reasoning",
-    "responsible_party", "counterparties", "exceptions", "exception_basis",
+    "responsible_party", "counterparties", "exceptions", "exception_effects", "exception_basis",
     "exception_verification", "scope_derivation", "source_reference", "test_vectors",
     "workflow_semantics",
 )
@@ -289,7 +290,11 @@ def _project_execution(rule: Mapping[str, Any]) -> dict[str, Any]:
     variables = [item for item in rule.get("variables", []) if isinstance(item, Mapping)]
     inputs = [str(item.get("name")) for item in variables if item.get("role") in {"input", "derived"}]
     outputs = [str(item.get("name")) for item in variables if item.get("role") == "output"]
-    targets = ["DMN"] if inputs and outputs else []
+    unconditional = (
+        rule.get("condition_logic") == {"constant": True}
+        and rule.get("condition_basis") == "unconditional_explicit_in_source"
+    )
+    targets = ["DMN"] if outputs and (inputs or unconditional) else []
     execution: dict[str, Any] = {"targets": targets}
     if "DMN" in targets:
         execution["dmn"] = {"input_columns": inputs, "output_columns": outputs, "hit_policy": rule.get("recommended_hit_policy")}
@@ -318,6 +323,10 @@ LEGACY_ENTITY_NAMES = {
 }
 
 LEGACY_VALUE_TYPES = {
+    # JSON/model schemas frequently distinguish integer from number, while
+    # Rule Contract v2 deliberately uses one numeric type.  This conversion
+    # loses no precision: the integral allowed_range/value remains intact.
+    "integer": "number",
     "array": "list",
     "enum_array": "list",
     "enum_list": "list",
@@ -379,6 +388,7 @@ LEGACY_VALUE_TYPES = {
 
 LEGACY_OPERATORS = {
     "=": "==",
+    "not in": "not_in",
     "BETWEEN": "in",
     # "contains_any" is the model's reasonable-but-undocumented name for
     # exactly what "in" already means (does the actual value match any of a
@@ -570,6 +580,29 @@ def _evidence_pointer(value: Any) -> dict[str, str] | None:
     return pointer if all(pointer.values()) else None
 
 
+_CONDITIONAL_SOURCE_CUE = re.compile(
+    r"\b(if|when|whenever|unless|provided\s+that|only\s+if|in\s+the\s+event\s+that)\b",
+    re.IGNORECASE,
+)
+_UNCONDITIONAL_SOURCE_ASSERTION = re.compile(
+    r"\b(must|shall|is\s+required\s+to|are\s+required\s+to|requires?)\b",
+    re.IGNORECASE,
+)
+
+
+def _has_explicit_unconditional_source(rule: Mapping[str, Any]) -> bool:
+    """Recognize a direct unconditional obligation without inventing a trigger.
+
+    This intentionally covers only source text with an explicit modal and no
+    conditional cue. Definitions, calculations, headings, and mixed
+    conditional/unconditional passages remain unresolved for a model or SME.
+    """
+
+    pointer = _evidence_pointer(rule.get("source_reference"))
+    text = str((pointer or {}).get("source_text", "")).strip()
+    return bool(text and _UNCONDITIONAL_SOURCE_ASSERTION.search(text) and not _CONDITIONAL_SOURCE_CUE.search(text))
+
+
 def _invert_predicate(predicate: Mapping[str, Any], predicate_id: str) -> dict[str, Any]:
     inverse = {"==": "!=", "!=": "==", ">": "<=", ">=": "<", "<": ">=", "<=": ">", "in": "not_in", "not_in": "in"}
     result = deepcopy(dict(predicate))
@@ -686,6 +719,129 @@ def _coerce_unresolved_basis(rule: dict[str, Any], basis_field: str, valid_value
     rule[basis_field] = unresolved_value
 
 
+def _derive_equality_test_vector(rule: Mapping[str, Any]) -> dict[str, Any] | None:
+    """Build one source-derived example for a pure equality conjunction.
+
+    Predicate literals become inputs and source-defined outcomes become
+    expected outputs. Mixed/OR logic, comparisons, unsafe expressions, and
+    contradictory assignments remain unresolved. Numeric FEEL and
+    variable-reference outcomes are evaluated only after assigning
+    deterministic values to declared inputs.
+    """
+
+    predicates = {
+        str(item.get("predicate_id")): item
+        for item in (rule.get("condition_predicates") or [])
+        if isinstance(item, Mapping) and str(item.get("predicate_id", "")).strip()
+    }
+    if not predicates:
+        return None
+
+    def conjunction_refs(node: Any) -> list[str] | None:
+        if isinstance(node, Mapping) and set(node) == {"predicate_ref"}:
+            return [str(node.get("predicate_ref"))]
+        if isinstance(node, Mapping) and set(node) == {"all"} and isinstance(node.get("all"), list) and node["all"]:
+            result: list[str] = []
+            for child in node["all"]:
+                child_refs = conjunction_refs(child)
+                if child_refs is None:
+                    return None
+                result.extend(child_refs)
+            return result
+        return None
+
+    refs = conjunction_refs(rule.get("condition_logic"))
+    if refs is None or len(refs) != len(set(refs)) or set(refs) != set(predicates):
+        return None
+    inputs: dict[str, Any] = {}
+    for predicate_id in refs:
+        predicate = predicates[predicate_id]
+        if predicate.get("operator") != "==" or predicate.get("value_type") == "variable_reference":
+            return None
+        name = str(predicate.get("variable") or "").strip()
+        if not name:
+            return None
+        value = deepcopy(predicate.get("value"))
+        if name in inputs and inputs[name] != value:
+            return None
+        inputs[name] = value
+    definitions = {
+        str(item.get("name", "")).strip(): item
+        for item in (rule.get("variables") or [])
+        if isinstance(item, Mapping) and str(item.get("name", "")).strip()
+    }
+
+    def sample_value(definition: Mapping[str, Any]) -> Any:
+        value_type = definition.get("type")
+        if value_type == "number":
+            allowed_range = definition.get("allowed_range")
+            if (
+                isinstance(allowed_range, list)
+                and allowed_range
+                and isinstance(allowed_range[0], (int, float))
+                and not isinstance(allowed_range[0], bool)
+            ):
+                return max(1, allowed_range[0])
+            return 1
+        if value_type == "boolean":
+            return True
+        if value_type == "enum" and isinstance(definition.get("allowed_values"), list) and definition["allowed_values"]:
+            return deepcopy(definition["allowed_values"][0])
+        if value_type == "date":
+            return "2000-01-01"
+        if value_type == "date_time":
+            return "2000-01-01T00:00:00"
+        if value_type == "time":
+            return "00:00:00"
+        if value_type == "duration":
+            return "P1D"
+        if value_type == "string":
+            return "example"
+        return None
+
+    expected: dict[str, Any] = {}
+    for outcome in rule.get("outcomes", []) or []:
+        if not isinstance(outcome, Mapping) or outcome.get("operator") != "=":
+            return None
+        name = str(outcome.get("variable") or "").strip()
+        if not name:
+            return None
+        value_type = outcome.get("value_type")
+        if value_type in {"number", "boolean", "enum", "date", "date_time", "time", "duration", "string", "list"}:
+            expected[name] = deepcopy(outcome.get("value"))
+            continue
+        if value_type == "variable_reference":
+            reference = str(outcome.get("value") or "").strip()
+            definition = definitions.get(reference)
+            if not isinstance(definition, Mapping) or definition.get("role") not in {"input", "derived"}:
+                return None
+            if reference not in inputs:
+                sampled = sample_value(definition)
+                if sampled is None:
+                    return None
+                inputs[reference] = sampled
+            expected[name] = deepcopy(inputs[reference])
+            continue
+        if value_type == "feel_expression":
+            for variable_name, definition in definitions.items():
+                if definition.get("role") == "input" and definition.get("type") == "number" and variable_name not in inputs:
+                    inputs[variable_name] = sample_value(definition)
+            evaluated = evaluate_feel_expression(outcome.get("value"), inputs)
+            if evaluated is None:
+                return None
+            expected[name] = evaluated
+            continue
+        return None
+    if not expected or _evidence_pointer(rule.get("source_reference")) is None:
+        return None
+    return {
+        "inputs": inputs,
+        "expected_output": expected,
+        "vector_basis": "derived_from_source",
+        "boundary_condition": False,
+    }
+
+
 def _normalise_rule_contract(rule: dict[str, Any]) -> dict[str, Any]:
     """Normalize legacy extraction shapes without changing rule/source identity."""
     _coerce_unresolved_basis(rule, "exception_basis", EXCEPTION_BASES, "exception_verification", "unresolved_after_full_document_search")
@@ -730,6 +886,12 @@ def _normalise_rule_contract(rule: dict[str, Any]) -> dict[str, Any]:
                 continue
             if field != "outcomes":
                 item["operator"] = _normalise_operator(item.get("operator"))
+                # ``is_applicable`` is an extraction spelling for a boolean
+                # truth test, not a new comparison operator.  Canonicalize it
+                # only when the value is explicitly boolean so no semantics
+                # are guessed for other shapes.
+                if item.get("operator") == "is_applicable" and isinstance(item.get("value"), bool):
+                    item["operator"] = "=="
             item["value_type"] = _normalise_value_type(item.get("value_type"))
             item["variable"] = normalise_declared_reference(item.get("variable"))
             if item.get("value_type") == "boolean" and isinstance(item.get("value"), str):
@@ -806,15 +968,17 @@ def _normalise_rule_contract(rule: dict[str, Any]) -> dict[str, Any]:
         value_type = _normalise_value_type(outcome.get("value_type"))
         template: Mapping[str, Any] | None = None
         if value_type == "variable_reference":
-            reference_name = str(outcome.get("value", "")).strip().lower()
-            template = variable_by_name.get(reference_name)
+            reference_name = str(outcome.get("value", "")).strip()
+            canonical_reference = declared_aliases.get(_compact_identifier(reference_name), reference_name)
+            outcome["value"] = canonical_reference
+            template = variable_by_name.get(canonical_reference.lower())
         if template is not None:
             output_variable = deepcopy(dict(template))
             output_variable["name"] = output_name
             output_variable["role"] = "output"
             variables.append(output_variable)
             variable_by_name[output_name.lower()] = output_variable
-        elif value_type in {"number", "boolean", "enum", "date", "date_time", "duration", "string", "list"}:
+        elif value_type in {"number", "boolean", "enum", "date", "date_time", "time", "duration", "string", "list"}:
             output_variable = {"name": output_name, "type": value_type, "role": "output"}
             if value_type == "string":
                 output_variable["free_text"] = True
@@ -828,6 +992,9 @@ def _normalise_rule_contract(rule: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(predicates, list):
         predicates = []
         rule["condition_predicates"] = predicates
+    if not predicates and _has_explicit_unconditional_source(rule):
+        rule["condition_logic"] = {"constant": True}
+        rule["condition_basis"] = "unconditional_explicit_in_source"
     # Every atomic predicate must have an ID before condition_logic is
     # resolved. Assign the first available deterministic pN identifier to
     # missing IDs so a logic tree such as ``predicate_ref: p4`` can resolve to
@@ -939,7 +1106,10 @@ def _normalise_rule_contract(rule: dict[str, Any]) -> dict[str, Any]:
         ]
         if normalised_logic is None:
             children = [{"predicate_ref": predicate_id} for predicate_id in missing]
-            normalised_logic = children[0] if len(children) == 1 else {"all": children}
+            if not children and rule.get("condition_basis") == "unconditional_explicit_in_source":
+                normalised_logic = {"constant": True}
+            else:
+                normalised_logic = children[0] if len(children) == 1 else {"all": children}
         elif missing:
             normalised_logic = {"all": [normalised_logic, *({"predicate_ref": predicate_id} for predicate_id in missing)]}
         rule["condition_logic"] = normalised_logic
@@ -998,6 +1168,51 @@ def _normalise_rule_contract(rule: dict[str, Any]) -> dict[str, Any]:
         exception["predicate_id"] = predicate_id
         seen_exception_ids.add(predicate_id)
 
+    # A recurring extraction error places alternate *outcome assignments* in
+    # ``exceptions``.  Evaluating an output as an input predicate is invalid
+    # and can invert the rule.  Preserve those assignments verbatim in the
+    # explicit non-executable ``exception_effects`` audit field, and leave only
+    # genuine input circumstances in ``exceptions``.  Downstream readiness
+    # keeps the rule review-gated until branch semantics are represented; no
+    # evidence or alternate value is discarded merely to pass validation.
+    output_names = {
+        str(variable.get("name", "")).strip().casefold()
+        for variable in variables
+        if isinstance(variable, Mapping) and variable.get("role") == "output"
+    }
+    preserved_effects = [
+        dict(item)
+        for item in (rule.get("exception_effects") or [])
+        if isinstance(item, Mapping)
+    ]
+    input_exceptions: list[dict[str, Any]] = []
+    for exception in rule.get("exceptions", []) or []:
+        if not isinstance(exception, dict):
+            continue
+        if str(exception.get("variable", "")).strip().casefold() not in output_names:
+            input_exceptions.append(exception)
+            continue
+        effect = deepcopy(exception)
+        effect["operator"] = "="
+        effect["effect_id"] = str(effect.pop("predicate_id", "") or f"effect_{len(preserved_effects) + 1}")
+        if effect not in preserved_effects:
+            preserved_effects.append(effect)
+    rule["exceptions"] = input_exceptions
+    if preserved_effects:
+        rule["exception_effects"] = preserved_effects
+        if not input_exceptions:
+            verification = rule.get("exception_verification")
+            verification_map = dict(verification) if isinstance(verification, Mapping) else {}
+            verification_map["status"] = "unresolved"
+            verification_map.setdefault(
+                "unresolved_reason",
+                "Alternate exception outcomes were preserved, but no source-stated input trigger is structurally associated with them.",
+            )
+            rule["exception_verification"] = verification_map
+            rule["exception_basis"] = "unresolved_after_full_document_search"
+    else:
+        rule.pop("exception_effects", None)
+
     variable_by_name = {
         str(variable.get("name", "")).strip().lower(): variable
         for variable in variables
@@ -1025,7 +1240,7 @@ def _normalise_rule_contract(rule: dict[str, Any]) -> dict[str, Any]:
             if reference is not None:
                 exception["value_type"] = "variable_reference"
                 value_type = "variable_reference"
-        variable_type = value_type if value_type in {"number", "boolean", "enum", "date", "date_time", "duration", "string"} else "string"
+        variable_type = value_type if value_type in {"number", "boolean", "enum", "date", "date_time", "time", "duration", "string"} else "string"
         variable: dict[str, Any] = {"name": name, "type": variable_type, "role": "input"}
         if variable_type == "string":
             variable["free_text"] = True
@@ -1097,6 +1312,25 @@ def _normalise_rule_contract(rule: dict[str, Any]) -> dict[str, Any]:
             existing["role"] = "input"
     rule["variables"] = merged_variables
 
+    # Promote only validated arithmetic over declared numeric variables to a
+    # real DMN FEEL expression.  Unsupported prose, lookup objects, collection
+    # folds, and unknown functions retain their original value_type and remain
+    # review-required.  The source spelling is preserved for grounding/audit.
+    for outcome in rule.get("outcomes", []) or []:
+        if not isinstance(outcome, dict) or outcome.get("value_type") not in {"formula", "expression"}:
+            continue
+        original_expression = outcome.get("value")
+        compiled = compile_feel_expression(
+            original_expression,
+            merged_variables,
+            output_variable=str(outcome.get("variable") or ""),
+        )
+        if compiled is None:
+            continue
+        outcome["source_expression"] = original_expression
+        outcome["value"] = compiled
+        outcome["value_type"] = "feel_expression"
+
     verification = rule.get("exception_verification")
     if (
         rule.get("exception_basis") == "explicit_in_source"
@@ -1106,6 +1340,11 @@ def _normalise_rule_contract(rule: dict[str, Any]) -> dict[str, Any]:
     ):
         rule["exception_basis"] = "unresolved_after_full_document_search"
         verification["status"] = "unresolved_after_full_document_search"
+
+    if not rule.get("test_vectors"):
+        derived_vector = _derive_equality_test_vector(rule)
+        if derived_vector is not None:
+            rule["test_vectors"] = [derived_vector]
 
     for vector in rule.get("test_vectors", []) or []:
         if not isinstance(vector, dict):
@@ -1272,7 +1511,7 @@ def _infer_literal_value_type(value: Any, variable: Mapping[str, Any] | None, op
     if isinstance(value, str):
         declared = variable.get("type") if isinstance(variable, Mapping) else None
         declared = _normalise_value_type(declared)
-        if declared in {"date", "date_time", "duration", "enum", "number", "boolean", "list", "range", "string"}:
+        if declared in {"date", "date_time", "time", "duration", "enum", "number", "boolean", "list", "range", "string"}:
             return declared
         if operator in {"in", "not_in"}:
             return "enum"
@@ -1432,6 +1671,14 @@ def _normalise_final_evidence_states(rule: dict[str, Any], corpus: Mapping[str, 
         and bool(expected_digest)
         and verification_map.get("corpus_sha256") == expected_digest
     )
+    if rule.get("exception_basis") == "explicitly_none_in_source" and complete_search:
+        # ``exception_basis`` is the contract field; resolver responses have
+        # historically used free-form synonyms in the companion status. Bind
+        # the status to the same final state only after the deterministic
+        # complete-corpus search fingerprint is current. Agent 09 can then
+        # certify the absence claim without trusting a loose status string.
+        verification_map["status"] = "explicitly_none_in_source"
+        rule["exception_verification"] = verification_map
     if (
         not rule.get("exceptions")
         and rule.get("exception_basis") in {"explicit_in_source", "unresolved_after_full_document_search"}
@@ -1450,6 +1697,15 @@ def _normalise_final_evidence_states(rule: dict[str, Any], corpus: Mapping[str, 
     has_dimension = any(bool(scope_map.get(key)) for key in ("loan_types", "occupancy_types", "transaction_types"))
     derivation = rule.get("scope_derivation")
     derivation_map = derivation if isinstance(derivation, Mapping) else {}
+    complete_scope_review = (
+        derivation_map.get("reviewed_chunk_count") == expected_count
+        and bool(expected_digest)
+        and derivation_map.get("corpus_sha256") == expected_digest
+    )
+    if rule.get("scope_basis") == "genuinely_unscoped" and complete_scope_review:
+        derivation_map = dict(derivation_map)
+        derivation_map["status"] = "genuinely_unscoped"
+        rule["scope_derivation"] = derivation_map
     scope_evidence = derivation_map.get("evidence") or derivation_map.get("source_evidence")
     if (not isinstance(scope_evidence, list) or not scope_evidence) and isinstance(rule.get("field_evidence"), Mapping):
         scope_evidence = rule["field_evidence"].get("scope_basis")
@@ -2133,6 +2389,7 @@ class ExecutableReadinessCompleter:
                     # on resumed runs and stale review metadata is not carried
                     # into the final readiness report.
                     cached_rule = _normalise_rule_contract(deepcopy(self._checkpoint[cache_key]))
+                    _verify_completion_evidence(cached_rule, corpus)
                     _sync_completion_field_evidence(cached_rule)
                     _normalise_field_evidence_references(cached_rule)
                     _normalise_final_evidence_states(cached_rule, corpus)
@@ -2181,6 +2438,7 @@ class ExecutableReadinessCompleter:
             rules = []
             for rule in existing_rules:
                 normalized = _normalise_rule_contract(rule)
+                _verify_completion_evidence(normalized, corpus)
                 _sync_completion_field_evidence(normalized)
                 _normalise_field_evidence_references(normalized)
                 _normalise_final_evidence_states(normalized, corpus)
@@ -2507,11 +2765,18 @@ class ExecutableReadinessCompleter:
             "scope_derivation": {"newly_populated_from_source_evidence": sum(bool(rule.get("applicability_scope", {}).get(key)) and not (before_scope.get(str(rule.get("rule_id"))) or {}).get(key) for rule in reviewed_rules for key in ("loan_types", "occupancy_types", "transaction_types")), "confirmed_explicitly_universal_in_source": scope_bases.count("explicitly_universal_in_source"), "confirmed_genuinely_unscoped": scope_bases.count("genuinely_unscoped"), "examples": examples},
             "rules_ready": sum(not rule.get("requires_review") for rule in reviewed_rules),
             "rules_requiring_review": len(unresolved),
+            "review_required_rate_percent": round(len(unresolved) / max(1, len(reviewed_rules)) * 100, 2),
             "review_routes": {
                 route: sum((rule.get("review_route") or {}).get("route") == route for rule in reviewed_rules)
                 for route in ("none", "machine_repair", "case_management", "human_review")
             },
             "human_review_required_rules": sum(bool((rule.get("review_route") or {}).get("human_review_required")) for rule in reviewed_rules),
+            "human_review_rate_percent": round(
+                sum(bool((rule.get("review_route") or {}).get("human_review_required")) for rule in reviewed_rules)
+                / max(1, len(reviewed_rules)) * 100,
+                2,
+            ),
+            "rules_with_preserved_exception_effects": sum(bool(rule.get("exception_effects")) for rule in reviewed_rules),
         }
         return final_graph, report
 

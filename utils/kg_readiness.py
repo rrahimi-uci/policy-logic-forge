@@ -356,6 +356,12 @@ def final_rule_issues(rule: Mapping[str, Any], entity_keys: Iterable[str]) -> li
         })
     if rule.get("exception_basis") == "explicit_in_source" and (not isinstance(rule.get("exceptions"), list) or not rule.get("exceptions") or not exception_evidence):
         issues.append({"requirement": "exceptions", "reason": "explicit exception lacks structured predicates or direct source evidence"})
+    exception_effects = rule.get("exception_effects")
+    if isinstance(exception_effects, list) and exception_effects:
+        issues.append({
+            "requirement": "execution",
+            "reason": "alternate exception outcomes are preserved but require conditional-branch lowering before execution",
+        })
     scope_evidence = _best_evidence(
         derivation_map.get("evidence") or derivation_map.get("source_evidence"),
         field_evidence_map.get("scope_basis"),

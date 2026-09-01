@@ -301,6 +301,17 @@ class ExtractionPipeline:
         except OSError as exc:
             self.reporter.error(f"Could not write run_metrics.json: {exc}")
 
+    def _final_status(self, *, completed: bool) -> str:
+        """Summarize review as review, never as either pass or failure."""
+        if not self._reporting_enabled():
+            return PASS if completed else FAIL
+        statuses = {stage.status for stage in self.metrics.stages.values()}
+        if FAIL in statuses:
+            return FAIL
+        if REVIEW in statuses:
+            return REVIEW
+        return PASS if completed else FAIL
+
     def _stage_position(self, agent_id: str) -> tuple[int, int]:
         planned = self._planned_stage_ids or [agent_id]
         try:
@@ -456,13 +467,30 @@ class ExtractionPipeline:
         ) and bool(report.get("rules_requiring_review"))
 
     def _readiness_requests_remediation(self) -> bool:
-        """Return whether Agent 07 produced actionable rules for Agent 08."""
+        """Return whether Agent 07 produced findings Agent 08 may repair.
+
+        Review items with passing invariants are the normal remediation path.
+        A schema-only invariant failure may also be repairable after contract
+        normalization. Corpus, naming, or referential-integrity failures are
+        not rule-evidence problems and must never be waved through merely
+        because the same report also contains review-required rules.
+        """
         report_path = self.optimized_dir / "kg_readiness_report.json"
         try:
             report = json.loads(report_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             return False
-        return bool(report.get("rules_requiring_review"))
+        if not report.get("rules_requiring_review"):
+            return False
+        invariants = report.get("invariants")
+        if not isinstance(invariants, dict) or not invariants:
+            return False
+        failed = {
+            str(name)
+            for name, result in invariants.items()
+            if not isinstance(result, dict) or result.get("pass") is not True
+        }
+        return not failed or failed <= {"schema_consistency"}
 
     def _review_only_grounding(self) -> bool:
         """Return true for a complete, fail-closed grounding review.
@@ -491,7 +519,7 @@ class ExtractionPipeline:
     def run_all(self) -> bool:
         self._begin_run(list(AGENT_IDS), f"full pipeline ({len(AGENT_IDS)} stages)")
         ok = self._run_all_stages()
-        self._end_run(overall_status=PASS if ok else FAIL)
+        self._end_run(overall_status=self._final_status(completed=ok))
         return ok
 
     def _run_all_stages(self) -> bool:
@@ -510,10 +538,16 @@ class ExtractionPipeline:
 
         if not self.skip_optimize:
             if not self.run_agent_07():
-                # agent_07 exits nonzero either on a hard invariant failure
-                # (unrecoverable here) or because rules need agent_08 remediation.
-                if not self._readiness_requests_remediation():
-                    self._operator_message("\n🛑 STOPPED: agent_07 invariant failure (not remediable by agent_08).", "error")
+                # Exit 3 is Agent 07's review/remediation signal. Exit 2 is
+                # also remediable, but only when the freshly written report
+                # proves schema_consistency is the sole failed invariant.
+                # Runtime/configuration errors (exit 1) and non-schema
+                # invariant failures must never use a possibly stale report.
+                if (
+                    self._last_exit_codes.get("agent_07") not in {2, 3}
+                    or not self._readiness_requests_remediation()
+                ):
+                    self._operator_message("\n🛑 STOPPED: agent_07 failed without a valid remediation signal; agent_08 was not started.", "error")
                     return False
                 self._operator_message("\n🩹 agent_07 requested focused remediation → running agent_08")
                 if not self.run_agent_08():
@@ -574,7 +608,21 @@ class ExtractionPipeline:
 
         if selection_label is None:
             selection_label = ", ".join(stage_ids)
-        self._begin_run(stage_ids, selection_label)
+        planned_stage_ids = list(stage_ids)
+        if "agent_08" in stage_ids:
+            remediation_index = stage_ids.index("agent_08")
+            has_downstream = any(
+                selected in stage_ids[remediation_index + 1:]
+                for selected in ("agent_09", "agent_10", "agent_11", "agent_12")
+            )
+            if has_downstream and "agent_07" not in stage_ids[:remediation_index]:
+                # A resume beginning at Agent 08 automatically rechecks Agent
+                # 07 before grounding. Put that real execution in the plan up
+                # front so its row and selected position are not appended as
+                # an unexplained "01/N" stage midway through the run.
+                planned_stage_ids.insert(remediation_index + 1, "agent_07")
+                selection_label += " + automatic agent_07 recheck"
+        self._begin_run(planned_stage_ids, selection_label)
         overall_ok = True
         readiness_pending = False
         for index, agent_id in enumerate(stage_ids):
@@ -582,9 +630,19 @@ class ExtractionPipeline:
 
             if agent_id == "agent_07" and not ok:
                 has_remediator = "agent_08" in stage_ids[index + 1:]
-                if has_remediator and self._readiness_requests_remediation():
+                if (
+                    has_remediator
+                    and self._last_exit_codes.get("agent_07") in {2, 3}
+                    and self._readiness_requests_remediation()
+                ):
                     readiness_pending = True
                     self._operator_message("\n🩹 agent_07 requested focused remediation → continuing to selected agent_08")
+                    continue
+                if (
+                    self._last_exit_codes.get("agent_07") == 3
+                    and self._review_only_readiness()
+                ):
+                    self._operator_message("🔎 readiness is structurally valid and remains review-gated", "warning")
                     continue
 
             if agent_id == "agent_08":
@@ -629,7 +687,7 @@ class ExtractionPipeline:
                 overall_ok = False
                 if not keep_going:
                     break
-        self._end_run(overall_status=PASS if overall_ok else FAIL)
+        self._end_run(overall_status=self._final_status(completed=overall_ok))
         return overall_ok
 
     def run_step(self, step: str) -> bool:

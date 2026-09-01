@@ -176,11 +176,27 @@ class ReadinessRemediator:
 
     @staticmethod
     def _failed_requirements(rule: Mapping[str, Any]) -> set[str]:
-        return {
-            str(item.get("requirement"))
-            for item in (rule.get("readiness") or {}).get("failed_requirements", [])
-            if isinstance(item, Mapping)
-        }
+        routed: set[str] = set()
+        for item in (rule.get("readiness") or {}).get("failed_requirements", []):
+            if not isinstance(item, Mapping):
+                continue
+            requirement = str(item.get("requirement", "")).strip()
+            code = str(item.get("code", "")).strip()
+            if requirement:
+                routed.add(requirement)
+            if code:
+                routed.add(f"code:{code}")
+                # Contract validators use ``code`` rather than ``requirement``.
+                # Route the source-sensitive families to the same repair path
+                # as their final-readiness counterparts instead of silently
+                # omitting them from every Agent 08 request.
+                if "exception" in code:
+                    routed.add("exceptions")
+                elif "scope" in code:
+                    routed.add("scope")
+                else:
+                    routed.add("contract")
+        return routed
 
     @staticmethod
     def _apply_rule_patch(rule: dict[str, Any], patch: Mapping[str, Any], corpus: Mapping[str, Any]) -> dict[str, Any]:
@@ -235,6 +251,11 @@ class ReadinessRemediator:
                 # stage output.
                 "rule": _compact_readiness_rule(rule),
                 "failed_requirements": sorted(failures),
+                "failed_findings": [
+                    dict(item)
+                    for item in (rule.get("readiness") or {}).get("failed_requirements", [])
+                    if isinstance(item, Mapping)
+                ],
                 "evidence_packet": completer._evidence_packet(rule, corpus),
             })
         packets.sort(key=lambda item: (

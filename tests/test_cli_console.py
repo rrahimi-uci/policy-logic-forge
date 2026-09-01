@@ -103,6 +103,18 @@ def test_json_reporter_error_event():
     assert event == {"event": "error", "message": "source directory not found"}
 
 
+def test_text_reporter_labels_review_as_review_not_failure():
+    run = _sample_run()
+    run.stages["agent_01"].finish(status=REVIEW, exit_code=3)
+    run.finish(overall_status=REVIEW)
+    output = io.StringIO()
+
+    TextReporter(stream=output).run_end(run)
+
+    assert "Review summary" in output.getvalue()
+    assert "REVIEW" in output.getvalue()
+
+
 def test_json_reporter_stdout_contains_only_valid_json_lines():
     """Automation consumers must be able to parse every stdout line as JSON."""
 
