@@ -29,6 +29,7 @@ def test_human_status_and_stage_icons_cover_monitoring_states():
     assert status_icon(FAIL) == "❌"
     assert status_icon("unknown") == "❔"
     assert stage_icon("agent_01") == "📚"
+    assert stage_icon("agent_02") == "🧩"
     assert stage_icon("agent_12") == "📊"
     assert stage_icon("unknown") == "🔹"
 

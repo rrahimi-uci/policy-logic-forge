@@ -61,7 +61,7 @@ _STATUS_STYLE: dict[str, tuple[str, str]] = {
 # The raw stage label remains unchanged in JSON events and persisted metrics.
 _STAGE_ICON: dict[str, str] = {
     "agent_01": "📚",  # organize source documents
-    "agent_02": "🔎",  # extract entities
+    "agent_02": "🧩",  # extract entities
     "agent_03": "📐",  # extract rules
     "agent_04": "🧪",  # validate rules
     "agent_05": "🔗",  # merge graph
