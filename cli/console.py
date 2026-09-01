@@ -181,7 +181,11 @@ class TextReporter:
 
     def stage_start(self, stage: StageMetrics, index: int, total: int) -> None:
         self.console.rule(
-            f"[bold yellow]🔄 Stage {index:02d}/{total:02d} · {_display_stage_label(stage)}[/bold yellow]",
+            # ``index/total`` is the position in the selected subset (for
+            # example, stage 07 is selection 01/01 when resumed alone).  The
+            # canonical label is deliberately rendered first so an operator
+            # never mistakes a resume position for the pipeline stage number.
+            f"[bold yellow]🔄 {_display_stage_label(stage)} · selected {index:02d}/{total:02d}[/bold yellow]",
             style="yellow",
         )
 

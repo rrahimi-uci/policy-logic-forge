@@ -58,6 +58,7 @@ def test_text_reporter_full_lifecycle_does_not_raise():
     assert "🚀 run started" in output
     assert "🔄" in output
     assert "📚 Stage 01/12" in output
+    assert "selected 01/02" in output
     assert "✅" in output
     assert "hello from the subprocess" in output
     assert "Run summary" in output
