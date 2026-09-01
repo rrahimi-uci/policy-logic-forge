@@ -78,7 +78,7 @@ def _predicate_test(predicate: Mapping[str, Any]) -> str | None:
     if operator == "in" and isinstance(value, list):
         return "[" + ", ".join(_feel(item, value_type) for item in value) + "]"
     if operator == "not_in" and isinstance(value, list):
-        return "not(" + ", ".join(_feel(item, value_type) for item in value) + ")"
+        return "not([" + ", ".join(_feel(item, value_type) for item in value) + "])"
     if operator == "contains":
         return f'contains(?, {_feel(value)})'
     return None

@@ -3,6 +3,7 @@ from pathlib import Path
 
 from agents.agent_12_business_knowledge_report import (
     _bar_chart_svg,
+    _automation_readiness,
     _bpmn_flow_html,
     _cmmn_plan_html,
     _condition_expression,
@@ -19,13 +20,8 @@ from agents.agent_12_business_knowledge_report import (
     _parse_bpmn_processes,
     _parse_cmmn_cases,
     _parse_dmn_decisions,
-    _review_route_meta,
-    _review_severity,
     _rule_connectivity,
     _rule_model_diagrams_html,
-    _route_badge_html,
-    _route_card_html,
-    _severity_badge_html,
     _traceability_html,
     generate,
     main,
@@ -108,20 +104,17 @@ def test_rule_connectivity_computes_true_degree_not_bfs_depth():
     assert connectivity["isolated_rule_ids"] == ["R-isolated"]
 
 
-def test_review_severity_prioritizes_case_management_and_contradicted_grounding():
-    assert _review_severity({"requires_review": False}) == "none"
-    assert _review_severity({"requires_review": True, "review_route": {"route": "case_management"}}) == "critical"
-    assert _review_severity({"requires_review": True, "review_route": {"route": "human_review"}, "grounding": {"status": "contradicted"}}) == "critical"
-    assert _review_severity({"requires_review": True, "review_route": {"route": "human_review"}}) == "high"
-    assert _review_severity({"requires_review": True, "review_route": {"route": "unclassified"}}) == "high"
-    assert _review_severity({"requires_review": True, "review_route": {"route": "machine_repair"}}) == "medium"
-    assert _review_severity({"requires_review": True, "review_route": {"route": "none"}}) == "low"
+def test_automation_readiness_is_policy_neutral_and_ignores_review_flags():
+    rule = _graph()["business_rules"][0]
+    first = _automation_readiness(rule)
+    rule["requires_review"] = False
+    rule["review_route"] = {"route": "none"}
+    second = _automation_readiness(rule)
 
-
-def test_severity_badge_html_renders_a_labeled_pill():
-    html = _severity_badge_html("critical")
-    assert 'class="severity-badge severity-critical"' in html
-    assert "Critical" in html
+    assert first == second
+    assert 0 <= first["score"] <= 100
+    assert sum(first["weights"].values()) == 100
+    assert set(first["components"]) == set(first["weights"])
 
 
 def test_model_badges_html_marks_present_and_absent_kinds():
@@ -212,11 +205,10 @@ def test_agent_12_generates_self_contained_report_with_traceability(tmp_path: Pa
     assert manifest["rule_local_decision_variable_count"] == 2
     assert manifest["reusable_decision_variable_count"] == 0
     assert manifest["concept_coverage_rate"] == 100.0
-    assert manifest["review_required_rate"] == 100.0
-    assert manifest["human_review_rate"] == 100.0
-    assert manifest["quality_hold_count"] == 1
-    assert manifest["quality_hold_rate"] == 100.0
-    assert manifest["review_route_counts"] == {"human_review": 1}
+    assert 0 <= manifest["automation_readiness_score_average"] <= 100
+    assert manifest["automation_readiness_score_minimum"] == manifest["automation_readiness_score_average"]
+    assert manifest["automation_readiness_score_maximum"] == manifest["automation_readiness_score_average"]
+    assert sum(manifest["automation_readiness_score_weights"].values()) == 100
     assert manifest["fact_type_count"] == 1
     assert manifest["fact_type_grounding_rate"] == 0.0
     assert manifest["concept_evidence_coverage_rate"] == 100.0
@@ -238,14 +230,14 @@ def test_agent_12_generates_self_contained_report_with_traceability(tmp_path: Pa
     assert manifest["model_type_counts"] == {"DMN": 1, "BPMN": 1, "CMMN": 1}
     assert manifest["degree_buckets"]["1–2"] == 1  # R-1's self-referencing edge
     assert manifest["isolated_rule_count"] == 0
-    assert "rule_summary" in manifest and manifest["rule_summary"]["R-1"]["severity"] == "high"
+    assert "rule_summary" in manifest and 0 <= manifest["rule_summary"]["R-1"]["automation_readiness_score"] <= 100
     assert manifest["dependency_edges"]
     assert "SBVR vocabulary" in report
     assert "Vocabulary workbench" in report
     assert "Decision variables are not SBVR concepts" in report
     assert "Executable symbol registry" in report
-    assert "Core-rule holds" in report
-    assert "Enrichment holds" in report
+    assert "Core support" in report
+    assert "Context support" in report
     assert "Quarantined claims" in report
     assert "Concept type mix" in report
     assert "Most connected concepts" in report
@@ -257,7 +249,7 @@ def test_agent_12_generates_self_contained_report_with_traceability(tmp_path: Pa
     assert "Raw structured contract" in report
     assert "75.0%" in report
     assert "score origin not recorded" in report
-    assert "Grounding not certified" in report
+    assert "Score factors" in report
     assert "1 contradiction · 2 evidence gaps" in report
     assert "4/7 claims supported" in report
     assert 'data-kind="actor_role"' in report
@@ -265,11 +257,12 @@ def test_agent_12_generates_self_contained_report_with_traceability(tmp_path: Pa
     assert 'href="#fact-CUSTOMER_OWNS_ACCOUNT"' in report
     assert "Customer consent" in report
     assert "Customer consent is required before processing." in report
-    # Models tab is gone; the review dashboard is unified (no more split
-    # human-review-queue / quality-holds-outside-queue tables).
+    # Models stay inline and the policy-neutral score explorer covers all rules.
     assert 'data-tab="models"' not in report
-    assert 'id="review-table"' in report
-    assert 'class="severity-badge severity-high"' in report
+    assert 'id="score-table"' in report
+    assert 'data-tab="scores"' in report
+    assert "no acceptance threshold" in report.lower()
+    assert "quality hold" not in report.lower()
     assert "Directed rule relationship graph" in report
     assert "Dependency topology" in report
     assert "dependency-graph-svg" in report
@@ -286,7 +279,7 @@ def test_agent_12_generates_self_contained_report_with_traceability(tmp_path: Pa
     assert json.loads((tmp_path / "report" / "business_knowledge_report_manifest.json").read_text())["validation"] == "pass"
 
 
-def test_agent_12_review_dashboard_is_unified_and_severity_triaged(tmp_path: Path):
+def test_agent_12_score_explorer_includes_every_rule_without_policy_labels(tmp_path: Path):
     graph = _graph()
     graph["business_rules"].append({
         "rule_id": "R-2", "rule_name": "Evidence follow-up", "rule_type": "documentation",
@@ -299,18 +292,13 @@ def test_agent_12_review_dashboard_is_unified_and_severity_triaged(tmp_path: Pat
     manifest = generate(graph_file, None, tmp_path / "models", tmp_path / "report")
     report = (tmp_path / "report" / "business_knowledge_report.html").read_text(encoding="utf-8")
 
-    assert manifest["review_required_count"] == 2
-    assert manifest["human_review_count"] == 1
-    assert manifest["nonhuman_quality_hold_count"] == 1
-    assert manifest["review_route_counts"] == {"case_management": 1, "human_review": 1}
-    assert manifest["rule_summary"]["R-2"]["severity"] == "critical"  # case_management route
-    assert manifest["rule_summary"]["R-1"]["severity"] == "high"  # plain human_review route
-    assert "case management" in report
-    assert 'id="rule-route"' in report
-    assert 'data-route="case_management"' in report
-    assert 'data-severity="critical"' in report
-    assert 'data-severity="high"' in report
-    assert 'id="review-severity"' in report  # the unified dashboard's severity filter
+    assert set(manifest["rule_summary"]) == {"R-1", "R-2"}
+    assert all("automation_readiness_score" in item for item in manifest["rule_summary"].values())
+    assert report.count('class="score-row"') == 2
+    assert 'id="score-min"' in report
+    assert 'id="score-max"' in report
+    assert "case management" not in report
+    assert "quality hold" not in report.lower()
 
 
 def test_outcome_kind_classifies_booleans_numbers_lists_and_text():
@@ -385,52 +373,6 @@ def test_formal_logic_html_falls_back_when_no_outcomes_declared():
     html = _formal_logic_html({"condition_predicates": [], "outcomes": [], "exceptions": [], "variables": []})
     assert "evaluate outcome" in html
     assert "None declared" in html  # empty Outcomes panel
-
-
-def test_review_route_meta_covers_every_known_semantic_routing_value():
-    """utils/semantic_routing.py::classify_review_route only ever emits these
-    four routes, plus agent_12's own 'unclassified' fallback -- every one
-    must have a real icon/label/description, not the generic unknown-route
-    fallback."""
-
-    for route in ("none", "human_review", "machine_repair", "case_management", "unclassified"):
-        icon, label, description = _review_route_meta(route)
-        assert icon and label and description
-        assert label != _review_route_meta("totally-unknown-route")[1]
-
-
-def test_review_route_meta_falls_back_gracefully_for_an_unrecognized_route():
-    icon, label, description = _review_route_meta("some_future_route")
-    assert icon == "❔"
-    assert label == "Some future route"  # humanized, not a raw enum dump
-    assert description
-
-
-def test_route_badge_preserves_lowercase_route_text_for_filter_compatibility():
-    """The compact toolbar filter/data-route attribute rely on the raw,
-    lowercase, underscore-free route text still being present verbatim."""
-
-    html = _route_badge_html("case_management")
-    assert "case management" in html  # raw text preserved
-    assert "Case management" in html  # human label added
-    assert 'class="status status-case_management route-badge"' in html
-
-
-def test_route_card_shows_icon_label_description_and_hold_state():
-    html = _route_card_html("human_review", has_hold=True, reason_items=["Evidence contradicted the source"])
-    assert 'class="route-card route-human_review"' in html
-    assert "Human review" in html
-    assert "judgment call" in html  # the plain-language description
-    assert '<span class="route-hold route-hold-yes">Quality hold</span>' in html
-    assert "Evidence contradicted the source" in html
-    assert "Why (1)" in html
-
-
-def test_route_card_shows_no_hold_state_and_default_reason_for_a_clean_route():
-    html = _route_card_html("none", has_hold=False, reason_items=[])
-    assert '<span class="route-hold route-hold-no">No quality hold</span>' in html
-    assert "No review reason recorded." in html
-    assert "Why (0)" in html
 
 
 def _model_source_graph():

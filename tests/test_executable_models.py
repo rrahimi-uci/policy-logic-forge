@@ -1,7 +1,7 @@
 import xml.etree.ElementTree as ET
 
 from utils.executable_models import (
-    BPMN_NS, CTC_NS, DMN_NS, build_dags_bpmn, build_graph_dmn,
+    BPMN_NS, CTC_NS, DMN_NS, _predicate_test, build_dags_bpmn, build_graph_dmn,
     validate_executable_models,
 )
 
@@ -35,6 +35,10 @@ def _explicit_workflow():
         ],
         "evidence": [{"chunk_path": "policy.txt", "section_id": "s1", "source_text": "After receipt, review the application and apply the eligibility decision."}],
     }
+
+
+def test_not_in_predicate_uses_a_single_feel_list_argument():
+    assert _predicate_test({"variable": "state", "operator": "not_in", "value": ["CA", "NY"]}) == 'not(["CA", "NY"])'
 
 
 def test_graph_dmn_is_valid_and_unsupported_predicates_fail_closed():

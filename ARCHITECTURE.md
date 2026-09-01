@@ -425,6 +425,18 @@ Its findings are never read by any other agent or by the orchestrator's control 
 
 A per-rule gate, `bpmn_eligibility`, decides DMN/CMMN-only vs. also-BPMN: it requires `workflow_semantics.kind == "prescriptive_process"`, `basis == "explicit_in_source"`, a non-empty trigger event and actor role, and direct evidence — "a party plus an outcome is not a process." Rules failing this stay visible in DMN/CMMN, with the omission reason recorded in `bpmn_omissions`.
 
+#### `agent_12` — Business Knowledge Report
+
+Agent 12 is a presentation-only stage. It renders every rule with a neutral
+0–100 automation-readiness score composed of core grounding (40%), contextual
+grounding (20%), contract integrity (15%), evidence integrity (10%),
+executability (10%), and relationship support (5%). The score does not consume
+`requires_review` or `review_route`, does not claim to be an accuracy
+probability, and has no built-in acceptance threshold. Those operational
+decisions belong to the deployment environment and domain policy. The source
+graph retains the pipeline's internal findings and routing metadata for audit
+and downstream model generation.
+
 ### 2.4 Orchestration summary
 
 The full run order and gating logic, tying every stage above together:
@@ -434,7 +446,7 @@ The full run order and gating logic, tying every stage above together:
 3. `agent_05` → `agent_06` — hard gates (unless `--skip-optimize`, which skips `agent_06`–`agent_08` entirely).
 4. `agent_07` — exit 3 with a valid readiness report enters `agent_08`; exit 2 may also enter only for a schema-only invariant failure. Both paths are followed by an `agent_07` recheck. Exit 1 and non-schema invariant failures stop immediately and cannot be misrouted by stale artifacts. A repeat exit-3 that is still fully invariant-passing is tolerated and the pipeline continues with rules flagged `requires_review`.
 5. `agent_09` — exit-3 tolerated only if the report shows complete, fail-closed coverage; otherwise hard stop.
-6. `agent_10` → `agent_11` — hard gates.
+6. `agent_10` → `agent_11` → `agent_12` — hard gates.
 
 A "review-required" state is therefore a legitimate terminal state throughout stages 07–09 — explicitly distinguished from a process/integrity failure via exit code 3 vs. 2 — and flows through to the final DMN/BPMN/CMMN artifacts with `requires_review`/`review_route` flags intact rather than blocking generation.
 

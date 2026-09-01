@@ -265,6 +265,20 @@ def test_rule_with_genuinely_invalid_scope_basis_is_still_rejected():
     assert any(issue.code == "invalid_scope_basis" for issue in issues)
 
 
+def test_exception_effect_numeric_and_time_values_are_type_checked():
+    rule = valid_rule()
+    rule["variables"].append({"name": "cutoff_time", "type": "time", "role": "output"})
+    rule["exception_effects"] = [
+        {"variable": "maximum_number_of_pools", "operator": "=", "value": "three", "value_type": "number"},
+        {"variable": "cutoff_time", "operator": "=", "value": "9pm", "value_type": "time"},
+    ]
+
+    codes = {issue.code for issue in validate_rule_v2(rule, {"SELLER_SERVICER", "FANNIE_MAE"})}
+
+    assert "invalid_exception_effect_number" in codes
+    assert "invalid_exception_effect_time" in codes
+
+
 # ─────────────────────────────────────────────────────────────────────────
 # scope_basis: "explicitly_none_in_source" — the same cross-pollination from
 # exception_basis's own "explicitly_none_in_source" value, this time meaning
