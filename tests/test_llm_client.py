@@ -294,8 +294,8 @@ class TestAnthropicViaLitellm:
         assert kwargs["max_tokens"] >= 32768
         assert "max_completion_tokens" not in kwargs
 
-    @allure.title("A non-reasoning-effort Claude call still honours the caller's plain max_tokens")
-    def test_claude_call_without_reasoning_effort_uses_plain_max_tokens(self):
+    @allure.title("A Claude call without reasoning_effort still receives an inflated reasoning budget")
+    def test_claude_call_without_reasoning_effort_gets_inflated_max_tokens(self):
         client = create_llm_client(api_key="sk-ant-test", model="claude-opus-5")
         with patch("litellm.completion", return_value=self._litellm_response()) as mock_completion:
             client.chat_completion([{"role": "user", "content": "hi"}], max_tokens=100)
