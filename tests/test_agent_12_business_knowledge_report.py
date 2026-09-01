@@ -20,6 +20,7 @@ from agents.agent_12_business_knowledge_report import (
     _parse_bpmn_processes,
     _parse_cmmn_cases,
     _parse_dmn_decisions,
+    _percentile,
     _rule_connectivity,
     _rule_model_diagrams_html,
     _traceability_html,
@@ -206,6 +207,8 @@ def test_agent_12_generates_self_contained_report_with_traceability(tmp_path: Pa
     assert manifest["reusable_decision_variable_count"] == 0
     assert manifest["concept_coverage_rate"] == 100.0
     assert 0 <= manifest["automation_readiness_score_average"] <= 100
+    assert manifest["automation_readiness_score_median"] == manifest["automation_readiness_score_average"]
+    assert manifest["automation_readiness_score_p10"] == manifest["automation_readiness_score_average"]
     assert manifest["automation_readiness_score_minimum"] == manifest["automation_readiness_score_average"]
     assert manifest["automation_readiness_score_maximum"] == manifest["automation_readiness_score_average"]
     assert sum(manifest["automation_readiness_score_weights"].values()) == 100
@@ -250,6 +253,24 @@ def test_agent_12_generates_self_contained_report_with_traceability(tmp_path: Pa
     assert "Executable symbol registry" in report
     for removed_card in ("Quarantined claims", "Core support", "Context support", "Source documents", "Dependencies"):
         assert f'<div class="metric-label">{removed_card}</div>' not in report
+    metric_labels = (
+        "Total business rules",
+        "Average and median readiness score",
+        "10th-percentile readiness score",
+        "Grounding claim support",
+        "Contract integrity",
+        "Relationship support",
+        "Rules below the user-selected threshold",
+        "Contradicted and insufficient-evidence claims",
+    )
+    assert report.count('<div class="metric-card') == len(metric_labels)
+    for label in metric_labels:
+        assert f'<div class="metric-label">{label}</div>' in report
+    for removed_card in ("Score range", "SBVR concepts", "Decision variables", "Source pointers", "Grounding claims"):
+        assert f'<div class="metric-label">{removed_card}</div>' not in report
+    assert 'id="readiness-threshold"' in report
+    assert "none is assumed" in report
+    assert "updateThresholdMetric" in report
     assert "Concept type mix" in report
     assert "Most connected concepts" in report
     assert 'id="concept-search"' in report
@@ -311,6 +332,15 @@ def test_agent_12_rule_explorer_scores_every_rule_without_policy_labels(tmp_path
     assert 'data-tab="scores"' not in report
     assert "case management" not in report
     assert "quality hold" not in report.lower()
+
+
+def test_percentile_uses_linear_interpolation_and_handles_boundaries():
+    values = [0, 10, 20, 30, 40]
+    assert _percentile(values, 0.5) == 20.0
+    assert _percentile(values, 0.1) == 4.0
+    assert _percentile(values, -1) == 0.0
+    assert _percentile(values, 2) == 40.0
+    assert _percentile([], 0.5) == 0.0
 
 
 def test_outcome_kind_classifies_booleans_numbers_lists_and_text():
