@@ -45,6 +45,31 @@ from utils.prompt_manager import get_prompt_manager
 from utils.llm_client import create_llm_client
 from utils.config import get_config
 
+
+def _parse_json_response(content: str) -> Any:
+    """Parse a chat_completion response's content as JSON defensively.
+
+    response_format={"type": "json_object"} is requested for every AI-
+    reasoning call in this agent, but relying on bare json.loads() alone
+    leaves no recourse if a provider ever wraps the payload in a markdown
+    code fence or emits one minor structural defect (a trailing comma, an
+    unterminated delimiter) despite that request -- exactly the defensive
+    strip-fence + json_repair fallback already used by every other agent
+    in this pipeline (see e.g. agents/agent_07_executable_readiness.py's
+    OpenAIEvidenceResolver._parse), applied here for the same reason.
+    """
+    text = content.strip()
+    if text.startswith("```"):
+        text = text.split("\n", 1)[1].rsplit("```", 1)[0]
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError as original_error:
+        try:
+            from json_repair import repair_json
+            return repair_json(text, return_objects=True, strict=True)
+        except Exception:
+            raise original_error
+
 # Optional: langchain text splitters for Markdown
 try:
     from langchain_text_splitters import MarkdownHeaderTextSplitter, RecursiveCharacterTextSplitter
@@ -1104,7 +1129,7 @@ If no TOC is found, return {{"has_toc": false, "toc_entries": []}}
                 reasoning_effort=self.reasoning_effort
             )
             
-            result = json.loads(response.choices[0].message.content)
+            result = _parse_json_response(response.choices[0].message.content)
             
             if result.get('has_toc') and result.get('toc_entries'):
                 toc_entries = [
@@ -1406,7 +1431,7 @@ If no TOC is found, return {{"has_toc": false, "toc_entries": []}}
                 reasoning_effort=self.reasoning_effort
             )
             
-            result = json.loads(response.choices[0].message.content)
+            result = _parse_json_response(response.choices[0].message.content)
             sections = result.get('sections', [])
             
             if not sections:

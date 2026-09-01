@@ -835,18 +835,24 @@ $relationships
 Return ONLY one valid JSON object, with no Markdown or explanation. Return at
 {max_entities} entity types and {max_relationships} relationships. Keep every definition
 under 20 words. Each entity needs exactly five short attribute names, one
-excerpt-grounded example, and one short business-rule summary. Each relationship
-needs source_entity, target_entity, definition, cardinality, one example, and
-one business-rule summary.
+excerpt-grounded example, one short business-rule summary, and at least one
+concept-specific source_evidence record. Each relationship needs source_entity,
+target_entity, definition, cardinality, one example, one business-rule summary,
+and at least one relationship-specific source_evidence record. Evidence must
+quote the exact words that establish the concept or relationship; a nearby rule
+citation is not concept evidence. If an item has no exact concept-specific
+evidence in the supplied excerpts, omit it.
 
 Required JSON shape:
 {{
   "entity_types": {{
     "ENTITY_NAME": {{
       "definition": "...",
+      "concept_kind": "actor_role|business_object|evidence_object|event|decision_variable|process",
       "attributes": ["...", "...", "...", "...", "..."],
       "examples": ["..."],
-      "business_rules": ["..."]
+      "business_rules": ["..."],
+      "source_evidence": [{{"chunk_path": "exact File path", "source_text": "verbatim source quote"}}]
     }}
   }},
   "relationships": {{
@@ -856,10 +862,16 @@ Required JSON shape:
       "definition": "...",
       "cardinality": "one-to-one|one-to-many|many-to-many",
       "examples": ["..."],
-      "business_rules": ["..."]
+      "business_rules": ["..."],
+      "source_evidence": [{{"chunk_path": "exact File path", "source_text": "verbatim source quote"}}]
     }}
   }}
 }}
+
+`concept_kind` is semantic typing, not a topic label. People and organizations
+that can bear an obligation are `actor_role`; documents are `evidence_object`;
+activities are `process`; triggers are `event`; values used by decisions are
+`decision_variable`; other governed things are `business_object`.
 
 EXCERPTS:
 {sample_content}
@@ -884,10 +896,12 @@ Return ONLY one valid JSON object, no Markdown:
     "ENTITY_NAME": {{
       "definition": "Clear business definition in $title context",
       "description": "Longer explanation of the role this entity plays",
+      "concept_kind": "actor_role|business_object|evidence_object|event|decision_variable|process",
       "attributes": ["attribute_one", "attribute_two", "attribute_three"],
       "examples": ["excerpt-grounded example"],
       "business_rules": ["High-level summary of a rule involving this entity"],
-      "business_rule_summaries": ["Alternate summary list for downstream compatibility"]
+      "business_rule_summaries": ["Alternate summary list for downstream compatibility"],
+      "source_evidence": [{{"chunk_path": "exact File path", "source_text": "verbatim source quote"}}]
     }}
   }},
   "relationships": {{
@@ -900,7 +914,8 @@ Return ONLY one valid JSON object, no Markdown:
       "description": "Directional semantics of the relationship",
       "cardinality": "one-to-one|one-to-many|many-to-many",
       "examples": ["excerpt-grounded example"],
-      "business_rules": ["High-level summary of a rule governing this relationship"]
+      "business_rules": ["High-level summary of a rule governing this relationship"],
+      "source_evidence": [{{"chunk_path": "exact File path", "source_text": "verbatim source quote"}}]
     }}
   }},
   "extraction_metadata": {{
@@ -911,7 +926,10 @@ Return ONLY one valid JSON object, no Markdown:
 }}
 
 Ground every entity and relationship in the excerpts. Do not invent entities the
-text does not support.
+text does not support. Every entity and relationship needs at least one
+source_evidence record quoting the exact words that establish it in the
+excerpts above; a nearby rule citation is not concept evidence. If an item has
+no exact concept-specific evidence in the supplied excerpts, omit it.
 
 EXCERPTS:
 {sample_content}
