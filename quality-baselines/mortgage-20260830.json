@@ -1,0 +1,38 @@
+{
+  "schema_version": "quality-baseline/1",
+  "baseline_id": "mortgage-20260830",
+  "artifact_locator": "pipeline-output/mortgage-full-2026-08-30/agent_06-07-08-09-optimized/kg_grounding_report.json",
+  "input_hashes": {
+    "corpus_sha256": "d978d8fe9aab1a613d982f7fa2847d35c8cd551683987cb17e43d64a34adec44",
+    "certified_graph_sha256": "2fe8e4ce29ac7b83c5ee1b569611bc17e3e364425dfa94b1f91a11327e109136",
+    "grounding_report_sha256": "759d3a97d7118ab01ffb78c623bc5f7cb3c60aeb756c3f867024e73036a75c40"
+  },
+  "verification": {
+    "verified_at": "2026-08-31T01:01:01.608881+00:00",
+    "model": "gpt-5.6-luna",
+    "reasoning_effort": "high"
+  },
+  "counts": {
+    "total_rules": 628,
+    "rules_certified": 111,
+    "rules_failed": 517,
+    "rules_requiring_review": 522,
+    "human_review_required_rules": 82,
+    "total_claims": 22303,
+    "supported_claims": 20703,
+    "contradicted_claims": 174,
+    "insufficient_evidence_claims": 1426,
+    "invalid_evidence_records": 312,
+    "repaired_evidence_records": 3136,
+    "relationship_claims": 5956
+  },
+  "failure_families": {
+    "claim_verdict_failure_rules": 474,
+    "evidence_authenticity_failure_rules": 43,
+    "other_claim_free_failure_rules": 0
+  },
+  "target_10_percent": {
+    "maximum_held_rules": 62,
+    "quality_holds_to_clear": 460
+  }
+}
