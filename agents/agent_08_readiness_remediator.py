@@ -155,7 +155,9 @@ class ReadinessRemediator:
         "exceptions", "exception_basis", "exception_verification",
         "applicability_scope", "scope_basis", "scope_derivation",
     )
-    CHECKPOINT_VERSION = 3
+    # v4 understands contract findings emitted as ``code`` and the expanded
+    # rule contract; v3 responses must be regenerated under this protocol.
+    CHECKPOINT_VERSION = 4
 
     @staticmethod
     def _unresolved_conflict_fallback(batch: list[dict[str, Any]], error: Exception) -> list[dict[str, Any]]:

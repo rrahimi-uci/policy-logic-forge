@@ -2011,7 +2011,9 @@ def _report_markdown(report: Mapping[str, Any]) -> str:
 class ExecutableReadinessCompleter:
     """Completes evidence fields and emits a non-silent pass/fail self-report."""
 
-    CHECKPOINT_VERSION = 2
+    # Bump whenever completion prompt/contract semantics change so an older
+    # model response cannot silently bypass newly required fields or states.
+    CHECKPOINT_VERSION = 3
 
     def __init__(self, resolver: EvidenceResolver | None = None) -> None:
         self.resolver = resolver
