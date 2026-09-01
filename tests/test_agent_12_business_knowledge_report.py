@@ -217,7 +217,6 @@ def test_agent_12_generates_self_contained_report_with_traceability(tmp_path: Pa
     assert manifest["concept_evidence_coverage_rate"] == 100.0
     assert manifest["confidence_distribution"] == {"75–89%": 1}
     assert manifest["confidence_source_counts"] == {"unattributed_score": 1}
-    assert manifest["confidence_score_median"] == 75.0
     assert manifest["grounding_claim_counts"] == {"contradicted": 1, "insufficient_evidence": 2, "supported": 4}
     assert manifest["grounding_claim_support_rate"] == 57.1
     assert manifest["grounding_dimensions"]["core_rule"]["failed_count"] == 1
@@ -256,12 +255,12 @@ def test_agent_12_generates_self_contained_report_with_traceability(tmp_path: Pa
         assert f'<div class="metric-label">{removed_card}</div>' not in report
     metric_labels = (
         "Total business rules",
-        "Average and median readiness score",
+        "Average readiness score",
+        "Median readiness score",
         "10th-percentile readiness score",
         "Grounding claim support",
         "Contract integrity",
         "Relationship support",
-        "Median confidence score",
         "Contradicted and insufficient-evidence claims",
     )
     assert report.count('<div class="metric-card') == len(metric_labels)
@@ -356,11 +355,11 @@ def test_agent_12_omits_empty_confidence_distribution(tmp_path: Path):
 
     assert manifest["confidence_distribution"] == {}
     assert manifest["confidence_source_counts"] == {"not_reported": 1}
-    assert manifest["confidence_score_median"] is None
     assert "Confidence distribution" not in report
     assert "Confidence provenance:" not in report
-    assert '<div class="metric-label">Median confidence score</div>' in report
-    assert "No independently scored confidence values" in report
+    assert '<div class="metric-label">Median readiness score</div>' in report
+    assert "Median confidence score" not in report
+    assert "No independently scored confidence values" not in report
 
 
 def test_outcome_kind_classifies_booleans_numbers_lists_and_text():
