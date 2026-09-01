@@ -1,16 +1,16 @@
 import json
-import xml.etree.ElementTree as ET
 from pathlib import Path
 
 from agents.agent_12_business_knowledge_report import (
+    _bar_chart_svg,
     _bpmn_flow_html,
     _cmmn_plan_html,
     _dependency_graph_layout,
     _dependency_graph_svg,
     _dmn_table_html,
+    _donut_chart_svg,
     _formal_logic_html,
-    _model_kind_section_html,
-    _model_links_html,
+    _model_badges_html,
     _outcome_badge_html,
     _outcome_cards_html,
     _outcome_chip_html,
@@ -19,8 +19,13 @@ from agents.agent_12_business_knowledge_report import (
     _parse_cmmn_cases,
     _parse_dmn_decisions,
     _review_route_meta,
+    _review_severity,
+    _rule_connectivity,
+    _rule_model_diagrams_html,
     _route_badge_html,
     _route_card_html,
+    _severity_badge_html,
+    _traceability_html,
     generate,
     main,
 )
@@ -83,6 +88,105 @@ def test_dependency_graph_preserves_direction_and_assigns_degree_layers():
     assert 'data-source="R-0" data-target="R-1"' in svg
     assert 'data-source="R-2" data-target="R-1"' in svg
     assert 'data-degree="2"' in svg
+    # Nodes carry a stable id for the Dependencies tab's click-to-highlight JS.
+    assert 'data-node-id="R-0"' in svg
+
+
+def test_rule_connectivity_computes_true_degree_not_bfs_depth():
+    """True in+out degree is a different question from the BFS 'degree lane'
+    depth _dependency_graph_layout computes for visual layout -- R-2 sits at
+    BFS depth 2 (two hops from the root) but has degree 2 (one in, one out),
+    same as R-1 which sits at depth 1. The two must not be conflated."""
+    edges = [
+        {"source_rule_id": "R-0", "target_rule_id": "R-1", "dependency_type": "prerequisite"},
+        {"source_rule_id": "R-1", "target_rule_id": "R-2", "dependency_type": "condition"},
+    ]
+    connectivity = _rule_connectivity(edges, ["R-0", "R-1", "R-2", "R-isolated"])
+    assert connectivity["degree_buckets"] == {"0": 1, "1–2": 3, "3–5": 0, "6–10": 0, "11+": 0}
+    assert connectivity["most_connected"][0] == ("R-1", 2)
+    assert connectivity["isolated_rule_ids"] == ["R-isolated"]
+
+
+def test_review_severity_prioritizes_case_management_and_contradicted_grounding():
+    assert _review_severity({"requires_review": False}) == "none"
+    assert _review_severity({"requires_review": True, "review_route": {"route": "case_management"}}) == "critical"
+    assert _review_severity({"requires_review": True, "review_route": {"route": "human_review"}, "grounding": {"status": "contradicted"}}) == "critical"
+    assert _review_severity({"requires_review": True, "review_route": {"route": "human_review"}}) == "high"
+    assert _review_severity({"requires_review": True, "review_route": {"route": "unclassified"}}) == "high"
+    assert _review_severity({"requires_review": True, "review_route": {"route": "machine_repair"}}) == "medium"
+    assert _review_severity({"requires_review": True, "review_route": {"route": "none"}}) == "low"
+
+
+def test_severity_badge_html_renders_a_labeled_pill():
+    html = _severity_badge_html("critical")
+    assert 'class="severity-badge severity-critical"' in html
+    assert "Critical" in html
+
+
+def test_model_badges_html_marks_present_and_absent_kinds():
+    model_rule_ids = {"DMN": {"R-1", "R-2"}, "BPMN": {"R-1"}, "CMMN": set()}
+    html = _model_badges_html("R-1", model_rule_ids)
+    assert html.count("model-badge-yes") == 2  # DMN, BPMN
+    assert html.count("model-badge-no") == 1  # CMMN
+    assert ">DMN<" in html and ">BPMN<" in html and ">CMMN<" in html
+
+
+def test_rule_model_diagrams_html_renders_only_kinds_this_rule_has():
+    lookup = {
+        "DMN": {"R-1": {"inputs": [{"name": "active", "type": "boolean"}], "outputs": [], "input_entries": [], "output_entries": []}},
+        "BPMN": {}, "CMMN": {},
+    }
+    html = _rule_model_diagrams_html("R-1", lookup)
+    assert "rule-model-diagrams" in html
+    assert html.count("rule-model-block") == 1
+    assert "DMN" in html
+
+
+def test_rule_model_diagrams_html_empty_state_when_no_models_exist():
+    assert "No executable model" in _rule_model_diagrams_html("R-9", {"DMN": {}, "BPMN": {}, "CMMN": {}})
+
+
+def test_traceability_html_renders_full_path_with_evidence_entities_dependencies_and_model():
+    rule = {
+        "source_reference": {"chunk_path": "policy/001.txt", "section_id": "s1", "source_text": "Customer consent is required."},
+        "related_entities": ["CUSTOMER"],
+        "dependencies": [{"depends_on_rule": "R-2"}],
+    }
+    html = _traceability_html(rule, "R-1", ["source-abc123"], {"DMN": {"R-1"}, "BPMN": set(), "CMMN": set()})
+    assert "trace-path" in html
+    assert 'href="#source-abc123"' in html
+    assert "CUSTOMER" in html
+    assert 'href="#rule-R-2"' in html
+    assert ">DMN<" in html
+
+
+def test_traceability_html_shows_empty_states_when_nothing_is_linked():
+    html = _traceability_html({}, "R-9", [], {"DMN": set(), "BPMN": set(), "CMMN": set()})
+    assert "No source pointer" in html
+    assert "None recorded" in html  # entities
+    assert "No dependencies" in html
+    assert "No executable model" in html
+
+
+def test_bar_chart_svg_renders_one_bar_per_item_scaled_to_the_max():
+    svg = _bar_chart_svg([("Category A", 10), ("Category B", 5)])
+    assert svg.count('class="chart-bar"') == 2
+    assert "Category A" in svg and "Category B" in svg
+
+
+def test_bar_chart_svg_empty_state():
+    assert "No data available" in _bar_chart_svg([])
+
+
+def test_donut_chart_svg_renders_one_segment_per_nonzero_item_with_a_legend():
+    svg = _donut_chart_svg([("Route A", 3), ("Route B", 0), ("Route C", 1)])
+    assert svg.count('class="chart-donut-seg"') == 2  # zero-count items are skipped
+    assert "Route A" in svg and "Route C" in svg and "Route B" not in svg
+    assert ">4<" in svg  # total in the donut center
+
+
+def test_donut_chart_svg_empty_state():
+    assert "No data available" in _donut_chart_svg([])
 
 
 def test_agent_12_generates_self_contained_report_with_traceability(tmp_path: Path):
@@ -129,6 +233,12 @@ def test_agent_12_generates_self_contained_report_with_traceability(tmp_path: Pa
     assert manifest["grounding_coverage_rate"] == 0.0
     assert manifest["source_pointer_count"] == 1
     assert manifest["source_pointer_coverage_rate"] == 100.0
+    # New analytics fields feeding the Overview dashboard's charts.
+    assert manifest["model_type_counts"] == {"DMN": 1, "BPMN": 1, "CMMN": 1}
+    assert manifest["degree_buckets"]["1–2"] == 1  # R-1's self-referencing edge
+    assert manifest["isolated_rule_count"] == 0
+    assert "rule_summary" in manifest and manifest["rule_summary"]["R-1"]["severity"] == "high"
+    assert manifest["dependency_edges"]
     assert "SBVR vocabulary" in report
     assert "Vocabulary workbench" in report
     assert "Decision variables are not SBVR concepts" in report
@@ -142,7 +252,6 @@ def test_agent_12_generates_self_contained_report_with_traceability(tmp_path: Pa
     assert 'id="concept-grid"' in report
     assert 'id="fact-types"' in report
     assert "applyConceptFilters" in report
-    assert "Readiness, grounding and confidence" in report
     assert "logic-expression" in report
     assert "Raw structured contract" in report
     assert "75.0%" in report
@@ -155,32 +264,28 @@ def test_agent_12_generates_self_contained_report_with_traceability(tmp_path: Pa
     assert 'href="#fact-CUSTOMER_OWNS_ACCOUNT"' in report
     assert "Customer consent" in report
     assert "Customer consent is required before processing." in report
-    assert "Human-review queue (1)" in report
-    assert "Quality holds outside the human queue (0)" in report
-    assert "Explicit human judgment required" in report
-    assert "data-tab=\"models\"" in report
+    # Models tab is gone; the review dashboard is unified (no more split
+    # human-review-queue / quality-holds-outside-queue tables).
+    assert 'data-tab="models"' not in report
+    assert 'id="review-table"' in report
+    assert 'class="severity-badge severity-high"' in report
     assert "Directed rule relationship graph" in report
     assert "Dependency topology" in report
     assert "dependency-graph-svg" in report
+    assert 'id="dep-side-panel"' in report
     assert "degree 0" in report
     assert "source_rule_id → target_rule_id" in report
-    assert report.count("Open highlighted XML") == 3
-    assert report.count('class="xml-viewer"') == 3
-    assert report.count('class="xml-line"') >= 3
-    assert 'class="xml-tag"' in report
-    assert 'class="xml-attr"' in report
-    assert 'class="xml-value"' in report
-    assert "0001" in report
-    assert "compliance_decisions.dmn" in report
-    assert "compliance_workflows.bpmn" in report
-    assert "compliance_reviews.cmmn" in report
+    # Per-rule model badges/diagrams replace the removed Models tab.
+    assert "model-badges" in report
+    assert "model-badge-yes" in report
+    assert "trace-path" in report
     assert "report-data" in report
     assert 'href="#source-' in report
     assert "no external assets" in report.lower()
     assert json.loads((tmp_path / "report" / "business_knowledge_report_manifest.json").read_text())["validation"] == "pass"
 
 
-def test_agent_12_separates_human_queue_from_nonhuman_quality_holds(tmp_path: Path):
+def test_agent_12_review_dashboard_is_unified_and_severity_triaged(tmp_path: Path):
     graph = _graph()
     graph["business_rules"].append({
         "rule_id": "R-2", "rule_name": "Evidence follow-up", "rule_type": "documentation",
@@ -197,11 +302,14 @@ def test_agent_12_separates_human_queue_from_nonhuman_quality_holds(tmp_path: Pa
     assert manifest["human_review_count"] == 1
     assert manifest["nonhuman_quality_hold_count"] == 1
     assert manifest["review_route_counts"] == {"case_management": 1, "human_review": 1}
-    assert "Human-review queue (1)" in report
-    assert "Quality holds outside the human queue (1)" in report
+    assert manifest["rule_summary"]["R-2"]["severity"] == "critical"  # case_management route
+    assert manifest["rule_summary"]["R-1"]["severity"] == "high"  # plain human_review route
     assert "case management" in report
     assert 'id="rule-route"' in report
     assert 'data-route="case_management"' in report
+    assert 'data-severity="critical"' in report
+    assert 'data-severity="high"' in report
+    assert 'id="review-severity"' in report  # the unified dashboard's severity filter
 
 
 def test_outcome_kind_classifies_booleans_numbers_lists_and_text():
@@ -472,39 +580,11 @@ def test_cmmn_plan_html_empty_state_for_no_case_plan_items():
     assert "No case plan items" in _cmmn_plan_html({"items": []})
 
 
-def test_model_kind_section_html_builds_select_and_hides_all_but_first_item():
-    items = [{"rule_id": "R-1", "name": "First"}, {"rule_id": "R-2", "name": "Second"}]
-    html = _model_kind_section_html("DMN", items, lambda item: f'<div class="stub">{item["rule_id"]}</div>')
-    assert 'id="model-dmn-select"' in html
-    assert html.count("<option") == 2
-    assert 'id="model-dmn-item-R-1" data-rule-id="R-1">' in html  # first item visible
-    assert 'id="model-dmn-item-R-2" data-rule-id="R-2" hidden>' in html  # rest start hidden
-    assert 'data-items="model-dmn-items"' in html
-    assert 'data-select="model-dmn-select"' in html
-
-
-def test_model_kind_section_html_empty_state_has_no_select():
-    html = _model_kind_section_html("BPMN", [], lambda item: "")
-    assert "No applicable elements were generated." in html
-    assert "<select" not in html
-
-
-def test_model_links_html_only_links_kinds_with_an_item_for_this_rule():
-    model_rule_ids = {"DMN": {"R-1", "R-2"}, "BPMN": {"R-1"}, "CMMN": set()}
-    html = _model_links_html("R-1", model_rule_ids)
-    assert "DMN" in html and "BPMN" in html and "CMMN" not in html
-    assert 'href="#model-dmn-item-R-1"' in html
-    assert 'href="#model-bpmn-item-R-1"' in html
-
-
-def test_model_links_html_empty_when_rule_has_no_models():
-    assert _model_links_html("R-9", {"DMN": {"R-1"}, "BPMN": set(), "CMMN": set()}) == ""
-
-
-def test_agent_12_renders_real_dmn_bpmn_cmmn_diagrams_and_navigation_js(tmp_path: Path):
-    """End-to-end: real generator output flows through to real diagrams, a
-    working selector, rule<->model deep links, and the cross-tab/details
-    navigation fix (the reported 'clicking links does nothing' bug)."""
+def test_agent_12_renders_real_dmn_bpmn_cmmn_diagrams_inline_per_rule(tmp_path: Path):
+    """End-to-end: real generator output flows through to real diagrams
+    rendered inline inside each rule's own row (the Models tab is gone), with
+    working model-availability badges and the cross-tab/details navigation
+    fix (the historically reported 'clicking links does nothing' bug)."""
 
     graph = _model_source_graph()
     graph_file = tmp_path / "graph.json"
@@ -517,27 +597,26 @@ def test_agent_12_renders_real_dmn_bpmn_cmmn_diagrams_and_navigation_js(tmp_path
     report = (tmp_path / "report" / "business_knowledge_report.html").read_text(encoding="utf-8")
 
     assert manifest["rule_count"] == 2
-    # Real structural diagrams, not the old bar-chart placeholder:
+    assert manifest["model_type_counts"] == {"DMN": 2, "BPMN": 1, "CMMN": 1}
+    # Real structural diagrams, rendered inline per rule, not in a separate tab:
+    assert 'data-tab="models"' not in report
     assert 'class="dmn-table"' in report
     assert 'class="bpmn-flow"' in report
     assert 'class="cmmn-plan"' in report
     assert "DMN-backed" in report
-    # Select-one-to-inspect controls, one per kind, each with pre-rendered
-    # (hidden-until-selected) diagram blocks:
-    assert 'id="model-dmn-select"' in report
-    assert 'id="model-bpmn-select"' in report
-    assert 'id="model-cmmn-select"' in report
-    assert 'class="model-diagram-item"' in report
-    # Rule row -> model deep links (only for kinds each rule actually has):
-    assert 'href="#model-dmn-item-R-1"' in report
-    assert 'href="#model-bpmn-item-R-1"' in report
-    assert 'href="#model-cmmn-item-R-2"' in report
-    # The universal cross-tab/details reveal fix:
+    assert "rule-model-diagrams" in report
+    # Model-availability badges, always visible (not just linked):
+    assert "model-badge-yes" in report and "model-badge-no" in report
+    # The universal cross-tab/details reveal fix -- still present, minus the
+    # removed model-select wiring:
     assert "function revealTarget(id)" in report
     assert "function activateTab(tabId)" in report
-    assert "function showModelItem(groupEl,ruleId)" in report
+    assert "showModelItem" not in report
     assert "el.scrollIntoView(" in report
     assert "nav-highlight" in report
+    # Dependencies tab's click-to-highlight interactivity:
+    assert "selectDepNode" in report
+    assert "dep-side-panel" in report
 
 
 def test_agent_12_handles_missing_optional_upstream_models(tmp_path: Path):
