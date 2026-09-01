@@ -438,6 +438,7 @@ class LLMClient:
             else:
                 params["max_tokens"] = completion_budget
                 kwargs.pop('max_completion_tokens', None)
+                kwargs.pop('max_tokens', None)
         elif max_tokens:
             params["max_tokens"] = max_tokens
             kwargs.pop("reasoning_completion_cap_override", None)
