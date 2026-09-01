@@ -108,7 +108,10 @@ override these values through the `KG_*` environment variables exported by
 `cli/extract.py` (for example, `KG_GROUNDING_LLM_CONCURRENCY` or
 `KG_OPENAI_TIMEOUT`).
 
-Output lands under `pipeline-output/<batch-name>/`:
+Output lands under `pipeline-output/<batch-name>/`. When `--batch-name` is
+omitted, a fresh run uses `<source-basename>-run-YYYY-MM-DD-HH-MM` in US
+Pacific time (PST/PDT), for example `mortgage-run-2026-09-01-09-05`. Use an
+explicit batch name when resuming a previous run.
 
 - `agent_06-07-08-09-optimized/optimized_compliance_knowledge_graph.json` — the final,
   grounding-certified knowledge graph.

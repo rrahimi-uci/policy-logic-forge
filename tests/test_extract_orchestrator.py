@@ -1,9 +1,40 @@
 import argparse
+from datetime import datetime
+from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import pytest
 
-from cli.extract import ExtractionPipeline, _PERFORMANCE_ENV, _parse_stage_arg, _parse_stages_arg
+from cli.extract import (
+    DOMAINS,
+    ExtractionPipeline,
+    _PERFORMANCE_ENV,
+    _parse_stage_arg,
+    _parse_stages_arg,
+    default_batch_name,
+)
 from utils.config import Config
+
+
+def test_default_batch_name_uses_source_basename_and_pacific_timestamp():
+    pacific = ZoneInfo("America/Los_Angeles")
+    now = datetime(2026, 9, 1, 9, 5, tzinfo=pacific)
+    assert default_batch_name(Path("/source/mortgage"), now=now) == "mortgage-run-2026-09-01-09-05"
+
+
+def test_default_batch_name_converts_aware_time_to_pacific():
+    utc = ZoneInfo("UTC")
+    now = datetime(2026, 1, 15, 20, 7, tzinfo=utc)
+    assert default_batch_name(Path("/source/nda_confidentiality"), now=now) == "nda_confidentiality-run-2026-01-15-12-07"
+
+
+@pytest.mark.parametrize("domain", DOMAINS)
+def test_default_batch_name_is_domain_independent(domain):
+    pacific = ZoneInfo("America/Los_Angeles")
+    now = datetime(2026, 9, 1, 9, 5, tzinfo=pacific)
+    assert default_batch_name(Path(f"/source/{domain}"), now=now) == (
+        f"{domain}-run-2026-09-01-09-05"
+    )
 
 
 def test_stage_argument_accepts_display_number_with_or_without_zero_padding():

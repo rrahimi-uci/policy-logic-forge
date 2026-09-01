@@ -385,6 +385,7 @@ class LLMClient:
         """
         is_reasoning = self.is_reasoning_model(self.model)
         is_openai_reasoning = self.is_openai_reasoning_model(self.model)
+        uses_reasoning_effort = bool(kwargs.get("reasoning_effort"))
 
         params: Dict[str, Any] = {
             "model": self.model,
@@ -413,7 +414,7 @@ class LLMClient:
         # floor headroom now; only the resulting parameter NAME differs,
         # since litellm/Anthropic don't recognize OpenAI's
         # max_completion_tokens.
-        if is_reasoning:
+        if is_openai_reasoning or (is_reasoning and uses_reasoning_effort):
             completion_budget = max(max_tokens * 4, 32768) if max_tokens else 32768
             # A bounded, compact extraction run can opt out of the historical
             # 32k minimum. The default remains unchanged for existing callers.
@@ -432,11 +433,10 @@ class LLMClient:
                 )
             if is_openai_reasoning:
                 params["max_completion_tokens"] = completion_budget
-                kwargs.pop('max_completion_tokens', None)
-                kwargs.pop('max_tokens', None)
             else:
                 params["max_tokens"] = completion_budget
-                kwargs.pop('max_completion_tokens', None)
+            kwargs.pop('max_completion_tokens', None)
+            kwargs.pop('max_tokens', None)
         elif max_tokens:
             params["max_tokens"] = max_tokens
             kwargs.pop("reasoning_completion_cap_override", None)
