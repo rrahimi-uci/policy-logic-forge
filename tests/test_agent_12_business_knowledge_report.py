@@ -258,8 +258,8 @@ def test_agent_12_generates_self_contained_report_with_traceability(tmp_path: Pa
     assert "Customer consent is required before processing." in report
     # Models stay inline and the policy-neutral score explorer covers all rules.
     assert 'data-tab="models"' not in report
-    assert 'id="score-table"' in report
-    assert 'data-tab="scores"' in report
+    assert 'id="score-table"' not in report
+    assert 'data-tab="scores"' not in report
     assert "no acceptance threshold" in report.lower()
     assert "quality hold" not in report.lower()
     assert "Directed rule relationship graph" in report
@@ -278,7 +278,7 @@ def test_agent_12_generates_self_contained_report_with_traceability(tmp_path: Pa
     assert json.loads((tmp_path / "report" / "business_knowledge_report_manifest.json").read_text())["validation"] == "pass"
 
 
-def test_agent_12_score_explorer_includes_every_rule_without_policy_labels(tmp_path: Path):
+def test_agent_12_rule_explorer_scores_every_rule_without_policy_labels(tmp_path: Path):
     graph = _graph()
     graph["business_rules"].append({
         "rule_id": "R-2", "rule_name": "Evidence follow-up", "rule_type": "documentation",
@@ -293,9 +293,10 @@ def test_agent_12_score_explorer_includes_every_rule_without_policy_labels(tmp_p
 
     assert set(manifest["rule_summary"]) == {"R-1", "R-2"}
     assert all("automation_readiness_score" in item for item in manifest["rule_summary"].values())
-    assert report.count('class="score-row"') == 2
-    assert 'id="score-min"' in report
-    assert 'id="score-max"' in report
+    assert report.count('class="rule-row"') == 2
+    assert 'id="rule-score-min"' in report
+    assert 'id="rule-score-max"' in report
+    assert 'data-tab="scores"' not in report
     assert "case management" not in report
     assert "quality hold" not in report.lower()
 
