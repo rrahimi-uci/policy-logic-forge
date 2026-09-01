@@ -3,8 +3,8 @@
 import io
 import json
 
-from cli.console import JsonReporter, TextReporter, make_reporter
-from utils.pipeline_metrics import FAIL, PASS, RunMetrics, parse_llm_cost_line
+from cli.console import JsonReporter, TextReporter, make_reporter, stage_icon, status_icon
+from utils.pipeline_metrics import FAIL, PASS, REVIEW, RunMetrics, parse_llm_cost_line
 
 
 def _sample_run() -> RunMetrics:
@@ -21,6 +21,15 @@ def test_make_reporter_dispatches_by_output_mode():
     assert isinstance(make_reporter("text"), TextReporter)
     assert isinstance(make_reporter("json"), JsonReporter)
     assert isinstance(make_reporter("anything-else"), TextReporter)  # safe default
+
+
+def test_human_status_and_stage_icons_cover_monitoring_states():
+    assert status_icon(PASS) == "✅"
+    assert status_icon(REVIEW) == "🔎"
+    assert status_icon(FAIL) == "❌"
+    assert stage_icon("agent_01") == "📚"
+    assert stage_icon("agent_12") == "📊"
+    assert stage_icon("unknown") == "🔹"
 
 
 def test_text_reporter_full_lifecycle_does_not_raise():
@@ -46,6 +55,10 @@ def test_text_reporter_full_lifecycle_does_not_raise():
 
     output = buf.getvalue()
     assert "demo" in output
+    assert "🚀 run started" in output
+    assert "🔄" in output
+    assert "📚 Stage 01/12" in output
+    assert "✅" in output
     assert "hello from the subprocess" in output
     assert "Run summary" in output
     assert "a fatal error message" in output
