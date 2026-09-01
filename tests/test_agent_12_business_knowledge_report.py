@@ -343,6 +343,22 @@ def test_percentile_uses_linear_interpolation_and_handles_boundaries():
     assert _percentile([], 0.5) == 0.0
 
 
+def test_agent_12_omits_empty_confidence_distribution(tmp_path: Path):
+    graph = _graph()
+    for rule in graph["business_rules"]:
+        rule.pop("confidence_score", None)
+    graph_file = tmp_path / "graph.json"
+    graph_file.write_text(json.dumps(graph), encoding="utf-8")
+
+    manifest = generate(graph_file, None, tmp_path / "models", tmp_path / "report")
+    report = (tmp_path / "report" / "business_knowledge_report.html").read_text(encoding="utf-8")
+
+    assert manifest["confidence_distribution"] == {}
+    assert manifest["confidence_source_counts"] == {"not_reported": 1}
+    assert "Confidence distribution" not in report
+    assert "Confidence provenance:" not in report
+
+
 def test_outcome_kind_classifies_booleans_numbers_lists_and_text():
     assert _outcome_kind(True, "boolean") == "true"
     assert _outcome_kind(False, "boolean") == "false"
