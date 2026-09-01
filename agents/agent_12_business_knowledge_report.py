@@ -440,6 +440,41 @@ def _review_reasons(rule: Mapping[str, Any]) -> list[str]:
     return list(dict.fromkeys(reasons))
 
 
+#: No explicit severity/priority field exists anywhere in the data contract
+#: (confirmed: the graph carries review_route + grounding status, not a
+#: standalone severity). Derived here from those two signals so Human Review
+#: can be triaged without a reviewer having to read every reason list first.
+#: case_management and a contradicted grounding verdict outrank a plain
+#: human_review route -- both represent a positively wrong or stuck state,
+#: not an open judgment call.
+_SEVERITY_META: dict[str, tuple[str, str]] = {
+    "critical": ("🟥", "Critical"),
+    "high": ("🟧", "High"),
+    "medium": ("🟨", "Medium"),
+    "low": ("🟩", "Low"),
+}
+_SEVERITY_ORDER = ("critical", "high", "medium", "low")
+
+
+def _review_severity(rule: Mapping[str, Any]) -> str:
+    if not rule.get("requires_review"):
+        return "none"
+    route = str(_mapping(rule.get("review_route")).get("route") or "unclassified")
+    grounding_status = str(_mapping(rule.get("grounding")).get("status") or "")
+    if route == "case_management" or grounding_status == "contradicted":
+        return "critical"
+    if route in ("human_review", "unclassified"):
+        return "high"
+    if route == "machine_repair":
+        return "medium"
+    return "low"
+
+
+def _severity_badge_html(severity: str) -> str:
+    icon, label = _SEVERITY_META.get(severity, ("⬜", "None"))
+    return f'<span class="severity-badge severity-{_safe(severity)}"><span aria-hidden="true">{icon}</span>{_safe(label)}</span>'
+
+
 #: Grounded in utils/semantic_routing.py::classify_review_route -- the actual
 #: decision logic behind each route -- plus agent_12's own "unclassified"
 #: fallback for a review-flagged rule whose graph predates route
@@ -749,82 +784,6 @@ def _cmmn_plan_html(case: Mapping[str, Any]) -> str:
     return f'<div class="cmmn-plan">{cards}</div>'
 
 
-def _model_kind_section_html(kind: str, items: Sequence[Mapping[str, Any]], renderer) -> str:
-    """Build the select-one-to-inspect control plus one pre-rendered (hidden
-    but present) diagram block per item, for one model kind. All diagrams
-    are rendered server-side; the client only toggles visibility -- see the
-    showModelItem() JS helper -- so no diagram-building logic is duplicated
-    between Python and JavaScript."""
-    if not items:
-        return '<div class="model-diagram-empty">No applicable elements were generated.</div>'
-    kind_lc = kind.casefold()
-    select_id, items_id = f"model-{kind_lc}-select", f"model-{kind_lc}-items"
-    noun = "decision" if kind == "DMN" else "case" if kind == "CMMN" else "process"
-    options = "".join(
-        f'<option value="{_safe(_slug(item["rule_id"]))}">{_safe(item["rule_id"])}{(" — " + _safe(item["name"])) if item.get("name") else ""}</option>'
-        for item in items
-    )
-    blocks = []
-    for index, item in enumerate(items):
-        rid_slug = _safe(_slug(item["rule_id"]))
-        rule_link = f'<a class="evidence-link" href="#rule-{rid_slug}">View rule →</a>' if item.get("rule_id") else ""
-        hidden_attr = "" if index == 0 else " hidden"
-        blocks.append(
-            f'<div class="model-diagram-item" id="model-{kind_lc}-item-{rid_slug}" data-rule-id="{rid_slug}"{hidden_attr}>'
-            f'<div class="model-diagram-item-head"><strong>{_safe(item["rule_id"])}</strong>{rule_link}</div>'
-            f"{renderer(item)}</div>"
-        )
-    return (
-        f'<div class="model-selector"><label for="{select_id}">{len(items)} {kind} {noun}{"s" if len(items) != 1 else ""} — select one to inspect</label>'
-        f'<select id="{select_id}" class="model-select" data-items="{items_id}">{options}</select></div>'
-        f'<div class="model-diagram-items" id="{items_id}" data-select="{select_id}">{"".join(blocks)}</div>'
-    )
-
-
-_XML_TAG_PATTERN = re.compile(r"(<\/?)([A-Za-z_][\w:.-]*)(.*?)(\/?>)$", re.S)
-_XML_ATTRIBUTE_PATTERN = re.compile(r"([A-Za-z_][\w:.-]*)(\s*=\s*)(&quot;.*?&quot;|&#x27;.*?&#x27;)", re.S)
-
-
-def _highlight_xml_fragment(fragment: str) -> str:
-    """Highlight one XML fragment after escaping it for safe inline HTML."""
-    if fragment.startswith("<!--") or fragment.startswith("<![CDATA["):
-        return f'<span class="xml-comment">{_safe(fragment)}</span>'
-    if fragment.startswith("<?") or fragment.startswith("<!"):
-        return f'<span class="xml-declaration">{_safe(fragment)}</span>'
-    match = _XML_TAG_PATTERN.match(fragment)
-    if not match:
-        return _safe(fragment)
-    prefix, name, attributes, suffix = match.groups()
-    attribute_html = _safe(attributes)
-    attribute_html = _XML_ATTRIBUTE_PATTERN.sub(
-        r'<span class="xml-attr">\1</span>\2<span class="xml-value">\3</span>',
-        attribute_html,
-    )
-    return (
-        f'<span class="xml-bracket">{_safe(prefix)}</span>'
-        f'<span class="xml-tag">{_safe(name)}</span>{attribute_html}'
-        f'<span class="xml-bracket">{_safe(suffix)}</span>'
-    )
-
-
-def _highlight_xml(path: Path, kind: str) -> str:
-    """Return a complete, line-numbered XML viewer for a model artifact."""
-    try:
-        text = path.read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        return '<div class="xml-empty">XML artifact is unavailable for this model.</div>'
-    lines = text.splitlines() or [""]
-    highlighted_lines = []
-    for number, line in enumerate(lines, 1):
-        fragments = re.split(r"(<[^>]*>)", line)
-        highlighted = "".join(_highlight_xml_fragment(fragment) for fragment in fragments)
-        highlighted_lines.append(
-            f'<span class="xml-line"><span class="xml-ln">{number:04d}</span><span class="xml-source">{highlighted or " "}</span></span>'
-        )
-    xml_code = "\n".join(highlighted_lines)
-    return f'<div class="xml-viewer" role="region" aria-label="Highlighted {_safe(kind)} XML"><div class="xml-toolbar"><span><strong>{_safe(kind)}</strong> XML · {_safe(path.name)}</span><span class="muted">{len(lines)} lines · read-only</span></div><pre class="xml-code" tabindex="0">{xml_code}</pre></div>'
-
-
 def _dependency_graph_layout(edges: Sequence[Mapping[str, Any]], rule_ids: Sequence[str] = ()) -> dict[str, Any]:
     """Build a deterministic directed, shortest-distance dependency layout.
 
@@ -897,6 +856,41 @@ def _dependency_graph_layout(edges: Sequence[Mapping[str, Any]], rule_ids: Seque
         "roots": roots,
         "fallback_roots": fallback_roots,
         "isolated_nodes": sorted(nodes - connected),
+    }
+
+
+_DEGREE_BUCKET_ORDER = ("0", "1–2", "3–5", "6–10", "11+")
+
+
+def _rule_connectivity(edges: Sequence[Mapping[str, Any]], rule_ids: Sequence[str]) -> dict[str, Any]:
+    """True graph-theoretic in+out degree per rule -- distinct from the BFS
+    'degree lane' (shortest distance from a zero-indegree root) that
+    ``_dependency_graph_layout`` computes for visual layout. That's a depth,
+    not a connectivity count; the two are easy to conflate but answer
+    different questions ("how central is this rule" vs. "how deep in the
+    chain is it"), so this is a separate, dedicated pass over the same edges."""
+    degree: Counter[str] = Counter()
+    for edge in edges:
+        if not isinstance(edge, Mapping):
+            continue
+        source = str(edge.get("source_rule_id") or "").strip()
+        target = str(edge.get("target_rule_id") or "").strip()
+        if source:
+            degree[source] += 1
+        if target:
+            degree[target] += 1
+    all_ids = sorted({str(rid).strip() for rid in rule_ids if str(rid).strip()})
+    buckets: Counter[str] = Counter()
+    for rid in all_ids:
+        d = degree.get(rid, 0)
+        bucket = "0" if d == 0 else "1–2" if d <= 2 else "3–5" if d <= 5 else "6–10" if d <= 10 else "11+"
+        buckets[bucket] += 1
+    most_connected = sorted(((rid, count) for rid, count in degree.items()), key=lambda item: (-item[1], item[0]))[:10]
+    isolated = [rid for rid in all_ids if degree.get(rid, 0) == 0]
+    return {
+        "degree_buckets": {bucket: buckets.get(bucket, 0) for bucket in _DEGREE_BUCKET_ORDER},
+        "most_connected": most_connected,
+        "isolated_rule_ids": isolated,
     }
 
 
@@ -985,9 +979,75 @@ def _progress_bar(label: str, value: int | float, total: int | float, color: str
     )
 
 
+def _bar_chart_svg(data: Sequence[tuple[str, int]], *, width: int = 560, bar_height: int = 24, gap: int = 10, color: str = "#7c83fd", max_bars: int = 14) -> str:
+    """A hand-rolled horizontal bar chart -- kept as server-rendered SVG,
+    matching the existing dependency-graph technique, rather than vendoring a
+    JS charting library: the report's hard contract is zero external network
+    calls, and a vendored library's minified source would meaningfully add
+    to a file that's already several megabytes on a real run."""
+    items = [(str(label), int(value)) for label, value in data][:max_bars]
+    if not items:
+        return '<div class="chart-empty">No data available.</div>'
+    max_value = max(value for _, value in items) or 1
+    label_width = 168
+    plot_width = max(120, width - label_width - 56)
+    height = len(items) * (bar_height + gap) + gap
+    rows = []
+    for index, (label, value) in enumerate(items):
+        y = gap + index * (bar_height + gap)
+        bar_w = max(2.0, plot_width * value / max_value)
+        display = label if len(label) <= 24 else label[:21] + "…"
+        rows.append(
+            f'<text class="chart-label" x="{label_width - 10}" y="{y + bar_height / 2 + 4:.1f}" text-anchor="end">{_safe(display)}</text>'
+            f'<rect class="chart-bar" x="{label_width}" y="{y}" width="{bar_w:.1f}" height="{bar_height}" rx="5" fill="{_safe(color)}"><title>{_safe(label)}: {value}</title></rect>'
+            f'<text class="chart-value" x="{label_width + bar_w + 8:.1f}" y="{y + bar_height / 2 + 4:.1f}">{value}</text>'
+        )
+    return f'<svg class="chart-svg bar-chart" width="{width}" height="{height}" viewBox="0 0 {width} {height}" role="img" aria-label="Bar chart">{"".join(rows)}</svg>'
+
+
+_DONUT_COLORS = ("#27c2a5", "#7c83fd", "#f3a94b", "#d85d69", "#5a8dee", "#8f6be8", "#a9b3c3")
+
+
+def _donut_chart_svg(data: Sequence[tuple[str, int]], *, size: int = 176, stroke: int = 24) -> str:
+    """A hand-rolled donut chart with an accompanying legend -- same
+    no-external-library rationale as ``_bar_chart_svg``."""
+    items = [(str(label), int(value)) for label, value in data if value]
+    total = sum(value for _, value in items)
+    if not items or not total:
+        return '<div class="chart-empty">No data available.</div>'
+    center = size / 2
+    radius = center - stroke / 2
+    circumference = 2 * 3.14159265358979 * radius
+    segments, legend = [], []
+    offset = 0.0
+    for index, (label, value) in enumerate(items):
+        color = _DONUT_COLORS[index % len(_DONUT_COLORS)]
+        fraction = value / total
+        dash = fraction * circumference
+        segments.append(
+            f'<circle class="chart-donut-seg" cx="{center}" cy="{center}" r="{radius:.1f}" fill="none" stroke="{color}" '
+            f'stroke-width="{stroke}" stroke-dasharray="{dash:.2f} {max(0.0, circumference - dash):.2f}" '
+            f'stroke-dashoffset="{-offset:.2f}" transform="rotate(-90 {center} {center})"><title>{_safe(label)}: {value} ({fraction * 100:.1f}%)</title></circle>'
+        )
+        legend.append(f'<li><span class="chart-legend-dot" style="background:{color}"></span>{_safe(label.replace("_", " "))} <strong>{value}</strong><span class="muted">({fraction * 100:.1f}%)</span></li>')
+        offset += dash
+    svg = (
+        f'<svg class="chart-svg donut-chart" width="{size}" height="{size}" viewBox="0 0 {size} {size}" role="img" aria-label="Donut chart">'
+        f'{"".join(segments)}<text class="chart-donut-total" x="{center}" y="{center - 3}" text-anchor="middle">{total}</text>'
+        f'<text class="chart-donut-caption" x="{center}" y="{center + 15}" text-anchor="middle">total</text></svg>'
+    )
+    return f'<div class="donut-wrap">{svg}<ul class="chart-legend">{"".join(legend)}</ul></div>'
+
+
 def _validate_report_html(document: str, rule_ids: Sequence[str], source_anchors: Sequence[str]) -> None:
     """Validate the non-network, single-document report contract."""
-    required = ('<!doctype html>', 'id="report-data"', 'data-tab="vocabulary"', 'data-tab="rules"', 'data-tab="models"', 'data-tab="review"', 'data-tab="sources"', 'id="concept-search"', 'id="concept-grid"', 'id="fact-types"', 'Open highlighted XML', 'xml-viewer', 'dependency-graph-shell', 'dependency-graph-scroll')
+    required = (
+        '<!doctype html>', 'id="report-data"',
+        'data-tab="overview"', 'data-tab="vocabulary"', 'data-tab="rules"', 'data-tab="dependencies"', 'data-tab="review"', 'data-tab="sources"',
+        'id="concept-search"', 'id="concept-grid"', 'id="fact-types"',
+        'dependency-graph-shell', 'dependency-graph-scroll', 'id="dep-side-panel"',
+        'model-badges', 'severity-badge', 'trace-path',
+    )
     missing = [marker for marker in required if marker not in document]
     if missing:
         raise ValueError("business report missing required sections: " + ", ".join(missing))
@@ -1008,21 +1068,101 @@ def _source_block(anchor: str, ref: Mapping[str, Any], text: str) -> str:
     return f'<article class="source-card" id="{_safe(anchor)}"><h4>{_safe(label)}</h4><div class="source-meta">{_safe(ref.get("evidence_field", "source"))} · offsets { _safe(ref.get("start_offset", "?")) }–{ _safe(ref.get("end_offset", "?")) }</div><pre>{_safe(text or "No source text was available for this pointer.")}</pre></article>'
 
 
-def _model_links_html(rid: str, model_rule_ids: Mapping[str, set[str]]) -> str:
-    """Deep links from a rule row straight to its own rendered DMN/BPMN/CMMN
-    diagram in the Models tab -- only for kinds that actually generated one
-    for this rule (e.g. most rules have no BPMN process; not every rule is
-    routed to a CMMN case)."""
-    rid_slug = _safe(_slug(rid))
-    links = [
-        f'<a class="evidence-link model-link" href="#model-{kind.casefold()}-item-{rid_slug}">{kind}</a>'
-        for kind in ("DMN", "BPMN", "CMMN")
-        if rid in model_rule_ids.get(kind, ())
+def _model_badges_html(rid: str, model_rule_ids: Mapping[str, set[str]]) -> str:
+    """Which of DMN/BPMN/CMMN exist for this rule -- always visible (not just
+    linked) so a reviewer can tell at a glance what's available without
+    expanding the row. Greyed badges make an absence as legible as a presence."""
+    badges = []
+    for kind in ("DMN", "BPMN", "CMMN"):
+        has = rid in model_rule_ids.get(kind, ())
+        state = "yes" if has else "no"
+        title = f"{kind} " + ("generated for this rule" if has else "not generated for this rule")
+        badges.append(f'<span class="model-badge model-badge-{state}" title="{_safe(title)}">{kind}</span>')
+    return f'<div class="model-badges">{"".join(badges)}</div>'
+
+
+def _rule_model_diagrams_html(rid: str, model_lookup: Mapping[str, Mapping[str, Mapping[str, Any]]]) -> str:
+    """Render this rule's own DMN decision table / BPMN flow / CMMN plan
+    inline, reusing the existing per-kind diagram renderers -- the projection
+    itself is unchanged, only where it's shown moves (into the rule row that
+    already links out to it, instead of a separate Models tab nothing else
+    points into). Rendered inside a closed-by-default <details>, so it only
+    costs bytes, not paint time, for rows a reviewer never opens."""
+    renderers = {"DMN": _dmn_table_html, "BPMN": _bpmn_flow_html, "CMMN": _cmmn_plan_html}
+    blocks = []
+    for kind, renderer in renderers.items():
+        item = model_lookup.get(kind, {}).get(rid)
+        if item is None:
+            continue
+        blocks.append(f'<div class="rule-model-block"><div class="rule-model-kind">{_safe(kind)}</div>{renderer(item)}</div>')
+    if not blocks:
+        return '<div class="model-diagram-empty">No executable model (DMN/BPMN/CMMN) was generated for this rule.</div>'
+    return f'<div class="rule-model-diagrams">{"".join(blocks)}</div>'
+
+
+def _traceability_html(
+    rule: Mapping[str, Any],
+    rid: str,
+    source_anchors: Sequence[str],
+    model_rule_ids: Mapping[str, set[str]],
+) -> str:
+    """Source document -> passage -> this rule -> related entities ->
+    dependencies -> executable model, as one explicit breadcrumb, built
+    entirely from data already loaded for other tabs (source references,
+    related_entities, dependency edges, model membership) -- no new fields,
+    just a single first-class path through fields that were previously only
+    reachable by switching tabs."""
+    refs = _rule_references(rule)
+    if refs and source_anchors:
+        ref, anchor = refs[0], source_anchors[0]
+        path = ref.get("chunk_path") or ref.get("document") or "Unresolved source"
+        section = ref.get("section_id") or ref.get("section") or ""
+        excerpt = str(ref.get("source_text") or ref.get("quote") or "")[:220].strip()
+        excerpt_html = f'<span class="trace-node-excerpt">“{_safe(excerpt)}{"…" if len(str(ref.get("source_text") or ref.get("quote") or "")) > 220 else ""}”</span>' if excerpt else ""
+        more = f'<span class="muted trace-more">+{len(source_anchors) - 1} more source pointer(s)</span>' if len(source_anchors) > 1 else ""
+        source_step = (
+            f'<a class="trace-node trace-source" href="#{_safe(anchor)}">'
+            f'<span class="trace-node-kind">Source document</span>'
+            f'<span class="trace-node-label">{_safe(path)}{("#" + _safe(str(section))) if section else ""}</span>'
+            f'{excerpt_html}</a>{more}'
+        )
+    else:
+        source_step = '<span class="trace-node trace-empty">No source pointer</span>'
+
+    entity_names = list(dict.fromkeys(str(value) for value in _list(rule.get("related_entities")) if value))
+    entities_html = "".join(f'<span class="trace-chip">{_safe(name)}</span>' for name in entity_names[:12]) or '<span class="trace-chip trace-chip-empty">None recorded</span>'
+    if len(entity_names) > 12:
+        entities_html += f'<span class="muted trace-more">+{len(entity_names) - 12} more</span>'
+
+    dep_ids = list(dict.fromkeys(
+        str(dep.get("depends_on_rule") or dep.get("target_rule_id") or "")
+        for dep in _list(rule.get("dependencies")) if isinstance(dep, Mapping)
+    ))
+    dep_ids = [d for d in dep_ids if d]
+    deps_html = "".join(f'<a class="trace-chip trace-chip-link" href="#rule-{_safe(_slug(d))}">{_safe(d)}</a>' for d in dep_ids[:12]) or '<span class="trace-chip trace-chip-empty">No dependencies</span>'
+    if len(dep_ids) > 12:
+        deps_html += f'<span class="muted trace-more">+{len(dep_ids) - 12} more</span>'
+
+    model_kinds = [kind for kind in ("DMN", "BPMN", "CMMN") if rid in model_rule_ids.get(kind, ())]
+    model_html = "".join(f'<span class="trace-chip trace-chip-model">{kind}</span>' for kind in model_kinds) or '<span class="trace-chip trace-chip-empty">No executable model</span>'
+
+    steps = [
+        source_step,
+        f'<span class="trace-node"><span class="trace-node-kind">This rule</span><span class="trace-node-label">{_safe(rid)}</span></span>',
+        f'<span class="trace-node"><span class="trace-node-kind">Related entities</span><span class="trace-chip-row">{entities_html}</span></span>',
+        f'<span class="trace-node"><span class="trace-node-kind">Dependencies</span><span class="trace-chip-row">{deps_html}</span></span>',
+        f'<span class="trace-node"><span class="trace-node-kind">Executable model</span><span class="trace-chip-row">{model_html}</span></span>',
     ]
-    return f'<div class="model-links">{"".join(links)}</div>' if links else ""
+    arrow = '<span class="trace-arrow" aria-hidden="true">→</span>'
+    return f'<div class="trace-path">{arrow.join(f"<div class=\"trace-step\">{step}</div>" for step in steps)}</div>'
 
 
-def _rule_row(rule: Mapping[str, Any], source_anchors: Sequence[str], model_rule_ids: Mapping[str, set[str]] = {}) -> str:
+def _rule_row(
+    rule: Mapping[str, Any],
+    source_anchors: Sequence[str],
+    model_rule_ids: Mapping[str, set[str]] = {},
+    model_item_lookup: Mapping[str, Mapping[str, Mapping[str, Any]]] = {},
+) -> str:
     rid = str(rule.get("rule_id") or "unidentified")
     category, subcategory = _category(rule)
     review = bool(rule.get("requires_review", False))
@@ -1038,11 +1178,19 @@ def _rule_row(rule: Mapping[str, Any], source_anchors: Sequence[str], model_rule
     reason_items = _review_reasons(rule)
     refs = " ".join(f'<a class="evidence-link" href="#{_safe(anchor)}">Evidence {index + 1}</a>' for index, anchor in enumerate(source_anchors)) or '<span class="muted">Unresolved source</span>'
     grounding_detail = _grounding_summary(rule, grounding_status)
-    return f'''<tr id="rule-{_safe(_slug(rid))}" class="rule-row" data-category="{_safe(category)}" data-status="{_safe(status)}" data-route="{_safe(review_route)}" data-review="{str(review).lower()}" data-search="{_safe((rid + ' ' + str(rule.get('rule_name', '')) + ' ' + _rule_statement(rule) + ' ' + category + ' ' + subcategory).casefold())}">
-      <td><a href="#rule-{_safe(_slug(rid))}">{_safe(rid)}</a><div class="muted">{_safe(rule.get('rule_name') or 'Untitled rule')}</div>{_model_links_html(rid, model_rule_ids)}</td>
+    has_dmn = "true" if rid in model_rule_ids.get("DMN", ()) else "false"
+    has_bpmn = "true" if rid in model_rule_ids.get("BPMN", ()) else "false"
+    has_cmmn = "true" if rid in model_rule_ids.get("CMMN", ()) else "false"
+    details_body = (
+        _traceability_html(rule, rid, source_anchors, model_rule_ids)
+        + _formal_logic_html(rule)
+        + _rule_model_diagrams_html(rid, model_item_lookup)
+    )
+    return f'''<tr id="rule-{_safe(_slug(rid))}" class="rule-row" data-category="{_safe(category)}" data-status="{_safe(status)}" data-route="{_safe(review_route)}" data-review="{str(review).lower()}" data-has-dmn="{has_dmn}" data-has-bpmn="{has_bpmn}" data-has-cmmn="{has_cmmn}" data-search="{_safe((rid + ' ' + str(rule.get('rule_name', '')) + ' ' + _rule_statement(rule) + ' ' + category + ' ' + subcategory).casefold())}">
+      <td><a href="#rule-{_safe(_slug(rid))}">{_safe(rid)}</a><div class="muted">{_safe(rule.get('rule_name') or 'Untitled rule')}</div>{_model_badges_html(rid, model_rule_ids)}</td>
       <td>{_safe(category)}<div class="muted">{_safe(subcategory)}</div></td>
       <td>{_safe(_rule_statement(rule))}</td>
-      <td><details class="logic-details"><summary><span class="logic-summary">IF / THEN</span><span class="muted">structured contract</span></summary>{_formal_logic_html(rule)}</details></td>
+      <td><details class="logic-details"><summary><span class="logic-summary">IF / THEN</span><span class="muted">contract, traceability & models</span></summary>{details_body}</details></td>
       <td><div class="status-stack"><span class="status status-{_safe(status.casefold().replace(' ', '_'))}">{_safe(status_label)}</span><span class="status status-grounding-{_safe(grounding_status.casefold().replace(' ', '_'))}" title="Underlying claim-level grounding verdict">{_safe(grounding_label)}</span></div><div class="confidence-score"><strong>{confidence_text}</strong><span class="muted">{_safe(_confidence_source_label(confidence_source))}</span></div><div class="muted">{_safe(grounding_detail)}</div></td>
       <td>{_route_card_html(review_route, has_hold=review, reason_items=reason_items)}</td>
       <td>{refs}</td>
@@ -1104,11 +1252,32 @@ def generate(
 
     model_info = _model_info(models_dir)
     model_rule_ids = {kind: set(record["rule_ids"]) for kind, record in model_info.items()}
+    # Parsed once, up front: these feed both the per-rule inline diagrams
+    # (Rule Explorer, §2 of the redesign) and the model-type distribution
+    # chart (Overview) -- the removed Models tab used to parse them a second
+    # time, purely for its own now-deleted section.
+    model_parsers = {"DMN": _parse_dmn_decisions, "BPMN": _parse_bpmn_processes, "CMMN": _parse_cmmn_cases}
+    model_items_by_kind = {
+        kind: (parser(models_dir / model_info[kind]["file"]) if model_info[kind]["exists"] else [])
+        for kind, parser in model_parsers.items()
+    }
+    model_item_lookup = {
+        kind: {str(item.get("rule_id")): item for item in items if item.get("rule_id")}
+        for kind, items in model_items_by_kind.items()
+    }
     edges = dependency_edges(graph)
-    dependency_layout = _dependency_graph_layout(
-        edges,
-        [str(rule.get("rule_id") or "") for rule in rules],
-    )
+    rule_ids_all = [str(rule.get("rule_id") or "") for rule in rules]
+    dependency_layout = _dependency_graph_layout(edges, rule_ids_all)
+    connectivity = _rule_connectivity(edges, rule_ids_all)
+    max_dependency_depth = max(dependency_layout["layers"], default=0)
+    cyclic_component_count = len(dependency_layout.get("fallback_roots", []))
+    rule_adjacency: dict[str, set[str]] = defaultdict(set)
+    for edge in dependency_layout["edges"]:
+        source, target = edge["source_rule_id"], edge["target_rule_id"]
+        if source == target:
+            continue
+        rule_adjacency[source].add(target)
+        rule_adjacency[target].add(source)
     categories = Counter(_category(rule)[0] for rule in rules)
     review_count = sum(bool(rule.get("requires_review")) for rule in rules)
     human_review_count = sum(bool(_mapping(rule.get("review_route")).get("human_review_required")) for rule in rules)
@@ -1242,6 +1411,33 @@ def generate(
         "grounding_claim_counts": dict(sorted(grounding_claim_counts.items())),
         "grounding_claim_support_rate": _percent(grounding_claim_counts.get("supported", 0), grounding_claim_total),
         "model_info": model_info, "edge_count": len(edges), "source_graph": str(graph_file),
+        "model_type_counts": {kind: len(model_info[kind]["rule_ids"]) for kind in ("DMN", "BPMN", "CMMN")},
+        "degree_buckets": connectivity["degree_buckets"],
+        "most_connected_rules": connectivity["most_connected"],
+        "isolated_rule_ids": connectivity["isolated_rule_ids"],
+        "isolated_rule_count": len(connectivity["isolated_rule_ids"]),
+        "max_dependency_depth": max_dependency_depth,
+        "cyclic_component_count": cyclic_component_count,
+        # Embedded once for the Dependencies tab's client-side interactivity
+        # (click-to-highlight, side panel) -- the graph's own <g>/<path>
+        # elements already carry data-node-id/data-source/data-target, so the
+        # JS only needs this to build an adjacency map and render panel text
+        # without any additional server-rendered markup per node.
+        "dependency_edges": dependency_layout["edges"],
+        "rule_summary": {
+            rid: {
+                "slug": _slug(rid),
+                "name": str(rule.get("rule_name") or ""),
+                "category": _category(rule)[0],
+                "status": ("Quality hold" if rule.get("requires_review") else ("Verified" if str(_mapping(rule.get("grounding")).get("status")) == "certified" else str(_mapping(rule.get("grounding")).get("status") or "unknown").replace("_", " ").title())),
+                "confidence": _confidence(rule),
+                "route": str(_mapping(rule.get("review_route")).get("route") or ("unclassified" if rule.get("requires_review") else "none")),
+                "severity": _review_severity(rule),
+                "degree": len(rule_adjacency.get(rid, ())),
+            }
+            for rule in rules
+            for rid in (str(rule.get("rule_id") or "unidentified"),)
+        },
     }
 
     concept_rows = []
@@ -1303,14 +1499,20 @@ def generate(
         fact_rows.append(
             f'<tr id="fact-{_safe(_slug(fact_id))}"><td><strong>{_safe(fact_id)}</strong><div class="muted">{_safe(fact.get("verb_term"))}</div></td><td>{subject_html}</td><td>{_safe(fact.get("verb_term"))}</td><td>{object_html}</td><td><span class="status status-{_safe(fact_status.casefold().replace(" ", "_"))}">{_safe(fact_status)}</span><div>{fact_evidence}</div></td></tr>'
         )
-    rule_rows = [_rule_row(rule, rule_sources.get(str(rule.get("rule_id") or "unidentified"), []), model_rule_ids) for rule in rules]
-    human_review_rows: list[str] = []
-    quality_hold_rows: list[str] = []
+    rule_rows = [_rule_row(rule, rule_sources.get(str(rule.get("rule_id") or "unidentified"), []), model_rule_ids, model_item_lookup) for rule in rules]
+
+    # Unified, severity-triaged Human Review dashboard -- replaces the old
+    # split human-review-queue / quality-holds-outside-queue tables (§5 of
+    # the redesign). Route + confidence stay visible for context; severity
+    # is the new primary sort/filter signal since neither of those alone
+    # told a reviewer what to look at first.
+    review_rows: list[str] = []
     for rule in rules:
         if not rule.get("requires_review"):
             continue
         rid = str(rule.get("rule_id") or "unidentified")
         review_route = str(_mapping(rule.get("review_route")).get("route") or "unclassified")
+        severity = _review_severity(rule)
         reasons = _review_reasons(rule) or ["Review flag set without a detailed reason."]
         reason_html = "".join(f"<li>{_safe(reason)}</li>" for reason in reasons)
         evidence_html = " ".join(
@@ -1318,20 +1520,38 @@ def generate(
             for anchor in rule_sources.get(rid, [])
         ) or "Unresolved source"
         confidence = _confidence(rule)
-        row = (
-            f'<tr><td><a href="#rule-{_safe(_slug(rid))}">{_safe(rid)}</a></td>'
+        related = sorted(rule_adjacency.get(rid, ()))
+        related_html = "".join(f'<a class="trace-chip trace-chip-link" href="#rule-{_safe(_slug(r))}">{_safe(r)}</a>' for r in related[:8]) or '<span class="trace-chip trace-chip-empty">None</span>'
+        if len(related) > 8:
+            related_html += f'<span class="muted trace-more">+{len(related) - 8} more</span>'
+        human_required = bool(_mapping(rule.get("review_route")).get("human_review_required"))
+        review_rows.append(
+            f'<tr class="review-row" data-severity="{_safe(severity)}" data-route="{_safe(review_route)}" data-human="{str(human_required).lower()}" '
+            f'data-search="{_safe((rid + " " + str(rule.get("rule_name", ""))).casefold())}">'
+            f'<td>{_severity_badge_html(severity)}</td>'
+            f'<td><a href="#rule-{_safe(_slug(rid))}">{_safe(rid)}</a><div class="muted">{_safe(rule.get("rule_name") or "Untitled rule")}</div></td>'
             f'<td>{_route_badge_html(review_route)}</td>'
             f'<td><ul class="reason-list">{reason_html}</ul></td>'
             f'<td>{_safe(f"{confidence:.1f}%" if confidence is not None else "—")}</td>'
-            f'<td>{evidence_html}</td></tr>'
+            f'<td>{evidence_html}</td>'
+            f'<td><div class="trace-chip-row">{related_html}</div></td></tr>'
         )
-        if bool(_mapping(rule.get("review_route")).get("human_review_required")):
-            human_review_rows.append(row)
-        else:
-            quality_hold_rows.append(row)
-    category_rows = "".join(f'<tr><td>{_safe(category)}</td><td>{count}</td><td>{round(count / max(1, len(rules)) * 100, 1)}%</td></tr>' for category, count in sorted(categories.items(), key=lambda item: (-item[1], item[0].casefold())))
-    confidence_rows = "".join(f'<tr><td>{_safe(bucket)}</td><td>{count}</td></tr>' for bucket, count in sorted(confidence_buckets.items())) or '<tr><td>Not reported</td><td>0</td></tr>'
+    # Overview / Rule Analytics chart data (§4 of the redesign) -- rendered
+    # as SVG bar/donut charts below, replacing the old plain KPI tables.
+    category_chart = _bar_chart_svg(sorted(categories.items(), key=lambda item: (-item[1], item[0].casefold())), color="#7c83fd")
+    confidence_chart = _bar_chart_svg(sorted(confidence_buckets.items()), color="#27c2a5")
     confidence_source_summary = " · ".join(f'{_confidence_source_label(source)}: {count}' for source, count in sorted(confidence_sources.items())) or "Not reported"
+    route_donut = _donut_chart_svg([(route.replace("_", " ").title(), count) for route, count in sorted(route_counts.items(), key=lambda item: -item[1])])
+    model_type_chart = _bar_chart_svg([(kind, len(model_info[kind]["rule_ids"])) for kind in ("DMN", "BPMN", "CMMN")], color="#5a8dee")
+    degree_chart = _bar_chart_svg(list(connectivity["degree_buckets"].items()), color="#f3a94b")
+    most_connected_html = "".join(
+        f'<li><a href="#rule-{_safe(_slug(rid))}">{_safe(rid)}</a><span class="muted">{count} connection{"s" if count != 1 else ""}</span></li>'
+        for rid, count in connectivity["most_connected"]
+    ) or '<li class="muted">No dependency edges were reported.</li>'
+    isolated_ids = connectivity["isolated_rule_ids"]
+    isolated_chips = "".join(f'<a class="trace-chip trace-chip-link" href="#rule-{_safe(_slug(rid))}">{_safe(rid)}</a>' for rid in isolated_ids[:60]) or '<span class="trace-chip trace-chip-empty">None -- every rule has at least one dependency edge.</span>'
+    if len(isolated_ids) > 60:
+        isolated_chips += f'<span class="muted trace-more">+{len(isolated_ids) - 60} more</span>'
     edge_rows = "".join(f'<tr><td>{_safe(edge.get("source_rule_id"))}</td><td>{_safe(edge.get("target_rule_id"))}</td><td>{_safe(edge.get("dependency_type", "unknown"))}</td></tr>' for edge in edges[:500]) or '<tr><td colspan="3">No dependency edges were reported.</td></tr>'
     dependency_layers = dependency_layout["layers"]
     dependency_layer_chips = "".join(
@@ -1352,59 +1572,88 @@ def generate(
         for item in top_concepts if item["rule_links"] or item["fact_links"]
     ) or '<li class="muted">No connected concepts were reported.</li>'
     fact_status_rows = "".join(f'<tr><td>{_safe(status)}</td><td>{count}</td><td>{_percent(count, len(fact_types)):.1f}%</td></tr>' for status, count in sorted(fact_status_counts.items(), key=lambda item: (-item[1], item[0]))) or '<tr><td>Not reported</td><td>0</td><td>0.0%</td></tr>'
-    model_cards = []
-    model_parsers = {"DMN": (_parse_dmn_decisions, _dmn_table_html), "BPMN": (_parse_bpmn_processes, _bpmn_flow_html), "CMMN": (_parse_cmmn_cases, _cmmn_plan_html)}
-    model_kind_notes = {
-        "DMN": "One decision table per rule: input columns on the left, output columns on the right, one row of FEEL expressions for the rule's evaluated condition.",
-        "BPMN": "Only rules with explicit, source-grounded ordered workflow steps get a process; other rules stay in DMN/rule views instead of an invented linear flow.",
-        "CMMN": "One case per rule routed to case management or human review, with its review task and resolution milestone. Case items carry no forced order.",
-    }
-    for kind in ("DMN", "BPMN", "CMMN"):
-        info = model_info[kind]
-        note = "Generated" if info["exists"] and not info.get("parse_error") else "Not generated or unavailable"
-        xml_path = models_dir / info["file"]
-        xml_view = _highlight_xml(xml_path, kind) if info["exists"] else '<div class="xml-empty">XML artifact is unavailable for this model.</div>'
-        parser, renderer = model_parsers[kind]
-        items = parser(xml_path) if info["exists"] else []
-        diagram_section = _model_kind_section_html(kind, items, renderer)
-        model_cards.append(
-            f'<article class="model-card model-card-wide"><div class="eyebrow">{kind}</div><h3>{_safe(note)}</h3>'
-            f'<p class="muted">{_safe(model_kind_notes[kind])} · {len(info["rule_ids"])} linked rules · {info["element_count"]} XML elements</p>'
-            f'{diagram_section}<details class="xml-details"><summary>Open highlighted XML</summary>{xml_view}</details></article>'
-        )
 
     report_html = f'''<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Business Knowledge Report</title>
 <style>
 :root{{--ink:#17253d;--muted:#6f7d91;--line:#e4eaf2;--paper:#fff;--wash:#f5f8fc;--teal:#27c2a5;--violet:#7c83fd;--amber:#f3a94b;--red:#d85d69;--shadow:0 18px 50px rgba(23,37,61,.08)}}*{{box-sizing:border-box}}body{{margin:0;color:var(--ink);background:var(--wash);font:14px/1.5 Inter,ui-sans-serif,system-ui,-apple-system,sans-serif}}a{{color:#4251bd;text-decoration:none}}a:hover{{text-decoration:underline}}button,input,select{{font:inherit}}.shell{{max-width:1560px;margin:auto;padding:26px}}header.hero{{background:linear-gradient(125deg,#17253d,#2b4169 55%,#5165ce);border-radius:24px;color:#fff;padding:34px;box-shadow:var(--shadow);position:relative;overflow:hidden}}header.hero:after{{content:"";position:absolute;width:320px;height:320px;border-radius:50%;right:-90px;top:-130px;background:rgba(39,194,165,.22)}}.eyebrow{{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--teal);font-weight:800}}.hero h1{{font-size:clamp(28px,4vw,48px);line-height:1.05;max-width:800px;margin:10px 0}}.hero p{{max-width:800px;color:#dce7f7;font-size:16px}}.metric-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin:18px 0 26px}}.metric-card,.panel,.model-card{{background:var(--paper);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow)}}.metric-card{{padding:18px}}.metric-value{{font-size:27px;font-weight:800}}.metric-label{{font-weight:750;margin-top:2px}}.metric-detail,.muted{{color:var(--muted);font-size:12px}}nav.tabs{{display:flex;gap:8px;flex-wrap:wrap;margin:20px 0}}nav.tabs button{{border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:999px;padding:10px 16px;cursor:pointer;font-weight:700}}nav.tabs button.active{{background:var(--ink);color:#fff;border-color:var(--ink)}}section.tab{{display:none}}section.tab.active{{display:block}}.panel{{padding:22px;margin:14px 0}}.panel h2,.panel h3{{margin-top:0}}.grid-2{{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px}}table{{width:100%;border-collapse:collapse}}th,td{{padding:11px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}}th{{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);background:#f8fafd;position:sticky;top:0;z-index:1}}tr:hover td{{background:#fbfcff}}.table-wrap{{overflow:auto;max-height:720px;border:1px solid var(--line);border-radius:12px}}.toolbar{{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0}}.toolbar input,.toolbar select{{border:1px solid var(--line);border-radius:9px;padding:9px 11px;background:#fff;min-width:190px}}.status{{display:inline-block;border-radius:999px;padding:3px 8px;font-size:11px;font-weight:800;background:#e9f7f3;color:#087760}}.status-review_required,.status-unresolved{{background:#fff1df;color:#92570a}}.status-fail,.status-contradicted{{background:#ffe8eb;color:#9d2937}}details summary{{cursor:pointer;color:#4251bd;font-weight:650}}pre{{white-space:pre-wrap;word-break:break-word;background:#f7f9fc;border-radius:9px;padding:12px;font:12px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace;max-height:360px;overflow:auto}}.evidence-link{{display:inline-block;margin:2px 4px 2px 0;padding:2px 7px;border-radius:99px;background:#eef1ff;font-size:11px}}.model-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:14px}}.model-card{{padding:18px}}.model-svg{{width:100%;height:auto;background:#fbfcff;border-radius:12px;margin-top:10px}}.svg-title{{font-size:16px;font-weight:800;fill:var(--ink)}}.svg-label{{font-size:11px;fill:var(--ink)}}.svg-empty{{font-size:12px;fill:var(--muted)}}.source-card{{border:1px solid var(--line);background:#fff;border-radius:12px;padding:16px;margin:10px 0;scroll-margin-top:20px}}.source-card h4{{margin:0 0 4px;font-size:14px;word-break:break-all}}.source-meta{{color:var(--muted);font-size:11px;margin-bottom:8px}}.callout{{border-left:4px solid var(--teal);padding:12px 16px;background:#effaf7;border-radius:8px}}.empty{{padding:30px;text-align:center;color:var(--muted)}}footer{{padding:28px 0;color:var(--muted);font-size:12px}}@media(max-width:700px){{.shell{{padding:12px}}header.hero{{padding:24px 20px}}th,td{{min-width:130px}}}}
- .insight-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;margin:16px 0}}.insight-card{{background:linear-gradient(145deg,#f7fbff,#fff);border:1px solid var(--line);border-radius:14px;padding:16px}}.insight-card .metric-value{{font-size:24px}}.insight-card h3{{font-size:13px;margin:0 0 4px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}}.insight-bar-row{{margin:12px 0}}.insight-bar-label{{display:flex;justify-content:space-between;gap:12px;text-transform:capitalize}}.insight-bar-track{{height:8px;background:#edf1f7;border-radius:99px;overflow:hidden;margin:6px 0 3px}}.insight-bar-track span{{display:block;height:100%;border-radius:99px}}.insight-list{{margin:0;padding:0;list-style:none}}.insight-list li{{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid var(--line)}}.insight-list li:last-child{{border-bottom:0}}.concept-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(310px,1fr));gap:14px;margin-top:16px}}.concept-card{{background:#fff;border:1px solid var(--line);border-radius:16px;padding:18px;box-shadow:0 10px 28px rgba(23,37,61,.05);scroll-margin-top:20px}}.concept-card:hover{{border-color:#b9c4ff;box-shadow:0 14px 34px rgba(66,81,189,.12)}}.concept-card-head{{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}}.concept-term{{font-size:18px;font-weight:800;line-height:1.2}}.concept-card p{{color:#4e5e73;min-height:42px}}.concept-meta{{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0;color:var(--muted);font-size:12px}}.concept-meta span{{padding:5px 8px;background:#f5f7fb;border-radius:999px}}.concept-detail{{display:grid;gap:12px;padding-top:10px}}.concept-detail strong{{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}}.vocabulary-toolbar{{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:14px 0}}.vocabulary-toolbar input,.vocabulary-toolbar select{{border:1px solid var(--line);border-radius:9px;padding:9px 11px;background:#fff;min-width:190px}}.vocabulary-toolbar output{{color:var(--muted);font-size:12px}}.fact-table{{margin-top:18px}}.status-case_management{{background:#eef1ff;color:#4251bd}}.status-human_review{{background:#ffe8eb;color:#9d2937}}.status-machine_repair{{background:#e9f7f3;color:#087760}}.status-presented{{background:#e9f7f3;color:#087760}}.status-unverified{{background:#fff1df;color:#92570a}}.status-grounding-failed{{background:#ffe8eb;color:#9d2937}}.status-grounding-certified{{background:#e9f7f3;color:#087760}}.status-grounding-unknown{{background:#f0f2f6;color:#5d6b7e}}.status-stack{{display:flex;flex-wrap:wrap;gap:5px}}.confidence-score{{display:flex;align-items:baseline;gap:6px;margin-top:7px}}.logic-details{{min-width:250px}}.logic-details summary{{display:flex;align-items:center;justify-content:space-between;gap:8px}}.logic-summary{{font-weight:800;color:#4251bd}}.formal-logic{{padding:14px 0 4px}}.logic-expression{{padding:12px 14px;background:#17253d;color:#eef4ff;border-radius:10px;font:12px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;overflow:auto}}.logic-keyword{{color:#7de4ce;font-weight:900;margin:0 4px}}.logic-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;margin-top:14px}}.logic-grid h4{{margin:0 0 7px;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}}.logic-list{{border:1px solid var(--line);border-radius:10px;overflow:hidden}}.logic-row{{display:flex;align-items:flex-start;gap:8px;padding:8px 10px;border-bottom:1px solid var(--line);background:#fff}}.logic-row:last-child{{border-bottom:0}}.logic-index{{flex:0 0 auto;color:#4251bd;font:700 11px ui-monospace,SFMono-Regular,Menlo,monospace}}.logic-row code{{font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;overflow-wrap:anywhere}}.logic-type{{margin-left:auto;flex:0 0 auto;color:var(--muted);font-size:11px}}.logic-raw{{margin-top:12px}}.logic-raw pre{{max-height:260px}}.logic-if{{margin-bottom:10px}}.logic-then-row{{display:flex;align-items:flex-start;gap:8px;flex-wrap:wrap}}.logic-then{{display:flex;flex-wrap:wrap;gap:6px;flex:1}}.outcome-chip{{display:inline-flex;align-items:center;gap:5px;padding:4px 9px;border-radius:7px;background:rgba(124,131,253,.22);font:12px/1.3 ui-monospace,SFMono-Regular,Menlo,monospace}}.outcome-chip .ov-name{{color:#b9c4ff}}.outcome-chip .ov-eq{{color:#7de4ce;font-weight:900}}.outcome-chip .ov-val{{color:#eef4ff;font-weight:700}}.outcome-chip.ov-true{{background:rgba(39,194,165,.26)}}.outcome-chip.ov-true .ov-val{{color:#7de4ce}}.outcome-chip.ov-false{{background:rgba(111,125,145,.24)}}.outcome-chip.ov-false .ov-val{{color:#c3cbdb}}.outcome-grid{{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;border:1px solid var(--line);border-radius:10px;padding:10px;background:#fbfcff}}.outcome-card{{display:flex;flex-direction:column;gap:6px;padding:9px 11px;border-radius:9px;background:#fff;border:1px solid var(--line)}}.outcome-name{{font-size:11.5px;font-weight:700;color:var(--ink);word-break:break-word;display:flex;flex-direction:column;gap:2px}}.outcome-var{{font:11px ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--muted);font-weight:400;word-break:break-all}}.outcome-badge{{align-self:flex-start;display:inline-flex;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:800;max-width:100%;overflow-wrap:anywhere}}.outcome-badge.type-true{{background:#e9f7f3;color:#087760}}.outcome-badge.type-false{{background:#f0f2f6;color:#5d6b7e}}.outcome-badge.type-number{{background:#eef1ff;color:#4251bd}}.outcome-badge.type-text{{background:#fff1df;color:#92570a}}.outcome-badge.type-list{{background:transparent;padding:0;display:flex;flex-wrap:wrap;gap:4px}}.outcome-value-item{{background:#f5f7fb;border:1px solid var(--line);border-radius:999px;padding:3px 9px;font-size:11px;font-weight:700;color:var(--ink)}}.status-unclassified{{background:#f0f2f6;color:#5d6b7e}}.route-card{{border:1px solid var(--line);border-left:4px solid #c7ceda;border-radius:10px;padding:12px 14px;background:#fff;display:flex;flex-direction:column;gap:8px;min-width:230px}}.route-head{{display:flex;align-items:flex-start;gap:10px}}.route-icon{{font-size:18px;line-height:1;flex:0 0 auto}}.route-title{{font-weight:800;font-size:13px;margin-top:3px}}.route-desc{{margin:0;color:var(--muted);font-size:12px;line-height:1.45}}.route-hold{{align-self:flex-start;display:inline-flex;padding:3px 9px;border-radius:999px;font-size:11px;font-weight:800}}.route-hold-yes{{background:#fff1df;color:#92570a}}.route-hold-no{{background:#e9f7f3;color:#087760}}.route-reasons{{margin-top:2px}}.route-reasons summary{{font-size:12px}}.route-badge{{display:inline-flex;align-items:center;gap:5px}}.route-badge-label{{margin-top:3px}}.reason-list{{margin:6px 0 0;padding-left:18px;color:#4e5e73;font-size:12.5px;line-height:1.6}}.route-human_review{{border-left-color:#d85d69}}.route-case_management{{border-left-color:#7c83fd}}.route-machine_repair{{border-left-color:#27c2a5}}.route-none{{border-left-color:#27c2a5}}.route-unclassified{{border-left-color:#9aa5b8}}.model-card-wide{{grid-column:1/-1}}.model-links{{margin-top:6px;display:flex;flex-wrap:wrap;gap:4px}}.model-link{{background:#eef7f3;color:#087760;font-weight:800}}.model-diagram-empty{{padding:22px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:10px;margin-top:12px}}.model-selector{{margin-top:14px;display:flex;flex-direction:column;gap:6px}}.model-selector label{{font-size:12px;font-weight:700;color:var(--muted)}}.model-select{{border:1px solid var(--line);border-radius:9px;padding:9px 11px;background:#fff;max-width:520px}}.model-diagram-items{{margin-top:12px}}.model-diagram-item-head{{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}}.status-dmn{{background:#eef1ff;color:#4251bd}}.dmn-table-wrap{{margin-top:2px}}.dmn-table-meta{{display:flex;align-items:center;gap:8px;margin-bottom:8px}}.dmn-table{{min-width:100%}}.dmn-table th,.dmn-table td{{border:1px solid var(--line)}}.dmn-table thead th.dmn-col-input{{background:#f4f7ff;color:#4251bd}}.dmn-table thead th.dmn-col-output{{background:#effaf7;color:#087760;border-left:3px solid var(--teal)}}.dmn-col-type{{display:block;font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted);font-size:10px}}.dmn-table td.dmn-col-output{{border-left:3px solid var(--teal);background:#fbfffd}}.dmn-table td code{{font:12px ui-monospace,SFMono-Regular,Menlo,monospace}}.bpmn-flow{{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-top:4px;padding:16px;background:#fbfcff;border:1px solid var(--line);border-radius:12px}}.bpmn-step{{display:flex;align-items:center;gap:6px}}.bpmn-node{{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-width:120px;min-height:64px;padding:8px 12px;text-align:center;font-size:12px;font-weight:700}}.bpmn-node-event{{border-radius:999px;background:#eef1ff;border:2px solid #7c83fd;color:#4251bd}}.bpmn-node-task{{border-radius:12px;background:#fff;border:1.5px solid var(--line);box-shadow:0 6px 16px rgba(23,37,61,.06)}}.bpmn-node-icon{{font-size:18px}}.bpmn-node-sub{{font-size:10px;font-weight:700;color:var(--teal);text-transform:uppercase;letter-spacing:.04em}}.bpmn-arrow{{color:#7c83fd;font-size:20px;font-weight:900}}.cmmn-plan{{display:flex;flex-wrap:wrap;gap:10px;margin-top:4px}}.cmmn-item{{display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:12px;background:#fff;border:1px solid var(--line);min-width:220px;box-shadow:0 6px 16px rgba(23,37,61,.05)}}.cmmn-item-icon{{font-size:20px}}.cmmn-item-kind{{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}}.cmmn-item-name{{font-weight:700}}.cmmn-human_task{{border-left:4px solid var(--violet)}}.cmmn-milestone{{border-left:4px solid var(--amber)}}@keyframes navHighlight{{0%{{box-shadow:0 0 0 3px rgba(66,81,189,.55)}}100%{{box-shadow:0 0 0 3px rgba(66,81,189,0)}}}}.nav-highlight{{animation:navHighlight 1.6s ease-out;border-radius:10px}}.xml-details{{margin-top:16px;border-top:1px solid var(--line);padding-top:12px}}.xml-details>summary{{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border-radius:10px;background:#f4f7ff;color:#4251bd;font-weight:800;cursor:pointer;list-style:none}}.xml-details>summary::-webkit-details-marker{{display:none}}.xml-details>summary:after{{content:"＋";font-size:18px;line-height:1}}.xml-details[open]>summary:after{{content:"−"}}.xml-viewer{{margin-top:12px;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#101a2d}}.xml-toolbar{{display:flex;justify-content:space-between;gap:12px;padding:10px 14px;background:#17253d;color:#eef4ff;font-size:12px}}.xml-code{{margin:0;padding:10px 0;max-height:680px;overflow:auto;background:#101a2d;color:#dce7f7;counter-reset:xml-line;font:12px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace}}.xml-line{{display:grid;grid-template-columns:52px minmax(max-content,1fr);min-width:max-content;padding-right:18px}}.xml-line:hover{{background:rgba(124,131,253,.12)}}.xml-ln{{color:#687998;text-align:right;padding-right:14px;user-select:none}}.xml-source{{white-space:pre;padding-right:18px}}.xml-tag{{color:#7de4ce}}.xml-attr{{color:#f3a94b}}.xml-value{{color:#b9c4ff}}.xml-bracket{{color:#8e9bb2}}.xml-comment,.xml-declaration{{color:#8291aa;font-style:italic}}.xml-empty{{margin-top:12px;padding:16px;border:1px dashed var(--line);border-radius:10px;color:var(--muted);background:#f8fafd}}.dependency-graph-shell{{border:1px solid var(--line);border-radius:14px;background:#fbfcff;padding:16px;margin:16px 0}}.dependency-graph-toolbar{{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}}.dependency-graph-toolbar h3{{margin:0}}.dependency-graph-stats{{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}}.graph-layer-chip{{display:inline-flex;align-items:center;gap:4px;border-radius:999px;padding:6px 10px;background:#eef1ff;color:#4251bd;font-size:12px}}.dependency-graph-scroll{{overflow:auto;border:1px solid var(--line);border-radius:12px;background:#fff;max-height:760px}}.dependency-graph-svg{{display:block;max-width:none;background:#fff}}.dependency-lane{{fill:#f7f9fc;stroke:#e4eaf2}}.dependency-layer-label{{fill:#6f7d91;font:700 12px Inter,ui-sans-serif,system-ui,sans-serif}}.dependency-edge{{fill:none;stroke:#7c83fd;stroke-width:1.6;opacity:.62;vector-effect:non-scaling-stroke}}.dependency-edge:hover{{stroke:#4251bd;stroke-width:2.8;opacity:1}}.dependency-node-id{{fill:#17253d;font:700 12px ui-monospace,SFMono-Regular,Menlo,monospace}}.dependency-node-degree{{fill:#6f7d91;font:11px Inter,ui-sans-serif,system-ui,sans-serif}}.dependency-graph-empty{{padding:32px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:10px}}.dependency-graph-note{{margin:12px 0 0;color:var(--muted);font-size:12px}}
+ .insight-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;margin:16px 0}}.insight-card{{background:linear-gradient(145deg,#f7fbff,#fff);border:1px solid var(--line);border-radius:14px;padding:16px}}.insight-card .metric-value{{font-size:24px}}.insight-card h3{{font-size:13px;margin:0 0 4px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}}.insight-bar-row{{margin:12px 0}}.insight-bar-label{{display:flex;justify-content:space-between;gap:12px;text-transform:capitalize}}.insight-bar-track{{height:8px;background:#edf1f7;border-radius:99px;overflow:hidden;margin:6px 0 3px}}.insight-bar-track span{{display:block;height:100%;border-radius:99px}}.insight-list{{margin:0;padding:0;list-style:none}}.insight-list li{{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid var(--line)}}.insight-list li:last-child{{border-bottom:0}}.concept-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(310px,1fr));gap:14px;margin-top:16px}}.concept-card{{background:#fff;border:1px solid var(--line);border-radius:16px;padding:18px;box-shadow:0 10px 28px rgba(23,37,61,.05);scroll-margin-top:20px}}.concept-card:hover{{border-color:#b9c4ff;box-shadow:0 14px 34px rgba(66,81,189,.12)}}.concept-card-head{{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}}.concept-term{{font-size:18px;font-weight:800;line-height:1.2}}.concept-card p{{color:#4e5e73;min-height:42px}}.concept-meta{{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0;color:var(--muted);font-size:12px}}.concept-meta span{{padding:5px 8px;background:#f5f7fb;border-radius:999px}}.concept-detail{{display:grid;gap:12px;padding-top:10px}}.concept-detail strong{{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}}.vocabulary-toolbar{{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:14px 0}}.vocabulary-toolbar input,.vocabulary-toolbar select{{border:1px solid var(--line);border-radius:9px;padding:9px 11px;background:#fff;min-width:190px}}.vocabulary-toolbar output{{color:var(--muted);font-size:12px}}.fact-table{{margin-top:18px}}.status-case_management{{background:#eef1ff;color:#4251bd}}.status-human_review{{background:#ffe8eb;color:#9d2937}}.status-machine_repair{{background:#e9f7f3;color:#087760}}.status-presented{{background:#e9f7f3;color:#087760}}.status-unverified{{background:#fff1df;color:#92570a}}.status-grounding-failed{{background:#ffe8eb;color:#9d2937}}.status-grounding-certified{{background:#e9f7f3;color:#087760}}.status-grounding-unknown{{background:#f0f2f6;color:#5d6b7e}}.status-stack{{display:flex;flex-wrap:wrap;gap:5px}}.confidence-score{{display:flex;align-items:baseline;gap:6px;margin-top:7px}}.logic-details{{min-width:250px}}.logic-details summary{{display:flex;align-items:center;justify-content:space-between;gap:8px}}.logic-summary{{font-weight:800;color:#4251bd}}.formal-logic{{padding:14px 0 4px}}.logic-expression{{padding:12px 14px;background:#17253d;color:#eef4ff;border-radius:10px;font:12px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;overflow:auto}}.logic-keyword{{color:#7de4ce;font-weight:900;margin:0 4px}}.logic-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;margin-top:14px}}.logic-grid h4{{margin:0 0 7px;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}}.logic-list{{border:1px solid var(--line);border-radius:10px;overflow:hidden}}.logic-row{{display:flex;align-items:flex-start;gap:8px;padding:8px 10px;border-bottom:1px solid var(--line);background:#fff}}.logic-row:last-child{{border-bottom:0}}.logic-index{{flex:0 0 auto;color:#4251bd;font:700 11px ui-monospace,SFMono-Regular,Menlo,monospace}}.logic-row code{{font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;overflow-wrap:anywhere}}.logic-type{{margin-left:auto;flex:0 0 auto;color:var(--muted);font-size:11px}}.logic-raw{{margin-top:12px}}.logic-raw pre{{max-height:260px}}.logic-if{{margin-bottom:10px}}.logic-then-row{{display:flex;align-items:flex-start;gap:8px;flex-wrap:wrap}}.logic-then{{display:flex;flex-wrap:wrap;gap:6px;flex:1}}.outcome-chip{{display:inline-flex;align-items:center;gap:5px;padding:4px 9px;border-radius:7px;background:rgba(124,131,253,.22);font:12px/1.3 ui-monospace,SFMono-Regular,Menlo,monospace}}.outcome-chip .ov-name{{color:#b9c4ff}}.outcome-chip .ov-eq{{color:#7de4ce;font-weight:900}}.outcome-chip .ov-val{{color:#eef4ff;font-weight:700}}.outcome-chip.ov-true{{background:rgba(39,194,165,.26)}}.outcome-chip.ov-true .ov-val{{color:#7de4ce}}.outcome-chip.ov-false{{background:rgba(111,125,145,.24)}}.outcome-chip.ov-false .ov-val{{color:#c3cbdb}}.outcome-grid{{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;border:1px solid var(--line);border-radius:10px;padding:10px;background:#fbfcff}}.outcome-card{{display:flex;flex-direction:column;gap:6px;padding:9px 11px;border-radius:9px;background:#fff;border:1px solid var(--line)}}.outcome-name{{font-size:11.5px;font-weight:700;color:var(--ink);word-break:break-word;display:flex;flex-direction:column;gap:2px}}.outcome-var{{font:11px ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--muted);font-weight:400;word-break:break-all}}.outcome-badge{{align-self:flex-start;display:inline-flex;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:800;max-width:100%;overflow-wrap:anywhere}}.outcome-badge.type-true{{background:#e9f7f3;color:#087760}}.outcome-badge.type-false{{background:#f0f2f6;color:#5d6b7e}}.outcome-badge.type-number{{background:#eef1ff;color:#4251bd}}.outcome-badge.type-text{{background:#fff1df;color:#92570a}}.outcome-badge.type-list{{background:transparent;padding:0;display:flex;flex-wrap:wrap;gap:4px}}.outcome-value-item{{background:#f5f7fb;border:1px solid var(--line);border-radius:999px;padding:3px 9px;font-size:11px;font-weight:700;color:var(--ink)}}.status-unclassified{{background:#f0f2f6;color:#5d6b7e}}.route-card{{border:1px solid var(--line);border-left:4px solid #c7ceda;border-radius:10px;padding:12px 14px;background:#fff;display:flex;flex-direction:column;gap:8px;min-width:230px}}.route-head{{display:flex;align-items:flex-start;gap:10px}}.route-icon{{font-size:18px;line-height:1;flex:0 0 auto}}.route-title{{font-weight:800;font-size:13px;margin-top:3px}}.route-desc{{margin:0;color:var(--muted);font-size:12px;line-height:1.45}}.route-hold{{align-self:flex-start;display:inline-flex;padding:3px 9px;border-radius:999px;font-size:11px;font-weight:800}}.route-hold-yes{{background:#fff1df;color:#92570a}}.route-hold-no{{background:#e9f7f3;color:#087760}}.route-reasons{{margin-top:2px}}.route-reasons summary{{font-size:12px}}.route-badge{{display:inline-flex;align-items:center;gap:5px}}.route-badge-label{{margin-top:3px}}.reason-list{{margin:6px 0 0;padding-left:18px;color:#4e5e73;font-size:12.5px;line-height:1.6}}.route-human_review{{border-left-color:#d85d69}}.route-case_management{{border-left-color:#7c83fd}}.route-machine_repair{{border-left-color:#27c2a5}}.route-none{{border-left-color:#27c2a5}}.route-unclassified{{border-left-color:#9aa5b8}}.model-diagram-empty{{padding:22px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:10px;margin-top:12px}}.status-dmn{{background:#eef1ff;color:#4251bd}}.dmn-table-wrap{{margin-top:2px}}.dmn-table-meta{{display:flex;align-items:center;gap:8px;margin-bottom:8px}}.dmn-table{{min-width:100%}}.dmn-table th,.dmn-table td{{border:1px solid var(--line)}}.dmn-table thead th.dmn-col-input{{background:#f4f7ff;color:#4251bd}}.dmn-table thead th.dmn-col-output{{background:#effaf7;color:#087760;border-left:3px solid var(--teal)}}.dmn-col-type{{display:block;font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted);font-size:10px}}.dmn-table td.dmn-col-output{{border-left:3px solid var(--teal);background:#fbfffd}}.dmn-table td code{{font:12px ui-monospace,SFMono-Regular,Menlo,monospace}}.bpmn-flow{{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-top:4px;padding:16px;background:#fbfcff;border:1px solid var(--line);border-radius:12px}}.bpmn-step{{display:flex;align-items:center;gap:6px}}.bpmn-node{{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-width:120px;min-height:64px;padding:8px 12px;text-align:center;font-size:12px;font-weight:700}}.bpmn-node-event{{border-radius:999px;background:#eef1ff;border:2px solid #7c83fd;color:#4251bd}}.bpmn-node-task{{border-radius:12px;background:#fff;border:1.5px solid var(--line);box-shadow:0 6px 16px rgba(23,37,61,.06)}}.bpmn-node-icon{{font-size:18px}}.bpmn-node-sub{{font-size:10px;font-weight:700;color:var(--teal);text-transform:uppercase;letter-spacing:.04em}}.bpmn-arrow{{color:#7c83fd;font-size:20px;font-weight:900}}.cmmn-plan{{display:flex;flex-wrap:wrap;gap:10px;margin-top:4px}}.cmmn-item{{display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:12px;background:#fff;border:1px solid var(--line);min-width:220px;box-shadow:0 6px 16px rgba(23,37,61,.05)}}.cmmn-item-icon{{font-size:20px}}.cmmn-item-kind{{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}}.cmmn-item-name{{font-weight:700}}.cmmn-human_task{{border-left:4px solid var(--violet)}}.cmmn-milestone{{border-left:4px solid var(--amber)}}@keyframes navHighlight{{0%{{box-shadow:0 0 0 3px rgba(66,81,189,.55)}}100%{{box-shadow:0 0 0 3px rgba(66,81,189,0)}}}}.nav-highlight{{animation:navHighlight 1.6s ease-out;border-radius:10px}}.dependency-graph-shell{{border:1px solid var(--line);border-radius:14px;background:#fbfcff;padding:16px;margin:16px 0}}.dependency-graph-toolbar{{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}}.dependency-graph-toolbar h3{{margin:0}}.dependency-graph-stats{{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}}.graph-layer-chip{{display:inline-flex;align-items:center;gap:4px;border-radius:999px;padding:6px 10px;background:#eef1ff;color:#4251bd;font-size:12px}}.dependency-graph-layout{{display:flex;gap:14px;align-items:flex-start}}.dependency-graph-scroll{{flex:1;min-width:0;overflow:auto;border:1px solid var(--line);border-radius:12px;background:#fff;max-height:760px}}.dependency-graph-svg{{display:block;max-width:none;background:#fff;cursor:grab}}.dependency-graph-svg.grabbing{{cursor:grabbing}}.dependency-lane{{fill:#f7f9fc;stroke:#e4eaf2}}.dependency-layer-label{{fill:#6f7d91;font:700 12px Inter,ui-sans-serif,system-ui,sans-serif}}.dependency-edge{{fill:none;stroke:#7c83fd;stroke-width:1.6;opacity:.62;vector-effect:non-scaling-stroke;transition:opacity .15s,stroke-width .15s}}.dependency-edge:hover,.dependency-edge.active{{stroke:#4251bd;stroke-width:2.8;opacity:1}}.dependency-edge.dimmed{{opacity:.12}}.dependency-node{{cursor:pointer;transition:opacity .15s}}.dependency-node rect{{transition:stroke-width .15s,filter .15s}}.dependency-node.selected rect{{stroke-width:3;filter:drop-shadow(0 0 6px rgba(66,81,189,.45))}}.dependency-node.neighbor rect{{stroke-width:2.4}}.dependency-node.dimmed{{opacity:.22}}.dependency-node-id{{fill:#17253d;font:700 12px ui-monospace,SFMono-Regular,Menlo,monospace}}.dependency-node-degree{{fill:#6f7d91;font:11px Inter,ui-sans-serif,system-ui,sans-serif}}.dependency-graph-empty{{padding:32px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:10px}}.dependency-graph-note{{margin:12px 0 0;color:var(--muted);font-size:12px}}.dep-side-panel{{flex:0 0 260px;border:1px solid var(--line);border-radius:12px;background:#fff;padding:14px;max-height:760px;overflow:auto}}.dep-panel-head{{display:flex;align-items:center;justify-content:space-between;gap:8px;font:700 13px ui-monospace,SFMono-Regular,Menlo,monospace}}.dep-panel-close{{border:0;background:none;font-size:18px;line-height:1;cursor:pointer;color:var(--muted)}}.dep-panel-meta{{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0;font-size:11px}}.dep-panel-meta span{{padding:3px 8px;border-radius:999px;background:#f5f7fb;color:var(--muted)}}.dep-panel-list{{list-style:none;margin:6px 0 0;padding:0}}.dep-panel-list li{{display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid var(--line);font-size:12.5px}}.dep-panel-list li:last-child{{border-bottom:0}}.dep-panel-head+*{{margin-top:2px}}
+.model-badges{{margin-top:6px;display:flex;gap:4px}}.model-badge{{font-size:10px;font-weight:800;letter-spacing:.03em;padding:2px 7px;border-radius:6px}}.model-badge-yes{{background:#eef7f3;color:#087760}}.model-badge-no{{background:#f0f2f6;color:#a9b3c3}}
+.rule-model-diagrams{{margin-top:14px;display:grid;gap:12px}}.rule-model-block{{border:1px solid var(--line);border-radius:10px;padding:12px;background:#fbfcff}}.rule-model-kind{{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:6px}}
+.trace-path{{display:flex;flex-wrap:wrap;align-items:stretch;gap:0;margin-bottom:16px;padding:14px;background:#f7f9fc;border:1px solid var(--line);border-radius:12px}}.trace-step{{display:flex;align-items:center}}.trace-arrow{{display:flex;align-items:center;padding:0 8px;color:#9aa5b8;font-weight:900;font-size:15px}}.trace-node{{display:flex;flex-direction:column;gap:4px;min-width:120px;max-width:230px}}a.trace-node{{color:inherit}}a.trace-node:hover{{text-decoration:none}}a.trace-node .trace-node-label{{text-decoration:underline}}.trace-node-kind{{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}}.trace-node-label{{font-weight:700;font-size:12.5px;word-break:break-word}}.trace-node-excerpt{{font-size:11px;color:var(--muted);font-style:italic;line-height:1.4}}.trace-node.trace-empty{{color:var(--muted);font-style:italic;justify-content:center}}.trace-chip-row{{display:flex;flex-wrap:wrap;gap:4px;margin-top:2px}}.trace-chip{{display:inline-flex;padding:3px 8px;border-radius:999px;background:#eef1ff;color:#4251bd;font-size:11px;font-weight:700}}.trace-chip-link{{background:#eef1ff}}.trace-chip-model{{background:#eef7f3;color:#087760}}.trace-chip-empty{{background:#f0f2f6;color:#a9b3c3;font-weight:400}}.trace-more{{align-self:center;font-size:11px}}
+.chart-empty{{padding:26px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:10px}}.chart-svg{{max-width:100%}}.bar-chart{{width:100%;height:auto}}.chart-label{{font:11px Inter,ui-sans-serif,system-ui,sans-serif;fill:var(--ink)}}.chart-value{{font:700 11px Inter,ui-sans-serif,system-ui,sans-serif;fill:var(--muted)}}.chart-bar{{transition:opacity .15s}}.chart-bar:hover{{opacity:.8}}.donut-wrap{{display:flex;align-items:center;gap:18px;flex-wrap:wrap}}.chart-donut-seg{{transition:opacity .15s}}.chart-donut-seg:hover{{opacity:.8}}.chart-donut-total{{font:800 22px Inter,ui-sans-serif,system-ui,sans-serif;fill:var(--ink)}}.chart-donut-caption{{font:11px Inter,ui-sans-serif,system-ui,sans-serif;fill:var(--muted)}}.chart-legend{{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}}.chart-legend li{{display:flex;align-items:center;gap:8px;font-size:12.5px}}.chart-legend-dot{{width:10px;height:10px;border-radius:3px;display:inline-block;flex:0 0 auto}}
+.severity-badge{{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:999px;font-size:11px;font-weight:800}}.severity-critical{{background:#ffe8eb;color:#9d2937}}.severity-high{{background:#fff1df;color:#92570a}}.severity-medium{{background:#fff8e1;color:#8a6d1c}}.severity-low{{background:#eef1ff;color:#4251bd}}
  </style></head><body><div class="shell">
 <header class="hero"><div class="eyebrow">Agent 12 · presentation and knowledge exploration</div><h1>Business knowledge, ready to review.</h1><p>A self-contained, source-traceable view of the extracted domain. Navigate from SBVR concepts to rules, decisions, workflows, review findings, and the exact evidence that supports each result.</p><div class="muted" style="color:#cbd9ee">Generated from {_safe(graph_file.name)} · no external assets or network calls required</div></header>
-<div class="metric-grid">{_metric_card('Business rules', len(rules), 'All extracted rules shown')}{_metric_card('SBVR concepts', concept_supported, f'{vocabulary_coverage:.1f}% with concept-specific evidence')}{_metric_card('Decision variables', len(decision_variables), 'Executable symbols kept outside SBVR')}{_metric_card('Human-review queue', f'{human_review_count} ({report_data["human_review_rate"]:.1f}%)', 'Explicit human judgment required')}{_metric_card('Quality holds', f'{review_count} ({report_data["quality_hold_rate"]:.1f}%)', 'Strict whole-rule execution holds')}{_metric_card('Quarantined claims', quarantined_claim_count, f'Ontology-invalid enrichment removed from {rules_with_quarantined_claims} rules')}{_metric_card('Core-rule holds', f'{grounding_dimension_metrics["core_rule"]["failed_count"]} ({grounding_dimension_metrics["core_rule"]["hold_rate"]:.1f}%)', 'Description, conditions, or outcomes')}{_metric_card('Enrichment holds', f'{grounding_dimension_metrics["enrichment"]["failed_count"]} ({grounding_dimension_metrics["enrichment"]["hold_rate"]:.1f}%)', 'Party, scope, or exception evidence')}{_metric_card('Contract holds', f'{grounding_dimension_metrics["contract"]["failed_count"]} ({grounding_dimension_metrics["contract"]["hold_rate"]:.1f}%)', 'Derived structural projections')}{_metric_card('Relationship holds', f'{grounding_dimension_metrics["relationship"]["failed_count"]} ({grounding_dimension_metrics["relationship"]["hold_rate"]:.1f}%)', 'Graph relationship grounding')}{_metric_card('Grounding certified', f'{grounded_count} ({report_data["grounding_coverage_rate"]:.1f}%)', 'Independent whole-rule certification')}{_metric_card('Source pointers', f'{source_pointer_count} ({report_data["source_pointer_coverage_rate"]:.1f}%)', 'Pointer presence, not grounding certification')}{_metric_card('Grounding claims', f'{grounding_claim_counts.get("supported", 0)} ({report_data["grounding_claim_support_rate"]:.1f}%)', 'Claim-level support; holds may be partial')}{_metric_card('Source documents', len(source_documents), f'{len(chunk_list)} indexed chunks')}{_metric_card('Dependencies', len(edges), 'DAG edges available')}</div>
-<nav class="tabs" aria-label="Report sections"><button class="active" data-tab="overview">Overview</button><button data-tab="vocabulary">SBVR vocabulary</button><button data-tab="rules">Rule explorer</button><button data-tab="models">Decision & process models</button><button data-tab="dependencies">Relationships</button><button data-tab="review">Review queue</button><button data-tab="sources">Source traceability</button></nav>
-<section id="overview" class="tab active"><div class="grid-2"><div class="panel"><div class="eyebrow">Executive summary</div><h2>What this domain contains</h2><p>The report presents <strong>{len(rules)}</strong> rules across <strong>{len(categories)}</strong> categories, <strong>{concept_supported}</strong> governed SBVR concepts, and <strong>{len(decision_variables)}</strong> separately managed decision variables.</p><div class="callout">Concept evidence, rule source pointers, and independent grounding certification are reported as distinct signals. A pointer is never presented as proof of entailment.</div></div><div class="panel"><div class="eyebrow">Coverage and quality</div><h2>At a glance</h2><table><tr><td>Concept evidence coverage</td><td><strong>{vocabulary_coverage:.1f}%</strong></td></tr><tr><td>Rule source-pointer coverage</td><td><strong>{report_data["source_pointer_coverage_rate"]:.1f}%</strong></td></tr><tr><td>Rules grounding-certified</td><td><strong>{report_data["grounding_coverage_rate"]:.1f}%</strong> ({grounded_count} rules)</td></tr><tr><td>Grounding claims supported</td><td><strong>{grounding_claim_counts.get("supported", 0)}/{grounding_claim_total}</strong> ({report_data["grounding_claim_support_rate"]:.1f}%)</td></tr><tr><td>Human-review queue</td><td><strong>{report_data["human_review_rate"]:.1f}%</strong> ({human_review_count} rules)</td></tr><tr><td>Quality holds</td><td><strong>{report_data["quality_hold_rate"]:.1f}%</strong> ({review_count} rules)</td></tr></table></div></div><div class="grid-2"><div class="panel"><h3>Rule categories</h3><div class="table-wrap"><table><thead><tr><th>Category</th><th>Rules</th><th>Share</th></tr></thead><tbody>{category_rows or '<tr><td colspan="3">No categories reported.</td></tr>'}</tbody></table></div></div><div class="panel"><h3>Confidence distribution</h3><div class="table-wrap"><table><thead><tr><th>Band</th><th>Rules</th></tr></thead><tbody>{confidence_rows}</tbody></table></div><p class="muted" style="margin-bottom:0">Confidence provenance: {_safe(confidence_source_summary)}</p></div></div></section>
+<div class="metric-grid">{_metric_card('Business rules', len(rules), 'All extracted rules shown')}{_metric_card('SBVR concepts', concept_supported, f'{vocabulary_coverage:.1f}% with concept-specific evidence')}{_metric_card('Decision variables', len(decision_variables), 'Executable symbols kept outside SBVR')}{_metric_card('Human-review queue', f'{human_review_count} ({report_data["human_review_rate"]:.1f}%)', 'Explicit human judgment required')}{_metric_card('Quality holds', f'{review_count} ({report_data["quality_hold_rate"]:.1f}%)', 'Strict whole-rule execution holds')}{_metric_card('Quarantined claims', quarantined_claim_count, f'Ontology-invalid enrichment removed from {rules_with_quarantined_claims} rules')}{_metric_card('Core-rule holds', f'{grounding_dimension_metrics["core_rule"]["failed_count"]} ({grounding_dimension_metrics["core_rule"]["hold_rate"]:.1f}%)', 'Description, conditions, or outcomes')}{_metric_card('Enrichment holds', f'{grounding_dimension_metrics["enrichment"]["failed_count"]} ({grounding_dimension_metrics["enrichment"]["hold_rate"]:.1f}%)', 'Party, scope, or exception evidence')}{_metric_card('Contract holds', f'{grounding_dimension_metrics["contract"]["failed_count"]} ({grounding_dimension_metrics["contract"]["hold_rate"]:.1f}%)', 'Derived structural projections')}{_metric_card('Relationship holds', f'{grounding_dimension_metrics["relationship"]["failed_count"]} ({grounding_dimension_metrics["relationship"]["hold_rate"]:.1f}%)', 'Graph relationship grounding')}{_metric_card('Grounding certified', f'{grounded_count} ({report_data["grounding_coverage_rate"]:.1f}%)', 'Independent whole-rule certification')}{_metric_card('Source pointers', f'{source_pointer_count} ({report_data["source_pointer_coverage_rate"]:.1f}%)', 'Pointer presence, not grounding certification')}{_metric_card('Grounding claims', f'{grounding_claim_counts.get("supported", 0)} ({report_data["grounding_claim_support_rate"]:.1f}%)', 'Claim-level support; holds may be partial')}{_metric_card('Source documents', len(source_documents), 'Documents referenced by rule evidence')}{_metric_card('Dependencies', len(edges), 'DAG edges available')}</div>
+<nav class="tabs" aria-label="Report sections"><button class="active" data-tab="overview">Overview</button><button data-tab="vocabulary">SBVR vocabulary</button><button data-tab="rules">Rule explorer</button><button data-tab="dependencies">Relationships</button><button data-tab="review">Review queue</button><button data-tab="sources">Source traceability</button></nav>
+<section id="overview" class="tab active"><div class="grid-2"><div class="panel"><div class="eyebrow">Executive summary</div><h2>What this domain contains</h2><p>The report presents <strong>{len(rules)}</strong> rules across <strong>{len(categories)}</strong> categories, <strong>{concept_supported}</strong> governed SBVR concepts, and <strong>{len(decision_variables)}</strong> separately managed decision variables.</p><div class="callout">Concept evidence, rule source pointers, and independent grounding certification are reported as distinct signals. A pointer is never presented as proof of entailment.</div></div><div class="panel"><div class="eyebrow">Coverage and quality</div><h2>At a glance</h2><table><tr><td>Concept evidence coverage</td><td><strong>{vocabulary_coverage:.1f}%</strong></td></tr><tr><td>Rule source-pointer coverage</td><td><strong>{report_data["source_pointer_coverage_rate"]:.1f}%</strong></td></tr><tr><td>Rules grounding-certified</td><td><strong>{report_data["grounding_coverage_rate"]:.1f}%</strong> ({grounded_count} rules)</td></tr><tr><td>Grounding claims supported</td><td><strong>{grounding_claim_counts.get("supported", 0)}/{grounding_claim_total}</strong> ({report_data["grounding_claim_support_rate"]:.1f}%)</td></tr><tr><td>Human-review queue</td><td><strong>{report_data["human_review_rate"]:.1f}%</strong> ({human_review_count} rules)</td></tr><tr><td>Quality holds</td><td><strong>{report_data["quality_hold_rate"]:.1f}%</strong> ({review_count} rules)</td></tr></table></div></div>
+<div class="grid-2"><div class="panel"><h3>Rule categories</h3><p class="muted">How the extracted rules are distributed across business categories.</p>{category_chart}</div><div class="panel"><h3>Confidence distribution</h3><p class="muted">Confidence provenance: {_safe(confidence_source_summary)}</p>{confidence_chart}</div></div>
+<div class="grid-2"><div class="panel"><h3>Review route distribution</h3><p class="muted">Where each rule that needs attention is routed -- human judgment, deterministic repair, or case management.</p>{route_donut}</div><div class="panel"><h3>Executable model coverage</h3><p class="muted">How many rules have a generated DMN decision, BPMN process, or CMMN case.</p>{model_type_chart}</div></div>
+<div class="grid-2"><div class="panel"><h3>Dependency degree distribution</h3><p class="muted">Total in+out dependency edges per rule -- a rule with more edges is more structurally central to the domain.</p>{degree_chart}</div><div class="panel"><h3>Most connected rules</h3><p class="muted">The rules with the most direct dependency edges -- start here to understand the domain's structural core.</p><ol class="insight-list">{most_connected_html}</ol></div></div>
+<div class="grid-2"><div class="panel"><h3>Isolated rules ({len(isolated_ids)})</h3><p class="muted">Rules with no dependency edges at all -- self-contained, or possibly missing an expected relationship.</p><details><summary>View isolated rules</summary><div class="trace-chip-row" style="margin-top:8px">{isolated_chips}</div></details></div><div class="panel"><h3>Dependency depth & complexity</h3><p class="muted">Shortest-path depth from root rules, and how many rules sit in a cyclic or rootless component.</p><div class="insight-grid"><div class="insight-card"><h3>Max depth</h3><div class="metric-value">{max_dependency_depth}</div></div><div class="insight-card"><h3>Cyclic/rootless anchors</h3><div class="metric-value">{cyclic_component_count}</div></div><div class="insight-card"><h3>Dependency edges</h3><div class="metric-value">{len(edges)}</div></div></div></div></div>
+</section>
 <section id="vocabulary" class="tab"><div class="panel"><div class="eyebrow">SBVR-aligned business vocabulary</div><h2>Vocabulary workbench</h2><p>Explore the domain lexicon as typed concepts and fact types. The view is grounded in the input graph: definitions, usage counts, relationships, and evidence links are shown only when the upstream artifacts provide them.</p><div class="insight-grid"><div class="insight-card"><h3>Supported concepts</h3><div class="metric-value">{concept_supported}</div><div class="muted">{report_data["concept_coverage_rate"]:.1f}% graph-supported coverage</div></div><div class="insight-card"><h3>Evidence coverage</h3><div class="metric-value">{report_data["concept_evidence_coverage_rate"]:.1f}%</div><div class="muted">{concept_evidence_count} concepts have source evidence</div></div><div class="insight-card"><h3>Fact types</h3><div class="metric-value">{len(fact_types)}</div><div class="muted">{fact_grounded_count} grounded · {report_data["fact_type_grounding_rate"]:.1f}%</div></div><div class="insight-card"><h3>Unresolved / orphaned</h3><div class="metric-value">{report_data["concept_review_count"]} / {concept_orphan_count}</div><div class="muted">Unresolved kinds / no rule or fact links</div></div></div><div class="grid-2"><div class="panel"><h3>Concept type mix</h3><p class="muted">How the vocabulary is distributed across SBVR-aligned concept kinds.</p>{kind_bars}</div><div class="panel"><h3>Most connected concepts</h3><p class="muted">Concepts with the strongest links into rules and fact types.</p><ul class="insight-list">{top_concept_rows}</ul></div></div><div class="panel"><div class="eyebrow">Concept explorer</div><h3>Find a term, definition, or concept kind</h3><div class="vocabulary-toolbar"><input id="concept-search" type="search" placeholder="Search concepts and definitions…"><select id="concept-kind"><option value="">All kinds</option>{''.join(f'<option value="{_safe(kind)}">{_safe(kind.replace("_", " "))}</option>' for kind in sorted(concept_kind_counts, key=str.casefold))}</select><select id="concept-evidence"><option value="">All evidence states</option><option value="grounded">With source evidence</option><option value="unresolved">Evidence unresolved</option></select><output id="concept-count" for="concept-search"></output></div><div id="concept-grid" class="concept-grid">{''.join(concept_rows) or '<div class="empty">No concepts were reported.</div>'}</div></div><div id="fact-types" class="panel fact-table"><div class="eyebrow">SBVR fact types</div><h3>Relationships and grounding status</h3><p class="muted">Each endpoint links back to its concept card; evidence links land on the embedded source block.</p><div class="grid-2"><div class="table-wrap"><table><thead><tr><th>Grounding status</th><th>Fact types</th><th>Share</th></tr></thead><tbody>{fact_status_rows}</tbody></table></div><div class="callout"><strong>{len(fact_types)}</strong> fact types connect <strong>{len(concept_ids)}</strong> concepts. A fact type is a vocabulary relationship, not a workflow sequence.</div></div><div class="table-wrap" style="margin-top:14px"><table><thead><tr><th>Fact type</th><th>Subject</th><th>Verb</th><th>Object</th><th>Grounding and evidence</th></tr></thead><tbody>{''.join(fact_rows) or '<tr><td colspan="5">No fact types were reported.</td></tr>'}</tbody></table></div></div></div></section>
-<section id="rules" class="tab"><div class="panel"><div class="eyebrow">Structured rule explorer</div><h2>Business rules</h2><p class="muted">Readiness, grounding, and confidence are separate signals. A quality hold means the rule is fail-closed for execution; it does not mean every extracted statement is wrong. Expand <strong>IF / THEN</strong> to inspect the typed contract and the raw JSON when needed.</p><div class="toolbar"><input id="rule-search" type="search" placeholder="Search ID, title, statement, category…"><select id="rule-category"><option value="">All categories</option>{''.join(f'<option>{_safe(category)}</option>' for category in sorted(categories, key=str.casefold))}</select><select id="rule-status"><option value="">All statuses</option><option value="review_required">Quality hold</option><option value="verified">Verified</option><option value="unresolved">Unresolved</option></select><select id="rule-route"><option value="">All routes</option>{route_options}</select><label class="muted" style="padding:9px 0"><input id="review-only" type="checkbox"> quality holds only</label><span id="rule-count" class="muted" style="padding:9px 0"></span></div><div class="table-wrap"><table id="rules-table"><thead><tr><th>Rule</th><th>Category</th><th>Natural-language statement</th><th>Formal logic</th><th>Readiness, grounding and confidence</th><th>Review route</th><th>Source evidence</th></tr></thead><tbody>{''.join(rule_rows) or '<tr><td colspan="7">No rules were reported.</td></tr>'}</tbody></table></div></div></section>
-<section id="models" class="tab"><div class="panel"><div class="eyebrow">Business process and decision models</div><h2>Models generated by Agent 11</h2><p>DMN, BPMN, and CMMN are shown as review projections and linked by rule IDs. BPMN is displayed only when the upstream semantic-routing gate found explicit ordered workflow semantics; obvious rules remain in DMN/rule views without invented process flows.</p><div class="model-grid">{''.join(model_cards)}</div></div></section>
-<section id="dependencies" class="tab"><div class="panel"><div class="eyebrow">Relationship and dependency view</div><h2>Directed rule relationship graph</h2><p>These are the dependency edges emitted by the knowledge-graph optimizer and DAG generator. They are not treated as BPMN sequence flows. The graph preserves the emitted direction and groups nodes into degree layers for readable traversal.</p><div class="dependency-graph-shell"><div class="dependency-graph-toolbar"><h3>Dependency topology</h3><span class="muted">{len(dependency_layout["nodes"])} nodes · {len(dependency_layout["edges"])} unique directed edges · {len(dependency_layers)} degree layers</span></div><div class="dependency-graph-stats">{dependency_layer_chips}<span class="graph-layer-chip"><strong>isolated</strong> · {len(dependency_layout["isolated_nodes"])} nodes</span></div><div class="dependency-graph-scroll">{dependency_graph}</div><p class="dependency-graph-note">{_safe(dependency_graph_note)} Hover an edge for its dependency type and full source → target direction.</p></div><div class="table-wrap"><table><thead><tr><th>Source rule</th><th>Target rule</th><th>Type</th></tr></thead><tbody>{edge_rows}</tbody></table></div></div></section>
-<section id="review" class="tab"><div class="panel"><div class="eyebrow">Review management</div><h2>Human-review queue and quality holds</h2><p><strong>Human-review queue</strong> contains only rules explicitly routed to human judgment. <strong>Quality holds</strong> remain fail-closed when evidence, contract, or relationship checks are incomplete; those items are routed to case management or machine repair and are not counted as human-review work.</p><div class="grid-2"><div class="callout"><strong>{human_review_count}</strong> rules are in the human-review queue (<strong>{report_data["human_review_rate"]:.1f}%</strong>).</div><div class="callout"><strong>{review_count}</strong> rules have quality holds (<strong>{report_data["quality_hold_rate"]:.1f}%</strong>); <strong>{nonhuman_quality_hold_count}</strong> are outside the human queue.</div></div><h3 style="margin-top:24px">Human-review queue ({human_review_count})</h3><div class="table-wrap"><table><thead><tr><th>Rule</th><th>Route</th><th>Why flagged</th><th>Confidence</th><th>Evidence</th></tr></thead><tbody>{''.join(human_review_rows) or '<tr><td colspan="5">No rules are currently routed to human review.</td></tr>'}</tbody></table></div><h3 style="margin-top:24px">Quality holds outside the human queue ({nonhuman_quality_hold_count})</h3><p class="muted">These items retain their review flag for auditability but are intended for case-management or deterministic repair workflows.</p><div class="table-wrap"><table><thead><tr><th>Rule</th><th>Route</th><th>Why flagged</th><th>Confidence</th><th>Evidence</th></tr></thead><tbody>{''.join(quality_hold_rows) or '<tr><td colspan="5">No non-human quality holds are currently recorded.</td></tr>'}</tbody></table></div></div></section>
+<section id="rules" class="tab"><div class="panel"><div class="eyebrow">Structured rule explorer</div><h2>Business rules</h2><p class="muted">Readiness, grounding, and confidence are separate signals. A quality hold means the rule is fail-closed for execution; it does not mean every extracted statement is wrong. Expand <strong>IF / THEN</strong> to inspect the typed contract, traceability path, and any generated DMN/BPMN/CMMN model.</p><div class="toolbar"><input id="rule-search" type="search" placeholder="Search ID, title, statement, category…"><select id="rule-category"><option value="">All categories</option>{''.join(f'<option>{_safe(category)}</option>' for category in sorted(categories, key=str.casefold))}</select><select id="rule-status"><option value="">All statuses</option><option value="review_required">Quality hold</option><option value="verified">Verified</option><option value="unresolved">Unresolved</option></select><select id="rule-route"><option value="">All routes</option>{route_options}</select><label class="muted" style="padding:9px 0"><input id="review-only" type="checkbox"> quality holds only</label><label class="muted" style="padding:9px 0"><input id="filter-has-dmn" type="checkbox"> has DMN</label><label class="muted" style="padding:9px 0"><input id="filter-has-bpmn" type="checkbox"> has BPMN</label><label class="muted" style="padding:9px 0"><input id="filter-has-cmmn" type="checkbox"> has CMMN</label><span id="rule-count" class="muted" style="padding:9px 0"></span></div><div class="table-wrap"><table id="rules-table"><thead><tr><th>Rule</th><th>Category</th><th>Natural-language statement</th><th>Contract, traceability & models</th><th>Readiness, grounding and confidence</th><th>Review route</th><th>Source evidence</th></tr></thead><tbody>{''.join(rule_rows) or '<tr><td colspan="7">No rules were reported.</td></tr>'}</tbody></table></div></div></section>
+<section id="dependencies" class="tab"><div class="panel"><div class="eyebrow">Relationship and dependency view</div><h2>Directed rule relationship graph</h2><p>These are the dependency edges emitted by the knowledge-graph optimizer and DAG generator. They are not treated as BPMN sequence flows. The graph preserves the emitted direction and groups nodes into degree layers for readable traversal. <strong>Click a rule</strong> to highlight it and its direct connections; everything else dims. Scroll to zoom, drag to pan.</p><div class="dependency-graph-shell"><div class="dependency-graph-toolbar"><h3>Dependency topology</h3><span class="muted">{len(dependency_layout["nodes"])} nodes · {len(dependency_layout["edges"])} unique directed edges · {len(dependency_layers)} degree layers</span></div><div class="dependency-graph-stats">{dependency_layer_chips}<span class="graph-layer-chip"><strong>isolated</strong> · {len(dependency_layout["isolated_nodes"])} nodes</span></div><div class="dependency-graph-layout"><div class="dependency-graph-scroll">{dependency_graph}</div><aside id="dep-side-panel" class="dep-side-panel" hidden></aside></div><p class="dependency-graph-note">{_safe(dependency_graph_note)} Hover an edge for its dependency type and full source → target direction.</p></div><div class="table-wrap"><table><thead><tr><th>Source rule</th><th>Target rule</th><th>Type</th></tr></thead><tbody>{edge_rows}</tbody></table></div></div></section>
+<section id="review" class="tab"><div class="panel"><div class="eyebrow">Review management</div><h2>Human review, triaged by severity</h2><p>Every rule with an open review flag, in one dashboard. <strong>Severity</strong> is derived from review route and grounding status (a case-management route or a contradicted grounding verdict is <em>Critical</em>; a plain human-review route is <em>High</em>; machine-repair is <em>Medium</em>; everything else is <em>Low</em>) -- it is not a separately extracted field, so treat it as a triage aid, not ground truth.</p><div class="grid-2"><div class="callout"><strong>{human_review_count}</strong> rules are in the human-review queue (<strong>{report_data["human_review_rate"]:.1f}%</strong>).</div><div class="callout"><strong>{review_count}</strong> rules have quality holds (<strong>{report_data["quality_hold_rate"]:.1f}%</strong>); <strong>{nonhuman_quality_hold_count}</strong> are outside the human queue.</div></div><div class="toolbar"><input id="review-search" type="search" placeholder="Search rule ID or name…"><select id="review-severity"><option value="">All severities</option><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select><select id="review-route"><option value="">All routes</option>{route_options}</select><label class="muted" style="padding:9px 0"><input id="review-human-only" type="checkbox"> human-review only</label><span id="review-count" class="muted" style="padding:9px 0"></span></div><div class="table-wrap"><table id="review-table"><thead><tr><th>Severity</th><th>Rule</th><th>Route</th><th>Why flagged</th><th>Confidence</th><th>Evidence</th><th>Related rules</th></tr></thead><tbody>{''.join(review_rows) or '<tr><td colspan="7">No rules currently require review.</td></tr>'}</tbody></table></div></div></section>
 <section id="sources" class="tab"><div class="panel"><div class="eyebrow">Source traceability</div><h2>Embedded source chunks</h2><p>These source blocks are embedded in this HTML file. Links from concepts, rules, and review items land on the exact referenced chunk/section without requiring filesystem access.</p>{''.join(source_blocks.values()) or '<div class="empty">No source references were present in the graph.</div>'}</div></section>
 <footer>Policy Logic Forge Agent 12 · presentation-only artifact · source graph SHA-256: {_safe(hashlib.sha256(graph_file.read_bytes()).hexdigest())}</footer></div>
 <script type="application/json" id="report-data">{_json_for_script(report_data)}</script><script>
 const tabs=[...document.querySelectorAll('[data-tab]')], sections=[...document.querySelectorAll('section.tab')];
 function activateTab(tabId){{tabs.forEach(item=>item.classList.toggle('active',item.dataset.tab===tabId));sections.forEach(section=>section.classList.toggle('active',section.id===tabId));}}
 tabs.forEach(button=>button.addEventListener('click',()=>{{activateTab(button.dataset.tab);history.replaceState(null,'','#'+button.dataset.tab);}}));
-const rows=[...document.querySelectorAll('#rules-table tbody .rule-row')], search=document.getElementById('rule-search'), category=document.getElementById('rule-category'), status=document.getElementById('rule-status'), route=document.getElementById('rule-route'), review=document.getElementById('review-only'), count=document.getElementById('rule-count');
-function applyFilters(){{const query=(search.value||'').toLowerCase(), cat=category.value, state=status.value, selectedRoute=route.value, only=review.checked;let visible=0;rows.forEach(row=>{{const matches=(!query||row.dataset.search.includes(query))&&(!cat||row.dataset.category===cat)&&(!state||row.dataset.status===state)&&(!selectedRoute||row.dataset.route===selectedRoute)&&(!only||row.dataset.review==='true');row.hidden=!matches;if(matches)visible++;}});count.textContent=visible+' of '+rows.length+' rules shown';}}
-[search,category,status,route,review].forEach(control=>control&&control.addEventListener('input',applyFilters));applyFilters();
+const rows=[...document.querySelectorAll('#rules-table tbody .rule-row')], search=document.getElementById('rule-search'), category=document.getElementById('rule-category'), status=document.getElementById('rule-status'), route=document.getElementById('rule-route'), review=document.getElementById('review-only'), hasDmn=document.getElementById('filter-has-dmn'), hasBpmn=document.getElementById('filter-has-bpmn'), hasCmmn=document.getElementById('filter-has-cmmn'), count=document.getElementById('rule-count');
+function applyFilters(){{const query=(search.value||'').toLowerCase(), cat=category.value, state=status.value, selectedRoute=route.value, only=review.checked;let visible=0;rows.forEach(row=>{{const matches=(!query||row.dataset.search.includes(query))&&(!cat||row.dataset.category===cat)&&(!state||row.dataset.status===state)&&(!selectedRoute||row.dataset.route===selectedRoute)&&(!only||row.dataset.review==='true')&&(!hasDmn.checked||row.dataset.hasDmn==='true')&&(!hasBpmn.checked||row.dataset.hasBpmn==='true')&&(!hasCmmn.checked||row.dataset.hasCmmn==='true');row.hidden=!matches;if(matches)visible++;}});count.textContent=visible+' of '+rows.length+' rules shown';}}
+[search,category,status,route,review,hasDmn,hasBpmn,hasCmmn].forEach(control=>control&&control.addEventListener('input',applyFilters));applyFilters();
 const conceptCards=[...document.querySelectorAll('#concept-grid .concept-card')], conceptSearch=document.getElementById('concept-search'), conceptKind=document.getElementById('concept-kind'), conceptEvidence=document.getElementById('concept-evidence'), conceptCount=document.getElementById('concept-count');
 function applyConceptFilters(){{const query=(conceptSearch.value||'').toLowerCase(), kind=conceptKind.value, evidence=conceptEvidence.value;let visible=0;conceptCards.forEach(card=>{{const matches=(!query||card.dataset.search.includes(query))&&(!kind||card.dataset.kind===kind)&&(!evidence||card.dataset.evidence===evidence);card.hidden=!matches;if(matches)visible++;}});conceptCount.textContent=visible+' of '+conceptCards.length+' concepts shown';}}
 [conceptSearch,conceptKind,conceptEvidence].forEach(control=>control&&control.addEventListener('input',applyConceptFilters));applyConceptFilters();
-function showModelItem(groupEl,ruleId){{if(!groupEl)return;[...groupEl.children].forEach(item=>{{item.hidden=item.dataset.ruleId!==ruleId;}});}}
-document.querySelectorAll('.model-select').forEach(select=>{{select.addEventListener('change',()=>showModelItem(document.getElementById(select.dataset.items),select.value));}});
-function revealTarget(id){{const el=document.getElementById(id);if(!el)return false;const tabSection=el.closest('section.tab');if(tabSection)activateTab(tabSection.id);if(el.classList.contains('model-diagram-item')){{const group=el.closest('.model-diagram-items');const select=group&&document.getElementById(group.dataset.select);if(select){{select.value=el.dataset.ruleId;showModelItem(group,el.dataset.ruleId);}}}}let node=el.parentElement;while(node){{if(node.tagName==='DETAILS'&&!node.open)node.open=true;node=node.parentElement;}}el.scrollIntoView({{behavior:'smooth',block:'start'}});el.classList.add('nav-highlight');setTimeout(()=>el.classList.remove('nav-highlight'),1600);return true;}}
+const reviewRows=[...document.querySelectorAll('#review-table tbody .review-row')], reviewSearch=document.getElementById('review-search'), reviewSeverity=document.getElementById('review-severity'), reviewRoute=document.getElementById('review-route'), reviewHumanOnly=document.getElementById('review-human-only'), reviewCount=document.getElementById('review-count');
+function applyReviewFilters(){{if(!reviewRows.length)return;const query=(reviewSearch.value||'').toLowerCase(), sev=reviewSeverity.value, selectedRoute=reviewRoute.value, humanOnly=reviewHumanOnly.checked;let visible=0;reviewRows.forEach(row=>{{const matches=(!query||row.dataset.search.includes(query))&&(!sev||row.dataset.severity===sev)&&(!selectedRoute||row.dataset.route===selectedRoute)&&(!humanOnly||row.dataset.human==='true');row.hidden=!matches;if(matches)visible++;}});reviewCount.textContent=visible+' of '+reviewRows.length+' review items shown';}}
+[reviewSearch,reviewSeverity,reviewRoute,reviewHumanOnly].forEach(control=>control&&control.addEventListener('input',applyReviewFilters));applyReviewFilters();
+function revealTarget(id){{const el=document.getElementById(id);if(!el)return false;const tabSection=el.closest('section.tab');if(tabSection)activateTab(tabSection.id);let node=el.parentElement;while(node){{if(node.tagName==='DETAILS'&&!node.open)node.open=true;node=node.parentElement;}}el.scrollIntoView({{behavior:'smooth',block:'start'}});el.classList.add('nav-highlight');setTimeout(()=>el.classList.remove('nav-highlight'),1600);return true;}}
 document.addEventListener('click',event=>{{const anchor=event.target.closest('a[href^="#"]');if(!anchor)return;const id=anchor.getAttribute('href').slice(1);if(!id||!document.getElementById(id))return;event.preventDefault();revealTarget(id);history.replaceState(null,'','#'+id);}});
 if(location.hash)revealTarget(location.hash.slice(1));
+(function(){{
+  const reportData=JSON.parse(document.getElementById('report-data').textContent);
+  const edges=reportData.dependency_edges||[], ruleSummary=reportData.rule_summary||{{}};
+  const adjacency={{}};
+  const esc=value=>String(value==null?'':value).replace(/[&<>"']/g,c=>({{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}}[c]));
+  edges.forEach(e=>{{
+    const s=String(e.source_rule_id||''), t=String(e.target_rule_id||'');
+    if(!s||!t||s===t) return;
+    (adjacency[s]=adjacency[s]||new Set()).add(t);
+    (adjacency[t]=adjacency[t]||new Set()).add(s);
+  }});
+  const panel=document.getElementById('dep-side-panel');
+  function clearDepSelection(){{document.querySelectorAll('.dependency-node,.dependency-edge').forEach(el=>el.classList.remove('selected','neighbor','dimmed','active'));if(panel)panel.hidden=true;}}
+  function renderDepPanel(id,neighbors){{
+    if(!panel) return;
+    const info=ruleSummary[id]||{{}};
+    const items=[...neighbors].sort().map(n=>{{const ninfo=ruleSummary[n]||{{}};return '<li><a href="#" data-dep-jump="'+esc(n)+'">'+esc(n)+'</a><span class="muted">'+esc(ninfo.category||'')+'</span></li>';}}).join('')||'<li class="muted">No direct connections</li>';
+    const conf=(info.confidence!=null)?Number(info.confidence).toFixed(1)+'%':'—';
+    panel.innerHTML='<div class="dep-panel-head"><strong>'+esc(id)+'</strong><button type="button" class="dep-panel-close" aria-label="Close">×</button></div><div class="muted">'+esc(info.name||'')+'</div><div class="dep-panel-meta"><span>'+esc(info.category||'Uncategorized')+'</span><span>'+esc(info.status||'')+'</span><span>'+esc(conf)+'</span></div><a class="evidence-link" href="#rule-'+esc(info.slug||id)+'">Open rule →</a><h4>Direct connections ('+neighbors.size+')</h4><ul class="dep-panel-list">'+items+'</ul>';
+    panel.hidden=false;
+    panel.querySelectorAll('[data-dep-jump]').forEach(a=>a.addEventListener('click',e=>{{e.preventDefault();selectDepNode(a.dataset.depJump);}}));
+    const closeBtn=panel.querySelector('.dep-panel-close');
+    if(closeBtn) closeBtn.addEventListener('click',clearDepSelection);
+  }}
+  function selectDepNode(id){{const neighbors=adjacency[id]||new Set();document.querySelectorAll('.dependency-node').forEach(node=>{{const nid=node.dataset.nodeId;node.classList.toggle('selected',nid===id);node.classList.toggle('neighbor',neighbors.has(nid));node.classList.toggle('dimmed',nid!==id&&!neighbors.has(nid));}});document.querySelectorAll('.dependency-edge').forEach(edge=>{{const active=edge.dataset.source===id||edge.dataset.target===id;edge.classList.toggle('active',active);edge.classList.toggle('dimmed',!active);}});renderDepPanel(id,neighbors);}}
+  document.querySelectorAll('.dependency-node').forEach(node=>node.addEventListener('click',event=>{{event.stopPropagation();selectDepNode(node.dataset.nodeId);}}));
+  const svg=document.querySelector('.dependency-graph-svg');
+  if(svg){{
+    let dragMoved=false;
+    svg.addEventListener('click',event=>{{if(!dragMoved&&!event.target.closest('.dependency-node'))clearDepSelection();}});
+    const vb=svg.viewBox.baseVal;let vx=vb.x,vy=vb.y,vw=vb.width,vh=vb.height;const baseW=vw,baseH=vh,minScale=0.3,maxScale=4;
+    function apply(){{svg.setAttribute('viewBox',vx+' '+vy+' '+vw+' '+vh);}}
+    svg.addEventListener('wheel',event=>{{event.preventDefault();const factor=event.deltaY>0?1.1:0.9;const newW=Math.min(baseW/minScale,Math.max(baseW/maxScale,vw*factor));const newH=newW*(baseH/baseW);const rect=svg.getBoundingClientRect();const mx=vx+(event.clientX-rect.left)/rect.width*vw;const my=vy+(event.clientY-rect.top)/rect.height*vh;vx=mx-(mx-vx)*(newW/vw);vy=my-(my-vy)*(newH/vh);vw=newW;vh=newH;apply();}},{{passive:false}});
+    let dragging=false,lastX=0,lastY=0;
+    svg.addEventListener('mousedown',event=>{{dragging=true;dragMoved=false;lastX=event.clientX;lastY=event.clientY;svg.classList.add('grabbing');}});
+    window.addEventListener('mousemove',event=>{{if(!dragging)return;if(Math.abs(event.clientX-lastX)+Math.abs(event.clientY-lastY)>3)dragMoved=true;const rect=svg.getBoundingClientRect();vx-=(event.clientX-lastX)/rect.width*vw;vy-=(event.clientY-lastY)/rect.height*vh;lastX=event.clientX;lastY=event.clientY;apply();}});
+    window.addEventListener('mouseup',()=>{{dragging=false;svg.classList.remove('grabbing');}});
+  }}
+}})();
 </script></body></html>'''
     output_dir.mkdir(parents=True, exist_ok=True)
     output_path = output_dir / REPORT_FILE_NAME
