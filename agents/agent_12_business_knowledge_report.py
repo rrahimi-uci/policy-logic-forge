@@ -1274,6 +1274,8 @@ def generate(
     rule_adjacency: dict[str, set[str]] = defaultdict(set)
     for edge in dependency_layout["edges"]:
         source, target = edge["source_rule_id"], edge["target_rule_id"]
+        if source == target:
+            continue
         rule_adjacency[source].add(target)
         rule_adjacency[target].add(source)
     categories = Counter(_category(rule)[0] for rule in rules)
