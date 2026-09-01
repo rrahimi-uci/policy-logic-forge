@@ -44,15 +44,59 @@ from utils.pipeline_metrics import (
     format_tokens,
 )
 
-# (style, icon) per stage status, used by the plan/summary tables.
+# (style, icon) per stage status, used by the plan/summary tables.  These are
+# intentionally emoji (rather than ASCII look-alikes) in the human reporter:
+# they remain readable when a long-running pipeline is monitored in a busy
+# terminal and make the distinction between review and failure unambiguous.
 _STATUS_STYLE: dict[str, tuple[str, str]] = {
-    PENDING: ("dim", "·"),       # ·
-    RUNNING: ("bold yellow", "▶"),  # ▶
-    PASS: ("bold green", "✔"),      # ✔
-    REVIEW: ("bold cyan", "◆"),     # ◆
-    FAIL: ("bold red", "✘"),        # ✘
-    SKIPPED: ("dim", "–"),          # –
+    PENDING: ("dim", "⏳"),
+    RUNNING: ("bold yellow", "🔄"),
+    PASS: ("bold green", "✅"),
+    REVIEW: ("bold cyan", "🔎"),
+    FAIL: ("bold red", "❌"),
+    SKIPPED: ("dim", "⏭️"),
 }
+
+# A small, stable visual vocabulary for the canonical twelve-stage contract.
+# The raw stage label remains unchanged in JSON events and persisted metrics.
+_STAGE_ICON: dict[str, str] = {
+    "agent_01": "📚",  # organize source documents
+    "agent_02": "🧩",  # extract entities
+    "agent_03": "📐",  # extract rules
+    "agent_04": "🧪",  # validate rules
+    "agent_05": "🔗",  # merge graph
+    "agent_06": "🧹",  # optimize graph
+    "agent_07": "🛡️",  # readiness gate
+    "agent_08": "🩹",  # remediation
+    "agent_09": "📎",  # grounding
+    "agent_10": "🕸️",  # dependency DAG
+    "agent_11": "⚙️",  # executable models
+    "agent_12": "📊",  # business knowledge report
+}
+
+
+def _status_style(status: str) -> tuple[str, str]:
+    """Return the style and icon for a pipeline status, including a fallback."""
+
+    return _STATUS_STYLE.get(status, ("dim", "❔"))
+
+
+def status_icon(status: str) -> str:
+    """Return the human-facing icon for a pipeline status."""
+
+    return _status_style(status)[1]
+
+
+def stage_icon(stage_id: str) -> str:
+    """Return the human-facing icon for a canonical agent identifier."""
+
+    return _STAGE_ICON.get(stage_id, "🔹")
+
+
+def _display_stage_label(stage: StageMetrics) -> str:
+    """Prefix a canonical stage label without changing its stored value."""
+
+    return f"{stage_icon(stage.stage_id)} {stage.label}"
 
 # Log-line highlight style per utils.pipeline_metrics.classify_log_line() kind.
 _LOG_STYLE = {"error": "bold red", "warning": "yellow", "success": "green", "plain": None}
@@ -70,7 +114,7 @@ class Reporter(Protocol):
 
 
 def _status_cell(status: str) -> Text:
-    style, icon = _STATUS_STYLE.get(status, ("dim", "?"))
+    style, icon = _status_style(status)
     return Text(f"{icon} {status}", style=style)
 
 
@@ -88,7 +132,7 @@ def _plan_table(run: RunMetrics, *, title: str) -> Table:
         cache = stage.cache_hit_rate_percent
         table.add_row(
             str(i),
-            stage.label,
+            _display_stage_label(stage),
             _status_cell(stage.status),
             format_duration(stage.duration_seconds),
             format_tokens(stage.total_tokens) if stage.total_tokens else "--",
@@ -107,6 +151,7 @@ class TextReporter:
     def run_start(self, run: RunMetrics) -> None:
         cfg = run.config
         lines = [
+            "🚀 run started — monitoring canonical Stage 01/12 … Stage 12/12",
             f"[bold]domain[/bold]        {run.domain}",
             f"[bold]source[/bold]        {run.source_dir}",
             f"[bold]batch name[/bold]    {run.batch_name}",
@@ -131,16 +176,24 @@ class TextReporter:
             lines.append(f"[bold]performance[/bold]   {', '.join(shown)}")
         if "output_path" in cfg:
             lines.append(f"[bold]output[/bold]        {cfg['output_path']}")
+        lines.append("[bold]legend[/bold]        ⏳ pending · 🔄 running · ✅ pass · 🔎 review · ❌ fail · ⏭️ skipped")
         self.console.print(Panel(
             "\n".join(lines),
-            title="[bold]policy-logic-forge[/bold] — extraction pipeline",
+            title="[bold]🧭 policy-logic-forge[/bold] — extraction pipeline",
             border_style="blue",
             expand=True,
         ))
         self.console.print(_plan_table(run, title="Stage plan"))
 
     def stage_start(self, stage: StageMetrics, index: int, total: int) -> None:
-        self.console.rule(f"[bold yellow]▶ Stage {index}/{total} — {stage.label}[/bold yellow]", style="yellow")
+        self.console.rule(
+            # ``index/total`` is the position in the selected subset (for
+            # example, stage 07 is selection 01/01 when resumed alone).  The
+            # canonical label is deliberately rendered first so an operator
+            # never mistakes a resume position for the pipeline stage number.
+            f"[bold yellow]🔄 {_display_stage_label(stage)} · selected {index:02d}/{total:02d}[/bold yellow]",
+            style="yellow",
+        )
 
     def log_line(self, line: str, kind: str = "plain") -> None:
         style = _LOG_STYLE.get(kind)
@@ -150,8 +203,8 @@ class TextReporter:
             self.console.print(line.rstrip("\n"), markup=False, highlight=False)
 
     def stage_end(self, stage: StageMetrics, run: RunMetrics) -> None:
-        style, icon = _STATUS_STYLE.get(stage.status, ("dim", "?"))
-        bits = [f"{icon} {stage.label}: {stage.status.upper()}"]
+        style, icon = _status_style(stage.status)
+        bits = [f"{icon} {_display_stage_label(stage)}: {stage.status.upper()}"]
         if stage.exit_code is not None:
             bits.append(f"(exit {stage.exit_code})")
         bits.append(f"in {format_duration(stage.duration_seconds)}")
@@ -174,7 +227,7 @@ class TextReporter:
         self.console.print(_plan_table(run, title="Progress"))
 
     def run_end(self, run: RunMetrics) -> None:
-        style, icon = _STATUS_STYLE.get(run.overall_status or PASS, ("bold", "?"))
+        style, icon = _status_style(run.overall_status or PASS)
         self.console.print()
         self.console.print(_plan_table(run, title="Final stage summary"))
         totals = run.to_dict()["totals"]
@@ -193,13 +246,13 @@ class TextReporter:
             summary_lines.append(f"[bold]log flags[/bold]       {totals['warnings']} warning(s), {totals['errors']} error line(s)")
         self.console.print(Panel(
             "\n".join(summary_lines),
-            title="Run summary",
+            title=f"{'🎉' if run.overall_status == PASS else '🛑'} Run summary",
             border_style=style,
             expand=True,
         ))
 
     def error(self, message: str) -> None:
-        self.console.print(Panel(message, title="[bold red]Error[/bold red]", border_style="red", expand=True))
+        self.console.print(Panel(message, title="[bold red]🛑 Error[/bold red]", border_style="red", expand=True))
 
 
 class JsonReporter:

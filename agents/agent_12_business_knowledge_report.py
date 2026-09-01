@@ -1154,7 +1154,8 @@ def _traceability_html(
         f'<span class="trace-node"><span class="trace-node-kind">Executable model</span><span class="trace-chip-row">{model_html}</span></span>',
     ]
     arrow = '<span class="trace-arrow" aria-hidden="true">→</span>'
-    return f'<div class="trace-path">{arrow.join(f"<div class=\"trace-step\">{step}</div>" for step in steps)}</div>'
+    steps_html = arrow.join(f'<div class="trace-step">{step}</div>' for step in steps)
+    return f'<div class="trace-path">{steps_html}</div>'
 
 
 def _rule_row(

@@ -244,6 +244,20 @@ class ExtractionPipeline:
 
         return getattr(self, "reporter", None) is not None and getattr(self, "metrics", None) is not None
 
+    def _operator_message(self, message: str, kind: str = "plain") -> None:
+        """Emit a monitoring message through the selected reporter.
+
+        Routing orchestration notices through the reporter keeps ``--output
+        json`` machine-readable (the JSON reporter sends these to stderr) and
+        gives the text reporter one consistent place to render the operator
+        emojis.  Bare test doubles still receive the historical stdout output.
+        """
+
+        if self._reporting_enabled():
+            self.reporter.log_line(message, kind)
+        else:
+            print(message)
+
     def _begin_run(self, stage_ids: list[str], selection_label: str) -> None:
         """Start run-level reporting: populate the stage plan and print the config panel."""
 
@@ -289,7 +303,7 @@ class ExtractionPipeline:
         self.reporter.stage_start(stage, index, total)
 
         cmd = [sys.executable, str(_ROOT / "agents" / spec.module)] + args
-        self.reporter.log_line(f"$ {' '.join(cmd)}", "plain")
+        self.reporter.log_line(f"🛠️ command: $ {' '.join(cmd)}", "plain")
         env = self._env()
         if extra_env:
             env.update(extra_env)
@@ -341,7 +355,7 @@ class ExtractionPipeline:
         if not files:
             nested_files = [p for p in self.source_dir.rglob("*") if p.is_file()]
             if not nested_files:
-                print(f"No files found in {self.source_dir}")
+                self._operator_message(f"❌ No files found in {self.source_dir}", "error")
                 return False
             return self._run("agent_01", [str(self.source_dir), str(self.organized_dir)])
         return self._run(
@@ -376,7 +390,7 @@ class ExtractionPipeline:
                 stage.finish(status=SKIPPED, exit_code=None, note="--skip-optimize")
                 self.reporter.stage_end(stage, self.metrics)
             else:
-                print(f"\n{stage_label('agent_06')} -- SKIPPED (--skip-optimize)")
+                self._operator_message(f"\n⏭️ {stage_label('agent_06')} — SKIPPED (--skip-optimize)")
             return True
         return self._run("agent_06", [])
 
@@ -479,24 +493,24 @@ class ExtractionPipeline:
                 # agent_07 exits nonzero either on a hard invariant failure
                 # (unrecoverable here) or because rules need agent_08 remediation.
                 if not self._readiness_requests_remediation():
-                    print("\nSTOPPED: agent_07 invariant failure (not remediable by agent_08).")
+                    self._operator_message("\n🛑 STOPPED: agent_07 invariant failure (not remediable by agent_08).", "error")
                     return False
-                print("\nagent_07 requested focused remediation -> running agent_08")
+                self._operator_message("\n🩹 agent_07 requested focused remediation → running agent_08")
                 if not self.run_agent_08():
                     if self._last_exit_codes.get("agent_08") != 3:
                         return False
-                    print("agent_08 retained review-required rules; continuing fail-closed")
+                    self._operator_message("🔎 agent_08 retained review-required rules; continuing fail-closed", "warning")
                 if not self.run_agent_07(reuse_conflicts=True):
                     if self._last_exit_codes.get("agent_07") != 3 or not self._review_only_readiness():
-                        print("\nSTOPPED: readiness invariants still failing after remediation.")
+                        self._operator_message("\n🛑 STOPPED: readiness invariants still failing after remediation.", "error")
                         return False
-                    print("readiness remains review-gated; preserving review flags and continuing")
+                    self._operator_message("🔎 readiness remains review-gated; preserving review flags and continuing", "warning")
 
         if not self.run_agent_09():
             if self._last_exit_codes.get("agent_09") != 3 or not self._review_only_grounding():
-                print("\nSTOPPED: agent_09 grounding certification failed.")
+                self._operator_message("\n🛑 STOPPED: agent_09 grounding certification failed.", "error")
                 return False
-            print("grounding remains review-gated with complete response coverage; continuing fail-closed")
+            self._operator_message("🔎 grounding remains review-gated with complete response coverage; continuing fail-closed", "warning")
 
         if not self.run_agent_10():
             return False
@@ -506,12 +520,10 @@ class ExtractionPipeline:
             return False
 
         elapsed = datetime.now() - start
-        print("\n" + "=" * 80)
-        print(f"COMPLETE in {elapsed}")
-        print(f"  optimized graph: {self.optimized_dir / 'optimized_compliance_knowledge_graph.json'}")
-        print(f"  dependency DAGs: {self.dag_dir / 'dependency_dags.json'}")
-        print(f"  executable models: {getattr(self, 'executable_models_dir', self.dag_dir)}")
-        print("=" * 80)
+        self._operator_message("\n🎉 PIPELINE COMPLETE in " + str(elapsed))
+        self._operator_message(f"📦 optimized graph: {self.optimized_dir / 'optimized_compliance_knowledge_graph.json'}")
+        self._operator_message(f"🕸️ dependency DAGs: {self.dag_dir / 'dependency_dags.json'}")
+        self._operator_message(f"⚙️ executable models: {getattr(self, 'executable_models_dir', self.dag_dir)}")
         return True
 
     def run_agent(self, agent_id: str) -> bool:
@@ -524,7 +536,7 @@ class ExtractionPipeline:
             "agent_11": self.run_agent_11, "agent_12": self.run_agent_12,
         }
         if agent_id not in dispatch:
-            print(f"Invalid agent: {agent_id}. Valid: {', '.join(AGENT_IDS)}")
+            self._operator_message(f"❌ Invalid agent: {agent_id}. Valid: {', '.join(AGENT_IDS)}", "error")
             return False
         return dispatch[agent_id]()
 
@@ -552,7 +564,7 @@ class ExtractionPipeline:
                 has_remediator = "agent_08" in stage_ids[index + 1:]
                 if has_remediator and self._readiness_requests_remediation():
                     readiness_pending = True
-                    print("\nagent_07 requested focused remediation -> continuing to selected agent_08")
+                    self._operator_message("\n🩹 agent_07 requested focused remediation → continuing to selected agent_08")
                     continue
 
             if agent_id == "agent_08":
@@ -582,7 +594,7 @@ class ExtractionPipeline:
                         if not keep_going:
                             break
                     elif not recheck_ok:
-                        print("readiness remains review-gated; preserving review flags and continuing")
+                        self._operator_message("🔎 readiness remains review-gated; preserving review flags and continuing", "warning")
                 continue
 
             if agent_id == "agent_09" and not ok:
@@ -590,7 +602,7 @@ class ExtractionPipeline:
                     self._last_exit_codes.get("agent_09") == 3
                     and self._review_only_grounding()
                 ):
-                    print("grounding remains review-gated with complete response coverage; continuing fail-closed")
+                    self._operator_message("🔎 grounding remains review-gated with complete response coverage; continuing fail-closed", "warning")
                     continue
 
             if not ok:
@@ -605,10 +617,13 @@ class ExtractionPipeline:
 
         if step not in LEGACY_STEP_ALIASES:
             valid = ", ".join(LEGACY_STEP_ALIASES)
-            print(f"Invalid legacy step: {step}. Valid legacy steps: {valid}; use --stage or --agent")
+            self._operator_message(
+                f"❌ Invalid legacy step: {step}. Valid legacy steps: {valid}; use --stage or --agent",
+                "error",
+            )
             return False
         agent_id = LEGACY_STEP_ALIASES[step]
-        print(f"Legacy --step {step} maps to {stage_label(agent_id)}")
+        self._operator_message(f"🧭 Legacy --step {step} maps to {stage_label(agent_id)}")
         return self.run_stages([agent_id], selection_label=f"legacy step {step} ({stage_label(agent_id)})")
 
     def run_stage(self, stage: str) -> bool:
@@ -617,7 +632,7 @@ class ExtractionPipeline:
         try:
             agent_id = agent_id_for_stage(stage)
         except ValueError as exc:
-            print(exc)
+            self._operator_message(f"❌ {exc}", "error")
             return False
         return self.run_stages([agent_id], selection_label=f"single stage ({stage_label(agent_id)})")
 
@@ -655,7 +670,11 @@ def main():
     if not source_dir.is_absolute():
         source_dir = _ROOT / "compliance-files" / args.dir
     if not source_dir.exists():
-        print(f"Source directory not found: {source_dir}")
+        message = f"Source directory not found: {source_dir}"
+        if args.output == "json":
+            print(json.dumps({"event": "error", "message": message}, ensure_ascii=False), flush=True)
+        else:
+            print(f"❌ {message}")
         sys.exit(1)
 
     pipeline = ExtractionPipeline(
