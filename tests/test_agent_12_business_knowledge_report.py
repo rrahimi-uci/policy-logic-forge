@@ -237,7 +237,8 @@ def test_agent_12_generates_self_contained_report_with_traceability(tmp_path: Pa
     assert "A self-contained, source-traceable view of the extracted domain knowledge." in report
     assert "Every rule is linked to its source and assigned a neutral <strong>0–100 Automation Readiness Score</strong>" in report
     assert "Your environment, risk tolerance, and domain policies determine the appropriate acceptance threshold." in report
-    assert 'class="panel score-definition"' in report
+    assert 'id="scoring-definition" class="panel score-definition"' in report
+    assert '<a class="hero-score-link" href="#scoring-definition">View scoring definition ↓</a>' in report
     assert "How the Automation Readiness Score is calculated" in report
     assert "0.40 Core + 0.20 Context + 0.15 Contract + 0.10 Evidence + 0.10 Execution + 0.05 Relationships" in report
     for component, weight in (("Core grounding", "40%"), ("Context grounding", "20%"), ("Contract integrity", "15%"), ("Evidence integrity", "10%"), ("Executability", "10%"), ("Relationship support", "5%")):
