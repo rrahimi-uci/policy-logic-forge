@@ -274,16 +274,36 @@ class TestAnthropicViaLitellm:
         assert "temperature" not in kwargs
         assert kwargs["reasoning_effort"] == "high"
 
-    @allure.title("Claude uses plain max_tokens, NOT the OpenAI-reasoning max_completion_tokens heuristic")
-    def test_claude_uses_plain_max_tokens(self):
+    @allure.title("Claude's thinking budget is drawn from max_tokens, so it gets the same generous headroom as OpenAI reasoning models -- just under the max_tokens name, not max_completion_tokens")
+    def test_claude_reasoning_call_gets_inflated_max_tokens(self):
+        # Regression: an earlier version assumed Claude's extended-thinking
+        # budget was sized separately from max_tokens by litellm, and left
+        # a bare max_tokens=100 uninflated for a reasoning_effort call. A
+        # real call at max_tokens=12000 came back with finish_reason=
+        # "length" and EMPTY content -- the entire budget went to thinking,
+        # none was left for visible output. Both provider families now get
+        # the same 4x/32768-floor inflation; only the resulting parameter
+        # name differs (max_tokens for Claude, max_completion_tokens for
+        # OpenAI reasoning models -- see test_reasoning_model_params above).
         client = create_llm_client(api_key="sk-ant-test", model="claude-opus-5")
         with patch("litellm.completion", return_value=self._litellm_response()) as mock_completion:
             client.chat_completion(
                 [{"role": "user", "content": "hi"}], max_tokens=100, reasoning_effort="high",
             )
         kwargs = mock_completion.call_args.kwargs
-        assert kwargs["max_tokens"] == 100
+        assert kwargs["max_tokens"] >= 32768
         assert "max_completion_tokens" not in kwargs
+
+    @allure.title("A non-reasoning-effort Claude call still honours the caller's plain max_tokens")
+    def test_claude_call_without_reasoning_effort_uses_plain_max_tokens(self):
+        client = create_llm_client(api_key="sk-ant-test", model="claude-opus-5")
+        with patch("litellm.completion", return_value=self._litellm_response()) as mock_completion:
+            client.chat_completion([{"role": "user", "content": "hi"}], max_tokens=100)
+        kwargs = mock_completion.call_args.kwargs
+        # Claude is always classified as a reasoning model (is_reasoning_model),
+        # so it always takes the inflated branch when max_tokens is set --
+        # this documents that behavior explicitly rather than assuming it.
+        assert kwargs["max_tokens"] >= 32768
 
     @allure.title("Response cost is estimated via litellm.completion_cost, not the OpenAI-only pricing table")
     def test_cost_uses_litellm_completion_cost(self, capsys):
