@@ -12,8 +12,8 @@ def _sample_run() -> RunMetrics:
         batch_name="demo", domain="nda_confidentiality", source_dir="/src",
         config={"target_rules": 20, "model": "gpt-5.6-luna"},
     )
-    run.stage("agent_01", "Stage 01/12 · agent_01 · Document Organizer")
-    run.stage("agent_02", "Stage 02/12 · agent_02 · Entity Extractor")
+    run.stage("agent_01", "Stage 01/13 · agent_01 · Document Organizer")
+    run.stage("agent_02", "Stage 02/13 · agent_02 · Entity Extractor")
     return run
 
 
@@ -30,7 +30,8 @@ def test_human_status_and_stage_icons_cover_monitoring_states():
     assert status_icon("unknown") == "❔"
     assert stage_icon("agent_01") == "📚"
     assert stage_icon("agent_02") == "🧩"
-    assert stage_icon("agent_12") == "📊"
+    assert stage_icon("agent_12") == "🧩"
+    assert stage_icon("agent_13") == "📊"
     assert stage_icon("unknown") == "🔹"
 
 
@@ -59,7 +60,7 @@ def test_text_reporter_full_lifecycle_does_not_raise():
     assert "demo" in output
     assert "🚀 run started" in output
     assert "🔄" in output
-    assert "📚 Stage 01/12" in output
+    assert "📚 Stage 01/13" in output
     assert "selected 01/02" in output
     assert "✅" in output
     assert "hello from the subprocess" in output

@@ -5,7 +5,7 @@ Loads and manages configuration from config.json with environment variable
 overrides.
 
 This is a trimmed fork of policy-to-knowledge/apps/pipeline/utils/config.py,
-kept in sync only for what ``agent_01`` through ``agent_12`` actually use.
+kept in sync only for what ``agent_01`` through ``agent_13`` actually use.
 Removed relative to the source: rule-type color palettes, priority-filter
 buttons, and directory getters that existed only to serve the HTML visualizer
 and the cross-graph comparison pipeline, neither of which is part of this repo.
@@ -296,9 +296,13 @@ class Config:
         base = self.get_pipeline_base_path()
         return base / output_dir_name("agent_11")
 
-    def get_business_report_dir(self) -> Path:
-        """``agent_12`` self-contained HTML report output directory."""
+    def get_information_model_dir(self) -> Path:
+        """``agent_12`` business information model output directory."""
         return self.get_pipeline_base_path() / output_dir_name("agent_12")
+
+    def get_business_report_dir(self) -> Path:
+        """``agent_13`` self-contained HTML report output directory."""
+        return self.get_pipeline_base_path() / output_dir_name("agent_13")
 
     def get_target_rules(self) -> int:
         """Get target number of rules to extract."""

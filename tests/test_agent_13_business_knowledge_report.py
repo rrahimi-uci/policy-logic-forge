@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from agents.agent_12_business_knowledge_report import (
+from agents.agent_13_business_knowledge_report import (
     _bar_chart_svg,
     _automation_readiness,
     _bpmn_flow_html,
@@ -657,5 +657,5 @@ def test_agent_12_main_reports_missing_graph(tmp_path, monkeypatch):
         def get_organized_dir(self): return tmp_path / "organized"
         def get_pipeline_base_path(self): return tmp_path
 
-    monkeypatch.setattr("agents.agent_12_business_knowledge_report.get_config", lambda: Config())
+    monkeypatch.setattr("agents.agent_13_business_knowledge_report.get_config", lambda: Config())
     assert main([]) == 2

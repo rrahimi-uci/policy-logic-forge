@@ -71,7 +71,8 @@ _STAGE_ICON: dict[str, str] = {
     "agent_09": "📎",  # grounding
     "agent_10": "🕸️",  # dependency DAG
     "agent_11": "⚙️",  # executable models
-    "agent_12": "📊",  # business knowledge report
+    "agent_12": "🧩",  # business information model
+    "agent_13": "📊",  # business knowledge report
 }
 
 
