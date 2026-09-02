@@ -184,6 +184,13 @@ def build_dependency_dags(graph: Mapping[str, Any]) -> dict[str, Any]:
             "missing_rule_ids": [...],       # non-empty only on a coverage bug
             "duplicate_rule_ids": [...],     # non-empty only on a coverage bug
           },
+          "relationship_diagnostics": {
+            "edge_count": int,
+            "connected_rules": int,
+            "isolated_rules": int,
+            "connected_rate": float,
+            "meaning": "diagnostic, not extraction coverage",
+          },
           "dropped_edges": [...],            # edges referencing an unknown rule_id
           "self_loop_edges": [...],          # edges where source_rule_id == target_rule_id
         }
@@ -285,10 +292,24 @@ def build_dependency_dags(graph: Mapping[str, Any]) -> dict[str, Any]:
         "missing_rule_ids": missing_ids,
         "duplicate_rule_ids": duplicate_ids,
     }
+    connected_rule_ids = {
+        str(endpoint)
+        for edge in edges
+        for endpoint in (edge.get("source_rule_id"), edge.get("target_rule_id"))
+        if endpoint
+    }
+    relationship_diagnostics = {
+        "edge_count": len(edges),
+        "connected_rules": len(connected_rule_ids),
+        "isolated_rules": len(node_id_set - connected_rule_ids),
+        "connected_rate": round(len(connected_rule_ids) / max(1, len(node_ids)) * 100, 2),
+        "meaning": "Observed typed dependency connectivity; not rule-extraction coverage or quality.",
+    }
 
     return {
         "dags": dags,
         "coverage": coverage,
+        "relationship_diagnostics": relationship_diagnostics,
         "dropped_edges": dropped_edges,
         "self_loop_edges": self_loop_edges,
     }

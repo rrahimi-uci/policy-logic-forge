@@ -103,31 +103,55 @@ class EntityRelationshipExtractor:
     
     def analyze_extraction_quality(self, results: Optional[Dict] = None, extraction_results: Optional[Dict] = None,
                                    iteration: int = 1) -> Dict:
-        """Analyze extraction quality.
+        """Measure catalog integrity without pretending to measure recall.
 
-        This is intentionally a lightweight, non-blocking placeholder — a
-        "good enough, keep going" signal, not a real per-axis quality
-        evaluation — pending a genuine quality-scoring implementation.
-        run_iterations_with_optimization's convergence check reads
-        overall_score/entity_quality_score/relationship_quality_score/
-        business_rules_score/coverage_score; this used to return a
-        differently-named quality_score/completeness/suggestions instead,
-        so every one of those reads silently defaulted to 0 — printing a
-        misleading "0/100 across every axis" on real runs (despite genuine,
-        non-empty extraction results) and permanently disabling the
-        quality_score >= entity_quality_target early-stop path in favor of
-        the new_items-only heuristic, regardless of the configured target.
+        Agent 02 sees bounded excerpts, so it cannot honestly report corpus
+        concept coverage.  The scores below are deterministic schema/evidence
+        integrity measurements for the returned catalog only; convergence is
+        handled separately from these measurements.
         """
+        catalog = extraction_results or results or {}
+        entities = [value for value in (catalog.get("entity_types") or {}).values() if isinstance(value, dict)]
+        relationships = [value for value in (catalog.get("relationships") or {}).values() if isinstance(value, dict)]
+
+        def percentage(items: List[Dict[str, Any]], predicate) -> float:
+            if not items:
+                return 0.0
+            return round(100.0 * sum(bool(predicate(item)) for item in items) / len(items), 1)
+
+        def has_evidence(item: Dict[str, Any]) -> bool:
+            return any(
+                isinstance(record, dict)
+                and str(record.get("chunk_path") or "").strip()
+                and str(record.get("source_text") or "").strip()
+                for record in (item.get("source_evidence") or [])
+            )
+
+        entity_schema = percentage(
+            entities,
+            lambda item: bool(item.get("definition"))
+            and bool(item.get("concept_kind"))
+            and len(item.get("attributes") or []) == 5
+            and has_evidence(item),
+        )
+        relationship_schema = percentage(
+            relationships,
+            lambda item: bool(item.get("source_entity"))
+            and bool(item.get("target_entity"))
+            and bool(item.get("definition"))
+            and has_evidence(item),
+        )
+        scored_axes = [entity_schema] + ([relationship_schema] if relationships else [])
+        overall = round(sum(scored_axes) / len(scored_axes), 1)
         return {
             "iteration": iteration,
-            "overall_score": 85,
-            "entity_quality_score": 85,
-            "relationship_quality_score": 85,
-            # Business rules are agent_03's output, not agent_02's — genuinely
-            # nothing to score here yet, so 0 is the accurate value.
-            "business_rules_score": 0,
-            "coverage_score": 85,
-            "completeness": "Good",
+            "overall_score": overall,
+            "entity_quality_score": entity_schema,
+            "relationship_quality_score": relationship_schema,
+            "business_rules_score": None,
+            "coverage_score": None,
+            "coverage_scope": "not measured; extraction uses bounded representative excerpts",
+            "completeness": "Catalog integrity only; corpus recall is not measured",
             "improvement_priorities": [],
             "suggestions": [],
         }
@@ -448,7 +472,6 @@ class ComplianceEntityRelationshipAgent:
         early_stop = os.getenv("KG_ENTITY_EARLY_STOP", "1").lower() in {"1", "true", "yes"}
         min_iterations = max(1, int(os.getenv("KG_ENTITY_MIN_ITERATIONS", "2")))
         min_new_items = max(0, int(os.getenv("KG_ENTITY_MIN_NEW_ITEMS", "0")))
-        quality_target = float(os.getenv("KG_ENTITY_QUALITY_TARGET", "90"))
         checkpoint_value = os.getenv("KG_ENTITY_CHECKPOINT_FILE", "").strip()
         checkpoint_path = Path(checkpoint_value) if checkpoint_value else None
 
@@ -523,8 +546,8 @@ class ComplianceEntityRelationshipAgent:
             print(f"    Overall Score: {quality_analysis.get('overall_score', 0)}/100")
             print(f"    Entity Quality: {quality_analysis.get('entity_quality_score', 0)}/100")
             print(f"    Relationship Quality: {quality_analysis.get('relationship_quality_score', 0)}/100")
-            print(f"    Business Rules: {quality_analysis.get('business_rules_score', 0)}/100")
-            print(f"    Coverage: {quality_analysis.get('coverage_score', 0)}/100")
+            print("    Business Rules: not measured by Agent 02")
+            print(f"    Coverage: {quality_analysis.get('coverage_scope')}")
 
             if checkpoint_path is not None:
                 checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
@@ -541,16 +564,15 @@ class ComplianceEntityRelationshipAgent:
                 len(accumulated_catalog.get("entity_types", {})) - before_entities
                 + len(accumulated_catalog.get("relationships", {})) - before_relationships
             )
-            quality_score = float((quality_analysis or {}).get("overall_score", 0) or 0)
             if (
                 early_stop
                 and iteration >= min_iterations
                 and iteration < n_iterations
-                and (new_items <= min_new_items or quality_score >= quality_target)
+                and new_items <= min_new_items
             ):
                 print(
                     f"  ⏩ Entity extraction converged after iteration {iteration}: "
-                    f"new catalog items={new_items}, quality={quality_score:.1f}",
+                    f"new catalog items={new_items}",
                     flush=True,
                 )
                 break

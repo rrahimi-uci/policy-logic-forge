@@ -40,7 +40,7 @@ def _report_markdown(result: dict, source_file: str) -> str:
     lines.append(f"- Total rules: {coverage['total_rules']}")
     lines.append(f"- DAGs generated: {len(dags)}")
     status = "PASS — 100%" if coverage["complete"] else "FAIL"
-    lines.append(f"- Coverage: {coverage['covered_rules']}/{coverage['total_rules']} rules ({status})")
+    lines.append(f"- Structural rule inclusion: {coverage['covered_rules']}/{coverage['total_rules']} rules ({status})")
     if not coverage["complete"]:
         lines.append(f"- Missing rule_ids: {coverage['missing_rule_ids']}")
         lines.append(f"- Duplicate rule_ids: {coverage['duplicate_rule_ids']}")
@@ -49,7 +49,7 @@ def _report_markdown(result: dict, source_file: str) -> str:
 
     lines += ["", "## DAG size distribution", ""]
     lines.append(f"- Largest DAG: {sizes[0] if sizes else 0} rules")
-    lines.append(f"- Single-rule (isolated) DAGs: {sum(1 for s in sizes if s == 1)}")
+    lines.append(f"- Single-rule DAGs (no asserted typed dependency): {sum(1 for s in sizes if s == 1)}")
     lines.append(f"- Multi-rule DAGs: {sum(1 for s in sizes if s > 1)}")
 
     lines += ["", "## Cycles", ""]
@@ -156,15 +156,15 @@ def main() -> None:
     print(flush=True)
 
     if not coverage["complete"]:
-        print("❌ COVERAGE CHECK FAILED — not every rule is covered by a generated DAG.", flush=True)
+        print("❌ RULE-INCLUSION CHECK FAILED — not every rule appears in exactly one generated DAG.", flush=True)
         print(f"   Missing rule_ids:   {coverage['missing_rule_ids']}", flush=True)
         print(f"   Duplicate rule_ids: {coverage['duplicate_rule_ids']}", flush=True)
         print("   Inspect dag_generation_report.md for details.", flush=True)
         raise SystemExit(2)
 
     print(
-        f"✅ Coverage check passed: {coverage['covered_rules']}/{coverage['total_rules']} rules "
-        f"(100%) are covered by {len(dags)} generated DAG(s).",
+        f"✅ Rule-inclusion check passed: {coverage['covered_rules']}/{coverage['total_rules']} rules "
+        f"(100%) appear in exactly one of {len(dags)} generated DAG(s).",
         flush=True,
     )
     print(flush=True)

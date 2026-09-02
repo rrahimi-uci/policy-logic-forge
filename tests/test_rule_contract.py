@@ -299,3 +299,22 @@ def test_rule_with_explicitly_none_in_source_scope_basis_has_no_scope_basis_issu
     issues = validate_rule_v2(rule, {"SELLER_SERVICER", "FANNIE_MAE"})
 
     assert not any(issue.code == "invalid_scope_basis" for issue in issues)
+
+
+def test_optional_fact_id_must_be_stable_snake_case():
+    rule = valid_rule()
+    rule["variables"][0]["fact_id"] = "Price Differential Amount"
+
+    issues = validate_rule_v2(rule, {"SELLER_SERVICER", "FANNIE_MAE"})
+
+    assert any(issue.code == "invalid_fact_id" for issue in issues)
+
+
+def test_distinct_local_variables_cannot_share_one_fact_id_within_rule():
+    rule = valid_rule()
+    rule["variables"][0]["fact_id"] = "shared_amount"
+    rule["variables"][1]["fact_id"] = "shared_amount"
+
+    issues = validate_rule_v2(rule, {"SELLER_SERVICER", "FANNIE_MAE"})
+
+    assert any(issue.code == "duplicate_fact_id" for issue in issues)

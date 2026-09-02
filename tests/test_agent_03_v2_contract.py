@@ -175,7 +175,7 @@ def test_entity_coverage_serializes_structured_conditions_for_orphan_prompt():
             assert "loan_age_months" in kwargs["messages"][0]["content"]
             return SimpleNamespace(
                 choices=[SimpleNamespace(message=SimpleNamespace(
-                    content='{"mappings": [{"rule_id": "orphan-1", "kind": "DROP", "name": ""}]}'
+                    content='{"mappings": [{"rule_id": "orphan-1", "kind": "UNMAPPED", "name": ""}]}'
                 ))]
             )
 
@@ -201,8 +201,12 @@ def test_entity_coverage_serializes_structured_conditions_for_orphan_prompt():
     stats = extractor.validate_entity_coverage(max_retries=1)
 
     assert stats["orphans_initial"] == 1
-    assert stats["dropped"] == 1
-    assert stats["remaining"] == 0
+    assert stats["dropped"] == 0
+    assert stats["unresolved"] == 1
+    assert stats["remaining"] == 1
+    retained = extractor.all_entity_types["UNKNOWN_BUCKET"]["business_rules"][0]
+    assert retained["entity_binding_status"] == "unresolved"
+    assert retained["requires_review"] is True
 
 
 def test_agent_three_checkpoint_fingerprint_changes_with_source_content():

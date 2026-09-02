@@ -204,6 +204,24 @@ class TestDanglingAndMalformedEdges:
         result = build_dependency_dags(graph)
         assert len(result["dags"][0]["edges"]) == 1
 
+    def test_admission_contract_excludes_rejected_relationship_candidates(self):
+        graph = _graph(["R1", "R2"], [])
+        graph["business_rules"][1]["dependencies"] = [{
+            "depends_on_rule": "R1", "dependency_type": "dataflow"
+        }]
+        graph["dependency_details"].update({
+            "admission_summary": {"candidates": 1, "admitted": 0, "rejected": 1},
+            "relationship_candidates": [{
+                "source_rule_id": "R1", "target_rule_id": "R2",
+                "dependency_type": "dataflow", "admission": "rejected_candidate",
+            }],
+        })
+
+        result = build_dependency_dags(graph)
+
+        assert len(result["dags"]) == 2
+        assert result["relationship_diagnostics"]["edge_count"] == 0
+
 
 class TestDeterminism:
     def test_repeated_calls_produce_identical_output(self):

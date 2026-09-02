@@ -73,6 +73,7 @@ EXCEPTION_BASES = {
 }
 HIT_POLICIES = {"UNIQUE", "FIRST", "PRIORITY", "COLLECT", "ANY"}
 ISO_LOCAL_TIME_RE = re.compile(r"^(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?$")
+FACT_ID_RE = re.compile(r"^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$")
 
 
 @dataclass(frozen=True)
@@ -330,6 +331,7 @@ def _validate_variables(rule: Mapping[str, Any], issues: list[ContractIssue]) ->
         return {}
 
     result: dict[str, Mapping[str, Any]] = {}
+    fact_owners: dict[str, str] = {}
     for index, variable in enumerate(variables):
         variable_path = f"variables[{index}]"
         if not isinstance(variable, Mapping):
@@ -343,6 +345,28 @@ def _validate_variables(rule: Mapping[str, Any], issues: list[ContractIssue]) ->
             _issue(issues, 1, "duplicate_variable_name", f"{variable_path}.name", "Variable names must be unique.")
             continue
         result[name] = variable
+
+        fact_id_value = variable.get("fact_id")
+        if fact_id_value is not None:
+            fact_id = str(fact_id_value).strip()
+            if not FACT_ID_RE.fullmatch(fact_id):
+                _issue(
+                    issues,
+                    1,
+                    "invalid_fact_id",
+                    f"{variable_path}.fact_id",
+                    "fact_id must be a stable lowercase snake_case identifier.",
+                )
+            elif fact_id in fact_owners and fact_owners[fact_id] != name:
+                _issue(
+                    issues,
+                    1,
+                    "duplicate_fact_id",
+                    f"{variable_path}.fact_id",
+                    "Distinct local variables in one rule cannot share a fact_id.",
+                )
+            else:
+                fact_owners[fact_id] = name
 
         variable_type = variable.get("type")
         if variable_type not in VARIABLE_TYPES:
@@ -722,6 +746,8 @@ def normalize_rule_v2(rule: Mapping[str, Any]) -> dict[str, Any]:
     for variable in normalized.get("variables", []):
         if isinstance(variable, dict) and isinstance(variable.get("name"), str):
             variable["name"] = variable["name"].strip()
+        if isinstance(variable, dict) and isinstance(variable.get("fact_id"), str):
+            variable["fact_id"] = variable["fact_id"].strip()
     for collection_name in ("condition_predicates", "outcomes", "exceptions"):
         for item in normalized.get(collection_name, []):
             if isinstance(item, dict) and isinstance(item.get("variable"), str):

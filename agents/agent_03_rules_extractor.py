@@ -1225,11 +1225,15 @@ class BusinessRulesExtractor:
 
         This method calls the LLM up to ``max_retries`` times with **only the
         orphan rules** (not the source chunks) and asks it to remap each one
-        to a canonical entity/relationship name or mark it ``DROP``. Optimal:
+        to a canonical entity/relationship name or mark it ``UNMAPPED``. An
+        unresolved binding is retained and review-flagged; extraction content
+        is never deleted merely because the small Agent 02 catalog lacks a
+        suitable concept. Optimal:
         rules already in valid buckets are never re-processed.
 
-        Returns a stats dict: ``{"orphans_initial", "remapped", "dropped",
-        "remaining"}``.
+        Returns a stats dict including initial, remapped, unresolved, and
+        remaining counts. ``dropped`` is retained as a compatibility metric
+        and is always zero.
         """
         import re as _re
 
@@ -1252,18 +1256,22 @@ class BusinessRulesExtractor:
             print("   ⚠️  No canonical entity/relationship catalog loaded — skipping entity-coverage validation", flush=True)
             return {"orphans_initial": 0, "remapped": 0, "dropped": 0, "remaining": 0}
 
-        def _collect_orphans():
+        def _collect_orphans(*, include_unresolved: bool = True):
             """Return list of (bucket_kind, bucket_key, rule_index, rule)."""
             orphans = []
             for ent_name, ent_info in self.all_entity_types.items():
                 if _norm(ent_name) in canonical_all:
                     continue
                 for idx, rule in enumerate(ent_info.get("business_rules", [])):
+                    if not include_unresolved and rule.get("entity_binding_status") == "unresolved":
+                        continue
                     orphans.append(("entity_types", ent_name, idx, rule))
             for rel_name, rel_info in self.all_relationships.items():
                 if _norm(rel_name) in canonical_all:
                     continue
                 for idx, rule in enumerate(rel_info.get("business_rules", [])):
+                    if not include_unresolved and rule.get("entity_binding_status") == "unresolved":
+                        continue
                     orphans.append(("relationships", rel_name, idx, rule))
             return orphans
 
@@ -1287,7 +1295,7 @@ class BusinessRulesExtractor:
         allowed_rel_list = sorted(canonical_rels.values())
 
         for attempt in range(1, max_retries + 1):
-            orphans = _collect_orphans()
+            orphans = _collect_orphans(include_unresolved=False)
             if not orphans:
                 print(f"   ✓ Attempt {attempt}: no orphans remain — exiting early", flush=True)
                 break
@@ -1326,7 +1334,8 @@ class BusinessRulesExtractor:
                 "You are validating business rules extracted from compliance documents. "
                 "Each rule below was bucketed under a name that is NOT in the canonical "
                 "entity/relationship catalog. Re-classify each rule to ONE canonical name "
-                "from the allowed lists, or mark it DROP if no plausible mapping exists.\n\n"
+                "from the allowed lists, or mark it UNMAPPED if no defensible mapping exists. "
+                "Never force a semantic mapping.\n\n"
                 "Allowed entity names (use exact spelling):\n"
                 f"{json.dumps(allowed_entity_list, indent=2)}\n\n"
                 "Allowed relationship names (use exact spelling):\n"
@@ -1334,8 +1343,8 @@ class BusinessRulesExtractor:
                 "Orphan rules to re-classify:\n"
                 f"{json.dumps(orphan_payload, indent=2)}\n\n"
                 "Respond with ONLY a JSON object of the form:\n"
-                '{"mappings": [{"rule_id": "...", "kind": "entity"|"relationship"|"DROP", "name": "<canonical>"}]}\n'
-                "Use kind=\"DROP\" with name=\"\" to drop a rule that cannot be mapped."
+                '{"mappings": [{"rule_id": "...", "kind": "entity"|"relationship"|"UNMAPPED", "name": "<canonical>"}]}\n'
+                "Use kind=\"UNMAPPED\" with name=\"\" when the catalog cannot represent the rule."
             )
 
             try:
@@ -1373,9 +1382,9 @@ class BusinessRulesExtractor:
                 print(f"   ⚠️  Attempt {attempt}: LLM returned no mappings — moving on", flush=True)
                 continue
 
-            # Apply mappings: pop each orphan rule from its current bucket
-            # and re-insert under the canonical bucket (creating it if
-            # missing). DROP just removes the rule.
+            # Apply mappings. Unresolved mappings remain in their source
+            # bucket with an explicit review marker; no extracted rule is
+            # deleted as a side effect of concept classification.
             attempt_remapped = 0
             attempt_dropped = 0
             for kind, bucket, _idx, rule in orphans:
@@ -1386,6 +1395,18 @@ class BusinessRulesExtractor:
                 target_kind = (mapping.get("kind") or "").strip().lower()
                 target_name = (mapping.get("name") or "").strip()
 
+                if target_kind in {"drop", "unmapped"} or not target_name:
+                    rule["entity_binding_status"] = "unresolved"
+                    rule["requires_review"] = True
+                    reasons = rule.get("review_reason")
+                    reasons = [reasons] if isinstance(reasons, str) and reasons else list(reasons or [])
+                    reason = "No defensible mapping to the current source-grounded concept catalog."
+                    if reason not in reasons:
+                        reasons.append(reason)
+                    rule["review_reason"] = reasons
+                    attempt_dropped += 1
+                    continue
+
                 # Locate and remove the rule from its current bucket
                 container = self.all_entity_types if kind == "entity_types" else self.all_relationships
                 bucket_info = container.get(bucket) or {}
@@ -1393,10 +1414,6 @@ class BusinessRulesExtractor:
                 try:
                     bucket_rules.remove(rule)
                 except ValueError:
-                    continue
-
-                if target_kind == "drop" or not target_name:
-                    attempt_dropped += 1
                     continue
 
                 # Resolve target name to canonical via _norm lookup
@@ -1426,8 +1443,8 @@ class BusinessRulesExtractor:
             remapped_total += attempt_remapped
             dropped_total += attempt_dropped
             print(
-                f"   • Attempt {attempt}: remapped {attempt_remapped}, dropped {attempt_dropped}, "
-                f"orphans now {len(_collect_orphans())}",
+                f"   • Attempt {attempt}: remapped {attempt_remapped}, unresolved {attempt_dropped}, "
+                f"unresolved orphans now {len(_collect_orphans())}",
                 flush=True,
             )
 
@@ -1435,14 +1452,15 @@ class BusinessRulesExtractor:
         print(f"\n   ✅ Validation complete:", flush=True)
         print(f"      • Initial orphans: {len(initial_orphans)}", flush=True)
         print(f"      • Remapped:        {remapped_total}", flush=True)
-        print(f"      • Dropped:         {dropped_total}", flush=True)
+        print(f"      • Unresolved:      {dropped_total} (retained for review)", flush=True)
         print(f"      • Remaining:       {remaining} (will fall through to data_loader fallback)", flush=True)
         print(f"{'='*70}\n", flush=True)
 
         return {
             "orphans_initial": len(initial_orphans),
             "remapped": remapped_total,
-            "dropped": dropped_total,
+            "dropped": 0,
+            "unresolved": dropped_total,
             "remaining": remaining,
         }
 

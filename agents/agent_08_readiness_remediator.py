@@ -27,6 +27,7 @@ from agents.agent_07_executable_readiness import (
 )
 from utils.config import get_config
 from utils.rule_dependencies import revalidate_graph
+from utils.rule_gating import make_entailment_oracle
 from utils.kg_readiness import source_document_index
 from utils.llm_client import create_llm_client
 from utils.prompt_manager import get_prompt_manager
@@ -665,7 +666,11 @@ class ReadinessRemediator:
         # Remediation renames and retypes variables (a list-typed output becomes
         # an ``allowed_*_values`` form, for instance), so relations derived
         # earlier must be re-checked before this graph is written.
-        revalidation = revalidate_graph(final_graph, stage="agent_08")
+        try:
+            entails, _gating_stats = make_entailment_oracle(final_graph, document_id="agent_08-revalidation")
+        except Exception:
+            entails = None
+        revalidation = revalidate_graph(final_graph, stage="agent_08", entails=entails)
         if revalidation["dropped"]:
             print(f"⚠️  agent_08 dropped {len(revalidation['dropped'])} rule relationship(s) "
                   f"invalidated by remediation", flush=True)

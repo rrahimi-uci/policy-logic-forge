@@ -36,6 +36,7 @@ container MUST use this structure:
   "variables": [
     {
       "name": "price_differential_amount",
+      "fact_id": "price_differential_amount",
       "type": "number",
       "unit": "USD",
       "allowed_range": [0, null],
@@ -43,6 +44,7 @@ container MUST use this structure:
     },
     {
       "name": "maximum_number_of_pools",
+      "fact_id": "maximum_number_of_pools",
       "type": "number",
       "role": "output"
     }
@@ -173,6 +175,11 @@ Rules:
    - A variable genuinely local to one rule -- an intermediate this rule
      alone computes -- may be named freely. The discipline above is for facts
      about the policy's subject, which recur across many rules.
+3b. Give every variable a stable lowercase snake_case `fact_id`. Use the same
+    `fact_id` across rules when differently worded local variables refer to
+    the same real-world fact. Do not reuse a `fact_id` for facts with different
+    meanings, types, or units. `name` remains the executable local label;
+    `fact_id` is the graph-wide semantic identity.
 4. `responsible_party` and `counterparties` must use an existing entity whose
    `concept_kind` is `actor_role`. A loan, property, document, report, process,
    decision variable, or other business object is never a party merely because

@@ -10,7 +10,7 @@ Return JSON only with exactly these fields:
   "exceptions": ["structured predicate objects using declared rule variables"],
   "exception_basis": "explicit_in_source | explicitly_none_in_source | no_exception_cue_found_in_complete_search | unresolved_after_full_document_search",
   "exception_verification": {{"status": "explicit_in_source | explicitly_none_in_source | no_exception_cue_found_in_complete_search | unresolved", "searched_document_ids": ["organized_corpus"], "searched_chunk_count": 0, "corpus_sha256":"provided digest", "evidence": [{{"chunk_path":"...", "section_id":"...", "source_text":"direct quote"}}], "unresolved_reason": null}},
-  "applicability_scope": {{"loan_types": [], "occupancy_types": [], "transaction_types": []}},
+  "applicability_scope": {{"domain_dimension_name": ["source-supported value"]}},
   "scope_basis": "explicit | explicitly_universal_in_source | genuinely_unscoped | unresolved_after_source_review",
   "scope_derivation": {{"status":"explicit | explicitly_universal | genuinely_unscoped | unresolved", "reviewed_chunk_count":0, "corpus_sha256":"provided digest", "evidence":[{{"chunk_path":"...", "section_id":"...", "source_text":"direct quote"}}], "unresolved_reason": null}}
 }}
@@ -26,10 +26,11 @@ Rules:
 - An exception must be a source-stated input circumstance. Never use the rule's
   own output variable, the opposite of its outcome, or an ordinary firing
   condition as an exception.
-- Populate loan_types, occupancy_types, and transaction_types only from direct
-  source wording. `explicitly_universal_in_source` requires universal wording.
-  Use `genuinely_unscoped` only when the relevant cited material has no scope
-  signal. Never return `inferred`.
+- Preserve the active domain's scope dimension names from the supplied rule.
+  Add a new dimension only when direct source wording names it, and always use
+  a list value. Never inject dimensions from another domain. An empty object is
+  valid when the final basis is genuinely unscoped. `explicitly_universal_in_source`
+  requires universal wording. Never return `inferred`.
 - Preserve the supplied searched_chunk_count and corpus digest evidence. Do not
   claim an unshown quote or fabricate a section_id.
 

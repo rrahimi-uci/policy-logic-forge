@@ -28,8 +28,37 @@ from utils.prompt_manager import get_prompt_manager
 from utils.llm_client import create_llm_client
 from utils.config import get_config
 from utils.rule_uniqueness import enforce_rule_uniqueness
-from utils.rule_dependencies import Relation, derive_relations
+from utils.rule_dependencies import Relation, build_fact_registry, derive_relations
 from utils.rule_gating import gating_stats, make_entailment_oracle
+
+
+_EXACT_LOGIC_FIELDS = (
+    "schema_version", "rule_type", "condition_predicates", "condition_logic",
+    "condition_basis", "outcomes", "variables", "applicability_scope",
+    "scope_basis", "responsible_party", "counterparties", "exceptions",
+    "exception_effects", "exception_basis", "workflow_semantics",
+    "recommended_hit_policy", "versioning_status",
+)
+
+
+def _exact_logic_fingerprint(rule: Dict[str, Any]) -> str:
+    """Stable fingerprint for globally exact semantic duplicates only."""
+    payload = {field: rule.get(field) for field in _EXACT_LOGIC_FIELDS}
+    return json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":"), default=str)
+
+
+def _records(value: Any) -> List[Any]:
+    if value in (None, "", []):
+        return []
+    return list(value) if isinstance(value, list) else [value]
+
+
+def _merge_unique(left: Any, right: Any) -> List[Any]:
+    merged: List[Any] = []
+    for item in _records(left) + _records(right):
+        if item not in merged:
+            merged.append(item)
+    return merged
 
 # Helper for real-time output
 def _print(msg):
@@ -45,7 +74,7 @@ def _relation_to_dependency(relation: "Relation") -> Dict[str, Any]:
     condition or it is not emitted -- so the payload says so rather than
     dressing a certainty up as a score.
     """
-    return {
+    payload = {
         "source_rule_id": relation.source_rule_id,
         "target_rule_id": relation.target_rule_id,
         "dependency_type": relation.kind,
@@ -57,82 +86,18 @@ def _relation_to_dependency(relation: "Relation") -> Dict[str, Any]:
         "confidence": {"overall_score": 100.0, "basis": relation.basis,
                        "note": "derived from the rule contracts, not estimated"},
     }
-
-
-def dependency_has_structural_support(source_rule: Any, target_rule: Any) -> bool:
-    """Return whether source output is consumed by a target predicate.
-
-    Agent 06 builds an executable dependency graph, not a thematic association
-    graph. A directed edge is groundable from the supplied rule contracts only
-    when the source produces a variable that the target reads. Shared inputs,
-    entities, descriptions, or presumed workflow order do not prove direction.
-
-    Returns False (no support) whenever either side isn't a real rule dict,
-    so a bad or missing rule_id degrades to "unsupported" rather than raising.
-    """
-    if not isinstance(source_rule, dict) or not isinstance(target_rule, dict):
-        return False
-    source_outputs = {
-        str(item.get("variable")).strip().lower()
-        for item in source_rule.get("outcomes", []) or []
-        if isinstance(item, dict) and item.get("variable")
-    }
-    target_inputs = {
-        str(item.get("variable")).strip().lower()
-        for item in target_rule.get("condition_predicates", []) or []
-        if isinstance(item, dict) and item.get("variable")
-    }
-    return bool(source_outputs & target_inputs)
-
-
-def annotate_dependency_structural_support(
-    entry: Dict[str, Any], source_rule: Any, target_rule: Any, *, unsupported_confidence_cap: int = 50
-) -> Dict[str, Any]:
-    """Stamp a dependency entry with whether it has structural backing, and
-    discount its confidence when it doesn't. Mutates and returns `entry`."""
-    supported = dependency_has_structural_support(source_rule, target_rule)
-    entry["structurally_supported"] = supported
-    if not supported:
-        confidence = entry.get("confidence", 70)
-        if isinstance(confidence, (int, float)):
-            entry["confidence"] = min(confidence, unsupported_confidence_cap)
-    return entry
-
-
-def dependency_rejection_reason(
-    entry: Any,
-    rule_lookup: Dict[str, Dict[str, Any]],
-) -> Optional[str]:
-    """Explain why a proposed dependency cannot enter the executable graph."""
-    if not isinstance(entry, dict):
-        return "dependency is not an object"
-    source_id = entry.get("source_rule_id")
-    target_id = entry.get("target_rule_id")
-    if not source_id or not target_id:
-        return "dependency is missing source_rule_id or target_rule_id"
-    if source_id == target_id:
-        return "self-dependencies are not executable data flow"
-    if source_id not in rule_lookup or target_id not in rule_lookup:
-        return "dependency references an unknown rule"
-    dependency_type = entry.get("dependency_type")
-    if dependency_type == "contradictory":
-        return "contradictions belong in conflict analysis, not the dependency DAG"
-    if dependency_type not in {
-        "prerequisite", "conditional", "sequential", "complementary", "override", "validation",
-    }:
-        return "dependency_type is missing or unsupported"
-    if not dependency_has_structural_support(rule_lookup[source_id], rule_lookup[target_id]):
-        return "source outcome is not consumed by any target condition predicate"
-    return None
+    if relation.proof is not None:
+        payload["proof"] = dict(relation.proof)
+    return payload
 
 
 class KnowledgeGraphOptimizer:
     """
-    Agent that optimizes business rules knowledge graph using LLM reasoning.
+    Agent that canonicalizes a business-rules knowledge graph.
     
     Features:
     - Conservative deduplication (only removes truly identical rules)
-    - Dependency analysis (prerequisite, sequential, conditional, etc.)
+    - Typed deterministic dataflow, gating, conflict, and association analysis
     - Detailed rationale for all optimization decisions
     """
     
@@ -168,7 +133,7 @@ class KnowledgeGraphOptimizer:
         print(f"""
 ╔══════════════════════════════════════════════════════════════════════╗
 ║   Compliance Knowledge Graph Optimizer                              ║
-║   Deduplication + Dependency Analysis with LLM Reasoning            ║
+║   Conservative Deduplication + Typed Relationship Derivation        ║
 ╚══════════════════════════════════════════════════════════════════════╝
 """, flush=True)
         print(f"Configuration:", flush=True)
@@ -210,7 +175,11 @@ class KnowledgeGraphOptimizer:
             summary['condition_logic'] = rule.get('condition_logic')
             summary['outcomes'] = rule.get('outcomes', [])
             summary['variables'] = [
-                {'name': v.get('name'), 'type': v.get('type'), 'role': v.get('role')}
+                {
+                    'name': v.get('name'), 'type': v.get('type'), 'role': v.get('role'),
+                    **({'fact_id': v.get('fact_id')} if v.get('fact_id') else {}),
+                    **({'unit': v.get('unit')} if v.get('unit') else {}),
+                }
                 for v in rule.get('variables', []) or []
                 if isinstance(v, dict)
             ]
@@ -357,9 +326,10 @@ class KnowledgeGraphOptimizer:
     ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
         """Run conservative deduplication on bounded chunks in parallel.
 
-        Cross-chunk merges are intentionally not inferred: a missed merge is
-        safer than combining rules whose numeric scope or source differs. The
-        dependency pass still provides cross-batch context separately.
+        Semantic cross-chunk merges are intentionally not inferred: a missed
+        merge is safer than combining rules whose numeric scope or source
+        differs. A final global pass does merge exact structured duplicates,
+        preserving all evidence, before relationships are derived.
         """
         import math
 
@@ -399,12 +369,53 @@ class KnowledgeGraphOptimizer:
             if metadata.get("error"):
                 errors.append(metadata["error"])
 
+        # Batching bounds model calls but cannot see exact duplicates split
+        # across chunks. A deterministic global pass safely closes that gap:
+        # it merges only byte-equivalent structured semantics and preserves
+        # every source and field-evidence record.
+        globally_deduplicated: List[Dict[str, Any]] = []
+        primary_by_fingerprint: Dict[str, Dict[str, Any]] = {}
+        cross_batch_groups: Dict[str, Dict[str, Any]] = {}
+        for rule in deduplicated:
+            fingerprint = _exact_logic_fingerprint(rule)
+            primary = primary_by_fingerprint.get(fingerprint)
+            if primary is None:
+                primary_by_fingerprint[fingerprint] = rule
+                globally_deduplicated.append(rule)
+                continue
+            primary_id = str(primary.get("rule_id") or "")
+            duplicate_id = str(rule.get("rule_id") or "")
+            removed_ids.append(duplicate_id)
+            group = cross_batch_groups.setdefault(primary_id, {
+                "primary_rule_id": primary_id,
+                "duplicate_rule_ids": [],
+                "rationale": "Exact structured semantics matched across deduplication batches.",
+                "confidence": "deterministic_exact",
+            })
+            group["duplicate_rule_ids"].append(duplicate_id)
+            merged_refs = _merge_unique(primary.get("source_reference"), rule.get("source_reference"))
+            if merged_refs:
+                primary["source_reference"] = merged_refs[0] if len(merged_refs) == 1 else merged_refs
+            left_evidence = primary.get("field_evidence") if isinstance(primary.get("field_evidence"), dict) else {}
+            right_evidence = rule.get("field_evidence") if isinstance(rule.get("field_evidence"), dict) else {}
+            primary["field_evidence"] = {
+                field: _merge_unique(left_evidence.get(field), right_evidence.get(field))
+                for field in set(left_evidence) | set(right_evidence)
+            }
+            info = primary.setdefault("deduplication_info", {})
+            info["merged_from"] = _merge_unique(info.get("merged_from"), duplicate_id)
+            info["merge_count"] = len(info["merged_from"])
+
+        deduplicated = globally_deduplicated
+        groups.extend(cross_batch_groups.values())
+
         metadata = {
             "deduplication_analysis": {
                 "duplicate_groups": groups,
                 "batched_analysis": True,
                 "batch_size": batch_size,
                 "num_batches": len(chunks),
+                "cross_batch_exact_groups": len(cross_batch_groups),
             },
             "rules_removed_ids": removed_ids,
             "total_removed": len(removed_ids),
@@ -680,6 +691,7 @@ class KnowledgeGraphOptimizer:
             "rules_with_dependencies": len(rule_dependencies_map),
             "rules_with_dependents": len(rule_dependents_map),
             "gating_coverage": gating_coverage,
+            "fact_registry": build_fact_registry(rules),
         }
 
         print(f"  \u2022 Dependencies derived:    {len(accepted_dependencies):>5}  {by_kind or '{}'}", flush=True)
@@ -693,7 +705,12 @@ class KnowledgeGraphOptimizer:
 
     def optimize_parallel(self, rules: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], Dict[str, Any], Dict[str, Any]]:
         """
-        Run deduplication and dependency analysis in parallel (thread-safe).
+        Deduplicate first, then derive relationships from the canonical rules.
+
+        The method name is retained for CLI/checkpoint compatibility.  These
+        operations are deliberately sequential: deriving edges from rules that
+        are subsequently removed can leave stale associations, conflicts, and
+        proof metadata in the optimized graph.
         
         Returns:
             - Deduplicated rules with dependencies
@@ -701,123 +718,41 @@ class KnowledgeGraphOptimizer:
             - Dependency metadata
         """
         print(f"\n{'='*70}", flush=True)
-        print(f"🚀 PARALLEL OPTIMIZATION: Deduplication + Dependency Analysis", flush=True)
+        print(f"🚀 CANONICAL OPTIMIZATION: Deduplication → Relationship Analysis", flush=True)
         print(f"{'='*70}", flush=True)
-        print(f"Running both analyses in parallel (2 threads)...\n", flush=True)
-        
-        dedup_result = None
-        dep_result = None
-        dedup_error = None
-        dep_error = None
+        try:
+            deduplicated_rules, dedup_metadata = self.deduplicate_rules(copy.deepcopy(rules))
+            print("✓ Task 1: Deduplication completed", flush=True)
+        except Exception as exc:
+            print(f"✗ Task 1: Deduplication failed; retaining all rules: {exc}", flush=True)
+            deduplicated_rules = copy.deepcopy(rules)
+            dedup_metadata = {"error": str(exc), "total_removed": 0}
 
-        print("📄 Launching Task 1 (Deduplication) + Task 2 (Dependency Analysis) in parallel...", flush=True)
-        # The two analyses add metadata to rule dictionaries.  Give each task
-        # an isolated copy so concurrent dependency annotation cannot affect
-        # deduplication summaries or source rule selection.
-        with ThreadPoolExecutor(max_workers=2) as executor:
-            fut_dedup = executor.submit(self.deduplicate_rules, copy.deepcopy(rules))
-            fut_dep = executor.submit(self.analyze_dependencies, copy.deepcopy(rules))
+        deduplicated_rules, fixes = enforce_rule_uniqueness(deduplicated_rules)
+        dedup_metadata["uniqueness_fixes"] = fixes
+        if fixes["id_fixes"] or fixes["name_fixes"]:
+            print(
+                f"   ⚠️  Canonicalized {fixes['id_fixes']} duplicate rule_id(s) and "
+                f"{fixes['name_fixes']} duplicate rule_name(s) before relationship derivation",
+                flush=True,
+            )
 
-            try:
-                dedup_result = fut_dedup.result()
-                print("✓ Task 1: Deduplication completed", flush=True)
-            except Exception as e:
-                dedup_error = str(e)
-                print(f"✗ Task 1: Deduplication failed: {e}", flush=True)
-
-            try:
-                dep_result = fut_dep.result()
-                print("✓ Task 2: Dependency analysis completed", flush=True)
-            except Exception as e:
-                dep_error = str(e)
-                print(f"✗ Task 2: Dependency analysis failed: {e}", flush=True)
-        
-        # Handle results
-        if dedup_error and dep_error:
-            print(f"\n❌ Both optimization steps failed", flush=True)
-            return rules, {"error": dedup_error}, {"error": dep_error}
-        
-        # Get deduplicated rules
-        if dedup_result:
-            deduplicated_rules, dedup_metadata = dedup_result
-        else:
-            deduplicated_rules, dedup_metadata = rules, {"error": dedup_error, "total_removed": 0}
-        
-        # Apply dependency analysis to deduplicated rules
-        if dep_result:
-            # Dependency analysis was run on original rules, need to map to deduplicated
-            _, dep_metadata = dep_result
-            
-            # Re-apply dependencies to deduplicated rules
-            deduplicated_rule_ids = {r.get('rule_id') for r in deduplicated_rules}
-            
-            # Filter dependencies to only include non-removed rules
-            filtered_deps = []
-            for dep in dep_metadata.get('dependency_analysis', {}).get('dependencies', []):
-                if not isinstance(dep, dict):
-                    continue
-                if (dep.get('source_rule_id') in deduplicated_rule_ids and
-                    dep.get('target_rule_id') in deduplicated_rule_ids):
-                    filtered_deps.append(dep)
-            
-            if dep_metadata.get('dependency_analysis'):
-                dep_metadata['dependency_analysis']['dependencies'] = filtered_deps
-                dep_metadata['total_dependencies'] = len(filtered_deps)
-            
-            # Add dependency info to deduplicated rules
-            rule_dependencies_map = {}
-            rule_dependents_map = {}
-            
-            for dep in filtered_deps:
-                source_id = dep.get("source_rule_id")
-                target_id = dep.get("target_rule_id")
-                if not source_id or not target_id:
-                    continue
-
-                if target_id not in rule_dependencies_map:
-                    rule_dependencies_map[target_id] = []
-                rule_dependencies_map[target_id].append({
-                    "depends_on_rule": source_id,
-                    "dependency_type": dep.get("dependency_type", "unknown"),
-                    "rationale": dep.get("rationale", ""),
-                    "impact_if_fails": dep.get("impact", "Unknown"),
-                    "strength": dep.get("strength", "medium"),
-                    # Preserve the per-dependency confidence computed upstream so
-                    # the saved rules keep their confidence (it was dropped here).
-                    "confidence": dep.get("confidence", 70),
-                    # Preserve the structural-support signal computed upstream
-                    # (analyze_dependencies / _analyze_dependencies_batched
-                    # already annotated `dep` in place with this and the
-                    # confidence discount it implies).
-                    "structurally_supported": dep.get("structurally_supported", True),
-                })
-
-                if source_id not in rule_dependents_map:
-                    rule_dependents_map[source_id] = []
-                rule_dependents_map[source_id].append({
-                    "dependent_rule": target_id,
-                    "dependency_type": dep.get("dependency_type", "unknown")
-                })
-            
-            # Enhance deduplicated rules with dependencies
-            for rule in deduplicated_rules:
-                rule_id = rule.get("rule_id")
-                if rule_id in rule_dependencies_map:
-                    rule["dependencies"] = rule_dependencies_map[rule_id]
-                if rule_id in rule_dependents_map:
-                    rule["dependent_rules"] = rule_dependents_map[rule_id]
-        else:
-            dep_metadata = {"error": dep_error, "total_dependencies": 0}
+        try:
+            deduplicated_rules, dep_metadata = self.analyze_dependencies(deduplicated_rules)
+            print("✓ Task 2: Relationship analysis completed on canonical rules", flush=True)
+        except Exception as exc:
+            print(f"✗ Task 2: Relationship analysis failed: {exc}", flush=True)
+            dep_metadata = {"error": str(exc), "total_dependencies": 0}
         
         print(f"\n{'='*70}", flush=True)
-        print(f"✅ PARALLEL OPTIMIZATION COMPLETE", flush=True)
+        print(f"✅ CANONICAL OPTIMIZATION COMPLETE", flush=True)
         print(f"{'='*70}", flush=True)
         print(f"Results:", flush=True)
         print(f"  • Original rules: {len(rules)}", flush=True)
         print(f"  • Rules after deduplication: {len(deduplicated_rules)}", flush=True)
         print(f"  • Rules removed: {dedup_metadata.get('total_removed', 0)}", flush=True)
         print(f"  • Dependencies found: {dep_metadata.get('total_dependencies', 0)}", flush=True)
-        print(f"  • Time saved: ~50% (parallel execution)", flush=True)
+        print(f"  • Relationship basis: canonical post-deduplication rule set", flush=True)
         
         return deduplicated_rules, dedup_metadata, dep_metadata
     
@@ -858,16 +793,17 @@ class KnowledgeGraphOptimizer:
                     "analysis_notes": dedup_metadata.get("deduplication_analysis", {}).get("analysis_notes", "")
                 },
                 "dependency_analysis": {
-                    "strategy": "Comprehensive relationship mapping",
+                    "strategy": "Typed deterministic relationship derivation after deduplication",
                     "dependencies_found": dep_metadata.get("total_dependencies", 0),
                     "dependency_chains": len(dep_metadata.get("dependency_chains", [])),
                     "conflicts_identified": len(dep_metadata.get("conflicts", [])),
                     "rules_with_dependencies": dep_metadata.get("rules_with_dependencies", 0),
-                    "rationale": "Identified prerequisite, sequential, conditional, complementary, contradictory, and override relationships between rules to enable proper execution ordering and conflict resolution.",
+                    "rationale": "Derived dataflow only from compatible fact assignments and reads, promoted gating only with a reproducible solver proof, and kept symmetric associations and conflict candidates outside execution ordering.",
                     "analysis_notes": dep_metadata.get("dependency_analysis", {}).get("analysis_notes", "")
                 }
             },
             "business_rules": optimized_rules,
+            "fact_registry": dep_metadata.get("fact_registry", {}),
             "deduplication_details": dedup_metadata.get("deduplication_analysis", {}),
             "dependency_details": {
                 "dependencies": dep_metadata.get("dependency_analysis", {}).get("dependencies", []),
@@ -933,10 +869,10 @@ class KnowledgeGraphOptimizer:
         print(f"   │   • Merge duplicates while preserving unique information    │", flush=True)
         print(f"   │   • Conservative approach - only remove true duplicates     │", flush=True)
         print(f"   ├─────────────────────────────────────────────────────────────┤", flush=True)
-        print(f"   │ Step 2: DEPENDENCY ANALYSIS                                 │", flush=True)
-        print(f"   │   • Map prerequisite relationships between rules            │", flush=True)
-        print(f"   │   • Identify sequential, conditional dependencies           │", flush=True)
-        print(f"   │   • Detect potential conflicts and circular references      │", flush=True)
+        print(f"   │ Step 2: TYPED RELATIONSHIP DERIVATION                       │", flush=True)
+        print(f"   │   • Derive type-, unit-, and scope-compatible dataflow       │", flush=True)
+        print(f"   │   • Promote logical gating only with a solver proof          │", flush=True)
+        print(f"   │   • Keep associations/conflicts outside execution ordering  │", flush=True)
         print(f"   ├─────────────────────────────────────────────────────────────┤", flush=True)
         print(f"   │ Step 3: SAVE OPTIMIZED OUTPUTS                              │", flush=True)
         print(f"   │   • Optimized knowledge graph JSON                          │", flush=True)
@@ -967,17 +903,9 @@ class KnowledgeGraphOptimizer:
                 "dependencies_count": 0
             }
         
-        # Run both deduplication and dependency analysis in PARALLEL
-        # This reduces optimization time by ~50% (from ~4 min to ~2 min)
+        # Relationship derivation must run after deduplication so every stored
+        # edge and fact-registry entry references the canonical graph.
         optimized_rules, dedup_metadata, dep_metadata = self.optimize_parallel(rules)
-
-        # Deterministic uniqueness enforcement after LLM deduplication
-        optimized_rules, fixes = enforce_rule_uniqueness(optimized_rules)
-        if fixes['id_fixes'] or fixes['name_fixes']:
-            print(f"   ⚠️  Uniqueness enforcement: fixed {fixes['id_fixes']} duplicate rule_id(s), "
-                  f"{fixes['name_fixes']} duplicate rule_name(s)", flush=True)
-        else:
-            print(f"   ✓ All rule_id and rule_name values are unique after optimization", flush=True)
 
         # Step 3: Save Results
         self.save_optimized_results(
