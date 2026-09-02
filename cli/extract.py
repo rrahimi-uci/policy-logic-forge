@@ -8,19 +8,25 @@ It runs the thirteen canonical stages in order, streaming each subprocess's
 output.  The stage number and agent identifier are deliberately identical:
 Stage 01/13 is ``agent_01`` through Stage 13/13, ``agent_13``:
 
-  01/12  agent_01  Document Organizer        chunk raw documents
-  02/12  agent_02  Entity Extractor          entities & relationships
-  03/12  agent_03  Rules Extractor           business rules (v2 contract)
-  04/12  agent_04  Rule Validator             advisory quality pass (non-blocking)
-  05/12  agent_05  Rules+Entities Merger      first complete knowledge graph
-  06/12  agent_06  KG Optimizer               dedup + dependency analysis
-  07/12  agent_07  Executable Readiness       four-invariant gate; DMN/BPMN projection
-  08/12  agent_08  Readiness Remediator       focused fix-up (only if agent_07 requests it)
-  09/12  agent_09  Grounding Verifier         independent claim-level certification
-  10/12  agent_10  Dependency DAG Generator   100%-coverage DAG partition of the graph
-  11/12  agent_11  Executable Model Generator  DMN 1.3 and BPMN 2.0 projection
-  12/13  agent_12  Business Information Model  UML domain model + catalog
-  13/13  agent_13  Business Knowledge Report    self-contained HTML report
+  01/13  agent_01  Document Organizer          chunk raw documents
+  02/13  agent_02  Entity Extractor            entities & relationships
+  03/13  agent_03  Rules Extractor             business rules (v2 contract)
+  04/13  agent_04  Rule Validator              advisory quality pass (non-blocking)
+  05/13  agent_05  Rules+Entities Merger       first complete knowledge graph
+  06/13  agent_06  KG Optimizer                dedup + dependency analysis
+  07/13  agent_07  Executable Readiness        four-invariant gate; DMN/BPMN projection
+  08/13  agent_08  Readiness Remediator        focused fix-up (only if agent_07 requests it)
+  09/13  agent_09  Grounding Verifier          independent claim-level certification
+  10/13  agent_10  Dependency DAG Generator    100%-coverage DAG partition of the graph
+  11/13  agent_11  Executable Model Generator  DMN 1.3 and BPMN 2.0 projection
+  12/13  agent_12  Business Information Model  LinkML schema + catalog
+  13/13  agent_13  Business Knowledge Report   self-contained HTML report
+
+Exit code 3 is a data-quality signal, not a crash, for agents 07, 08, 09 and
+12: the stage did its work and wrote its output, but the result needs review.
+The pipeline continues past those. Agent 03 uses the same code for the opposite
+meaning -- extraction was incomplete -- and there the pipeline must stop, so
+downstream stages never consume a partial graph.
 
 Each agent subprocess shares an adaptive API-concurrency limiter (see
 utils/adaptive_limiter.py) via KG_GLOBAL_LLM_STATE_FILE, so running multiple
@@ -446,7 +452,7 @@ class ExtractionPipeline:
         return self._run("agent_11", [])
 
     def run_agent_12(self) -> bool:
-        """Build the UML business information model from the certified graph."""
+        """Build the LinkML business information model from the certified graph."""
         return self._run("agent_12", [])
 
     def run_agent_13(self) -> bool:
@@ -577,7 +583,14 @@ class ExtractionPipeline:
         if not self.run_agent_11():
             return False
         if not self.run_agent_12():
-            return False
+            # Exit 3 is agent_12's data-quality signal, the same convention
+            # agents 07/08/09 use: the model was built and written, but its
+            # validation found errors. Stopping here would mean a graph with a
+            # single type contradiction silently costs you the final report.
+            if self._last_exit_codes.get("agent_12") != 3:
+                self._operator_message("\n🛑 STOPPED: agent_12 could not build the information model.", "error")
+                return False
+            self._operator_message("🔎 information model has validation errors; continuing fail-closed", "warning")
         if not self.run_agent_13():
             return False
 
@@ -690,6 +703,11 @@ class ExtractionPipeline:
                     and self._review_only_grounding()
                 ):
                     self._operator_message("🔎 grounding remains review-gated with complete response coverage; continuing fail-closed", "warning")
+                    continue
+
+            if agent_id == "agent_12" and not ok:
+                if self._last_exit_codes.get("agent_12") == 3:
+                    self._operator_message("🔎 information model has validation errors; continuing fail-closed", "warning")
                     continue
 
             if not ok:

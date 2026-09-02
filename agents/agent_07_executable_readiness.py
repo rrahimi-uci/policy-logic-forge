@@ -20,7 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from utils.citations import normalise_text, repair_citation
 from utils.config import get_config
 from utils.feel_expression import compile_feel_expression, evaluate_feel_expression
-from utils.rule_dependencies import revalidate_graph
+from utils.rule_dependencies import prune_dangling_related_rules, revalidate_graph
 from utils.rule_gating import make_entailment_oracle
 from utils.kg_readiness import (
     CANONICAL_ENTITY_RE,
@@ -2913,6 +2913,14 @@ class ExecutableReadinessCompleter:
             print(f"⚠️  agent_07 dropped {len(revalidation['dropped'])} rule relationship(s) "
                   f"invalidated by this stage's edits", flush=True)
         report["relation_revalidation"] = revalidation
+        # ``related_rules`` is model-authored and never validated anywhere else,
+        # so it is the one channel that can ship references to rules that were
+        # deduplicated away -- or that never existed at all.
+        related_integrity = prune_dangling_related_rules(final_graph, stage="agent_07")
+        if related_integrity["dropped"]:
+            print(f"⚠️  agent_07 dropped {len(related_integrity['dropped'])} related_rules "
+                  f"reference(s) naming rules that are not in the graph", flush=True)
+        report["related_rules_integrity"] = related_integrity
         graph_path.write_text(json.dumps(final_graph, indent=2, ensure_ascii=False) + "\n")
         (output_dir / "corpus_manifest.json").write_text(json.dumps(final_graph["corpus_manifest"], indent=2) + "\n")
         (output_dir / "kg_readiness_report.json").write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n")
@@ -2921,8 +2929,24 @@ class ExecutableReadinessCompleter:
         return report
 
 
+def required_inputs(config) -> list[Path]:
+    """Upstream artifacts this stage cannot start without."""
+    return [
+        config.get_rules_with_entities_dir() / "compliance_knowledge_graph.json",
+        config.get_optimized_dir() / "optimized_compliance_knowledge_graph.json",
+    ]
+
+
 def main() -> None:
     config = get_config()
+    # Reported as a missing artifact rather than an unhandled FileNotFoundError:
+    # a traceback tells an operator nothing about which stage to run first, and
+    # the exit code it produced (1) is not one the orchestrator can route.
+    missing = [str(path) for path in required_inputs(config) if not path.exists()]
+    if missing:
+        print("ERROR: required upstream artifact(s) missing: " + ", ".join(missing), flush=True)
+        print("   Run the pipeline through agent_06 first.", flush=True)
+        raise SystemExit(2)
     resolver = OpenAIEvidenceResolver(config.get_api_key(), config.get_optimizer_model_name(), config.get_reasoning_effort())
     completer = ExecutableReadinessCompleter(resolver)
     baseline = config.get_rules_with_entities_dir() / "compliance_knowledge_graph.json"

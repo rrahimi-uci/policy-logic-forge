@@ -713,9 +713,10 @@ class ComplianceEntityRelationshipAgent:
             print(f"  Sample Relationships: {', '.join(sample_rels)}")
 
 
-def main():
-    """
-    Main execution function.
+def main() -> int:
+    """Extract entities and relationships from the organized corpus.
+
+    Returns a process exit code: 0 on success, 2 when there is nothing to read.
     """
     # Load configuration
     import sys
@@ -759,19 +760,25 @@ def main():
     documents = agent.read_text_files(TEXT_DIR)
     
     if not documents:
-        print("Error: No documents found!")
-        return
-    
+        # Exiting 0 here reported success for a stage that did nothing: the
+        # orchestrator ran agent_03 and agent_04 against no entities at all, and
+        # the run only stopped three stages later at agent_05, blaming its own
+        # missing inputs rather than the organizer that produced none.
+        print(f"❌ agent_02: no organized documents found in {TEXT_DIR}", flush=True)
+        print("   Run agent_01 first, or check that it produced chunk files.", flush=True)
+        return 2
+
     # Run iterative extraction with optimization
     results = agent.run_iterations_with_optimization(documents, n_iterations=N_ITERATIONS)
-    
+
     # Save results
     agent.save_results(results, OUTPUT_DIR)
-    
+
     print("\n✓ Process completed successfully!")
     print("\nOutput files:")
     print("  - entity_types_and_relationships.json (extraction results)")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

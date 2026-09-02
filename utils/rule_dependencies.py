@@ -73,6 +73,7 @@ __all__ = [
     "refusal_for_declared_kind",
     "derive_relations",
     "revalidate_graph",
+    "prune_dangling_related_rules",
 ]
 
 
@@ -828,6 +829,77 @@ def derive_relations(
             result.refusals.append(refusal)
     result.refusals.sort(key=lambda r: r.kind)
     return result
+
+
+def prune_dangling_related_rules(graph: Mapping[str, Any], *, stage: str = "") -> dict[str, Any]:
+    """Drop ``related_rules`` entries naming a rule the graph does not contain.
+
+    ``related_rules`` is the one dependency channel nothing checks. It is
+    written by the extraction model, which is asked to list "rule_ids that
+    interact with this rule", and from then on it is carried untouched into the
+    certified graph: no stage validates the targets, and no stage prunes it when
+    optimization removes a rule.
+
+    Both failure modes are real. On an 832-rule privacy run the shipped graph
+    carried 18 references to 17 rule ids that do not exist -- 9 to rules that
+    optimization deleted, and 8 that never existed in any graph at any stage,
+    invented by the model outright. agent_10 discarded them while building DAGs
+    and recorded ``dropped_edges: 0``, so the loss was invisible too.
+
+    Targets are checked against the rule set only. A surviving entry still means
+    no more than "the extraction model asserted these interact"; the decidable
+    relations live in ``dependency_details`` and are checked by
+    :func:`revalidate_graph`. ``divergent_from_typed`` counts the gap between
+    the two so it cannot be mistaken for agreement.
+    """
+    rules = list(_rules_of(graph))
+    known = {_rule_id(rule) for rule in rules if _rule_id(rule)}
+
+    dropped: list[dict[str, Any]] = []
+    kept_pairs: set[tuple[str, str]] = set()
+    for rule in rules:
+        related = rule.get("related_rules")
+        if not isinstance(related, list) or not related:
+            continue
+        source = _rule_id(rule)
+        surviving: list[Any] = []
+        for entry in related:
+            target = str(entry.get("rule_id") if isinstance(entry, Mapping) else entry or "")
+            if target and target not in known:
+                dropped.append({
+                    "source_rule_id": source,
+                    "target_rule_id": target,
+                    "reason": "related_rules names a rule id that is not in the graph",
+                })
+                continue
+            surviving.append(entry)
+            if target:
+                kept_pairs.add((source, target))
+        rule["related_rules"] = surviving
+
+    details = graph.get("dependency_details")
+    typed_pairs = {
+        (str(entry.get("source_rule_id") or ""), str(entry.get("target_rule_id") or ""))
+        for entry in ((details or {}).get("dependencies") or [])
+        if isinstance(entry, Mapping)
+    } if isinstance(details, Mapping) else set()
+
+    report = {
+        "stage": stage,
+        "checked": sum(
+            len(rule.get("related_rules") or []) for rule in rules
+        ) + len(dropped),
+        "kept": len(kept_pairs),
+        "dropped": dropped,
+        "divergent_from_typed": len(kept_pairs - typed_pairs),
+        "typed_relations": len(typed_pairs),
+    }
+    if isinstance(details, dict):
+        details["related_rules_integrity"] = {
+            key: (len(value) if isinstance(value, list) else value)
+            for key, value in report.items()
+        }
+    return report
 
 
 def revalidate_graph(

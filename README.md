@@ -64,7 +64,7 @@ against `Percentage`) are errors.
 rule and score exploration, DMN/BPMN/CMMN coverage, dependency views, embedded
 source chunks, search/filter controls, and inline SVG visualizations. Each rule
 receives a transparent 0–100 automation-readiness score derived from grounding,
-contract, evidence, execution, and relationship signals. Agent 12 assigns no
+contract, evidence, execution, and relationship signals. Agent 13 assigns no
 pass/fail label or universal threshold; deployment owners interpret the score
 for their environment and domain. It uses only graph-derived facts.
 

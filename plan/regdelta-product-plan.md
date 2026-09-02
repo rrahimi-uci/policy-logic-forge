@@ -2,7 +2,7 @@
 
 ## 0. What this is
 
-RegDelta is a differential-execution engine layered on top of the eleven-agent
+RegDelta is a differential-execution engine layered on top of the thirteen-agent
 extraction pipeline: given old and new versions of a policy document, it
 compiles both to LExec IR, aligns rules, classifies semantic changes, and
 propagates impact through the dependency graph — entirely from data and code
