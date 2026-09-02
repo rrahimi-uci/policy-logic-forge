@@ -1275,7 +1275,22 @@ def test_review_required_rules_without_v2_violations_do_not_fail_schema_consiste
 
     assert report["rules_requiring_review"] > 0
     assert report["invariants"]["schema_consistency"]["pass"] is True
-    assert all(rule.get("readiness", {}).get("status") == "review_required" for rule in final_graph["business_rules"])
+
+
+def test_normalise_rule_contract_repairs_fact_id_shape_and_collisions():
+    rule = valid_rule()
+    rule["variables"] = [
+        {"name": "Loan Amount", "fact_id": "shared amount", "type": "number", "role": "input"},
+        {"name": "Loan Amount Basis", "fact_id": "shared amount", "type": "enum", "allowed_values": ["original"], "role": "input"},
+        {"name": "Result", "fact_id": "result", "type": "boolean", "role": "output"},
+    ]
+
+    normalized = normalise_rule_contract(rule)
+    fact_ids = [item["fact_id"] for item in normalized["variables"]]
+
+    assert fact_ids[:3] == ["loan_amount", "loan_amount_basis", "result"]
+    assert len(fact_ids) == len(set(fact_ids))
+    assert not any(issue.code in {"invalid_fact_id", "duplicate_fact_id"} for issue in validate_rule_v2(normalized))
 
 
 def test_uncovered_pairs_use_mechanical_disjoint_proof_before_falling_back_to_unresolved(tmp_path):

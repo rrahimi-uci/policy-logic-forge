@@ -39,7 +39,7 @@ from utils.kg_readiness import (
 from utils.llm_client import create_llm_client
 from utils.prompt_manager import get_prompt_manager
 from utils.rule_contract import annotate_rule_contract, quarantine_non_actor_counterparties
-from utils.rule_contract import EXCEPTION_BASES, SCOPE_BASES, validate_rule_v2
+from utils.rule_contract import EXCEPTION_BASES, FACT_ID_RE, SCOPE_BASES, validate_rule_v2
 from utils.scope import newly_populated_dimension_count, populated_scope
 from utils.semantic_routing import bpmn_eligibility
 
@@ -560,6 +560,33 @@ def _declared_identifier_aliases(variables: list[Any]) -> dict[str, str]:
     for compact in collisions:
         aliases.pop(compact, None)
     return aliases
+
+
+def _canonical_fact_id(value: Any, fallback: Any, used: set[str]) -> str:
+    """Return a stable, unique v2 fact identifier.
+
+    Extraction models occasionally copy an output's fact id onto a related
+    input, or emit display-style identifiers containing spaces/punctuation.
+    Fact ids are local structural identifiers, so repairing their spelling
+    from the declared variable name does not make a new business claim.  A
+    deterministic numeric suffix handles the rare case where two variable
+    names canonicalize to the same id.
+    """
+    candidate = str(value or "").strip().casefold()
+    if not FACT_ID_RE.fullmatch(candidate):
+        candidate = str(fallback or "").strip().casefold()
+    candidate = re.sub(r"[^a-z0-9]+", "_", candidate).strip("_")
+    if not candidate:
+        candidate = "fact"
+    if candidate[0].isdigit():
+        candidate = f"fact_{candidate}"
+    base = candidate
+    suffix = 2
+    while candidate in used:
+        candidate = f"{base}_{suffix}"
+        suffix += 1
+    used.add(candidate)
+    return candidate
 
 
 def _evidence_pointer(value: Any) -> dict[str, str] | None:
@@ -1362,6 +1389,17 @@ def _normalise_rule_contract(rule: dict[str, Any]) -> dict[str, Any]:
         elif "input" in roles:
             existing["role"] = "input"
     rule["variables"] = merged_variables
+
+    # Fact ids are local identifiers, not source assertions.  Normalize them
+    # after duplicate variable declarations have been merged so every rule
+    # satisfies the v2 uniqueness contract before readiness is evaluated.
+    used_fact_ids: set[str] = set()
+    for variable in merged_variables:
+        if not isinstance(variable, dict):
+            continue
+        variable["fact_id"] = _canonical_fact_id(
+            variable.get("fact_id"), variable.get("name"), used_fact_ids
+        )
 
     # Promote only validated arithmetic over declared numeric variables to a
     # real DMN FEEL expression.  Unsupported prose, lookup objects, collection
