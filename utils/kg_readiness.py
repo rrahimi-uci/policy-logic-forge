@@ -90,11 +90,29 @@ def corpus_manifest(input_graph: Mapping[str, Any], final_graph: Mapping[str, An
     }
 
 
+#: Relation kinds that are symmetric and therefore carry no direction to order
+#: by. They live under their own keys in ``dependency_details`` today, but the
+#: filter below is deliberate rather than incidental: folding either into the
+#: DAG would invent an ordering the evidence does not support, and a future
+#: change that merged the keys would otherwise do exactly that silently.
+UNDIRECTED_RELATION_KINDS = frozenset({"association", "conflict"})
+
+
+def _is_directed_dependency(edge: Mapping[str, Any]) -> bool:
+    if edge.get("directed") is False:
+        return False
+    return str(edge.get("dependency_type") or "").strip().lower() not in UNDIRECTED_RELATION_KINDS
+
+
 def dependency_edges(graph: Mapping[str, Any]) -> list[dict[str, Any]]:
-    """Read canonical top-level edges and fall back to per-rule dependency lists."""
+    """Read canonical top-level edges and fall back to per-rule dependency lists.
+
+    Only directed relations are returned: everything downstream treats these as
+    orderable dependency edges, so a symmetric relation must never reach here.
+    """
     details = graph.get("dependency_details", {})
     raw = details.get("dependencies", []) if isinstance(details, Mapping) else []
-    edges = [dict(edge) for edge in raw if isinstance(edge, Mapping)]
+    edges = [dict(edge) for edge in raw if isinstance(edge, Mapping) and _is_directed_dependency(edge)]
     if edges:
         return edges
     for rule in graph.get("business_rules", []):
