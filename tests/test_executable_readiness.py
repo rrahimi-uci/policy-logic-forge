@@ -1294,6 +1294,26 @@ def test_normalise_rule_contract_repairs_fact_id_shape_and_collisions():
     assert not any(issue.code in {"invalid_fact_id", "duplicate_fact_id"} for issue in validate_rule_v2(normalized))
 
 
+def test_normalise_rule_contract_maps_document_task_to_user_task():
+    rule = valid_rule()
+    rule["workflow_semantics"] = {
+        "kind": "prescriptive_process",
+        "basis": "explicit_in_source",
+        "trigger_event": "A document is required",
+        "actor_role": "SELLER_SERVICER",
+        "ordered_steps": [
+            {"step_id": "s1", "name": "Collect the document", "kind": "document_task"},
+            {"step_id": "s2", "name": "Review the document", "kind": "business_rule_task"},
+        ],
+        "evidence": [rule["source_reference"]],
+    }
+
+    normalized = normalise_rule_contract(rule)
+
+    assert normalized["workflow_semantics"]["ordered_steps"][0]["kind"] == "user_task"
+    assert not any(issue.code == "invalid_workflow_step" for issue in validate_rule_v2(normalized))
+
+
 def test_uncovered_pairs_use_mechanical_disjoint_proof_before_falling_back_to_unresolved(tmp_path):
     """entity_conflict_analysis.txt only asks the model for "every material
     pair or an unresolved group" — a small entity group's single-call

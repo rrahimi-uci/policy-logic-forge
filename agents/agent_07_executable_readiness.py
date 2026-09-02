@@ -947,6 +947,17 @@ def _normalise_rule_contract(rule: dict[str, Any]) -> dict[str, Any]:
             variable["free_text"] = True
         variable["role"] = _normalise_variable_role(variable.get("role"))
 
+    # ``document_task`` is a common descriptive label in model output, but
+    # the executable contract represents a document-handling activity as a
+    # human/user task.  Canonicalize this losslessly before validation and
+    # BPMN projection rather than rejecting an otherwise source-explicit
+    # workflow.
+    workflow = rule.get("workflow_semantics")
+    if isinstance(workflow, dict) and isinstance(workflow.get("ordered_steps"), list):
+        for step in workflow["ordered_steps"]:
+            if isinstance(step, dict) and step.get("kind") == "document_task":
+                step["kind"] = "user_task"
+
     declared_aliases = _declared_identifier_aliases(variables)
 
     def normalise_declared_reference(value: Any) -> Any:
