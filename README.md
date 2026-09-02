@@ -47,6 +47,17 @@ catalog are **projections** of that one schema, so they cannot drift from it.
 A ten-check validation report accompanies the model; attributes the pipeline
 cannot confidently place are held for review rather than filed under a guess.
 
+The model is categorised along two axes that need no domain knowledge to derive:
+classes by what kind of thing they are (`entity`, `actor`, `event`, `process`,
+`value_object`) and attributes by what kind of value they hold (`identifier`,
+`quantity`, `temporal`, `categorical`, `flag`, `descriptive`). Both are carried
+as LinkML `subsets`, counted in an `inventory` block in the validation report,
+and exposed as catalog columns. Where two rules describe the same attribute at
+different precisions — a closed value set in one, a bare string in another —
+the narrower reading wins and the difference is reported for review; only
+genuinely irreconcilable types (`Boolean` against an enumeration, `Money`
+against `Percentage`) are errors.
+
 **Agent 13 report layer** — after Agent 11 has produced its model bundle,
 `agents/agent_13_business_knowledge_report.py` creates one self-contained
 `business_knowledge_report.html`. The report provides tabbed SBVR vocabulary,

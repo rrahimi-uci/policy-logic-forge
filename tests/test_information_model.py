@@ -12,12 +12,18 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from utils.information_model import (  # noqa: E402
+    ATTRIBUTE_CATEGORIES,
+    Attribute,
     build_model,
     catalog_rows,
+    categorise_attribute,
     collect_attributes,
     extract_enumerations,
     infer_business_type,
+    model_inventory,
     pascal_case,
+    reconcile_types,
+    refines,
     to_mermaid,
     to_plantuml,
     validate_model,
@@ -412,3 +418,198 @@ def test_a_single_component_value_object_is_refused():
     assert stats["value_objects"] == 0
     assert len(model.unassigned) == 1
     assert "too few components" in " ".join(model.unassigned[0].review_reasons)
+
+
+# ---------------------------------------------------------------------------
+# refinement vs contradiction
+# ---------------------------------------------------------------------------
+
+def test_refinement_is_not_a_contradiction():
+    """Rules routinely describe the same symbol at different precisions.
+
+    One names a closed value set, another calls it free text. The set loses
+    nothing the text declared, so this is an under-specification to reconcile,
+    not a disagreement to escalate.
+    """
+    assert refines("OccupancyType", "Text")       # an enumeration narrows free text
+    assert refines("Identifier", "String")
+    assert refines("Money", "Decimal")
+    assert refines("Integer", "Decimal")
+
+
+def test_types_in_different_families_never_refine_each_other():
+    """The check has to stay narrow or it becomes a silent type-coercion pass."""
+    assert not refines("Boolean", "Text")
+    assert not refines("OccupancyType", "Boolean")
+    assert not refines("Money", "Percentage")     # both decimal, neither narrower
+    assert not refines("Percentage", "Money")
+    assert not refines("Date", "Text")
+    assert not refines("Money", "Money")          # a type does not refine itself
+
+
+def test_reconcile_picks_the_narrowest_reading():
+    assert reconcile_types(["OccupancyType", "Text"]) == "OccupancyType"
+    assert reconcile_types(["Money", "Decimal"]) == "Money"
+    assert reconcile_types(["Text"]) == "Text"
+    assert reconcile_types(["Identifier", "Text", "String"]) == "Identifier"
+
+
+def test_reconcile_refuses_when_the_rules_genuinely_disagree():
+    assert reconcile_types(["Boolean", "ParentalConsent"]) is None
+    assert reconcile_types(["Money", "Percentage"]) is None
+    assert reconcile_types(["OccupancyType", "LoanPurpose"]) is None   # two closed sets
+    assert reconcile_types([]) is None
+
+
+def test_an_under_specified_declaration_is_reported_for_review_not_as_an_error():
+    """This is the case that dominated real runs: 24 of 28 reported errors were
+    a closed value set in one rule and a bare string in another."""
+    rules = [
+        _rule("R1", variables=[_var("occupancy_type", type="enum",
+                                    allowed_values=["primary", "second"])]),
+        _rule("R2", variables=[_var("occupancy_type", type="string", free_text=True)]),
+    ]
+    attributes, conflicts = collect_attributes({"business_rules": rules})
+    assert len(conflicts) == 1
+    conflict = conflicts[0]
+    assert conflict["level"] == "refinement"
+    assert conflict["severity"] == "review"
+    assert conflict["resolved_to"] == "OccupancyType"
+    # and the narrower reading is the one the attribute actually gets
+    assert attributes["occupancy_type"].type == "OccupancyType"
+
+
+def test_the_narrow_reading_wins_regardless_of_declaration_order():
+    """Ordering by evidence alone let a `string` beat the enumeration that
+    refines it on tie-break, silently discarding a real constraint."""
+    for order in ([0, 1], [1, 0]):
+        rules = [
+            _rule("R1", variables=[_var("occupancy_type", type="enum",
+                                        allowed_values=["primary", "second"])]),
+            _rule("R2", variables=[_var("occupancy_type", type="string", free_text=True)]),
+        ]
+        attributes, _ = collect_attributes({"business_rules": [rules[i] for i in order]})
+        assert attributes["occupancy_type"].type == "OccupancyType"
+
+
+def test_a_genuine_contradiction_is_still_an_error():
+    rules = [
+        _rule("R1", variables=[_var("parental_consent", type="enum",
+                                    allowed_values=["given", "withheld"])]),
+        _rule("R2", variables=[_var("parental_consent", type="boolean")]),
+    ]
+    _, conflicts = collect_attributes({"business_rules": rules})
+    assert len(conflicts) == 1
+    assert conflicts[0]["level"] == "contradiction"
+    assert conflicts[0]["severity"] == "error"
+    assert "resolved_to" not in conflicts[0]
+
+
+def test_validation_reports_conflicts_at_the_severity_they_carry():
+    """Exit code 3 keys off errors, so a refinement must not trigger it."""
+    rules = [
+        _rule("R1", variables=[_var("occupancy_type", type="enum",
+                                    allowed_values=["primary", "second"])],
+              entities=["LOAN"]),
+        _rule("R2", variables=[_var("occupancy_type", type="string", free_text=True)],
+              entities=["LOAN"]),
+        _rule("R3", variables=[_var("parental_consent", type="enum",
+                                    allowed_values=["given", "withheld"])], entities=["LOAN"]),
+        _rule("R4", variables=[_var("parental_consent", type="boolean")], entities=["LOAN"]),
+    ]
+    graph = {"entity_types": {"LOAN": {"concept_kind": "business_object"}},
+             "business_rules": rules}
+    report = validate_model(build_model(graph, {}), graph, {})
+    consistency = [f for f in report["findings"] if f["check"] == "type_consistency"]
+    by_severity = {f["subject"]: f["severity"] for f in consistency}
+    assert by_severity["occupancy_type"] == "review"
+    assert by_severity["parental_consent"] == "error"
+    assert "reconciled to OccupancyType" in next(
+        f["detail"] for f in consistency if f["subject"] == "occupancy_type")
+
+
+# ---------------------------------------------------------------------------
+# high-level categories and the element inventory
+# ---------------------------------------------------------------------------
+
+def _attr(name, type_):
+    return Attribute(name=name, symbol=name, type=type_, type_basis="declared", type_reason="t")
+
+
+def test_every_business_type_lands_in_a_declared_category():
+    for type_ in ("Money", "Percentage", "Quantity", "Integer", "Decimal",
+                  "Date", "DateTime", "Time", "Duration", "Boolean",
+                  "Text", "String", "Identifier", "SomeEnumeration"):
+        assert categorise_attribute(_attr("x", type_)) in ATTRIBUTE_CATEGORIES
+
+
+def test_categories_group_by_the_kind_of_value_held():
+    assert categorise_attribute(_attr("a", "Money")) == "quantity"
+    assert categorise_attribute(_attr("a", "Duration")) == "temporal"
+    assert categorise_attribute(_attr("a", "Boolean")) == "flag"
+    assert categorise_attribute(_attr("a", "Identifier")) == "identifier"
+    assert categorise_attribute(_attr("a", "Text")) == "descriptive"
+    # anything not a builtin or business type is a closed vocabulary
+    assert categorise_attribute(_attr("a", "OccupancyType")) == "categorical"
+
+
+def test_inventory_counts_every_element_kind():
+    rules = [
+        _rule("R1", entities=["LOAN"], variables=[
+            _var("principal_amount", unit="usd"),
+            _var("term_months", unit="months"),
+            _var("occupancy_type", type="enum", allowed_values=["primary", "second"]),
+            _var("eligible", type="boolean", role="output"),
+        ], predicates=["principal_amount", "term_months", "occupancy_type"],
+              outcomes=["eligible"]),
+    ]
+    graph = {"entity_types": {"LOAN": {"concept_kind": "business_object"}},
+             "business_rules": rules}
+    inventory = model_inventory(build_model(graph, {}))
+
+    assert inventory["classes"]["total"] == 1
+    assert inventory["classes"]["by_stereotype"] == {"entity": 1}
+    categories = inventory["attributes"]["by_category"]
+    assert categories["quantity"] == 1        # principal_amount
+    assert categories["temporal"] == 1        # term_months
+    assert categories["categorical"] == 1     # occupancy_type
+    assert categories["flag"] == 1            # eligible
+    assert inventory["attributes"]["total"] == 4
+    assert set(categories) == set(ATTRIBUTE_CATEGORIES)
+
+
+def test_inventory_separates_detected_enumerations_from_referenced_ones():
+    """The schema drops enumerations no class references, so reporting only the
+    total leaves the two artifacts disagreeing with no way to explain it."""
+    rules = [
+        _rule("R1", entities=["LOAN"], variables=[
+            _var("occupancy_type", type="enum", allowed_values=["primary", "second"]),
+        ], predicates=["occupancy_type"]),
+        # declared by a rule naming no entity, so it cannot be assigned
+        _rule("R2", variables=[
+            _var("loan_purpose", type="enum", allowed_values=["purchase", "refinance"]),
+        ], predicates=["loan_purpose"]),
+    ]
+    graph = {"entity_types": {"LOAN": {"concept_kind": "business_object"}},
+             "business_rules": rules}
+    enums = model_inventory(build_model(graph, {}))["enumerations"]
+    assert enums["total"] == 2
+    assert enums["referenced_by_a_class"] == 1
+    assert enums["single_valued"] == 0
+
+
+def test_inventory_flags_single_valued_enumerations():
+    rules = [_rule("R1", entities=["LOAN"], variables=[
+        _var("status", type="enum", allowed_values=["only"]),
+    ], predicates=["status"])]
+    graph = {"entity_types": {"LOAN": {"concept_kind": "business_object"}},
+             "business_rules": rules}
+    assert model_inventory(build_model(graph, {}))["enumerations"]["single_valued"] == 1
+
+
+def test_the_validation_report_carries_the_inventory():
+    graph = {"entity_types": {"LOAN": {"concept_kind": "business_object"}},
+             "business_rules": [_rule("R1", entities=["LOAN"], variables=[
+                 _var("principal_amount", unit="usd")], predicates=["principal_amount"])]}
+    report = validate_model(build_model(graph, {}), graph, {})
+    assert report["inventory"]["attributes"]["by_category"]["quantity"] == 1

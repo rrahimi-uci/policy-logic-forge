@@ -56,6 +56,11 @@ __all__ = [
     "CLASS_CONCEPT_KINDS",
     "camel_case",
     "validate_model",
+    "refines",
+    "reconcile_types",
+    "ATTRIBUTE_CATEGORIES",
+    "categorise_attribute",
+    "model_inventory",
 ]
 
 #: Business types this module will assign.  Deliberately not a superset of
@@ -229,6 +234,65 @@ def infer_business_type(
     return TypeInference("String", "fallback", f"no declared type ({declared or 'missing'})", needs_review=True)
 
 
+#: Which business types are *refinements* of which others. A refinement is a
+#: strictly narrower reading of the same underlying value: every value it admits
+#: is a valid value of the type it refines. Two rules that disagree only along
+#: this axis have not contradicted each other -- one of them simply said less.
+#:
+#: ``Money`` vs ``Percentage`` is deliberately absent even though both are
+#: decimal: neither is a special case of the other, so picking a winner would be
+#: a modelling decision made on no evidence. Types not listed here are
+#: enumerations, handled in :func:`refines`.
+_REFINES: dict[str, frozenset[str]] = {
+    "Text": frozenset({"String"}),
+    "Identifier": frozenset({"String", "Text"}),
+    "Money": frozenset({"Decimal"}),
+    "Percentage": frozenset({"Decimal"}),
+    "Duration": frozenset({"Decimal"}),
+    "Quantity": frozenset({"Decimal"}),
+    "Integer": frozenset({"Decimal"}),
+    # Roots of their own families: nothing is a narrower reading of these.
+    "String": frozenset(),
+    "Decimal": frozenset(),
+    "Boolean": frozenset(),
+    "Date": frozenset(),
+    "DateTime": frozenset(),
+    "Time": frozenset(),
+}
+
+
+def refines(specific: str, general: str) -> bool:
+    """True when ``specific`` is a strictly narrower reading of ``general``."""
+    if specific == general:
+        return False
+    if specific in _REFINES:
+        return general in _REFINES[specific]
+    # Anything absent from the table is an enumeration: a closed set of strings,
+    # so a refinement of free text but of nothing numeric, temporal or boolean.
+    return general in ("String", "Text")
+
+
+def reconcile_types(types: Iterable[str]) -> str | None:
+    """The single most specific type in ``types``, or ``None`` if they conflict.
+
+    Rules routinely declare the same symbol at different levels of precision --
+    one names a closed value set, another calls it a string. That is an
+    under-specification, not a disagreement, and the closed set is the answer
+    that loses no information. ``None`` means the rules genuinely contradict
+    each other (``Boolean`` against an enumeration, ``Money`` against
+    ``Percentage``), which no amount of ordering can reconcile.
+    """
+    candidates = sorted({t for t in types if t})
+    if not candidates:
+        return None
+    if len(candidates) == 1:
+        return candidates[0]
+    for candidate in candidates:
+        if all(other == candidate or refines(candidate, other) for other in candidates):
+            return candidate
+    return None
+
+
 @dataclass
 class Constraint:
     """A business rule expressed against one attribute."""
@@ -349,32 +413,52 @@ def collect_attributes(graph: Mapping[str, Any]) -> tuple[dict[str, Attribute], 
             inference = infer_business_type(variable)
             inferences.setdefault(inference.type, []).append(rid)
 
-        # Prefer the type with the strongest evidence, and report disagreement
-        # at both levels. Inference can reconcile a loosely-declared `string`
-        # with a properly united `number` into the same business type, which is
-        # the right model -- but the underlying rules still disagree about what
-        # the attribute *is*, and that is an extraction defect a reviewer should
-        # see rather than one the model quietly absorbs.
+        # Report disagreement at the level it actually occurs. Rules that name
+        # the same symbol at different precisions -- a closed value set in one,
+        # a bare `string` in another -- have not contradicted each other, and
+        # calling that an error buries the handful of real contradictions in a
+        # pile of under-specifications. Only types that cannot be reconciled to
+        # a single most-specific reading are errors.
         declared_types = {_norm(v.get("type")) for _, v in decls if _norm(v.get("type"))}
-        if len(inferences) > 1:
+        resolved = reconcile_types(inferences)
+        if len(inferences) > 1 and resolved is None:
             conflicts.append({
                 "symbol": symbol,
-                "level": "business_type",
+                "level": "contradiction",
+                "severity": "error",
                 "types": {t: sorted(set(ids)) for t, ids in inferences.items()},
                 "detail": "the same attribute resolves to incompatible business types across rules",
+            })
+        elif len(inferences) > 1:
+            conflicts.append({
+                "symbol": symbol,
+                "level": "refinement",
+                "severity": "review",
+                "resolved_to": resolved,
+                "types": {t: sorted(set(ids)) for t, ids in inferences.items()},
+                "detail": (f"rules describe this attribute at different precisions; {resolved} is the "
+                           "narrowest reading and loses nothing the others declared"),
             })
         elif len(declared_types) > 1:
             conflicts.append({
                 "symbol": symbol,
                 "level": "declared_type",
+                "severity": "review",
                 "types": {t: sorted({rid for rid, v in decls if _norm(v.get("type")) == t})
                           for t in sorted(declared_types)},
                 "detail": ("rules declare this attribute with different primitive types; they agree "
                            "on the business type only after inference"),
             })
 
+        # Among the declarations, prefer the reconciled (narrowest) type, then
+        # the strongest evidence for it. Ordering by evidence alone would let a
+        # `string` declaration beat the enumeration that refines it purely on
+        # tie-break order, silently discarding a real constraint.
+        candidates = [infer_business_type(v) for _, v in decls]
+        if resolved is not None:
+            candidates = [c for c in candidates if c.type == resolved] or candidates
         best = max(
-            (infer_business_type(v) for _, v in decls),
+            candidates,
             key=lambda i: {"declared": 3, "derived": 2, "heuristic": 1, "fallback": 0}.get(i.basis, 0),
         )
 
@@ -566,6 +650,82 @@ class InformationModel:
                 "unassigned_attributes": len(self.unassigned),
             },
         }
+
+
+#: The high-level category of an attribute, derived from its business type
+#: alone. This is the one grouping axis the pipeline can produce without
+#: guessing: it needs no document structure, no corpus conventions and no
+#: model judgment, so it means the same thing in mortgage as in privacy.
+#:
+#: Subject areas derived from document sections were considered and rejected:
+#: a corpus of many organisations' policies has no shared section vocabulary,
+#: so clustering free-text headings would invent structure rather than report it.
+ATTRIBUTE_CATEGORIES = ("identifier", "quantity", "temporal", "categorical", "flag", "descriptive")
+
+_CATEGORY_BY_TYPE = {
+    "Identifier": "identifier",
+    "Money": "quantity", "Percentage": "quantity", "Quantity": "quantity",
+    "Integer": "quantity", "Decimal": "quantity",
+    "Date": "temporal", "DateTime": "temporal", "Time": "temporal", "Duration": "temporal",
+    "Boolean": "flag",
+    "Text": "descriptive", "String": "descriptive",
+}
+
+
+def categorise_attribute(attribute: Attribute) -> str:
+    """The high-level category of one attribute.
+
+    Anything whose type is not a known business type or builtin is an
+    enumeration -- a closed vocabulary -- and therefore categorical.
+    """
+    return _CATEGORY_BY_TYPE.get(attribute.type, "categorical")
+
+
+def model_inventory(model: InformationModel) -> dict[str, Any]:
+    """Count every element in the model by its kind.
+
+    The model distinguishes six kinds of element -- class, attribute, value
+    object, enumeration, relationship and constraint -- but that taxonomy is
+    only useful if you can see it. This is the inventory a reader needs before
+    reading anything else: what is in here, and of what sort.
+    """
+    classes: dict[str, int] = {}
+    attributes: dict[str, int] = {c: 0 for c in ATTRIBUTE_CATEGORIES}
+    constraints: dict[str, int] = {}
+    relationships: dict[str, int] = {}
+
+    for klass in model.classes:
+        classes[klass.stereotype] = classes.get(klass.stereotype, 0) + 1
+        for attribute in klass.attributes:
+            category = categorise_attribute(attribute)
+            attributes[category] = attributes.get(category, 0) + 1
+            for constraint in attribute.constraints:
+                constraints[constraint.kind] = constraints.get(constraint.kind, 0) + 1
+    for rel in model.relationships:
+        relationships[rel.kind] = relationships.get(rel.kind, 0) + 1
+
+    unassigned: dict[str, int] = {c: 0 for c in ATTRIBUTE_CATEGORIES}
+    for attribute in model.unassigned:
+        category = categorise_attribute(attribute)
+        unassigned[category] = unassigned.get(category, 0) + 1
+
+    # Most detected enumerations belong to attributes no class owns, so they
+    # never reach the schema. Reporting only the total would leave a reader
+    # comparing 328 here against 74 in the schema with no way to explain it.
+    referenced = {a.type for k in model.classes for a in k.attributes} & set(model.enumerations)
+    single_valued = sum(1 for e in model.enumerations.values() if len(e.values) < 2)
+
+    return {
+        "classes": {"total": len(model.classes), "by_stereotype": classes},
+        "attributes": {"total": sum(len(k.attributes) for k in model.classes),
+                       "by_category": attributes},
+        "unassigned_attributes": {"total": len(model.unassigned), "by_category": unassigned},
+        "enumerations": {"total": len(model.enumerations),
+                         "referenced_by_a_class": len(referenced),
+                         "single_valued": single_valued},
+        "relationships": {"total": len(model.relationships), "by_kind": relationships},
+        "constraints": {"total": sum(constraints.values()), "by_kind": constraints},
+    }
 
 
 def _stereotype_for(kind: str) -> str:
@@ -859,9 +1019,15 @@ def validate_model(
                     f"type inferred from the attribute name alone: {attribute.type_reason}",
                 ))
     for conflict in model.type_conflicts:
+        declared_as = ", ".join(sorted(conflict.get("types", {})))
+        if conflict.get("level") == "refinement":
+            detail = (f"declared as {declared_as} by different rules; reconciled to "
+                      f"{conflict.get('resolved_to')}, which every other reading generalises")
+        else:
+            detail = f"declared as {declared_as} by different rules"
         findings.append(Finding(
-            "type_consistency", "error", str(conflict.get("symbol")),
-            f"declared as {', '.join(sorted(conflict.get('types', {})))} by different rules",
+            "type_consistency", str(conflict.get("severity") or "error"),
+            str(conflict.get("symbol")), detail,
         ))
 
     # 5. Relationships carry a defensible direction and multiplicity.
@@ -940,6 +1106,7 @@ def validate_model(
         "checks": list(VALIDATION_CHECKS),
         "passed": [c for c, n in by_check.items() if n == 0],
         "findings": [f.as_dict() for f in findings],
+        "inventory": model_inventory(model),
         "counts": {"by_check": by_check, "by_severity": by_severity, "total": len(findings)},
         "coverage": {
             "classes": len(model.classes),

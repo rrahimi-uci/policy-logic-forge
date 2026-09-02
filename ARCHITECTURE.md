@@ -485,6 +485,53 @@ denominated in the same currency, so folding the currency into the type would
 assert something the source never said; `Money` is `decimal` and the currency
 rides on the attribute that declares it.
 
+##### High-level categories
+
+The model distinguishes six kinds of element — class, attribute, value object,
+enumeration, relationship, constraint — but that taxonomy is only useful if you
+can see it, so it is emitted two ways. LinkML `subsets` group every class by
+**what kind of thing it is** (`entity`, `actor`, `event`, `process`,
+`value_object`) and every attribute by **what kind of value it holds**
+(`identifier`, `quantity`, `temporal`, `categorical`, `flag`, `descriptive`),
+with `in_subset` on each element; only populated subsets are declared. The
+validation report carries an `inventory` block counting every element by kind,
+and the catalog gains `element_kind`, `category` and `class_stereotype` columns.
+
+Both axes derive from evidence the rules already declare, which is why they mean
+the same thing in any domain. **Subject areas derived from document structure
+were considered and rejected**: a corpus drawn from many organisations' policies
+has no shared section vocabulary — the privacy corpus spans 719 distinct
+passages across dozens of unrelated documents — so clustering free-text headings
+would invent structure rather than report it.
+
+The inventory pays for itself immediately. On the privacy run it shows **324 of
+464 attributes are `flag`s** — booleans recording whether a rule passed rather
+than business state — and reconciles two numbers that otherwise look like a bug:
+of 328 detected enumerations only 74 are `referenced_by_a_class` (the rest
+belong to unassigned attributes and never reach the schema), and 186 are
+`single_valued`, which is exactly the count of `no_superfluous_elements`
+findings.
+
+##### Refinement is not contradiction
+
+Rules routinely name the same symbol at different precisions: one declares a
+closed value set, another calls it a string. The value set loses nothing the
+string declared, so this is an **under-specification to reconcile**, not a
+disagreement to escalate — `reconcile_types` returns the narrowest reading that
+every other reading generalises, and the conflict is reported at `review`
+severity with `level: "refinement"` and the type it resolved to.
+
+Only types that cannot be reconciled to a single narrowest reading are errors:
+`Boolean` against an enumeration, or `Money` against `Percentage` — both
+decimal, but neither a special case of the other, so picking a winner would be a
+modelling decision made on no evidence. Treating every precision difference as
+an error buried the real contradictions: on the privacy run this was **28
+reported errors, of which 24 were refinements**.
+
+The narrowest reading also wins the type itself. Ordering candidates by evidence
+strength alone let a `string` declaration beat the enumeration that refines it
+purely on tie-break order, silently discarding a real constraint.
+
 ##### What is derived rather than asked
 
 Business types come from what the rule contract already declares, not from a
