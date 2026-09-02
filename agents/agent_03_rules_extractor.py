@@ -569,43 +569,46 @@ class BusinessRulesExtractor:
             # provider/client connection budget before rate limiting takes effect.
             request_gate = getattr(self, "_request_gate", None)
             attempts = max(1, int(os.getenv("KG_BATCH_MAX_ATTEMPTS", "3")))
-            response = None
-            last_error = None
-            for attempt in range(1, attempts + 1):
-                try:
-                    if request_gate is None:
-                        response = self.client.chat_completion(
-                            messages=[{"role": "user", "content": prompt}],
-                            temperature=self.global_config.get_rules_temperature(),
-                            max_tokens=completion_limit,
-                            response_format={"type": "json_object"},
-                            reasoning_effort=self.reasoning_effort,
-                            reasoning_completion_cap_override=(
-                                completion_limit if max_tokens_override is not None else None
-                            ),
-                        )
-                    else:
+
+            def _request_with_transport_retries(
+                request_prompt: str,
+                *,
+                max_tokens: int,
+                reasoning_completion_cap_override: int | None,
+                phase: str,
+            ):
+                """Issue one logical completion without spending semantic retries on I/O.
+
+                Empty/truncated-response retries and JSON-repair retries are semantic
+                recovery budgets. A connection reset or timeout has produced no model
+                answer, so it must use the separate transport budget instead of
+                consuming one of those semantic attempts.
+                """
+                last_error = None
+                for attempt in range(1, attempts + 1):
+                    try:
+                        kwargs = {
+                            "messages": [{"role": "user", "content": request_prompt}],
+                            "temperature": self.global_config.get_rules_temperature(),
+                            "max_tokens": max_tokens,
+                            "response_format": {"type": "json_object"},
+                            "reasoning_effort": self.reasoning_effort,
+                            "reasoning_completion_cap_override": reasoning_completion_cap_override,
+                        }
+                        if request_gate is None:
+                            return self.client.chat_completion(**kwargs)
                         with request_gate:
-                            response = self.client.chat_completion(
-                                messages=[{"role": "user", "content": prompt}],
-                                temperature=self.global_config.get_rules_temperature(),
-                                max_tokens=completion_limit,
-                                response_format={"type": "json_object"},
-                                reasoning_effort=self.reasoning_effort,
-                                reasoning_completion_cap_override=(
-                                    completion_limit if max_tokens_override is not None else None
-                                ),
-                            )
-                    break
-                except Exception as exc:
-                    last_error = exc
-                    if attempt < attempts:
+                            return self.client.chat_completion(**kwargs)
+                    except Exception as exc:
+                        last_error = exc
+                        if attempt >= attempts:
+                            break
                         # Connection resets/timeouts usually indicate a
                         # provider-side saturation window. Retrying after
-                        # 1–2 seconds compounds the burst and causes the
-                        # next request to fail as well. Use a configurable
-                        # cooldown for transport errors while retaining the
-                        # short exponential delay for local/parse failures.
+                        # 1-2 seconds compounds the burst and causes the next
+                        # request to fail as well. Use a configurable cooldown
+                        # for transport errors while retaining the short
+                        # exponential delay for other request failures.
                         error_text = str(exc).lower()
                         is_transport_error = any(
                             marker in error_text
@@ -619,13 +622,24 @@ class BusinessRulesExtractor:
                         else:
                             delay = min(30, 2 ** (attempt - 1))
                         print(
-                            f"  DEBUG Batch {batch_num}: request attempt {attempt}/{attempts} "
-                            f"failed ({exc}); retrying in {delay}s",
+                            f"  DEBUG Batch {batch_num}: {phase} transport attempt "
+                            f"{attempt}/{attempts} failed ({exc}); retrying in {delay}s",
                             flush=True,
                         )
                         _time.sleep(delay)
-            if response is None:
-                raise RuntimeError(f"LLM completion failed after {attempts} attempts: {last_error}")
+                raise RuntimeError(
+                    f"{phase} completion failed after {attempts} transport attempts: "
+                    f"{last_error}"
+                )
+
+            response = _request_with_transport_retries(
+                prompt,
+                max_tokens=completion_limit,
+                reasoning_completion_cap_override=(
+                    completion_limit if max_tokens_override is not None else None
+                ),
+                phase="initial",
+            )
             
             content = response.choices[0].message.content
             finish_reason = getattr(response.choices[0], "finish_reason", None)
@@ -634,6 +648,9 @@ class BusinessRulesExtractor:
             # missing-rule result; retry with an explicit compact-output
             # instruction while preserving the original source batch.
             if not content or finish_reason == "length":
+                # Do not let a non-empty but truncated initial payload survive
+                # failed recovery requests and reach the JSON decoder.
+                content = ""
                 compact_prompt = (
                     f"{prompt}\n\nIMPORTANT RETRY: The previous response was empty or truncated. "
                     "Return compact, complete JSON only. Include all supported rules, "
@@ -654,27 +671,16 @@ class BusinessRulesExtractor:
                         flush=True,
                     )
                     try:
-                        if request_gate is None:
-                            response = self.client.chat_completion(
-                                messages=[{"role": "user", "content": compact_prompt}],
-                                temperature=self.global_config.get_rules_temperature(),
-                                max_tokens=retry_completion_limit,
-                                response_format={"type": "json_object"},
-                                reasoning_effort=self.reasoning_effort,
-                                reasoning_completion_cap_override=retry_completion_limit,
-                            )
-                        else:
-                            with request_gate:
-                                response = self.client.chat_completion(
-                                    messages=[{"role": "user", "content": compact_prompt}],
-                                    temperature=self.global_config.get_rules_temperature(),
-                                    max_tokens=retry_completion_limit,
-                                    response_format={"type": "json_object"},
-                                    reasoning_effort=self.reasoning_effort,
-                                    reasoning_completion_cap_override=retry_completion_limit,
-                                )
+                        response = _request_with_transport_retries(
+                            compact_prompt,
+                            max_tokens=retry_completion_limit,
+                            reasoning_completion_cap_override=retry_completion_limit,
+                            phase=f"compact retry {recovery_attempt}",
+                        )
                         content = response.choices[0].message.content
-                        if content and getattr(response.choices[0], "finish_reason", None) != "length":
+                        if getattr(response.choices[0], "finish_reason", None) == "length":
+                            content = ""
+                        elif content:
                             break
                     except Exception as exc:
                         print(f"  DEBUG Batch {batch_num}: compact retry failed: {exc}", flush=True)
@@ -746,34 +752,16 @@ class BusinessRulesExtractor:
                         f"{parse_attempt}/{parse_attempts}; requesting a fresh response",
                         flush=True,
                     )
-                    request_gate = getattr(self, "_request_gate", None)
-                    if request_gate is None:
-                        response = self.client.chat_completion(
-                            messages=[{"role": "user", "content": retry_prompt}],
-                            temperature=self.global_config.get_rules_temperature(),
-                            max_tokens=completion_limit,
-                            response_format={"type": "json_object"},
-                            reasoning_effort=self.reasoning_effort,
-                            reasoning_completion_cap_override=(
-                                retry_completion_limit
-                                if "compact_prompt" in locals()
-                                else (completion_limit if max_tokens_override is not None else None)
-                            ),
-                        )
-                    else:
-                        with request_gate:
-                            response = self.client.chat_completion(
-                                messages=[{"role": "user", "content": retry_prompt}],
-                                temperature=self.global_config.get_rules_temperature(),
-                                max_tokens=completion_limit,
-                                response_format={"type": "json_object"},
-                                reasoning_effort=self.reasoning_effort,
-                                reasoning_completion_cap_override=(
-                                    retry_completion_limit
-                                    if "compact_prompt" in locals()
-                                    else (completion_limit if max_tokens_override is not None else None)
-                                ),
-                            )
+                    response = _request_with_transport_retries(
+                        retry_prompt,
+                        max_tokens=completion_limit,
+                        reasoning_completion_cap_override=(
+                            retry_completion_limit
+                            if "compact_prompt" in locals()
+                            else (completion_limit if max_tokens_override is not None else None)
+                        ),
+                        phase=f"JSON parse retry {parse_attempt}",
+                    )
                     content = response.choices[0].message.content or ""
                     if getattr(response.choices[0], "finish_reason", None) == "length":
                         content = ""
