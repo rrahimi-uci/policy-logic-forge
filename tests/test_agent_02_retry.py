@@ -69,6 +69,71 @@ def test_entity_extraction_does_not_retry_non_transport_error(monkeypatch):
     assert agent.client.calls == 1
 
 
+def test_entity_extraction_retries_incomplete_json_with_compact_contract(monkeypatch):
+    agent = object.__new__(ComplianceEntityRelationshipAgent)
+    agent.extraction_model = "gpt-5.6-luna"
+    agent.reasoning_effort = "high"
+    agent.config = SimpleNamespace(
+        get_entity_extractor_temperature=lambda: 0.0,
+        get_entity_extractor_max_tokens=lambda: 128,
+    )
+
+    response = SimpleNamespace(
+        choices=[SimpleNamespace(message=SimpleNamespace(
+            content='{"entity_types": {}, "relationships": {}}'
+        ))]
+    )
+
+    class TruncatedClient:
+        calls = 0
+        prompts = []
+
+        def chat_completion(self, **kwargs):
+            self.calls += 1
+            self.prompts.append(kwargs["messages"][0]["content"])
+            if self.calls == 1:
+                return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(
+                    content='{"entity_types": {"USER": {'
+                ))])
+            return response
+
+    agent.client = TruncatedClient()
+    monkeypatch.setenv("KG_ENTITY_RESPONSE_ATTEMPTS", "2")
+
+    result = agent.extract_entities_and_relationships("extract")
+
+    assert result == {"entity_types": {}, "relationships": {}}
+    assert agent.client.calls == 2
+    assert "RECOVERY INSTRUCTION" in agent.client.prompts[1]
+    assert "no more than 4 entity types" in agent.client.prompts[1]
+
+
+def test_entity_extraction_retries_empty_response(monkeypatch):
+    agent = object.__new__(ComplianceEntityRelationshipAgent)
+    agent.extraction_model = "gpt-5.6-luna"
+    agent.reasoning_effort = "high"
+    agent.config = SimpleNamespace(
+        get_entity_extractor_temperature=lambda: 0.0,
+        get_entity_extractor_max_tokens=lambda: 128,
+    )
+
+    class EmptyThenValidClient:
+        calls = 0
+
+        def chat_completion(self, **_kwargs):
+            self.calls += 1
+            content = "" if self.calls == 1 else '{"entity_types": {}, "relationships": {}}'
+            return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=content))])
+
+    agent.client = EmptyThenValidClient()
+    monkeypatch.setenv("KG_ENTITY_RESPONSE_ATTEMPTS", "2")
+
+    assert agent.extract_entities_and_relationships("extract") == {
+        "entity_types": {}, "relationships": {}
+    }
+    assert agent.client.calls == 2
+
+
 def test_catalog_evidence_requires_verbatim_concept_and_relationship_quotes():
     documents = [{
         "path": "policy/one.txt",
