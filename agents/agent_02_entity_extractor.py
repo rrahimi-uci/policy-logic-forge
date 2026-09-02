@@ -311,7 +311,14 @@ class ComplianceEntityRelationshipAgent:
     def validate_catalog_evidence(
         findings: Dict[str, Any], documents: List[Dict[str, str]]
     ) -> List[str]:
-        """Require authentic, concept-specific evidence for every catalog item."""
+        """Require authentic, concept-specific evidence for every catalog item.
+
+        A model can occasionally omit or slightly alter one generated path
+        segment while still returning an exact quote from the intended source.
+        Repair that pointer only when the quote identifies exactly one chunk
+        within the same source-document directory.  This keeps traceability
+        fail-closed: cross-document and ambiguous matches remain errors.
+        """
         document_index = {
             str(document.get('path', '')).replace('\\', '/'): ' '.join(
                 str(document.get('content', '')).split()
@@ -342,6 +349,18 @@ class ComplianceEntityRelationshipAgent:
                     path = str(reference.get('chunk_path', '')).replace('\\', '/')
                     quote = ' '.join(str(reference.get('source_text', '')).split())
                     source = document_index.get(path)
+                    if source is None and path and quote:
+                        source_directory = path.split('/', 1)[0]
+                        matching_paths = [
+                            document_path
+                            for document_path, document_text in document_index.items()
+                            if document_path.split('/', 1)[0] == source_directory
+                            and quote in document_text
+                        ]
+                        if len(matching_paths) == 1:
+                            path = matching_paths[0]
+                            reference['chunk_path'] = path
+                            source = document_index[path]
                     if source is None:
                         issues.append(f'{ref_prefix}.chunk_path not found: {path or "<empty>"}')
                     elif not quote:

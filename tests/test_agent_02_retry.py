@@ -101,3 +101,60 @@ def test_catalog_evidence_requires_verbatim_concept_and_relationship_quotes():
 
     assert "entity_types.CUSTOMER.source_evidence is required" in issues
     assert any("source_text is not verbatim" in issue for issue in issues)
+
+
+def test_catalog_evidence_repairs_unique_quote_match_within_source_document():
+    documents = [{
+        "path": "policy/collection/information_from_services.txt",
+        "content": "A customer may choose not to provide optional information.",
+    }]
+    reference = {
+        "chunk_path": "policy/collection/information_services.txt",
+        "source_text": "customer may choose not to provide optional information",
+    }
+    findings = {
+        "entity_types": {"CUSTOMER_CHOICE": {"source_evidence": [reference]}},
+        "relationships": {},
+    }
+
+    issues = ComplianceEntityRelationshipAgent.validate_catalog_evidence(
+        findings, documents
+    )
+
+    assert issues == []
+    assert reference["chunk_path"] == (
+        "policy/collection/information_from_services.txt"
+    )
+
+
+def test_catalog_evidence_does_not_repair_ambiguous_or_cross_document_match():
+    quote = "Users may request access to their information."
+    documents = [
+        {"path": "policy/access/one.txt", "content": quote},
+        {"path": "policy/access/two.txt", "content": quote},
+        {"path": "other/access.txt", "content": "A unique external quote."},
+    ]
+    ambiguous = {
+        "chunk_path": "policy/access/missing.txt",
+        "source_text": quote,
+    }
+    cross_document = {
+        "chunk_path": "policy/access/also_missing.txt",
+        "source_text": "A unique external quote.",
+    }
+    findings = {
+        "entity_types": {
+            "AMBIGUOUS": {"source_evidence": [ambiguous]},
+            "CROSS_DOCUMENT": {"source_evidence": [cross_document]},
+        },
+        "relationships": {},
+    }
+
+    issues = ComplianceEntityRelationshipAgent.validate_catalog_evidence(
+        findings, documents
+    )
+
+    assert len(issues) == 2
+    assert all("chunk_path not found" in issue for issue in issues)
+    assert ambiguous["chunk_path"] == "policy/access/missing.txt"
+    assert cross_document["chunk_path"] == "policy/access/also_missing.txt"
