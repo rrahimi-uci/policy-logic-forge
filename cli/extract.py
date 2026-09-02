@@ -4,7 +4,7 @@ Extraction orchestrator: compliance documents -> a grounding-certified,
 DMN/BPMN-ready knowledge graph.
 
 This is a lean, single-batch orchestrator by design (see README.md "Scope").
-It runs the twelve canonical stages in order, streaming each subprocess's
+It runs the thirteen canonical stages in order, streaming each subprocess's
 output.  The stage number and agent identifier are deliberately identical:
 Stage 01/13 is ``agent_01`` through Stage 13/13, ``agent_13``:
 
