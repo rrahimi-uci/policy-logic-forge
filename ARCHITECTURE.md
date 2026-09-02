@@ -127,7 +127,7 @@ Two things worth noticing immediately:
 | 09/13 | `agent_09` | Independent grounding verification | claim-level certification |
 | 10/13 | `agent_10` | Dependency-DAG generation, 100%-coverage guarantee | `agent_10-dag-generation/dependency_dags.json` |
 | 11/13 | `agent_11` | DMN/BPMN/CMMN/SBVR generation + LExec compile | `agent_11-executable-models/` |
-| 12/13 | `agent_12` | Business information model (UML classes, attributes, enumerations) | `agent_12-business-information-model/` |
+| 12/13 | `agent_12` | Business information model (LinkML schema; classes, typed attributes, enumerations) | `agent_12-business-information-model/` |
 | 13/13 | `agent_13` | Self-contained business knowledge report | `agent_13-business-knowledge-report/business_knowledge_report.html` |
 
 Stages 07–09 share one directory (`agent_06-07-08-09-optimized/`) because
@@ -178,7 +178,7 @@ sequenceDiagram
     A10->>FS: dependency_dags.json + DMN/BPMN/CMMN/SBVR + lexec_ir.json
 
     CLI->>A12: run_agent_12() business information model
-    A12->>FS: UML model + catalog + validation
+    A12->>FS: LinkML schema + projections + validation
 
     CLI->>A13: run_agent_13() business knowledge report
     A13->>FS: business_knowledge_report.html + manifest
@@ -444,11 +444,46 @@ A per-rule gate, `bpmn_eligibility`, decides DMN/CMMN-only vs. also-BPMN: it req
 
 | | |
 | --- | --- |
-| **File** | `agents/agent_12_business_information_model.py`, deterministic core in `utils/information_model.py` |
-| **Purpose** | Turns the certified graph into the canonical UML picture of the business *data* the rules operate on — classes, typed attributes, enumerations, multiplicity, constraints — as the bridge from policy knowledge to schemas, APIs and code. |
+| **File** | `agents/agent_12_business_information_model.py`, deterministic core in `utils/information_model.py`, canonical schema in `utils/linkml_schema.py` |
+| **Purpose** | Turns the certified graph into a canonical, machine-readable model of the business *data* the rules operate on — classes, typed attributes, enumerations, multiplicity, constraints — as the bridge from policy knowledge to schemas, APIs and code. |
 | **Inputs** | Optimized graph (`agent_06`–`09`) and `semantic_vocabulary_profile.json` (`agent_11`). Fails fast (exit 2) if the graph is missing. |
-| **Outputs** | `business_information_model.json`, `.mmd` (Mermaid `classDiagram`), `.puml` (PlantUML), `class_attribute_catalog.{json,md}`, `information_model_validation.json`. |
+| **Outputs** | `business_information_model.yaml` (**canonical**), plus five projections generated from it: `.schema.json`, `.mmd` (Mermaid `classDiagram`), `.puml` (PlantUML), `class_attribute_catalog.{json,md}`, `information_model_validation.json`. |
 | **Exit codes** | 0 clean; **3** when validation reports an error — a data-quality signal, matching the readiness/grounding convention; **2** on missing input or generation failure. |
+
+##### Why LinkML is the canonical form
+
+A UML class diagram is a picture. It can be read but not executed, not
+validated, and not diffed — and when the same model is emitted as a diagram
+*and* a JSON model *and* a catalog, the three drift the moment one of them is
+edited. [LinkML](https://linkml.io) is a schema language with a metamodel, so
+the model becomes an artifact that tools can check rather than one a human must
+eyeball.
+
+Three properties earn it the canonical slot:
+
+- **It validates.** The emitted schema is loaded back through LinkML's own
+  `SchemaView` before it is written; the result is recorded in
+  `information_model_validation.json` under `schema_validation`. A schema that
+  no LinkML tool would accept fails here rather than downstream.
+- **It generates.** JSON Schema, SHACL, OWL, SQL DDL, Pydantic/TypeScript/Java
+  classes and GraphQL all come from LinkML's own generators. `.schema.json` is
+  produced this way, so the JSON Schema is not a hand-written approximation of
+  the model — it *is* the model, mechanically translated.
+- **It carries the semantics that matter here.** `unit`, `minimum_value`,
+  `pattern`, `permissible_values` and free-form `annotations` are first-class
+  metamodel slots, so declared units, numeric bounds, controlled vocabularies
+  and per-attribute provenance survive into every downstream artifact instead
+  of being lost at the diagram boundary.
+
+Everything else is a **projection**: `to_mermaid`, `to_plantuml` and
+`catalog_rows` in `utils/information_model.py` delegate through
+`to_linkml()`, so the diagram and the catalog read their facts back out of the
+canonical schema and cannot disagree with it.
+
+Units sit on the **slot**, never on the type. Two `Money` attributes need not be
+denominated in the same currency, so folding the currency into the type would
+assert something the source never said; `Money` is `decimal` and the currency
+rides on the attribute that declares it.
 
 ##### What is derived rather than asked
 
@@ -472,9 +507,12 @@ object, and which concepts deserve to be classes cannot be read off a contract,
 so one prompt decides those — bounded hard. The model may not invent, retype or
 rename anything: each proposal is checked against the deterministic facts, and
 one naming an unknown symbol or class is discarded. A proposed class needs three
-supporting attributes or it stays a label. An attribute the model cannot place
-stays **unassigned** and is reported, because a misfiled attribute silently
-corrupts the model while an unplaced one is merely reviewed.
+supporting attributes, at least two of them non-Boolean, or it stays a label —
+the second condition is what stops a "class" that is really a bag of rule
+outcomes, which the prompt forbids and a model still occasionally proposes. An
+attribute the model cannot place stays **unassigned** and is reported, because a
+misfiled attribute silently corrupts the model while an unplaced one is merely
+reviewed.
 
 **Actors are excluded from attribute ownership.** A rule names the party
 responsible for applying it, which is not what its variables describe — a lender
@@ -483,7 +521,8 @@ exclusion put 1,454 attributes on `LENDER` and 10 on `MortgageLoan`.
 
 ##### Validation
 
-Ten checks run after generation and **repair nothing** — a validator that
+Ten domain checks run after generation, alongside the LinkML metamodel check
+described above, and they **repair nothing** — a validator that
 silently fixes what it finds cannot also report how good the model was:
 concept representation, attribute presence, type defensibility, type
 consistency, relationship direction and multiplicity, enumeration usage,
@@ -1083,7 +1122,8 @@ pipeline-output/<batch>/
 │   ├── semantic_vocabulary_profile.json
 │   └── lexec_ir.json, compilation_report.json, proof_records.json
 ├── agent_12-business-information-model/
-│   ├── business_information_model.json
+│   ├── business_information_model.yaml          # canonical LinkML schema
+│   ├── business_information_model.schema.json   # generated by LinkML
 │   ├── business_information_model.{mmd,puml}
 │   ├── class_attribute_catalog.{json,md}
 │   └── information_model_validation.json

@@ -255,7 +255,8 @@ def test_catalog_row_carries_type_multiplicity_constraints_and_sources():
     _, model = _sample_model()
     row = next(r for r in catalog_rows(model) if r["attribute"] == "ltvRatio")
     assert row["type"] == "Percentage" and row["multiplicity"] == "1" and row["required"]
-    assert row["constraints"] and row["source_rule_ids"] == ["R1"]
+    assert row["constraints"] and row["source_rules"] == "R1"
+    assert row["unit"] == "%"   # the declared unit survives into the catalog
 
 
 def test_validation_reports_every_check_and_repairs_nothing():

@@ -5,6 +5,11 @@ json-repair>=0.63.4
 PyPDF2>=3.0.1
 rich>=13.7                        # CLI progress display, tables, and panels (cli/extract.py)
 
+# Business Information Model (agent_12) — LinkML is the canonical model form
+linkml>=1.11.1                    # schema validation + JSON Schema/SHACL/OWL generators
+linkml-runtime>=1.11.1            # SchemaView, used to prove the emitted schema is real LinkML
+PyYAML>=6.0                       # canonical schema is serialised as YAML (utils/linkml_schema.py)
+
 # OCR for scanned PDFs
 pytesseract>=0.3.10               # Tesseract OCR wrapper
 pdf2image>=1.17.0                 # Convert PDF pages to images for OCR

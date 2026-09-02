@@ -20,7 +20,7 @@ real DMN/BPMN/CMMN/SBVR examples — see [`ARCHITECTURE.md`](ARCHITECTURE.md).
 business-rule extraction → validation → merge → deduplication + dependency
 analysis → four-invariant executable-readiness gate → focused remediation →
 independent grounding certification → dependency DAG generation → DMN/BPMN/
-CMMN model generation → UML business information model → self-contained business knowledge report). A lean CLI
+CMMN model generation → LinkML business information model → self-contained business knowledge report). A lean CLI
 orchestrator (`cli/extract.py`) runs them in order.
 
 **RegDelta** — a rule-change/version differential-execution engine layered on
@@ -32,13 +32,20 @@ graph. See [`plan/regdelta-product-plan.md`](plan/regdelta-product-plan.md).
 frontend or backend service.
 
 **Agent 12 business information model** — `agents/agent_12_business_information_model.py`
-turns the certified graph into a UML domain model: classes with fully typed
-business attributes (`Money`, `Percentage`, `Duration`, named enumerations —
-derived from declared units and value sets, not guessed from names),
-multiplicity, optionality, constraints, and per-attribute source rules. Emits a
-Mermaid and a PlantUML class diagram, a machine-readable model, a class/attribute
-catalog, and a ten-check validation report. Attributes it cannot confidently
-place are held for review rather than filed under a guess.
+turns the certified graph into a domain model whose canonical form is a
+[LinkML](https://linkml.io) schema: classes with fully typed business attributes
+(`Money`, `Percentage`, `Duration`, named enumerations — derived from declared
+units and value sets, not guessed from names), multiplicity, optionality,
+constraints, and per-attribute source rules carried as annotations.
+
+LinkML is canonical rather than a UML diagram because a schema can be *checked*:
+the emitted `business_information_model.yaml` is loaded back through LinkML's own
+metamodel before it is written, and LinkML's generators turn it into JSON Schema
+(shipped as `.schema.json`) and, on demand, SHACL, OWL, SQL DDL, Pydantic or
+TypeScript. The Mermaid and PlantUML class diagrams and the class/attribute
+catalog are **projections** of that one schema, so they cannot drift from it.
+A ten-check validation report accompanies the model; attributes the pipeline
+cannot confidently place are held for review rather than filed under a guess.
 
 **Agent 13 report layer** — after Agent 11 has produced its model bundle,
 `agents/agent_13_business_knowledge_report.py` creates one self-contained
@@ -137,6 +144,10 @@ explicit batch name when resuming a previous run.
 - `agent_11-executable-models/` — DMN/BPMN/CMMN/SBVR review projections, plus
   a compiled, proof-checked LExec IR document for rules the compiler can
   represent (`lexec_ir.json`, `compilation_report.json`, `proof_records.json`).
+- `agent_12-business-information-model/business_information_model.yaml` — the
+  canonical LinkML schema of the business data the rules operate on, with
+  `.schema.json`, Mermaid/PlantUML class diagrams, a class/attribute catalog and
+  a validation report generated from it.
 - `agent_13-business-knowledge-report/business_knowledge_report.html` — the
   self-contained human-review and exploration report generated from the Agent
   11 bundle. Open it directly in a browser; no server or network access is
@@ -162,7 +173,7 @@ or `--agent agent_NN` when selecting by identifier:
 | 09/13 | `agent_09` | Independent grounding verification |
 | 10/13 | `agent_10` | Dependency-DAG generation |
 | 11/13 | `agent_11` | DMN/BPMN/CMMN model generation |
-| 12/13 | `agent_12` | Business information model (UML classes, attributes, enumerations) |
+| 12/13 | `agent_12` | Business information model (LinkML schema; classes, typed attributes, enumerations) |
 | 13/13 | `agent_13` | Self-contained business knowledge report |
 
 Stages 07–09 intentionally write reports into the shared

@@ -36,20 +36,24 @@ from typing import Any, Mapping, Sequence
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from utils.config import get_config
-from utils.information_model import (
-    Klass,
-    build_model,
+from utils.information_model import Klass, build_model, pascal_case, validate_model
+from utils.linkml_schema import (
     catalog_rows,
-    pascal_case,
+    dump_yaml,
+    to_json_schema,
+    to_linkml,
     to_mermaid,
     to_plantuml,
-    validate_model,
+    validate_schema,
 )
 from utils.llm_client import create_llm_client
 from utils.prompt_manager import get_prompt_manager
 
 OUTPUT_DIR_NAME = "agent_12-business-information-model"
-MODEL_FILE = "business_information_model.json"
+#: The canonical artifact. Every other file in the directory is generated from
+#: it, so none of them can drift from the model or from each other.
+SCHEMA_FILE = "business_information_model.yaml"
+JSON_SCHEMA_FILE = "business_information_model.schema.json"
 MERMAID_FILE = "business_information_model.mmd"
 PLANTUML_FILE = "business_information_model.puml"
 CATALOG_FILE = "class_attribute_catalog.json"
@@ -253,18 +257,26 @@ def _apply_assignments(
 
 def _catalog_markdown(rows: Sequence[Mapping[str, Any]]) -> str:
     header = (
-        "| Class | Attribute | Type | Multiplicity | Required | Constraints | Source rules |\n"
-        "| --- | --- | --- | --- | --- | --- | --- |\n"
+        "| Class | Attribute | Type | Unit | Multiplicity | Required | Constraints | Source rules |\n"
+        "| --- | --- | --- | --- | --- | --- | --- | --- |\n"
     )
     lines = []
     for row in rows:
-        constraints = "; ".join(row["constraints"])[:120] or "—"
-        sources = ", ".join(row["source_rule_ids"][:3]) or "—"
+        constraints = "; ".join(row["constraints"])[:80] or "—"
+        if row["allowed_values"]:
+            constraints = (constraints + "; " if constraints != "—" else "") + \
+                f"one of {len(row['allowed_values'])} values"
+        sources = (row["source_rules"] or "—").split(", ")
         lines.append(
-            f"| {row['class']} | {row['attribute']} | {row['type']} | {row['multiplicity']} | "
-            f"{'yes' if row['required'] else 'no'} | {constraints} | {sources} |"
+            f"| {row['class']} | {row['attribute']} | {row['type']} | {row['unit'] or '—'} | "
+            f"{row['multiplicity']} | {'yes' if row['required'] else 'no'} | {constraints} | "
+            f"{', '.join(sources[:2])} |"
         )
-    return "# Class and attribute catalog\n\n" + header + "\n".join(lines) + "\n"
+    return (
+        "# Class and attribute catalog\n\n"
+        "Generated from `business_information_model.yaml`, which is the canonical model.\n\n"
+        + header + "\n".join(lines) + "\n"
+    )
 
 
 def generate(
@@ -334,23 +346,53 @@ def generate(
         else:
             print("⚠️ agent_12: no API key; emitting the deterministic model only", flush=True)
 
+    # LinkML is the canonical form; everything below is generated from it.
+    schema = to_linkml(model, domain=os.getenv("KG_DOMAIN", "") or "")
+    schema_problems = validate_schema(schema)
+    if schema_problems:
+        print(f"⚠️ agent_12: emitted schema did not validate: {schema_problems[0]}", flush=True)
+
+    json_schema = to_json_schema(schema)
+
     report = validate_model(model, graph, profile)
     report["synthesis"] = synthesis
+    report["schema_validation"] = {
+        "valid": not schema_problems,
+        "problems": schema_problems,
+        "checked_with": "linkml-runtime SchemaView",
+        "json_schema_generated_by": json_schema.get("x-generated-by", "unknown"),
+    }
+    if json_schema.get("x-fallback-reason"):
+        print("⚠️ agent_12: LinkML's JSON Schema generator was unavailable "
+              f"({json_schema['x-fallback-reason']}); used the direct translation",
+              flush=True)
+    # Everything the model could not settle lives with the validation report
+    # rather than in a parallel model file, so there is exactly one canonical
+    # description of the model itself.
+    report["unassigned_attributes"] = [a.as_dict() for a in model.unassigned]
+    report["type_conflicts"] = model.type_conflicts
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    payload = model.as_dict()
-    payload["synthesis"] = synthesis
-    (output_dir / MODEL_FILE).write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    (output_dir / MERMAID_FILE).write_text(to_mermaid(model) + "\n", encoding="utf-8")
-    (output_dir / PLANTUML_FILE).write_text(to_plantuml(model) + "\n", encoding="utf-8")
-    rows = catalog_rows(model)
-    (output_dir / CATALOG_FILE).write_text(json.dumps(rows, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    (output_dir / SCHEMA_FILE).write_text(dump_yaml(schema), encoding="utf-8")
+    (output_dir / JSON_SCHEMA_FILE).write_text(
+        json.dumps(json_schema, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    (output_dir / MERMAID_FILE).write_text(to_mermaid(schema) + "\n", encoding="utf-8")
+    (output_dir / PLANTUML_FILE).write_text(to_plantuml(schema) + "\n", encoding="utf-8")
+    rows = catalog_rows(schema)
+    (output_dir / CATALOG_FILE).write_text(
+        json.dumps(rows, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     (output_dir / CATALOG_MARKDOWN).write_text(_catalog_markdown(rows), encoding="utf-8")
-    (output_dir / VALIDATION_FILE).write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    (output_dir / VALIDATION_FILE).write_text(
+        json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
     manifest = {
-        **payload["counts"],
+        "classes": len(schema["classes"]),
+        "attributes": sum(len(k.get("attributes") or {}) for k in schema["classes"].values()),
+        "enumerations": len(schema["enums"]),
+        "relationships": len(model.relationships),
+        "unassigned_attributes": len(model.unassigned),
         "validation": report["counts"],
+        "schema_valid": not schema_problems,
         "output_dir": str(output_dir),
     }
     return manifest
