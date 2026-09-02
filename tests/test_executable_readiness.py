@@ -959,6 +959,36 @@ def test_source_backed_unconditional_assertion_is_deferred_not_pipeline_failure(
     assert is_deferred_contract_issue({"code": "empty_condition_logic_branch"}, rule) is True
 
 
+def test_rule_local_metadata_gaps_are_reviewable_not_graph_blockers():
+    rule = valid_rule()
+    for code in (
+        "invalid_hit_policy",
+        "missing_versioning_status",
+        "missing_responsible_party",
+        "invalid_vector_basis",
+        "undefined_predicate_variable",
+        "missing_workflow_evidence",
+    ):
+        assert is_deferred_contract_issue({"code": code}, rule) is True
+
+
+def test_contract_normalization_unwraps_party_details_and_marks_missing_basis_unresolved():
+    rule = valid_rule()
+    rule["scope_basis"] = None
+    rule["responsible_party"] = {"entity_type": "SELLER_SERVICER", "name": "Acme"}
+    rule["counterparties"] = [
+        {"entity_type": "FANNIE_MAE", "name": "Fannie Mae"},
+    ]
+
+    normalise_rule_contract(rule)
+
+    assert rule["scope_basis"] == "unresolved_after_source_review"
+    assert rule["scope_derivation"]["unresolved_reason"]
+    assert rule["responsible_party"] == "SELLER_SERVICER"
+    assert rule["counterparties"] == ["FANNIE_MAE"]
+    assert len(rule["counterparty_details"]) == 2
+
+
 def test_equivalent_boolean_and_enum_conflict_is_non_conflict():
     first = valid_rule()
     first["outcomes"][0]["value"] = "eligible"
