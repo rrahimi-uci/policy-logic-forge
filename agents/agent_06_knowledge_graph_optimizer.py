@@ -29,6 +29,7 @@ from utils.llm_client import create_llm_client
 from utils.config import get_config
 from utils.rule_uniqueness import enforce_rule_uniqueness
 from utils.rule_dependencies import Relation, derive_relations
+from utils.rule_gating import gating_stats, make_entailment_oracle
 
 # Helper for real-time output
 def _print(msg):
@@ -613,7 +614,17 @@ class KnowledgeGraphOptimizer:
         print(f"{'='*70}", flush=True)
         print(f"Deriving relationships across {len(rules)} rules (deterministic, no model calls)...", flush=True)
 
-        derived = derive_relations(rules)
+        # Promote dataflow to gating where the solver can prove the target
+        # cannot fire without the source's outcome. Best-effort by design: a
+        # rule that does not lower, or a query the solver cannot close, leaves
+        # the relation at the weaker `dataflow` claim rather than guessing.
+        try:
+            entails, gating_coverage = make_entailment_oracle({"business_rules": rules})
+        except Exception as exc:  # a solver problem must not fail the stage
+            print(f"   \u26a0\ufe0f  gating classification unavailable ({exc}); relations stay at dataflow", flush=True)
+            entails, gating_coverage = None, {}
+
+        derived = derive_relations(rules, entails=entails)
 
         accepted_dependencies = [_relation_to_dependency(relation) for relation in derived.dependencies]
 
@@ -668,12 +679,15 @@ class KnowledgeGraphOptimizer:
             "relation_refusals": [refusal.as_dict() for refusal in derived.refusals],
             "rules_with_dependencies": len(rule_dependencies_map),
             "rules_with_dependents": len(rule_dependents_map),
+            "gating_coverage": gating_coverage,
         }
 
         print(f"  \u2022 Dependencies derived:    {len(accepted_dependencies):>5}  {by_kind or '{}'}", flush=True)
         print(f"  \u2022 Conflict candidates:     {len(derived.conflicts):>5}", flush=True)
         print(f"  \u2022 Associations (symmetric):{len(derived.associations):>5}", flush=True)
         print(f"  \u2022 Rules with dependencies: {len(rule_dependencies_map):>5}", flush=True)
+        if gating_coverage:
+            print(f"  \u2022 Gating check: {gating_stats(gating_coverage)}", flush=True)
 
         return rules_with_deps, metadata
 

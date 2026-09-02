@@ -60,6 +60,15 @@ IGNORED_FIELD_REASONS = {
     "legal_basis": "NON_EXECUTABLE_METADATA", "language": "NON_EXECUTABLE_METADATA",
     "detected_language": "NON_EXECUTABLE_METADATA", "source_language": "NON_EXECUTABLE_METADATA",
     "confidence_score": "AUDIT_STATUS_NOT_EXECUTABLE", "exception_verification": "AUDIT_STATUS_NOT_EXECUTABLE", "scope_derivation": "AUDIT_STATUS_NOT_EXECUTABLE",
+    # ``confidence_source``/``confidence_status`` are agent_03's provenance for
+    # the confidence score (see agent_03_rules_extractor.py) -- they record how
+    # a score was arrived at, never anything the rule evaluates. They were added
+    # to the contract after this allowlist was written, and because an
+    # unclassified field is a refusal, their absence here silently refused
+    # *every* rule in a real run: mortgage lowered 0 of 613 and privacy 0 of
+    # 776, which in turn emptied lexec_ir.json, disabled smt.py proof search
+    # entirely, and left RegDelta unable to compile either side of a diff.
+    "confidence_source": "AUDIT_STATUS_NOT_EXECUTABLE", "confidence_status": "AUDIT_STATUS_NOT_EXECUTABLE",
     "grounding": "AUDIT_STATUS_NOT_EXECUTABLE", "requires_review": "AUDIT_STATUS_NOT_EXECUTABLE", "review_reason": "AUDIT_STATUS_NOT_EXECUTABLE",
     "reference_verified": "AUDIT_STATUS_NOT_EXECUTABLE", "reference_verification_note": "AUDIT_STATUS_NOT_EXECUTABLE",
     "contract_issues": "AUDIT_STATUS_NOT_EXECUTABLE", "readiness": "AUDIT_STATUS_NOT_EXECUTABLE",
@@ -105,6 +114,16 @@ def _canonical(value: Any) -> str:
 
 def _normalise_name(value: Any) -> str:
     return str(value or "").strip().lower()
+
+
+#: Ordered weakest to strongest. A symbol read by one rule and assigned by
+#: another is an ``output`` at the graph level: something produces it.
+_SYMBOL_ROLE_STRENGTH = {"input": 0, "derived": 1, "output": 2}
+
+
+def _merge_symbol_role(left: str, right: str) -> str:
+    """The stronger of two per-rule usages of the same symbol."""
+    return left if _SYMBOL_ROLE_STRENGTH.get(left, 0) >= _SYMBOL_ROLE_STRENGTH.get(right, 0) else right
 
 
 def _safe_identifier(value: Any, fallback: str = "symbol") -> str:
@@ -623,9 +642,25 @@ def lower_graph(
             existing = symbol_by_id.get(symbol["id"]) or pending_symbols.get(symbol["id"])
             if existing is None:
                 pending_symbols[symbol["id"]] = symbol
-            elif _canonical({k: existing[k] for k in ("theory", "role", "domain", "unit")}) != _canonical({k: symbol[k] for k in ("theory", "role", "domain", "unit")}):
+            elif _canonical({k: existing[k] for k in ("theory", "domain", "unit")}) != _canonical({k: symbol[k] for k in ("theory", "domain", "unit")}):
                 conflict = symbol["id"]
                 break
+            elif existing["role"] != symbol["role"]:
+                # ``role`` describes how one rule uses the symbol, not what the
+                # symbol is, and a symbol that flows between rules necessarily
+                # carries different roles at each end -- the producer declares
+                # it ``output``, the consumer ``input``. Treating that as a
+                # conflict refused precisely the rules connected by a real
+                # dependency: on a 613-rule graph only 11 of the 62 rules
+                # participating in dataflow lowered at all, and 26 were refused
+                # here, leaving no pair with both ends available to reason
+                # about. theory/domain/unit remain genuine agreement
+                # requirements. The merged role keeps the strongest usage so
+                # effect-target validation (which requires ``output``) still
+                # holds for whichever rule assigns it.
+                merged = dict(existing)
+                merged["role"] = _merge_symbol_role(existing["role"], symbol["role"])
+                pending_symbols[symbol["id"]] = merged
         if conflict is not None:
             ir["refusals"].append(_refusal(rule, digest, LoweringRefusal("SYMBOL_CONFLICT", "symbol", f"Symbol {conflict!r} has incompatible declarations.")))
             ir["rules"].pop()
