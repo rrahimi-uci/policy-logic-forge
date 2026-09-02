@@ -39,7 +39,7 @@ from utils.kg_readiness import (
 from utils.llm_client import create_llm_client
 from utils.prompt_manager import get_prompt_manager
 from utils.rule_contract import annotate_rule_contract, quarantine_non_actor_counterparties
-from utils.rule_contract import EXCEPTION_BASES, SCOPE_BASES, validate_rule_v2
+from utils.rule_contract import EXCEPTION_BASES, FACT_ID_RE, SCOPE_BASES, validate_rule_v2
 from utils.scope import newly_populated_dimension_count, populated_scope
 from utils.semantic_routing import bpmn_eligibility
 
@@ -562,6 +562,33 @@ def _declared_identifier_aliases(variables: list[Any]) -> dict[str, str]:
     return aliases
 
 
+def _canonical_fact_id(value: Any, fallback: Any, used: set[str]) -> str:
+    """Return a stable, unique v2 fact identifier.
+
+    Extraction models occasionally copy an output's fact id onto a related
+    input, or emit display-style identifiers containing spaces/punctuation.
+    Fact ids are local structural identifiers, so repairing their spelling
+    from the declared variable name does not make a new business claim.  A
+    deterministic numeric suffix handles the rare case where two variable
+    names canonicalize to the same id.
+    """
+    candidate = str(value or "").strip().casefold()
+    if not FACT_ID_RE.fullmatch(candidate):
+        candidate = str(fallback or "").strip().casefold()
+    candidate = re.sub(r"[^a-z0-9]+", "_", candidate).strip("_")
+    if not candidate:
+        candidate = "fact"
+    if candidate[0].isdigit():
+        candidate = f"fact_{candidate}"
+    base = candidate
+    suffix = 2
+    while candidate in used:
+        candidate = f"{base}_{suffix}"
+        suffix += 1
+    used.add(candidate)
+    return candidate
+
+
 def _evidence_pointer(value: Any) -> dict[str, str] | None:
     # source_reference is documented (rule_contract_v2.txt, every domain
     # prompt) as a single object, but agent_03 sometimes emits a list of
@@ -919,6 +946,17 @@ def _normalise_rule_contract(rule: dict[str, Any]) -> dict[str, Any]:
         if variable.get("type") == "string":
             variable["free_text"] = True
         variable["role"] = _normalise_variable_role(variable.get("role"))
+
+    # ``document_task`` is a common descriptive label in model output, but
+    # the executable contract represents a document-handling activity as a
+    # human/user task.  Canonicalize this losslessly before validation and
+    # BPMN projection rather than rejecting an otherwise source-explicit
+    # workflow.
+    workflow = rule.get("workflow_semantics")
+    if isinstance(workflow, dict) and isinstance(workflow.get("ordered_steps"), list):
+        for step in workflow["ordered_steps"]:
+            if isinstance(step, dict) and step.get("kind") == "document_task":
+                step["kind"] = "user_task"
 
     declared_aliases = _declared_identifier_aliases(variables)
 
@@ -1362,6 +1400,17 @@ def _normalise_rule_contract(rule: dict[str, Any]) -> dict[str, Any]:
         elif "input" in roles:
             existing["role"] = "input"
     rule["variables"] = merged_variables
+
+    # Fact ids are local identifiers, not source assertions.  Normalize them
+    # after duplicate variable declarations have been merged so every rule
+    # satisfies the v2 uniqueness contract before readiness is evaluated.
+    used_fact_ids: set[str] = set()
+    for variable in merged_variables:
+        if not isinstance(variable, dict):
+            continue
+        variable["fact_id"] = _canonical_fact_id(
+            variable.get("fact_id"), variable.get("name"), used_fact_ids
+        )
 
     # Promote only validated arithmetic over declared numeric variables to a
     # real DMN FEEL expression.  Unsupported prose, lookup objects, collection
