@@ -57,7 +57,7 @@ _STATUS_STYLE: dict[str, tuple[str, str]] = {
     SKIPPED: ("dim", "⏭️"),
 }
 
-# A small, stable visual vocabulary for the canonical twelve-stage contract.
+# A small, stable visual vocabulary for the canonical thirteen-stage contract.
 # The raw stage label remains unchanged in JSON events and persisted metrics.
 _STAGE_ICON: dict[str, str] = {
     "agent_01": "📚",  # organize source documents
