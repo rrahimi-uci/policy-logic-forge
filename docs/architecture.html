@@ -1,0 +1,745 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Architecture — Policy Logic Forge</title>
+<meta name="description" content="How Policy Logic Forge is put together: the twelve-agent extraction pipeline, the compiler layer, RegDelta, and real DMN/BPMN/CMMN/SBVR output.">
+<style>
+  :root{
+    --ink:#101826; --muted:#5b6b83; --line:#e3e8f0; --paper:#fff; --wash:#f6f8fb;
+    --teal:#0f9d80; --violet:#5b5bd6; --amber:#c8790f; --red:#c0374a;
+    --shadow:0 18px 48px rgba(16,24,38,.08);
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0; color:var(--ink); background:var(--paper); font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  a{color:var(--violet); text-decoration:none}
+  a:hover{text-decoration:underline}
+  .wrap{max-width:1080px; margin:0 auto; padding:0 24px}
+  .eyebrow{display:inline-block; font-size:12px; font-weight:800; letter-spacing:.12em; text-transform:uppercase; color:var(--teal); margin-bottom:10px}
+  code{font:.88em ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; background:#f0f2f8; color:#3b2fae; padding:1px 5px; border-radius:5px}
+  .mathvar{font:italic 500 .95em Georgia,"Times New Roman",serif; color:var(--ink)}
+  .mathvar sub{font-size:.7em}
+
+  header.site-nav{position:sticky; top:0; z-index:20; background:rgba(255,255,255,.92); backdrop-filter:saturate(180%) blur(10px); border-bottom:1px solid var(--line)}
+  .nav-inner{max-width:1300px; margin:0 auto; padding:14px 24px; display:flex; align-items:center; justify-content:space-between; gap:16px}
+  .brand{display:flex; align-items:center; gap:9px; font-weight:800; color:var(--ink); font-size:15px}
+  .brand-mark{width:22px; height:22px; border-radius:6px; background:linear-gradient(135deg,var(--teal),var(--violet)); flex:0 0 auto}
+  .brand:hover{text-decoration:none}
+  nav.links{display:flex; gap:22px; font-size:14px; font-weight:600}
+  nav.links a{color:var(--muted)}
+  nav.links a:hover{color:var(--ink); text-decoration:none}
+  .nav-cta{font-size:13px; font-weight:700; padding:8px 14px; border-radius:8px; background:var(--ink); color:#fff}
+  .nav-cta:hover{background:#000; text-decoration:none}
+
+  .arch-shell{max-width:1300px; margin:0 auto; padding:0 24px; display:grid; grid-template-columns:250px 1fr; gap:48px; align-items:start}
+  .arch-toc{position:sticky; top:73px; max-height:calc(100vh - 90px); overflow-y:auto; padding:32px 0}
+  .arch-toc-details summary{list-style:none; cursor:default}
+  .arch-toc-details summary::-webkit-details-marker{display:none}
+  .arch-toc-inner nav{display:flex; flex-direction:column; gap:2px; margin-top:8px}
+  .arch-toc a{font-size:13px; color:var(--muted); padding:5px 10px; border-radius:7px; line-height:1.35}
+  .arch-toc a:hover{background:var(--wash); color:var(--ink); text-decoration:none}
+  .arch-toc a.toc-h1{font-weight:800; color:var(--ink); margin-top:10px}
+  .arch-toc a.toc-h1:first-child{margin-top:0}
+  .arch-toc a.toc-h2{font-weight:600}
+
+  .arch-content{padding:32px 0 80px; min-width:0}
+  .arch-hero{padding-bottom:28px; margin-bottom:28px; border-bottom:1px solid var(--line)}
+  .arch-hero h1{font-size:clamp(30px,4vw,42px); margin:0 0 12px; letter-spacing:-.01em}
+  .arch-hero .lede{font-size:17px; color:var(--muted); max-width:720px; margin:0}
+
+  .arch-content h2{font-size:26px; margin:52px 0 16px; padding-top:8px; letter-spacing:-.01em}
+  .arch-content h3{font-size:20px; margin:36px 0 12px; letter-spacing:-.01em}
+  .arch-content h4{font-size:16px; margin:28px 0 10px; color:var(--violet)}
+  .arch-content h5{font-size:13px; margin:20px 0 8px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted)}
+  .arch-content p{margin:0 0 14px; max-width:760px; color:#26324a}
+  .arch-content ul, .arch-content ol{margin:0 0 14px; padding-left:22px; max-width:760px; color:#26324a}
+  .arch-content li{margin-bottom:6px}
+  .arch-content strong{color:var(--ink)}
+
+  .table-wrap{overflow-x:auto; border:1px solid var(--line); border-radius:12px; margin:0 0 20px; max-width:920px}
+  .arch-content table{width:100%; border-collapse:collapse; font-size:13.5px}
+  .arch-content th, .arch-content td{padding:9px 13px; text-align:left; border-bottom:1px solid var(--line); vertical-align:top}
+  .arch-content th{font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); background:var(--wash); white-space:nowrap}
+  .arch-content tbody tr:last-child td{border-bottom:0}
+
+  .code-block{background:#0d1730; color:#dce7f7; border-radius:12px; padding:16px 18px; overflow-x:auto; font:12.5px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace; margin:0 0 20px; max-width:920px}
+  .code-block code{background:none; color:inherit; padding:0; font-size:inherit}
+
+  .arch-mermaid{border:1px solid var(--line); border-radius:14px; background:#fff; box-shadow:var(--shadow); padding:20px 8px; margin:0 0 24px; overflow-x:auto}
+  .arch-mermaid pre.mermaid{margin:0; min-width:600px}
+  .arch-mermaid svg{max-width:none !important}
+
+  .formula{background:var(--wash); border:1px solid var(--line); border-radius:10px; padding:16px 20px; font:14px ui-monospace,SFMono-Regular,Menlo,monospace; margin:0 0 20px; color:var(--ink)}
+  .formula sub{font-size:.75em}
+
+  .arch-footer-nav{display:flex; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-top:56px; padding-top:28px; border-top:1px solid var(--line)}
+  .btn{display:inline-block; padding:11px 18px; border-radius:10px; font-weight:700; font-size:14px}
+  .btn-primary-alt{background:var(--ink); color:#fff}
+  .btn-primary-alt:hover{background:#000; text-decoration:none}
+  .btn-ghost-alt{border:1px solid var(--line); color:var(--ink)}
+  .btn-ghost-alt:hover{border-color:var(--muted); text-decoration:none}
+
+  footer{border-top:1px solid var(--line); padding:44px 0; background:var(--wash)}
+  .footer-grid{display:flex; justify-content:space-between; align-items:flex-start; gap:24px; flex-wrap:wrap}
+  footer .brand{margin-bottom:10px}
+  footer .muted{color:var(--muted); font-size:13.5px}
+  footer .links{display:flex; gap:18px; font-size:13.5px; flex-wrap:wrap}
+
+  @media (min-width:901px){
+    .arch-toc-details summary{pointer-events:none}
+  }
+  @media (max-width:900px){
+    .arch-shell{grid-template-columns:1fr}
+    .arch-toc{position:static; max-height:none; padding:20px 0 0}
+    .arch-toc-details summary{cursor:pointer; display:flex; align-items:center; gap:6px}
+    .arch-toc-details summary:after{content:"▸"; font-size:11px; transition:transform .15s}
+    .arch-toc-details[open] summary:after{transform:rotate(90deg)}
+    .arch-toc-details nav{max-height:60vh; overflow-y:auto}
+    nav.links{display:none}
+  }
+</style>
+</head>
+<body>
+
+<header class="site-nav">
+  <div class="nav-inner">
+    <a class="brand" href="index.html"><span class="brand-mark" aria-hidden="true"></span>Policy Logic Forge</a>
+    <nav class="links">
+      <a href="index.html">Overview</a>
+      <a href="index.html#how-it-works">How it works</a>
+      <a href="index.html#results">Results</a>
+    </nav>
+    <a class="nav-cta" href="https://github.com/rrahimi-uci/policy-logic-forge">View on GitHub</a>
+  </div>
+</header>
+
+<div class="arch-shell">
+  <aside class="arch-toc">
+    <div class="arch-toc-inner">
+      <details class="arch-toc-details" open>
+        <summary class="eyebrow">On this page</summary>
+        <nav>
+<a class="toc-h1" style="padding-left:0px" href="#1-system-overview">1. System overview</a>
+<a class="toc-h1" style="padding-left:0px" href="#2-the-twelve-agent-pipeline">2. The twelve-agent pipeline</a>
+<a class="toc-h2" style="padding-left:14px" href="#21-stage-responsibilities">2.1 Stage responsibilities</a>
+<a class="toc-h2" style="padding-left:14px" href="#22-execution-flow-including-the-readinessremediation-loop">2.2 Execution flow, including the readiness/remediation loop</a>
+<a class="toc-h2" style="padding-left:14px" href="#23-detailed-stage-reference">2.3 Detailed stage reference</a>
+<a class="toc-h3" style="padding-left:28px" href="#agent_01-document-organizer">agent_01 — Document Organizer</a>
+<a class="toc-h3" style="padding-left:28px" href="#agent_02-entity-extractor">agent_02 — Entity Extractor</a>
+<a class="toc-h3" style="padding-left:28px" href="#agent_03-rules-extractor">agent_03 — Rules Extractor</a>
+<a class="toc-h3" style="padding-left:28px" href="#agent_04-rule-validator">agent_04 — Rule Validator</a>
+<a class="toc-h3" style="padding-left:28px" href="#agent_05-rulesentities-merger">agent_05 — Rules/Entities Merger</a>
+<a class="toc-h3" style="padding-left:28px" href="#agent_06-knowledge-graph-optimizer">agent_06 — Knowledge Graph Optimizer</a>
+<a class="toc-h3" style="padding-left:28px" href="#agent_07-executable-readiness">agent_07 — Executable Readiness</a>
+<a class="toc-h3" style="padding-left:28px" href="#agent_08-readiness-remediator">agent_08 — Readiness Remediator</a>
+<a class="toc-h3" style="padding-left:28px" href="#agent_09-grounding-verifier">agent_09 — Grounding Verifier</a>
+<a class="toc-h3" style="padding-left:28px" href="#agent_10-dependency-dag-generator">agent_10 — Dependency DAG Generator</a>
+<a class="toc-h3" style="padding-left:28px" href="#agent_11-executable-model-generator">agent_11 — Executable Model Generator</a>
+<a class="toc-h3" style="padding-left:28px" href="#agent_12-business-knowledge-report">agent_12 — Business Knowledge Report</a>
+<a class="toc-h2" style="padding-left:14px" href="#24-orchestration-summary">2.4 Orchestration summary</a>
+<a class="toc-h2" style="padding-left:14px" href="#25-resume-and-checkpointing">2.5 Resume and checkpointing</a>
+<a class="toc-h1" style="padding-left:0px" href="#3-module-architecture-utils">3. Module architecture (utils/)</a>
+<a class="toc-h1" style="padding-left:0px" href="#4-configuration-and-prompt-resolution">4. Configuration and prompt resolution</a>
+<a class="toc-h1" style="padding-left:0px" href="#5-regdelta-differential-execution-engine">5. RegDelta: differential-execution engine</a>
+<a class="toc-h1" style="padding-left:0px" href="#6-executable-model-formats">6. Executable model formats</a>
+<a class="toc-h2" style="padding-left:14px" href="#61-dmn-compliance_decisionsdmn">6.1 DMN — compliance_decisions.dmn</a>
+<a class="toc-h2" style="padding-left:14px" href="#62-bpmn-compliance_workflowsbpmn">6.2 BPMN — compliance_workflows.bpmn</a>
+<a class="toc-h2" style="padding-left:14px" href="#63-cmmn-compliance_reviewscmmn">6.3 CMMN — compliance_reviews.cmmn</a>
+<a class="toc-h2" style="padding-left:14px" href="#64-sbvr-semantic_vocabulary_profilejson">6.4 SBVR — semantic_vocabulary_profile.json</a>
+<a class="toc-h2" style="padding-left:14px" href="#65-lexec-ir-lexec_irjson-the-proof-checked-side-channel">6.5 LExec IR — lexec_ir.json (the proof-checked side channel)</a>
+<a class="toc-h1" style="padding-left:0px" href="#7-directory-reference">7. Directory reference</a>
+<a class="toc-h2" style="padding-left:14px" href="#pipeline-outputbatch-layout">pipeline-output/&lt;batch&gt;/ layout</a>
+<a class="toc-h1" style="padding-left:0px" href="#8-testing">8. Testing</a>
+        </nav>
+      </details>
+    </div>
+  </aside>
+  <script>if(window.innerWidth<=900){document.querySelector(".arch-toc-details").removeAttribute("open");}</script>
+  <main class="arch-content">
+    <div class="arch-hero">
+      <span class="eyebrow">Technical reference</span>
+      <h1>Architecture</h1>
+      <p class="lede">How Policy Logic Forge is put together: the twelve-agent extraction pipeline, the shared services and compiler layer underneath it, the RegDelta differential-execution engine, and how configuration and prompts flow through all of it.</p>
+    </div>
+<h2 id="1-system-overview">1. System overview</h2>
+<p>Policy Logic Forge turns compliance policy text into a typed, source-grounded knowledge graph, then optionally compares two versions of that graph to report what actually changed. There are three moving parts:</p>
+<ul><li><strong>The extraction pipeline</strong> (<code>agents/</code>, orchestrated by <code>cli/extract.py</code>) — twelve agents run in a fixed sequence, each consuming the previous stage&#x27;s output and writing its own artifacts under <code>pipeline-output/&lt;batch&gt;/</code>.</li><li><strong>Shared services and the compiler layer</strong> (<code>utils/</code>) — configuration, the LLM client, prompt resolution, and (for rules the compiler can represent) a fail-closed lowering to an intermediate representation with bounded proof search.</li><li><strong>RegDelta</strong> (<code>utils/regdelta_engine.py</code> and friends) — a differential-execution engine that compiles two graphs, aligns their rules, classifies what changed, and propagates impact through the dependency graph.</li></ul>
+<div class="arch-mermaid"><pre class="mermaid">flowchart LR
+    classDef input fill:#e0f2fe,stroke:#0369a1,color:#0c4a6e,stroke-width:1px
+    classDef orchestration fill:#ede9fe,stroke:#6d28d9,color:#4c1d95,stroke-width:1px
+    classDef agent fill:#fae8ff,stroke:#a21caf,color:#701a75,stroke-width:1px
+    classDef shared fill:#dcfce7,stroke:#15803d,color:#14532d,stroke-width:1px
+    classDef compiler fill:#fef3c7,stroke:#b45309,color:#78350f,stroke-width:1px
+    classDef regdelta fill:#ffe4e6,stroke:#be123c,color:#881337,stroke-width:1px
+    classDef output fill:#e2e8f0,stroke:#334155,color:#1e293b,stroke-width:1px
+
+    DOCS[(&quot;Source docs&lt;br/&gt;compliance-files/&quot;)]
+    CFG[(&quot;config.json + .env&quot;)]
+
+    subgraph ORCH[&quot;Orchestration — cli/extract.py&quot;]
+        EXTRACT[&quot;ExtractionPipeline&quot;]
+    end
+
+    subgraph PIPELINE[&quot;12-Agent Pipeline (agents/)&quot;]
+        direction LR
+        A1[&quot;01&lt;br/&gt;Organize&quot;] --&gt; A2[&quot;02&lt;br/&gt;Entities&quot;] --&gt; A3[&quot;03&lt;br/&gt;Rules&quot;]
+        A3 --&gt; A4[&quot;04&lt;br/&gt;Validate&quot;] --&gt; A5[&quot;05&lt;br/&gt;Merge&quot;] --&gt; A6[&quot;06&lt;br/&gt;Optimize&quot;]
+        A6 --&gt; A7[&quot;07&lt;br/&gt;Readiness&quot;]
+        A7 -.-&gt;|&quot;review&quot;| A8[&quot;08&lt;br/&gt;Remediate&quot;]
+        A8 -.-&gt;|&quot;re-check&quot;| A7
+        A7 --&gt; A9[&quot;09&lt;br/&gt;Ground&quot;] --&gt; A10[&quot;10&lt;br/&gt;DAG&quot;] --&gt; A11[&quot;11&lt;br/&gt;Models&quot;] --&gt; A12[&quot;12&lt;br/&gt;Report&quot;]
+    end
+
+    subgraph OUTPUTS[&quot;Outputs (pipeline-output/&amp;lt;batch&amp;gt;/)&quot;]
+        GRAPH[&quot;optimized graph&quot;]
+        DAGS[&quot;dependency DAGs&quot;]
+        MODELS[&quot;DMN·BPMN·CMMN·SBVR&quot;]
+        REPORT[&quot;business knowledge report&quot;]
+    end
+
+    DOCS --&gt; EXTRACT
+    CFG --&gt; EXTRACT
+    EXTRACT ==&gt; A1
+    A6 -.-&gt; GRAPH
+    A10 -.-&gt; DAGS
+    A11 -.-&gt; MODELS
+    A12 -.-&gt; REPORT
+
+    subgraph SUPPORT[&quot;Support layers, used throughout the pipeline&quot;]
+        direction TB
+        SHARED[&quot;Shared services&lt;br/&gt;utils/config · llm_client&lt;br/&gt;adaptive_limiter · prompt_manager&quot;]
+        PROMPTS[&quot;Prompts&lt;br/&gt;domain-prompts/&amp;lt;domain&amp;gt; + prompts/&quot;]
+        COMPILER[&quot;Compiler + proof layer&lt;br/&gt;lexec_ir · lexec_compile · smt · feel&lt;br/&gt;executable_models · semantic_artifacts&quot;]
+    end
+
+    PIPELINE -.-&gt;|&quot;config, LLM calls,&lt;br/&gt;rate limiting&quot;| SHARED
+    SHARED -.-&gt; PROMPTS
+    A11 -.-&gt;|&quot;compiles + proves&quot;| COMPILER
+
+    subgraph REGDELTA[&quot;RegDelta engine&quot;]
+        direction LR
+        RE[&quot;regdelta_engine.py&lt;br/&gt;align → classify&lt;br/&gt;→ propagate&quot;]
+    end
+
+    GRAPH ==&gt;|&quot;old vs new run&quot;| REGDELTA
+    COMPILER -.-&gt;|&quot;lower_graph / evaluate_formula&quot;| REGDELTA
+
+    class DOCS,CFG input
+    class EXTRACT orchestration
+    class A1,A2,A3,A4,A5,A6,A7,A8,A9,A10,A11,A12 agent
+    class SHARED,PROMPTS shared
+    class COMPILER compiler
+    class RE regdelta
+    class GRAPH,DAGS,MODELS,REPORT output</pre></div>
+<p>Two things worth noticing immediately:</p>
+<ol><li><strong>The compiler layer is additive, not required.</strong> Agents 01–10 and most of agent_11 (the review-projection DMN/BPMN/CMMN/SBVR) never touch <code>lexec_ir.py</code>/<code>lexec_compile.py</code>/<code>smt.py</code>. Only the proof-checked side output (<code>lexec_ir.json</code>, <code>compilation_report.json</code>, <code>proof_records.json</code>) goes through the compiler, and a failure there never blocks or replaces the review-projection output.</li><li><strong>RegDelta consumes the pipeline&#x27;s output, it doesn&#x27;t run inside it.</strong> It reads two already-completed runs&#x27; optimized graphs; nothing in <code>agents/</code> or <code>cli/extract.py</code> imports from <code>utils/regdelta_engine.py</code> or its dependencies.</li></ol>
+<h2 id="2-the-twelve-agent-pipeline">2. The twelve-agent pipeline</h2>
+<h3 id="21-stage-responsibilities">2.1 Stage responsibilities</h3>
+<div class="table-wrap"><table><thead><tr><th>Stage</th><th>Agent</th><th>Responsibility</th><th>Primary output</th></tr></thead><tbody><tr><td>01/12</td><td><code>agent_01</code></td><td>Document organization</td><td><code>agent_01-organized-documents/</code></td></tr><tr><td>02/12</td><td><code>agent_02</code></td><td>Entity and relationship extraction</td><td><code>agent_02-entities/</code></td></tr><tr><td>03/12</td><td><code>agent_03</code></td><td>Business-rule extraction</td><td><code>agent_03-rules/</code></td></tr><tr><td>04/12</td><td><code>agent_04</code></td><td>Advisory rule validation</td><td><code>agent_04-validation/</code></td></tr><tr><td>05/12</td><td><code>agent_05</code></td><td>Rules/entities merge</td><td><code>agent_05-rules-with-entities/</code></td></tr><tr><td>06/12</td><td><code>agent_06</code></td><td>Knowledge-graph optimization (dedup + dependency analysis)</td><td><code>agent_06-07-08-09-optimized/optimized_compliance_knowledge_graph.json</code></td></tr><tr><td>07/12</td><td><code>agent_07</code></td><td>Executable-readiness gate (four invariants)</td><td>readiness report, embedded in the shared optimized directory</td></tr><tr><td>08/12</td><td><code>agent_08</code></td><td>Readiness remediation (only if agent_07 requests it)</td><td>focused rule fix-ups</td></tr><tr><td>09/12</td><td><code>agent_09</code></td><td>Independent grounding verification</td><td>claim-level certification</td></tr><tr><td>10/12</td><td><code>agent_10</code></td><td>Dependency-DAG generation, 100%-coverage guarantee</td><td><code>agent_10-dag-generation/dependency_dags.json</code></td></tr><tr><td>11/12</td><td><code>agent_11</code></td><td>DMN/BPMN/CMMN/SBVR generation + LExec compile</td><td><code>agent_11-executable-models/</code></td></tr><tr><td>12/12</td><td><code>agent_12</code></td><td>Self-contained business knowledge report</td><td><code>agent_12-business-knowledge-report/business_knowledge_report.html</code></td></tr></tbody></table></div>
+<p>Stages 07–09 share one directory (<code>agent_06-07-08-09-optimized/</code>) because they all read and write the same optimized graph; their stage IDs and checkpoints stay distinct. The stage number and agent identifier are always the same value — <code>--stage 9</code> and <code>--agent agent_09</code> select the same stage.</p>
+<h3 id="22-execution-flow-including-the-readinessremediation-loop">2.2 Execution flow, including the readiness/remediation loop</h3>
+<div class="arch-mermaid"><pre class="mermaid">sequenceDiagram
+    autonumber
+    actor Op as Operator
+    participant CLI as cli/extract.py
+    participant A as agents 01–06
+    participant A7 as agent_07&lt;br/&gt;Readiness
+    participant A8 as agent_08&lt;br/&gt;Remediator
+    participant A9 as agent_09&lt;br/&gt;Grounding
+    participant A10 as agent_10/11&lt;br/&gt;DAG + Models
+    participant A12 as agent_12&lt;br/&gt;Report
+    participant FS as pipeline output
+
+    Op-&gt;&gt;CLI: extract.py --dir --domain --resume
+    CLI-&gt;&gt;FS: read pipeline_run_state.json
+    alt resume requested
+        FS--&gt;&gt;CLI: last completed stage
+    end
+    CLI-&gt;&gt;A: run_agent_01 … run_agent_06
+    A-&gt;&gt;FS: write per-stage artifacts + checkpoints
+    CLI-&gt;&gt;FS: record_stage_result() after each stage
+
+    CLI-&gt;&gt;A7: run_agent_07()
+    A7-&gt;&gt;FS: read optimized graph
+    A7--&gt;&gt;CLI: exit 0 (ready), exit 3 (review), or exit 2 (failed invariant)
+
+    alt rules need remediation
+        CLI-&gt;&gt;A8: run_agent_08()
+        A8-&gt;&gt;FS: focused rule fix-ups
+        CLI-&gt;&gt;A7: run_agent_07(reuse_conflicts=true)
+        A7--&gt;&gt;CLI: re-verified readiness
+    end
+
+    CLI-&gt;&gt;A9: run_agent_09() — independent grounding
+    A9--&gt;&gt;CLI: claim-level certification
+
+    CLI-&gt;&gt;A10: run_agent_10() DAG, run_agent_11() models
+    A10-&gt;&gt;FS: dependency_dags.json + DMN/BPMN/CMMN/SBVR + lexec_ir.json
+
+    CLI-&gt;&gt;A12: run_agent_12() business knowledge report
+    A12-&gt;&gt;FS: business_knowledge_report.html + manifest
+
+    CLI--&gt;&gt;Op: COMPLETE — optimized graph, DAGs, executable models</pre></div>
+<p><strong>Readiness exit code 3 is a review signal, not a crash.</strong> Exit code 2 may enter remediation only when the current report proves <code>schema_consistency</code> is the sole failed invariant. Exit 1 (configuration/runtime failure) and non-schema invariant failures stop even if an older readiness report is present. The full orchestrator runs remediation, then continues to independent grounding and DAG generation once all four readiness invariants pass; affected rules remain <code>requires_review: true</code> in the final artifacts rather than blocking the run. A structural invariant failure (not remediable) still stops it.</p>
+<h3 id="23-detailed-stage-reference">2.3 Detailed stage reference</h3>
+<p>Each agent runs as its own subprocess (<code>ExtractionPipeline._run</code>, <code>cli/extract.py</code>); the orchestration semantics in <strong>Failure semantics</strong> below refer to the OS exit code that subprocess returns, not a Python exception.</p>
+<h4 id="agent_01-document-organizer"><code>agent_01</code> — Document Organizer</h4>
+<div class="table-wrap"><table><thead><tr><th></th><th></th></tr></thead><tbody><tr><td><strong>File</strong></td><td><code>agents/agent_01_document_organizer.py</code></td></tr><tr><td><strong>Purpose</strong></td><td>Converts heterogeneous source documents (PDF, DOCX, Markdown, CSV, XLSX, TXT) into structurally chunked <code>.txt</code> files that mirror each source document&#x27;s own table-of-contents/header hierarchy — not fixed-size splitting.</td></tr><tr><td><strong>Inputs</strong></td><td>Raw files under the run&#x27;s source directory, filtered to a supported-extension set.</td></tr><tr><td><strong>Outputs</strong></td><td><code>agent_01-organized-documents/&lt;document_stem&gt;/&lt;section_path…&gt;/&lt;chunk_title&gt;.txt</code> (metadata header + content) per chunk; per-document <code>_metadata.json</code> (<code>source_file, total_chunks, chunk_methods, structure[]</code>); run-level <code>_processing_results.json</code> (<code>total_files, processed, failed, total_chunks, chunker_tools_used, chunk_size_stats</code>).</td></tr><tr><td><strong>Concurrency</strong></td><td>Documents are chunked concurrently via a thread pool (<code>KG_ORGANIZER_WORKERS</code>, default 32, capped to file count) — safe because each document&#x27;s output folder is independent.</td></tr><tr><td><strong>Failure semantics</strong></td><td>Plain success/failure per file; the orchestrator hard-blocks the pipeline if the stage as a whole fails.</td></tr></tbody></table></div>
+<h5 id="key-logic">Key logic</h5>
+<ul><li>A tool registry dispatches by file type: <code>MarkdownChunker</code>, <code>CSVChunker</code>, <code>ExcelChunker</code>, <code>DocxChunker</code>, plus built-in PDF/TXT handling (PDF chunking is TOC/bookmark-based, with OCR fallback via <code>pytesseract</code>/<code>pdf2image</code> for scanned pages).</li><li>Before writing, any pre-existing output folder for a document is deleted (<code>shutil.rmtree</code>) — chunking is LLM-assisted and non-deterministic, so stale chunks from a prior run would otherwise be glob-matched by every downstream agent.</li><li>Chunk filenames are de-duplicated on title collision by appending the chunk id, since chunk titles are model-generated and can repeat within a section.</li></ul>
+<h4 id="agent_02-entity-extractor"><code>agent_02</code> — Entity Extractor</h4>
+<div class="table-wrap"><table><thead><tr><th></th><th></th></tr></thead><tbody><tr><td><strong>File</strong></td><td><code>agents/agent_02_entity_extractor.py</code></td></tr><tr><td><strong>Purpose</strong></td><td>Iteratively catalogs domain entity types and relationships (not rules) across up to <code>n_iterations</code> refinement passes, accumulating discoveries rather than replacing them each pass.</td></tr><tr><td><strong>Inputs</strong></td><td>Every organized <code>.txt</code> chunk from <code>agent_01</code>.</td></tr><tr><td><strong>Outputs</strong></td><td><code>entity_types_and_relationships.json</code> — <code>entity_types</code>, <code>relationships</code>, <code>iteration</code>, <code>optimization_summary</code>, <code>final_quality_analysis</code>; an intermediate <code>entity_iteration_checkpoint.json</code> after every pass.</td></tr><tr><td><strong>Failure semantics</strong></td><td>No special exit codes; raises on <code>n_iterations &lt; 1</code> or invalid LLM JSON. Hard-blocks the pipeline.</td></tr></tbody></table></div>
+<h5 id="key-logic-1">Key logic</h5>
+<ul><li>Each iteration samples a representative, evenly distributed subset of documents (default 8 docs / 1,200 chars each), shifted by a rotating offset per pass so successive iterations see different corpus windows, then merges new findings into the accumulated catalog (never overwrites it).</li><li><code>entity_extractor.n_iterations</code> defaults to <strong>3</strong>; <code>entity_min_iterations</code> defaults to <strong>2</strong>. Early stop (<code>entity_early_stop</code>, on by default) fires only once <code>iteration ≥ min_iterations</code> <strong>and</strong> either no new entities/relationships were found this pass, or a quality-score target is met. In practice, the quality-score gate is a fixed placeholder (always 85/100) — early stop is driven almost entirely by new-item count plateauing at zero, not by the quality target.</li></ul>
+<h4 id="agent_03-rules-extractor"><code>agent_03</code> — Rules Extractor</h4>
+<div class="table-wrap"><table><thead><tr><th></th><th></th></tr></thead><tbody><tr><td><strong>File</strong></td><td><code>agents/agent_03_rules_extractor.py</code>, contract in <code>utils/rule_contract.py</code></td></tr><tr><td><strong>Purpose</strong></td><td>Extracts individual business rules as structured &quot;v2 contract&quot; objects — typed predicates, variables, and outcomes with exact source citations — batching the corpus into word-balanced batches with per-batch checkpointing.</td></tr><tr><td><strong>Inputs</strong></td><td>Organized chunks (<code>agent_01</code>) plus the entity catalog (<code>agent_02</code>, used to validate <code>responsible_party</code>/<code>counterparties</code>).</td></tr><tr><td><strong>Outputs</strong></td><td><code>compliance_rules_with_entities.json</code>, keyed by <code>entity_types</code>/<code>relationships</code>, each carrying a nested <code>business_rules[]</code> list.</td></tr><tr><td><strong>Checkpointing</strong></td><td>Batches are appended to a JSONL checkpoint keyed by a content fingerprint (SHA-256 of batch text); a checkpoint whose fingerprint no longer matches current content — because the source changed — is rejected as stale, never silently reused.</td></tr><tr><td><strong>Failure semantics</strong></td><td>A malformed rule candidate is retained with <code>requires_review: true</code> rather than dropped. Hard-blocks the pipeline on stage failure.</td></tr></tbody></table></div>
+<h5 id="key-logic-2">Key logic</h5>
+<ul><li>Batches are <strong>word-balanced</strong>, not fixed-file-count: oversized files are re-split at word boundaries with overlap, then bin-packed toward <code>target_words_per_batch</code>.</li><li><code>bridge_exact_span</code> repairs LLM-quoted source text that isn&#x27;t an exact substring of the source (e.g. the model silently drops an inline aside), by locating the true matching word span and rebuilding the quote verbatim — required downstream because <code>agent_09</code>&#x27;s grounding verifier needs literal substrings.</li><li>Every candidate is run through <code>annotate_rule_contract</code>, which never discards an invalid rule — it attaches <code>contract_issues[]</code> and sets <code>requires_review: true</code> on any error-severity issue instead.</li></ul>
+<p><strong>v2 rule contract — top-level fields</strong> (<code>utils/rule_contract.py</code>):</p>
+<div class="table-wrap"><table><thead><tr><th>Field</th><th>Notes</th></tr></thead><tbody><tr><td><code>condition_predicates[]</code></td><td><code>predicate_id, variable, operator (==, !=, &gt;, &gt;=, &lt;, &lt;=, in, not_in), value, value_type</code></td></tr><tr><td><code>condition_logic</code></td><td>Boolean tree over predicate refs (<code>all</code>/<code>any</code>/<code>predicate_ref</code>), or <code>{&quot;constant&quot;: true}</code> only for a direct, explicitly unconditional source assertion</td></tr><tr><td><code>outcomes[]</code></td><td><code>variable, operator=&quot;=&quot;, value, value_type</code>; validated numeric arithmetic may use canonical <code>feel_expression</code></td></tr><tr><td><code>variables[]</code></td><td><code>name, type, role (input\|derived\|output), unit?, allowed_range?, allowed_values?</code></td></tr><tr><td><code>scope_basis</code></td><td>One of <code>explicit</code>, <code>explicit_in_source</code>, <code>explicitly_none_in_source</code>, <code>explicitly_universal_in_source</code>, <code>genuinely_unscoped</code>, <code>inferred</code>, <code>unresolved_after_source_review</code></td></tr><tr><td><code>exceptions[]</code>, <code>exception_basis</code></td><td>Input-side exception triggers use the predicate shape and a 5-value basis enum</td></tr><tr><td><code>exception_effects[]</code></td><td>Preserves source-backed alternate output assignments separately from exception triggers; remains review-gated until branch lowering is available</td></tr><tr><td><code>source_reference</code>, <code>field_evidence</code></td><td>Chunk path, section id, exact quoted source text</td></tr><tr><td><code>test_vectors[]</code></td><td>Input/output example pairs for the rule</td></tr></tbody></table></div>
+<p><strong>Example</strong> (<code>tests/test_rule_contract.py</code>):</p>
+<pre class="code-block" data-lang="python"><code>&quot;condition_predicates&quot;: [{
+    &quot;predicate_id&quot;: &quot;p1&quot;, &quot;variable&quot;: &quot;price_differential_amount&quot;,
+    &quot;operator&quot;: &quot;&gt;=&quot;, &quot;value&quot;: &quot;designated_threshold_amount&quot;,
+    &quot;value_type&quot;: &quot;variable_reference&quot;,
+}],
+&quot;condition_logic&quot;: {&quot;predicate_ref&quot;: &quot;p1&quot;},
+&quot;outcomes&quot;: [{&quot;variable&quot;: &quot;maximum_number_of_pools&quot;, &quot;operator&quot;: &quot;=&quot;, &quot;value&quot;: 3, &quot;value_type&quot;: &quot;number&quot;}],
+&quot;scope_basis&quot;: &quot;inferred&quot;,
+&quot;inference_reasoning&quot;: &quot;The cited section is within the conventional-loan chapter.&quot;,
+&quot;responsible_party&quot;: &quot;SELLER_SERVICER&quot;, &quot;counterparties&quot;: [&quot;FANNIE_MAE&quot;],
+&quot;exception_basis&quot;: &quot;explicitly_none_in_source&quot;,</code></pre>
+<h4 id="agent_04-rule-validator"><code>agent_04</code> — Rule Validator</h4>
+<div class="table-wrap"><table><thead><tr><th></th><th></th></tr></thead><tbody><tr><td><strong>File</strong></td><td><code>agents/agent_04_rule_validator.py</code></td></tr><tr><td><strong>Purpose</strong></td><td>Runs five heuristic quality checks over <code>agent_03</code>&#x27;s rules and writes a standalone report. <strong>Advisory only — never gates or modifies pipeline data.</strong></td></tr><tr><td><strong>Inputs</strong></td><td><code>compliance_rules_with_entities.json</code>; optionally the organized source directory.</td></tr><tr><td><strong>Outputs</strong></td><td><code>validation_report.json</code> — <code>passed[], warnings[], failures[], corrections[], statistics{passed_count, warning_count, failure_count, avg_confidence}</code>.</td></tr><tr><td><strong>Failure semantics</strong></td><td>None that matter — <code>main()</code> always exits 0. <code>cli/extract.py</code> calls it as <code>self.run_agent_04()  # advisory; never blocks the pipeline</code> and discards the return value.</td></tr></tbody></table></div>
+<h5 id="key-logic-the-five-checks-and-how-heuristic-each-really-is">Key logic — the five checks, and how heuristic each really is</h5>
+<ol><li>Confidence score presence/threshold (flag if <code>&lt; 70</code>).</li><li>Numeric-threshold consistency — regex-extracted numbers on shared key terms (<code>credit score</code>, <code>ltv</code>, <code>dti</code>, …).</li><li>Field completeness against the v2 required-field list.</li><li>Cross-rule contradiction detection — <strong>a documented placeholder</strong>; the code comment states a full implementation would use an LLM, and it never actually flags anything today.</li><li>Source-reference verification — samples up to 10 rules and checks only that a <code>source_reference</code> exists, not that it is textually correct.</li></ol>
+<p>Its findings are never read by any other agent or by the orchestrator&#x27;s control flow.</p>
+<h4 id="agent_05-rulesentities-merger"><code>agent_05</code> — Rules/Entities Merger</h4>
+<div class="table-wrap"><table><thead><tr><th></th><th></th></tr></thead><tbody><tr><td><strong>File</strong></td><td><code>agents/agent_05_rules_with_entities_merger.py</code></td></tr><tr><td><strong>Purpose</strong></td><td>Flattens <code>agent_03</code>&#x27;s entity/relationship-nested rule structure into one top-level rule list, cross-references each rule&#x27;s entity/relationship reference to <code>agent_02</code>&#x27;s canonical names, and attaches inline entity/relationship definitions to each rule.</td></tr><tr><td><strong>Inputs</strong></td><td><code>entity_types_and_relationships.json</code> (<code>agent_02</code>) + <code>compliance_rules_with_entities.json</code> (<code>agent_03</code>).</td></tr><tr><td><strong>Outputs</strong></td><td><code>compliance_knowledge_graph.json</code> — <code>metadata</code>, <code>entity_types</code>, <code>relationships</code>, flat <code>business_rules[]</code>, <code>statistics{total_entities, total_relationships, total_rules, rules_by_entity, rules_by_type}</code>.</td></tr><tr><td><strong>Failure semantics</strong></td><td>No special exit codes; hard-blocks the pipeline on failure.</td></tr></tbody></table></div>
+<h5 id="key-logic-3">Key logic</h5>
+<ul><li>Builds a case/whitespace/hyphen-insensitive canonical-name lookup over <code>agent_02</code>&#x27;s entity/relationship keys, and remaps any rule whose reference resolves but differs in spelling (e.g. <code>&quot;Financial Institution&quot;</code> → <code>&quot;FINANCIAL_INSTITUTION&quot;</code>).</li><li>If a rule references a party <code>agent_02</code> never emitted as a top-level entity, a placeholder entity is synthesized and explicitly marked as such — never silently dropped, never silently invented as an unmarked definition.</li></ul>
+<h4 id="agent_06-knowledge-graph-optimizer"><code>agent_06</code> — Knowledge Graph Optimizer</h4>
+<div class="table-wrap"><table><thead><tr><th></th><th></th></tr></thead><tbody><tr><td><strong>File</strong></td><td><code>agents/agent_06_knowledge_graph_optimizer.py</code></td></tr><tr><td><strong>Purpose</strong></td><td>Conservatively deduplicates truly-identical rules and derives a dependency/conflict edge graph between rules, both LLM-driven, then deterministically enforces <code>rule_id</code>/<code>rule_name</code> uniqueness on the result.</td></tr><tr><td><strong>Inputs</strong></td><td><code>compliance_knowledge_graph.json</code> (<code>agent_05</code>).</td></tr><tr><td><strong>Outputs</strong></td><td><code>optimized_compliance_knowledge_graph.json</code> — <code>optimization_summary{deduplication, dependency_analysis}</code>, <code>business_rules</code>, <code>deduplication_details</code>, <code>dependency_details{dependencies, dependency_chains, conflicts}</code>. This directory is then shared and overwritten in place by <code>agent_07</code>–<code>agent_09</code>.</td></tr><tr><td><strong>Failure semantics</strong></td><td>A chunk-level dedup failure is caught and that chunk&#x27;s rules are retained unchanged, rather than failing the whole stage. <code>--skip-optimize</code> skips <code>agent_06</code>–<code>agent_08</code> entirely.</td></tr></tbody></table></div>
+<h5 id="key-logic-4">Key logic</h5>
+<ul><li><strong>Deduplication</strong> is LLM-based and batched (default 25 rules/batch): cross-<em>chunk</em> merges are intentionally never inferred — &quot;a missed merge is safer than combining rules whose numeric scope or source differs.&quot; Both <code>source_reference</code> <strong>and</strong> <code>field_evidence</code> are merged onto the surviving primary rule (a real fixed defect: dropping the duplicate&#x27;s <code>field_evidence</code> previously caused downstream <code>corpus_integrity</code> invariant failures).</li><li><strong>Dependency analysis</strong> is separately LLM-based, looking for prerequisite/sequential/conditional/complementary/contradictory/override relationships between rules.</li><li>A deterministic guard, <code>dependency_has_structural_support</code>, checks whether two rules in a claimed dependency edge share <em>any</em> variable name at all. This is deliberately weak — it exists only to catch the clearest false positives, not to replace independent verification. On a real mortgage-domain run, <code>agent_09</code>&#x27;s independent grounding pass found <strong>44% of dependency/conflict claims did not actually hold up structurally</strong> — the reason a second, independent verification stage exists at all.</li><li><code>utils/kg_readiness.py</code> is <strong>not</strong> used by <code>agent_06</code>; its deterministic primitives (cited-section tracking, naming/referential-integrity checks) first come into play in <code>agent_07</code>.</li></ul>
+<h4 id="agent_07-executable-readiness"><code>agent_07</code> — Executable Readiness</h4>
+<div class="table-wrap"><table><thead><tr><th></th><th></th></tr></thead><tbody><tr><td><strong>File</strong></td><td><code>agents/agent_07_executable_readiness.py</code>, deterministic core in <code>utils/kg_readiness.py</code></td></tr><tr><td><strong>Purpose</strong></td><td>Completes every rule&#x27;s evidence-dependent fields (exceptions, applicability scope, workflow eligibility, hit policy) via bounded LLM evidence retrieval over the full corpus, then validates the graph against four deterministic invariants.</td></tr><tr><td><strong>Inputs</strong></td><td>Baseline graph (<code>agent_05</code>, for corpus-citation comparison), optimized graph (<code>agent_06</code>), organized corpus.</td></tr><tr><td><strong>Outputs</strong></td><td>Overwrites the optimized graph; writes <code>corpus_manifest.json</code>, <code>kg_readiness_report.{json,md}</code> — <code>invariants{…}</code>, <code>rules_ready</code>, <code>rules_requiring_review</code>, <code>review_routes</code>, <code>human_review_required_rules</code>.</td></tr><tr><td><strong>Exit codes</strong></td><td><strong>0</strong> — all invariants pass, no rule needs review. <strong>2</strong> — any invariant fails; unrecoverable, hard pipeline stop. <strong>3</strong> — all invariants pass but at least one rule needs review; a deliberate <em>data-quality</em>, not <em>process-failure</em>, signal.</td></tr></tbody></table></div>
+<p><strong>The four invariants, precisely:</strong></p>
+<div class="table-wrap"><table><thead><tr><th>Invariant</th><th>What it checks</th></tr></thead><tbody><tr><td><code>corpus_integrity</code></td><td>Every cited-section addition/removal between the baseline and final graph has an explicit reason string.</td></tr><tr><td><code>naming_consistency</code></td><td>Zero entity-key naming violations against a canonical <code>^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*$</code> pattern.</td></tr><tr><td><code>schema_consistency</code></td><td>Zero <strong>blocking</strong> v2-contract violations. Deliberately gated on blocking errors alone, not evidence/provenance gaps — folding those in previously made this invariant fail on every run with any review-required rule, pre-empting <code>agent_08</code> remediation before it could run.</td></tr><tr><td><code>referential_integrity</code></td><td>Zero dependency edges pointing at a <code>rule_id</code> that doesn&#x27;t exist.</td></tr></tbody></table></div>
+<h5 id="key-logic-5">Key logic</h5>
+<ul><li>Evidence retrieval builds an inverted token index (words, path tokens, exception markers like &quot;except&quot;/&quot;unless&quot;/&quot;notwithstanding&quot;) over the organized corpus <em>before</em> any LLM call, so the search record can prove the whole corpus was inspected.</li><li>Each <code>(rule, evidence packet)</code> pair is fingerprinted (SHA-256) and checkpointed to JSONL; a resumed run rejects checkpoint rows whose rule no longer exists or whose recorded corpus hash doesn&#x27;t match.</li><li>Cache/resume paths revalidate nested exception/scope citations against the organized corpus before syncing them into <code>field_evidence</code>; cached evidence never bypasses the citation gate.</li><li>Deterministic normalization aliases legacy operators/types, preserves alternate exception effects, compiles only a conservative arithmetic subset to FEEL, and derives test vectors only when the condition and expected output are mechanically evaluable.</li></ul>
+<h4 id="agent_08-readiness-remediator"><code>agent_08</code> — Readiness Remediator</h4>
+<div class="table-wrap"><table><thead><tr><th></th><th></th></tr></thead><tbody><tr><td><strong>File</strong></td><td><code>agents/agent_08_readiness_remediator.py</code></td></tr><tr><td><strong>Purpose</strong></td><td>Re-requests LLM completion for <strong>only</strong> the specific fields that caused an <code>agent_07</code> exceptions/scope failure — never a full re-extraction — and separately re-resolves unresolved rule conflicts.</td></tr><tr><td><strong>Inputs</strong></td><td>Baseline graph, the <code>agent_07</code>-annotated optimized graph, organized corpus.</td></tr><tr><td><strong>Outputs</strong></td><td>Overwrites the optimized graph and readiness reports; adds <code>agent_08_remediation_report.json</code>.</td></tr><tr><td><strong>Exit codes</strong></td><td>Same contract as <code>agent_07</code>: 0 clean, 2 an invariant still fails after remediation, 3 invariants pass but rules remain under review.</td></tr></tbody></table></div>
+<h5 id="key-logic-6">Key logic</h5>
+<ul><li>Patches only a fixed field allowlist per rule — <code>exceptions</code>, <code>exception_basis</code>, <code>exception_verification</code>, <code>applicability_scope</code>, <code>scope_basis</code>, <code>scope_derivation</code> (plus new typed input variables the patch introduces) — and only for rules whose failures are exactly <code>exceptions</code> and/or <code>scope</code>.</li><li>Rebuilds unresolved conflict pairs (capped at 5,000 to bound the request count on large conflict groups) and asks the model to resolve each as <code>non_conflict</code>/<code>conflict</code> with a rationale and any hit-policy update.</li><li>One deterministic rule folded in here: if any rule declares a <code>list</code>-typed output variable, that variable becomes graph-wide <code>list</code>-typed and every rule assigning it switches to <code>COLLECT</code> hit policy — resolving conflicts where rules legitimately co-fire on a shared collection output.</li></ul>
+<p><strong>Example</strong> (<code>tests/test_readiness_remediator.py</code>): a rule failing on <code>exceptions</code> gets patched with a new input variable <code>exception_applies</code> (boolean), a matching exception predicate, <code>exception_basis: &quot;explicit_in_source&quot;</code>, and a real evidence citation — <code>{&quot;chunk_path&quot;: &quot;B2-1-01/001.txt&quot;, &quot;section_id&quot;: &quot;B2-1-01&quot;, &quot;source_text&quot;: &quot;Except when exception_applies.&quot;}</code>.</p>
+<h4 id="agent_09-grounding-verifier"><code>agent_09</code> — Grounding Verifier</h4>
+<div class="table-wrap"><table><thead><tr><th></th><th></th></tr></thead><tbody><tr><td><strong>File</strong></td><td><code>agents/agent_09_grounding_verifier.py</code></td></tr><tr><td><strong>Purpose</strong></td><td>Independently certifies every source-derived rule field, claim by claim, against text the verifier re-locates in the corpus itself — it does not trust <code>agent_07</code>/<code>agent_08</code>&#x27;s stored citations.</td></tr><tr><td><strong>Inputs</strong></td><td>The post-remediation optimized graph, organized corpus.</td></tr><tr><td><strong>Outputs</strong></td><td>Adds <code>metadata.grounding_certification</code> + a per-rule <code>grounding</code> block to the graph; <code>kg_grounding_report.{json,md}</code> — <code>pass, total_claims, supported_claims, contradicted_claims, insufficient_evidence_claims, claim_coverage_percent, review_route_counts, …</code>.</td></tr><tr><td><strong>Exit codes</strong></td><td><strong>0</strong> clean pass. <strong>3</strong> — <code>report.pass</code> is false; the orchestrator only tolerates this if the report is <em>complete</em> (<code>claim_coverage_percent == 100.0</code>, zero missing/duplicate/unexpected verifier responses) — an incomplete run is a hard stop, never silently accepted.</td></tr></tbody></table></div>
+<h5 id="key-logic-what-independent-means-precisely">Key logic — what &quot;independent&quot; means precisely</h5>
+<ul><li>Splits claims into two disjoint verification paths, deliberately not both model-based:</li><li><code>description</code>, <code>condition</code>, <code>outcome</code>, <code>party</code>, <code>scope</code>, <code>exception</code> are verified by the LLM against an evidence packet the module <strong>rebuilds itself</strong> from the raw corpus.</li><li><code>condition_logic</code> and <code>test_vector</code> are <strong>excluded</strong> from model verification — they are pipeline-derived values, not sentences any document states verbatim, and asking a model for a literal quote scored near-100% false-insufficient in practice. These are verified <strong>structurally</strong> instead (predicate coverage, input/output consistency against declared variables).</li><li>Every model verdict of <code>supported</code>/<code>contradicted</code> is downgraded to <code>insufficient_evidence</code> unless the model&#x27;s cited quote resolves to a genuine substring of the real corpus text — a hallucinated citation cannot pass even if the model claims &quot;supported.&quot;</li><li><code>claim_coverage_percent</code> measures response-set <strong>completeness</strong> (did the verifier return exactly one verdict per claim, with none missing, duplicated, or unexpected) — a fail-closed integrity check on the verification pipeline itself, distinct from the actual supported/contradicted/insufficient outcome counts.</li></ul>
+<h4 id="agent_10-dependency-dag-generator"><code>agent_10</code> — Dependency DAG Generator</h4>
+<div class="table-wrap"><table><thead><tr><th></th><th></th></tr></thead><tbody><tr><td><strong>File</strong></td><td><code>agents/agent_10_dag_generator.py</code>, algorithm in <code>utils/dag_builder.py</code></td></tr><tr><td><strong>Purpose</strong></td><td>Deterministically partitions every rule into one or more directed acyclic graphs built from <code>agent_06</code>&#x27;s dependency edges, guaranteeing every rule appears in exactly one output DAG — cycles included.</td></tr><tr><td><strong>Inputs</strong></td><td>Optimized graph (falls back to the pre-optimization graph under <code>--skip-optimize</code>, where every rule becomes an isolated single-node DAG since dependency edges don&#x27;t exist yet).</td></tr><tr><td><strong>Outputs</strong></td><td><code>dependency_dags.json</code> — <code>dags[]</code> (<code>rule_ids, nodes, edges, cycle_groups, topological_order, is_acyclic</code>), <code>coverage{total_rules, covered_rules, complete}</code>, <code>dropped_edges</code>, <code>self_loop_edges</code>.</td></tr><tr><td><strong>Exit codes</strong></td><td>0 normally; <strong>2</strong> only if <code>coverage.complete</code> is somehow false — a real bug, since coverage is structurally guaranteed by construction.</td></tr></tbody></table></div>
+<h5 id="key-logic-the-100-coverage-guarantee-precisely">Key logic — the 100%-coverage guarantee, precisely</h5>
+<ul><li>Weakly-connected components (union-find over the undirected view of all edges) assign <em>every</em> rule, including zero-edge rules, to exactly one component; each component becomes exactly one DAG. The result is explicitly re-verified (<code>covered_ids == node_ids</code>, no duplicates) rather than assumed.</li><li>Within each component, Kosaraju&#x27;s two-pass DFS finds strongly connected components of any size; any SCC larger than one node is condensed into a single &quot;cycle group&quot; node. SCC-condensation of a directed graph is always acyclic, so a topological sort (Kahn&#x27;s algorithm) is guaranteed to succeed afterward.</li><li>Self-loops are reported separately and excluded from cycle detection; edges referencing an unknown <code>rule_id</code> are dropped and reported.</li></ul>
+<p><strong>Example</strong>: a cycle <code>R1 → R2 → R3 → R1</code> plus a downstream dependency <code>R3 → R4</code> condenses into one <code>cycle_groups</code> entry <code>{rule_ids: [R1, R2, R3]}</code>, with <code>R4</code> ordered strictly after that group in <code>topological_order</code>.</p>
+<h4 id="agent_11-executable-model-generator"><code>agent_11</code> — Executable Model Generator</h4>
+<div class="table-wrap"><table><thead><tr><th></th><th></th></tr></thead><tbody><tr><td><strong>File</strong></td><td><code>agents/agent_11_executable_model_generator.py</code></td></tr><tr><td><strong>Purpose</strong></td><td>Projects the final certified graph into standards-based executable/review artifacts — DMN, BPMN, CMMN, SBVR — validates them for internal consistency, and (additively, best-effort) lowers the graph into a separately provable LExec IR.</td></tr><tr><td><strong>Inputs</strong></td><td>Optimized graph (<code>agent_06</code>–<code>09</code>), <code>dependency_dags.json</code> (<code>agent_10</code>). Fails fast (exit 2) if either is missing.</td></tr><tr><td><strong>Outputs</strong></td><td><code>compliance_decisions.dmn</code>, <code>compliance_workflows.bpmn</code>, <code>compliance_reviews.cmmn</code>, <code>semantic_vocabulary_profile.json</code>, and best-effort <code>lexec_ir.json</code>/<code>compilation_report.json</code>/<code>proof_records.json</code>; <code>executable_model_report.json</code> summarizing rule/review/BPMN/CMMN counts.</td></tr><tr><td><strong>Exit codes</strong></td><td>0 on success; <strong>2</strong> if inputs are missing or DMN/BPMN/CMMN validation raises.</td></tr></tbody></table></div>
+<h5 id="key-logic-exact-order-of-operations">Key logic — exact order of operations</h5>
+<ol><li>Build DMN (<code>utils/executable_models.build_graph_dmn</code>) and BPMN (<code>build_dags_bpmn</code>).</li><li>Build CMMN (<code>utils/semantic_artifacts.build_review_cmmn</code>) and the SBVR profile (<code>build_sbvr_profile</code>).</li><li>Validate all four for internal consistency — <strong>any failure raises before anything is written to disk</strong>, so there is never a partial artifact set from a failed validation.</li><li>Write the four artifacts.</li><li>Best-effort: <code>compile_and_prove</code> (<code>utils/lexec_compile.py</code>) lowers the graph to LExec IR and runs bounded proof search, writing the three compiler artifacts. Wrapped in a bare exception handler that only warns — a compiler failure must never block or replace the artifacts already written in step 4.</li><li>Write the summary report.</li></ol>
+<p>A per-rule gate, <code>bpmn_eligibility</code>, decides DMN/CMMN-only vs. also-BPMN: it requires <code>workflow_semantics.kind == &quot;prescriptive_process&quot;</code>, <code>basis == &quot;explicit_in_source&quot;</code>, a non-empty trigger event and actor role, and direct evidence — &quot;a party plus an outcome is not a process.&quot; Rules failing this stay visible in DMN/CMMN, with the omission reason recorded in <code>bpmn_omissions</code>.</p>
+<h4 id="agent_12-business-knowledge-report"><code>agent_12</code> — Business Knowledge Report</h4>
+<div class="table-wrap"><table><thead><tr><th></th><th></th></tr></thead><tbody><tr><td><strong>File</strong></td><td><code>agents/agent_12_business_knowledge_report.py</code></td></tr><tr><td><strong>Purpose</strong></td><td>Renders the certified graph into a single, self-contained, source-traceable HTML dashboard for human exploration and review — never invents rules, concepts, or process semantics.</td></tr><tr><td><strong>Inputs</strong></td><td>Optimized graph (<code>agent_06</code>–<code>09</code>), <code>agent_11-executable-models/</code> (DMN/BPMN/CMMN + SBVR profile), organized-document text (for source-passage fallback lookup). Fails fast (exit 2) if the optimized graph is missing.</td></tr><tr><td><strong>Outputs</strong></td><td><code>business_knowledge_report.html</code> (zero external network calls — inline CSS/JS/SVG, no CDN, no webfonts) and <code>business_knowledge_report_manifest.json</code>. Six tabs: Overview (chart-based analytics — category/confidence/route/model-type/dependency-degree distributions, most-connected and isolated rules), SBVR vocabulary, Rule explorer (per-rule traceability breadcrumb and inline DMN/BPMN/CMMN diagrams), Relationships (click-to-highlight dependency graph with pan/zoom), Review queue (severity-triaged), and Source traceability.</td></tr><tr><td><strong>Exit codes</strong></td><td>0 on success; <strong>2</strong> if the optimized graph is missing or generation raises.</td></tr></tbody></table></div>
+<p>Agent 12 is a presentation-only stage. It renders every rule with a neutral 0–100 automation-readiness score composed of core grounding (40%), contextual grounding (20%), contract integrity (15%), evidence integrity (10%), executability (10%), and relationship support (5%). The score does not consume <code>requires_review</code> or <code>review_route</code>, does not claim to be an accuracy probability, and has no built-in acceptance threshold. Those operational decisions belong to the deployment environment and domain policy. The source graph retains the pipeline&#x27;s internal findings and routing metadata for audit and downstream model generation.</p>
+<p>The score is calculated from normalized component values in the inclusive range 0–100. Components and the final weighted result are rounded to one decimal place.</p>
+<div class="table-wrap"><table><thead><tr><th>Component</th><th>Weight</th><th>Exact component calculation</th><th>What 100 means</th><th>What 0 means</th></tr></thead><tbody><tr><td>Core grounding</td><td>40%</td><td><code>supported core claims / evaluated core claims × 100</code>; if claim counts are absent, a <code>certified</code> or <code>supported</code> status maps to 100 and any other status maps to 0.</td><td>Every evaluated description, condition, and outcome claim is supported.</td><td>No evaluated core claim is supported, or support was not reported.</td></tr><tr><td>Context grounding</td><td>20%</td><td><code>supported enrichment claims / evaluated enrichment claims × 100</code>, with the same status fallback as core grounding.</td><td>Every evaluated party, scope, and exception claim is supported.</td><td>No evaluated contextual claim is supported, or support was not reported.</td></tr><tr><td>Contract integrity</td><td>15%</td><td><code>supported contract claims / evaluated contract claims × 100</code>, with the same status fallback as core grounding.</td><td>Every evaluated structural contract claim is internally supported.</td><td>No evaluated contract claim is supported, or support was not reported.</td></tr><tr><td>Evidence integrity</td><td>10%</td><td><code>max(0, evidence records - invalid records - missing responses - duplicate responses) / evidence records × 100</code>. If no evidence records exist, zero recorded protocol defects maps to 100 and any recorded defect maps to 0. This measures verifier-protocol cleanliness, not source coverage.</td><td>The verifier recorded no invalid citations, missing responses, or duplicate responses.</td><td>Recorded evidence/protocol defects consume the available evidence-record count, or defects exist without evidence records.</td></tr><tr><td>Executability</td><td>10%</td><td>Four checks worth 25 points each: at least one execution target; a projection for every target; at least one test vector; and declared variables plus outcomes.</td><td>All four executable-projection checks are present.</td><td>None of the four executable-projection checks is present.</td></tr><tr><td>Relationship support</td><td>5%</td><td><code>relationship_status == &quot;supported&quot; ? 100 : 0</code>.</td><td>Emitted rule relationships are supported.</td><td>Relationship support is absent, failed, or unreported.</td></tr></tbody></table></div>
+<p>For component scores <span class="mathvar">C<sub>core</sub></span>, <span class="mathvar">C<sub>context</sub></span>, <span class="mathvar">C<sub>contract</sub></span>, <span class="mathvar">C<sub>evidence</sub></span>, <span class="mathvar">C<sub>execution</sub></span>, and <span class="mathvar">C<sub>relationship</sub></span>, the final score is:</p>
+<div class="formula">ARS = 0.40C<sub>core</sub> + 0.20C<sub>context</sub> + 0.15C<sub>contract</sub>     + 0.10C<sub>evidence</sub> + 0.10C<sub>execution</sub> + 0.05C<sub>relationship</sub></div>
+<p><code>ARS = 100</code> means all six measured components are complete under these definitions. It does <strong>not</strong> mean the rule is guaranteed correct, and it does not authorize automation. Each deployment defines its own acceptable score or additional gates based on domain risk, legal obligations, and operating controls.</p>
+<h3 id="24-orchestration-summary">2.4 Orchestration summary</h3>
+<p>The full run order and gating logic, tying every stage above together:</p>
+<ol><li><code>agent_01</code> → <code>agent_02</code> → <code>agent_03</code> — each a hard gate.</li><li><code>agent_04</code> — called, but its return value is discarded; advisory only.</li><li><code>agent_05</code> → <code>agent_06</code> — hard gates (unless <code>--skip-optimize</code>, which skips <code>agent_06</code>–<code>agent_08</code> entirely).</li><li><code>agent_07</code> — exit 3 with a valid readiness report enters <code>agent_08</code>; exit 2 may also enter only for a schema-only invariant failure. Both paths are followed by an <code>agent_07</code> recheck. Exit 1 and non-schema invariant failures stop immediately and cannot be misrouted by stale artifacts. A repeat exit-3 that is still fully invariant-passing is tolerated and the pipeline continues with rules flagged <code>requires_review</code>.</li><li><code>agent_09</code> — exit-3 tolerated only if the report shows complete, fail-closed coverage; otherwise hard stop.</li><li><code>agent_10</code> → <code>agent_11</code> → <code>agent_12</code> — hard gates.</li></ol>
+<p>A &quot;review-required&quot; state is therefore a legitimate terminal state throughout stages 07–09 — explicitly distinguished from a process/integrity failure via exit code 3 vs. 2 — and flows through to the final DMN/BPMN/CMMN artifacts with <code>requires_review</code>/<code>review_route</code> flags intact rather than blocking generation.</p>
+<h3 id="25-resume-and-checkpointing">2.5 Resume and checkpointing</h3>
+<p>Two independent mechanisms cooperate:</p>
+<ul><li><strong>Stage-level resume, via targeted re-selection.</strong> There is no separate <code>--resume</code>/<code>--resume-from</code> flag or persisted &quot;which stage completed&quot; state file. Instead, <code>--stage</code>/<code>--agent</code>/<code>--stages</code> (see <a href="https://github.com/rrahimi-uci/policy-logic-forge/blob/main/docs/cli.md#selecting-stages"><code>docs/cli.md</code></a>) read and write into the <em>same</em> <code>pipeline-output/&lt;batch-name&gt;/</code> directory as the original run, so re-running only the remaining stage(s) against that batch name picks up exactly where a failed or interrupted run left off, reusing every earlier stage&#x27;s already-written output as-is. <code>--stages 7-9 --keep-going</code> runs a contiguous or mixed set of stages in one invocation regardless of earlier per-stage failures.</li><li><strong>Item-level resume, inside a single stage.</strong> Agents 01, 03, 07, 08, and 09 each maintain their own append-only JSONL checkpoint (<code>agent_07_rule_checkpoint.jsonl</code> and similar) keyed by a content fingerprint, so an interrupted stage skips already-processed items on its next invocation instead of redoing them — independent of whether the outer orchestrator is resuming or running that stage fresh.</li></ul>
+<p>A shared adaptive concurrency limiter (<code>utils/adaptive_limiter.py</code>) governs API request pacing across every agent subprocess in a run, backed by a SQLite file so concurrently running batches share one budget.</p>
+<h2 id="3-module-architecture-utils">3. Module architecture (<code>utils/</code>)</h2>
+<p>Most of <code>utils/</code> is used directly by one or more agents with no interesting inter-module structure. The part worth diagramming is the compiler layer, because it is a genuine hub: <code>lexec_ir.py</code> is imported both by agent_11&#x27;s proof-checked compile path and by every RegDelta module that needs to read or evaluate that IR.</p>
+<div class="arch-mermaid"><pre class="mermaid">flowchart TB
+    classDef pipeline fill:#fae8ff,stroke:#a21caf,color:#701a75,stroke-width:1px
+    classDef core fill:#dcfce7,stroke:#15803d,color:#14532d,stroke-width:1px
+    classDef hub fill:#fef3c7,stroke:#b45309,color:#78350f,stroke-width:2px
+    classDef regdelta fill:#ffe4e6,stroke:#be123c,color:#881337,stroke-width:1px
+
+    A11[&quot;agent_11_executable_model_generator.py&quot;]:::pipeline
+    A12[&quot;agent_12_business_knowledge_report.py&quot;]:::pipeline
+
+    EM[&quot;executable_models.py&lt;br/&gt;(real DMN + BPMN emitter)&quot;]:::core
+    SA[&quot;semantic_artifacts.py&lt;br/&gt;(real CMMN + SBVR emitter)&quot;]:::core
+    LC[&quot;lexec_compile.py&quot;]:::core
+    IR[&quot;lexec_ir.py&quot;]:::hub
+    SMT[&quot;smt.py&lt;br/&gt;(bounded proof search)&quot;]:::core
+
+    OTHER[&quot;14 other utils/ modules&lt;br/&gt;config · llm_client · adaptive_limiter · agent_names&lt;br/&gt;prompt_manager · rule_contract · rule_uniqueness · dag_builder&lt;br/&gt;readiness · kg_readiness · citations · semantic_routing …&lt;br/&gt;&lt;i&gt;used directly by agents/, no internal utils/ dependencies&lt;/i&gt;&quot;]:::core
+
+    A11 --&gt; EM
+    A11 --&gt; SA
+    A12 --&gt; SA
+    A11 --&gt;|&quot;proof-checked path&quot;| LC
+    LC --&gt; IR
+    LC --&gt; SMT
+
+    subgraph RD[&quot;RegDelta-only — layered on utils/regdelta_engine.py&quot;]
+        RE[&quot;regdelta_engine.py&quot;]:::regdelta
+        RA[&quot;rule_alignment.py&quot;]:::regdelta
+        SD[&quot;semantic_diff.py&quot;]:::regdelta
+        IP[&quot;impact_propagation.py&quot;]:::regdelta
+        FEEL[&quot;feel.py&lt;br/&gt;(bounded evaluator)&quot;]:::regdelta
+    end
+
+    RE --&gt; RA
+    RE --&gt; SD
+    RE --&gt; IP
+    RE --&gt; FEEL
+    RE --&gt;|&quot;lower_graph&quot;| IR
+    FEEL --&gt;|&quot;validate_ir&quot;| IR</pre></div>
+<p>Note the two independent DMN/BPMN emitters, which is easy to conflate:</p>
+<ul><li><code>utils/executable_models.py</code> + <code>utils/semantic_artifacts.py</code> produce the <strong>real</strong> <code>compliance_decisions.dmn</code>, <code>compliance_workflows.bpmn</code>, <code>compliance_reviews.cmmn</code>, and <code>semantic_vocabulary_profile.json</code> in every run. This path never touches the compiler.</li><li><code>lexec_compile.py</code> → <code>lexec_ir.py</code>/<code>smt.py</code> produce a <strong>separate</strong>, proof-checked <code>lexec_ir.json</code> for the subset of rules the compiler can represent (no unsupported <code>scope.predicate</code>, no unproved hit-policy table). It is additive and best-effort: a compiler failure never blocks or replaces the review-projection output above.</li></ul>
+<h2 id="4-configuration-and-prompt-resolution">4. Configuration and prompt resolution</h2>
+<div class="arch-mermaid"><pre class="mermaid">flowchart TB
+    classDef file fill:#e0f2fe,stroke:#0369a1,color:#0c4a6e
+    classDef code fill:#dcfce7,stroke:#15803d,color:#14532d
+    classDef decision fill:#fef3c7,stroke:#b45309,color:#78350f
+
+    CFGJSON[(&quot;config.json&lt;br/&gt;(gitignored, local)&quot;)]:::file
+    CFGEX[(&quot;config.example.json&lt;br/&gt;(committed template)&quot;)]:::file
+    ENVF[(&quot;.env&lt;br/&gt;OPENAI_API_KEY&quot;)]:::file
+
+    CONFIGPY[&quot;utils/config.py&lt;br/&gt;Config singleton&quot;]:::code
+    CFGJSON --&gt; CONFIGPY
+    CFGEX -.-&gt;|&quot;fallback if missing&quot;| CONFIGPY
+    ENVF --&gt; CONFIGPY
+
+    DOMAIN{{&quot;--domain flag&lt;br/&gt;sets active domain&quot;}}:::decision
+    CONFIGPY --&gt; DOMAIN
+
+    PM[&quot;utils/prompt_manager.py&lt;br/&gt;PromptManager.load_prompt(name)&quot;]:::code
+    DOMAIN --&gt; PM
+
+    CHECK{{&quot;domain-prompts/&amp;lt;domain&amp;gt;/&amp;lt;name&amp;gt;.txt&lt;br/&gt;exists?&quot;}}:::decision
+    PM --&gt; CHECK
+    DOMPACK[(&quot;domain-prompts/&amp;lt;domain&amp;gt;/&lt;br/&gt;per-domain override pack&quot;)]:::file
+    SHAREDP[(&quot;prompts/&lt;br/&gt;shared fallback templates&quot;)]:::file
+    CHECK --&gt;|&quot;yes&quot;| DOMPACK
+    CHECK --&gt;|&quot;no&quot;| SHAREDP
+
+    AGENT[&quot;calling agent&lt;br/&gt;(e.g. agent_03, agent_07)&quot;]:::code
+    DOMPACK --&gt; AGENT
+    SHAREDP --&gt; AGENT</pre></div>
+<p><code>config.json</code> is gitignored and local-only; <code>config.example.json</code> is the committed, portable source of truth checked by <code>scripts/validate_config.py</code>. <code>Config</code> is a process-level singleton (<code>utils/config.py</code>), mutated in place by <code>set_batch_name</code>/<code>domain</code> — a real constraint for anything that might want to launch concurrent batches from the same Python process: each batch must be its own OS process, never an in-process call into <code>ExtractionPipeline</code>. Six domains are registered in <code>config.example.json</code>&#x27;s <code>domain.available</code> list; five have a dedicated <code>domain-prompts/&lt;domain&gt;/</code> override pack, and <code>mortgage</code> falls back entirely to the shared <code>prompts/</code> templates. <code>scripts/generate_benchmark_domain_prompts.py</code> is the source of truth for the generated <code>.txt</code> packs — regenerate from it rather than hand-editing the committed files.</p>
+<h2 id="5-regdelta-differential-execution-engine">5. RegDelta: differential-execution engine</h2>
+<p>Given two already-completed runs (an &quot;old&quot; and a &quot;new&quot; optimized graph), RegDelta answers <em>what changed, for whom, and what else does it affect</em> — without re-running the extraction pipeline.</p>
+<div class="arch-mermaid"><pre class="mermaid">flowchart LR
+    classDef input fill:#e0f2fe,stroke:#0369a1,color:#0c4a6e
+    classDef step fill:#ffe4e6,stroke:#be123c,color:#881337
+    classDef output fill:#e2e8f0,stroke:#334155,color:#1e293b
+
+    OLD[(&quot;old run&lt;br/&gt;optimized graph&quot;)]:::input
+    NEW[(&quot;new run&lt;br/&gt;optimized graph&quot;)]:::input
+
+    COMPILE[&quot;Compile both to&lt;br/&gt;LExec IR&quot;]:::step
+    ALIGN[&quot;Align rules&lt;br/&gt;rule_alignment.py&lt;br/&gt;(exact-ID today)&quot;]:::step
+    CLASSIFY[&quot;Classify each pair&lt;br/&gt;semantic_diff.py&lt;br/&gt;added · removed · changed · unchanged&quot;]:::step
+    PROPAGATE[&quot;Propagate impact&lt;br/&gt;impact_propagation.py&lt;br/&gt;Direct → Potential → Recompute&quot;]:::step
+    REPLAY[&quot;Replay scenarios&lt;br/&gt;feel.py evaluate_formula&lt;br/&gt;old vs new outcome&quot;]:::step
+
+    REPORT[&quot;regdelta-impact/1.0&lt;br/&gt;rule_alignments · semantic_changes ·&lt;br/&gt;affected_cases · witnesses ·&lt;br/&gt;downstream_impacts · refusals&quot;]:::output
+
+    OLD --&gt; COMPILE
+    NEW --&gt; COMPILE
+    COMPILE --&gt; ALIGN --&gt; CLASSIFY --&gt; PROPAGATE --&gt; REPLAY --&gt; REPORT</pre></div>
+<p>Key design choices, since they&#x27;re easy to get wrong by assumption:</p>
+<ul><li><strong>Alignment is exact-ID only, today.</strong> <code>rule_alignment.py</code> implements only the first stage of a five-stage alignment ladder (exact ID → source-section signature → predicate structure → semantic similarity → explicit review). It is sufficient when both runs share an ID namespace (a hand-edited fork of one graph); two independently re-extracted runs of the same document will not align well yet.</li><li><strong><code>Potential</code> is narrative reachability, not proven dependency.</strong> It walks <code>agent_10</code>&#x27;s dependency-DAG edges, which are extraction judgment calls about <em>narrative</em> dependency between rules, not a shared data-flow symbol. <code>Recompute</code> is <code>Potential</code> minus anything still <code>requires_review</code>, so a rule that can&#x27;t be safely re-evaluated is held for review rather than silently resolved.</li><li><strong>RegDelta deliberately does not use <code>utils/feel.py</code>&#x27;s <code>evaluate_ir</code>.</strong> That entry point forces <code>unknown</code> whenever a rule&#x27;s scope carries jurisdiction/party/effective-date metadata (a tested safety property — the evaluator has no real-world runtime context). RegDelta instead calls the same module&#x27;s side-effect-free <code>evaluate_formula</code> directly, because it&#x27;s asking &quot;does this rule&#x27;s own logic differ between two snapshots,&quot; not &quot;is this rule in force for a real transaction.&quot;</li><li><strong>Four-way status vocabulary, nothing silently dropped.</strong> Every rule in scope resolves to exactly one of <code>changed</code>, <code>unchanged</code>, <code>unresolved-review</code>, or <code>refused-unsupported-construct</code> — refused and review-held rules stay in the denominator of every reported metric.</li></ul>
+<p>See <a href="https://github.com/rrahimi-uci/policy-logic-forge/blob/main/plan/regdelta-product-plan.md"><code>plan/regdelta-product-plan.md</code></a> for the full rollout plan and acceptance criteria.</p>
+<h2 id="6-executable-model-formats">6. Executable model formats</h2>
+<p><code>agent_11</code> emits four standards-based artifacts per run. The examples below are not hand-written approximations — they are the <strong>actual, unedited output</strong> of <code>utils/executable_models.py</code> and <code>utils/semantic_artifacts.py</code>, executed against a small synthetic rule (&quot;transactions over $10,000 require compliance-officer approval&quot;) for this document. XML is reformatted from the generator&#x27;s real single-line output to multi-line for readability only; no element, attribute, or value was altered.</p>
+<div class="table-wrap"><table><thead><tr><th>Format</th><th>Namespace / schema</th><th>Real spec conformance</th></tr></thead><tbody><tr><td>DMN</td><td><code>https://www.omg.org/spec/DMN/20191111/MODEL/</code></td><td>DMN 1.3</td></tr><tr><td>BPMN</td><td><code>http://www.omg.org/spec/BPMN/20100524/MODEL</code></td><td>BPMN 2.0</td></tr><tr><td>CMMN</td><td><code>http://www.omg.org/spec/CMMN/20151109/MODEL</code></td><td>CMMN 1.1 (per the module&#x27;s own validator error text)</td></tr><tr><td>SBVR</td><td>n/a — plain JSON</td><td><code>&quot;conformance&quot;: &quot;pipeline_profile_not_full_sbvr_exchange&quot;</code> — explicitly <em>not</em> a full OMG SBVR interchange document</td></tr><tr><td>LExec IR</td><td>n/a — plain JSON</td><td><code>&quot;schema_version&quot;: &quot;lexec-ir/1.0&quot;</code> (internal, not a standards body format)</td></tr></tbody></table></div>
+<p>Every emitted document also carries a <code>ctc:</code> namespace (<code>https://github.com/rrahimi-uci/policy-logic-forge/executable/1</code>) with pipeline-specific audit attributes — <code>ctc:ruleId</code>, <code>ctc:requiresReview</code>, <code>ctc:groundingStatus</code>, <code>ctc:sourceRef</code> — so a reviewer can trace any element straight back to its source rule and citation without leaving the document.</p>
+<h3 id="61-dmn-compliance_decisionsdmn">6.1 DMN — <code>compliance_decisions.dmn</code></h3>
+<p>Source rule fed to <code>build_graph_dmn</code>:</p>
+<pre class="code-block" data-lang="python"><code>{
+    &quot;rule_id&quot;: &quot;R-101&quot;, &quot;rule_name&quot;: &quot;Large Transaction Approval&quot;,
+    &quot;requires_review&quot;: False, &quot;grounding&quot;: {&quot;status&quot;: &quot;certified&quot;},
+    &quot;condition_predicates&quot;: [
+        {&quot;variable&quot;: &quot;transaction_amount&quot;, &quot;operator&quot;: &quot;&gt;&quot;, &quot;value&quot;: 10000}
+    ],
+    &quot;variables&quot;: [
+        {&quot;name&quot;: &quot;transaction_amount&quot;, &quot;type&quot;: &quot;number&quot;, &quot;role&quot;: &quot;input&quot;},
+        {&quot;name&quot;: &quot;requires_approval&quot;, &quot;type&quot;: &quot;boolean&quot;, &quot;role&quot;: &quot;output&quot;},
+    ],
+    &quot;outcomes&quot;: [{&quot;variable&quot;: &quot;requires_approval&quot;, &quot;value&quot;: True}],
+    &quot;execution&quot;: {&quot;dmn&quot;: {&quot;hit_policy&quot;: &quot;UNIQUE&quot;}},
+    &quot;source_reference&quot;: {&quot;chunk_path&quot;: &quot;policy.txt&quot;, &quot;section_id&quot;: &quot;s1&quot;},
+}</code></pre>
+<p>Real generated output:</p>
+<pre class="code-block" data-lang="xml"><code>&lt;?xml version=&#x27;1.0&#x27; encoding=&#x27;utf-8&#x27;?&gt;
+&lt;dmn:definitions xmlns:ctc=&quot;https://github.com/rrahimi-uci/policy-logic-forge/executable/1&quot;
+                 xmlns:dmn=&quot;https://www.omg.org/spec/DMN/20191111/MODEL/&quot;
+                 id=&quot;definitions_compliance_graph&quot; name=&quot;Policy Logic Forge DMN&quot;
+                 namespace=&quot;https://github.com/rrahimi-uci/policy-logic-forge/executable/1&quot;
+                 exporter=&quot;policy-logic-forge&quot; exporterVersion=&quot;graph-projection/1&quot;&gt;
+  &lt;dmn:decision id=&quot;decision_R-101&quot; name=&quot;Large Transaction Approval&quot;
+                ctc:ruleId=&quot;R-101&quot; ctc:requiresReview=&quot;false&quot;
+                ctc:groundingStatus=&quot;certified&quot; ctc:sourceRef=&quot;policy.txt#s1&quot;&gt;
+    &lt;dmn:decisionTable id=&quot;table_R-101&quot; hitPolicy=&quot;UNIQUE&quot;&gt;
+      &lt;dmn:input id=&quot;input_R-101_transaction_amount&quot;&gt;
+        &lt;dmn:inputExpression typeRef=&quot;string&quot;&gt;
+          &lt;dmn:text&gt;transaction_amount&lt;/dmn:text&gt;
+        &lt;/dmn:inputExpression&gt;
+      &lt;/dmn:input&gt;
+      &lt;dmn:output id=&quot;output_R-101_requires_approval&quot; name=&quot;requires_approval&quot; typeRef=&quot;string&quot; /&gt;
+      &lt;dmn:rule id=&quot;row_R-101&quot;&gt;
+        &lt;dmn:inputEntry&gt;
+          &lt;dmn:text&gt;&amp;gt; 10000&lt;/dmn:text&gt;
+        &lt;/dmn:inputEntry&gt;
+        &lt;dmn:outputEntry&gt;
+          &lt;dmn:text&gt;true&lt;/dmn:text&gt;
+        &lt;/dmn:outputEntry&gt;
+      &lt;/dmn:rule&gt;
+    &lt;/dmn:decisionTable&gt;
+  &lt;/dmn:decision&gt;
+&lt;/dmn:definitions&gt;</code></pre>
+<p><strong>Real quirk worth knowing before reading generated output elsewhere:</strong> <code>typeRef</code> is <code>&quot;boolean&quot;</code> only when a variable&#x27;s declared type is literally <code>boolean</code>; every other type — including <code>number</code>, as here — defaults to <code>&quot;string&quot;</code>. Output columns are always <code>typeRef=&quot;string&quot;</code> unconditionally. The FEEL comparison text itself (<code>&gt; 10000</code>) is numerically correct; only the declared column type is imprecise. An unsupported predicate fails closed to a literal <code>false</code> <code>inputEntry</code> rather than being silently omitted.</p>
+<h3 id="62-bpmn-compliance_workflowsbpmn">6.2 BPMN — <code>compliance_workflows.bpmn</code></h3>
+<p>Additional fields fed to <code>build_dags_bpmn</code> (only rules passing <code>bpmn_eligibility</code> reach this emitter — see §2.3&#x27;s <code>agent_11</code> entry):</p>
+<pre class="code-block" data-lang="python"><code>rule[&quot;responsible_party&quot;] = &quot;COMPLIANCE_OFFICER&quot;
+rule[&quot;workflow_semantics&quot;] = {
+    &quot;kind&quot;: &quot;prescriptive_process&quot;, &quot;basis&quot;: &quot;explicit_in_source&quot;,
+    &quot;trigger_event&quot;: &quot;Transaction submitted&quot;, &quot;actor_role&quot;: &quot;COMPLIANCE_OFFICER&quot;,
+    &quot;ordered_steps&quot;: [
+        {&quot;step_id&quot;: &quot;review&quot;, &quot;name&quot;: &quot;Review transaction&quot;, &quot;kind&quot;: &quot;user_task&quot;},
+        {&quot;step_id&quot;: &quot;decide&quot;, &quot;name&quot;: &quot;Apply approval decision&quot;, &quot;kind&quot;: &quot;business_rule_task&quot;},
+    ],
+    &quot;evidence&quot;: [{&quot;chunk_path&quot;: &quot;policy.txt&quot;, &quot;section_id&quot;: &quot;s1&quot;,
+                  &quot;source_text&quot;: &quot;Upon submission, review the transaction and apply the approval decision.&quot;}],
+}</code></pre>
+<p>Real generated output:</p>
+<pre class="code-block" data-lang="xml"><code>&lt;?xml version=&#x27;1.0&#x27; encoding=&#x27;utf-8&#x27;?&gt;
+&lt;bpmn:definitions xmlns:bpmn=&quot;http://www.omg.org/spec/BPMN/20100524/MODEL&quot;
+                  xmlns:ctc=&quot;https://github.com/rrahimi-uci/policy-logic-forge/executable/1&quot;
+                  id=&quot;definitions_compliance_graph&quot; name=&quot;Policy Logic Forge BPMN&quot;
+                  targetNamespace=&quot;https://github.com/rrahimi-uci/policy-logic-forge/executable/1&quot;
+                  exporter=&quot;policy-logic-forge&quot; exporterVersion=&quot;explicit-workflow/2&quot;&gt;
+  &lt;bpmn:process id=&quot;process_R-101&quot; name=&quot;Large Transaction Approval&quot; isExecutable=&quot;true&quot;
+                ctc:ruleId=&quot;R-101&quot; ctc:sourceRef=&quot;policy.txt#s1&quot;
+                ctc:triggerEvent=&quot;Transaction submitted&quot; ctc:actorRole=&quot;COMPLIANCE_OFFICER&quot;&gt;
+    &lt;bpmn:startEvent id=&quot;start_1&quot; name=&quot;Transaction submitted&quot; /&gt;
+    &lt;bpmn:userTask id=&quot;step_R-101_review&quot; name=&quot;Review transaction&quot; ctc:ruleId=&quot;R-101&quot; /&gt;
+    &lt;bpmn:sequenceFlow id=&quot;flow_1_1&quot; sourceRef=&quot;start_1&quot; targetRef=&quot;step_R-101_review&quot; /&gt;
+    &lt;bpmn:businessRuleTask id=&quot;step_R-101_decide&quot; name=&quot;Apply approval decision&quot;
+                            implementation=&quot;##DMN&quot; ctc:ruleId=&quot;R-101&quot; ctc:decisionRef=&quot;decision_R-101&quot; /&gt;
+    &lt;bpmn:sequenceFlow id=&quot;flow_1_2&quot; sourceRef=&quot;step_R-101_review&quot; targetRef=&quot;step_R-101_decide&quot; /&gt;
+    &lt;bpmn:endEvent id=&quot;end_1&quot; /&gt;
+    &lt;bpmn:sequenceFlow id=&quot;flow_1_end&quot; sourceRef=&quot;step_R-101_decide&quot; targetRef=&quot;end_1&quot; /&gt;
+  &lt;/bpmn:process&gt;
+&lt;/bpmn:definitions&gt;</code></pre>
+<p><strong>Real quirk:</strong> <code>build_dags_bpmn</code> accepts a <code>dags</code> argument (the DAG partition from <code>agent_10</code>) but explicitly discards it — dependency order between <em>different</em> rules is never process order within <em>one</em> rule&#x27;s workflow. Only that rule&#x27;s own <code>workflow_semantics.ordered_steps</code> drives sequence flow. No <code>bpmn:lane</code>/<code>laneSet</code> elements are ever emitted; the actor role is tracked only as a <code>ctc:actorRole</code> attribute. <code>businessRuleTask</code> carries <code>implementation=&quot;##DMN&quot;</code> and a <code>ctc:decisionRef</code> pointing at the matching DMN decision id, linking the two documents.</p>
+<h3 id="63-cmmn-compliance_reviewscmmn">6.3 CMMN — <code>compliance_reviews.cmmn</code></h3>
+<p>Source rules fed to <code>build_review_cmmn</code>:</p>
+<pre class="code-block" data-lang="python"><code>{&quot;rule_id&quot;: &quot;R-101&quot;, &quot;rule_name&quot;: &quot;Large Transaction Approval&quot;,
+ &quot;review_route&quot;: {&quot;route&quot;: &quot;human_review&quot;, &quot;human_review_required&quot;: True,
+                   &quot;reasons&quot;: [&quot;2 contradicted claims&quot;]}}
+# a second rule with review_route.route == &quot;machine_repair&quot; produces no case at all</code></pre>
+<p>Real generated output:</p>
+<pre class="code-block" data-lang="xml"><code>&lt;?xml version=&#x27;1.0&#x27; encoding=&#x27;utf-8&#x27;?&gt;
+&lt;cmmn:definitions xmlns:cmmn=&quot;http://www.omg.org/spec/CMMN/20151109/MODEL&quot;
+                  xmlns:ctc=&quot;https://github.com/rrahimi-uci/policy-logic-forge/executable/1&quot;
+                  id=&quot;definitions_policy_review&quot;
+                  targetNamespace=&quot;https://github.com/rrahimi-uci/policy-logic-forge/executable/1&quot;
+                  exporter=&quot;policy-logic-forge&quot; exporterVersion=&quot;review-routing/1&quot;&gt;
+  &lt;cmmn:case id=&quot;case_R-101&quot; name=&quot;Large Transaction Approval&quot;
+             ctc:ruleId=&quot;R-101&quot; ctc:reviewRoute=&quot;human_review&quot;&gt;
+    &lt;cmmn:casePlanModel id=&quot;plan_R-101&quot; name=&quot;Resolve policy evidence findings&quot;&gt;
+      &lt;cmmn:humanTask id=&quot;review_task_R-101&quot; name=&quot;Review grounded findings&quot; /&gt;
+      &lt;cmmn:planItem id=&quot;review_item_R-101&quot; definitionRef=&quot;review_task_R-101&quot; /&gt;
+      &lt;cmmn:milestone id=&quot;resolved_R-101&quot; name=&quot;Review resolved&quot; /&gt;
+      &lt;cmmn:planItem id=&quot;resolved_item_R-101&quot; definitionRef=&quot;resolved_R-101&quot; /&gt;
+    &lt;/cmmn:casePlanModel&gt;
+  &lt;/cmmn:case&gt;
+&lt;/cmmn:definitions&gt;</code></pre>
+<p><strong>Real quirk:</strong> only rules routed to <code>human_review</code> or <code>case_management</code> produce a <code>case</code> at all — <code>machine_repair</code> and any other route are correctly omitted. Every case is structurally identical: exactly one <code>humanTask</code> (&quot;Review grounded findings&quot;) plus one <code>milestone</code> (&quot;Review resolved&quot;), regardless of rule content. There is no <code>sentry</code>/<code>entryCriterion</code> element anywhere in this generator — case progression is not conditionally gated.</p>
+<h3 id="64-sbvr-semantic_vocabulary_profilejson">6.4 SBVR — <code>semantic_vocabulary_profile.json</code></h3>
+<p>Source graph fed to <code>build_sbvr_profile</code>:</p>
+<pre class="code-block" data-lang="python"><code>{
+    &quot;entity_types&quot;: {
+        &quot;COMPLIANCE_OFFICER&quot;: {&quot;definition&quot;: &quot;The role responsible for reviewing flagged transactions.&quot;,
+                                &quot;concept_kind&quot;: &quot;actor_role&quot;,
+                                &quot;source_evidence&quot;: [{&quot;chunk_path&quot;: &quot;policy.txt&quot;, &quot;section_id&quot;: &quot;s1&quot;}]},
+        &quot;TRANSACTION&quot;: {&quot;definition&quot;: &quot;A monetary transfer subject to compliance review.&quot;},
+    },
+    &quot;relationships&quot;: {
+        &quot;REQUIRES_APPROVAL_FROM&quot;: {
+            &quot;source_entity&quot;: &quot;TRANSACTION&quot;, &quot;target_entity&quot;: &quot;COMPLIANCE_OFFICER&quot;,
+            &quot;grounding&quot;: {&quot;status&quot;: &quot;supported&quot;},
+            &quot;source_evidence&quot;: [{&quot;chunk_path&quot;: &quot;policy.txt&quot;, &quot;section_id&quot;: &quot;s1&quot;}],
+        },
+    },
+}</code></pre>
+<p>Real generated output (full):</p>
+<pre class="code-block" data-lang="json"><code>{
+  &quot;profile_type&quot;: &quot;sbvr_aligned_semantic_vocabulary&quot;,
+  &quot;conformance&quot;: &quot;pipeline_profile_not_full_sbvr_exchange&quot;,
+  &quot;concept_kinds&quot;: [
+    &quot;actor_role&quot;, &quot;business_object&quot;, &quot;decision_variable&quot;, &quot;event&quot;, &quot;evidence_object&quot;, &quot;process&quot;
+  ],
+  &quot;concepts&quot;: [
+    {
+      &quot;concept_id&quot;: &quot;COMPLIANCE_OFFICER&quot;,
+      &quot;preferred_term&quot;: &quot;Compliance Officer&quot;,
+      &quot;definition&quot;: &quot;The role responsible for reviewing flagged transactions.&quot;,
+      &quot;concept_kind&quot;: &quot;actor_role&quot;,
+      &quot;source_evidence&quot;: [{&quot;chunk_path&quot;: &quot;policy.txt&quot;, &quot;section_id&quot;: &quot;s1&quot;}]
+    },
+    {
+      &quot;concept_id&quot;: &quot;TRANSACTION&quot;,
+      &quot;preferred_term&quot;: &quot;Transaction&quot;,
+      &quot;definition&quot;: &quot;A monetary transfer subject to compliance review.&quot;,
+      &quot;concept_kind&quot;: &quot;unresolved&quot;,
+      &quot;source_evidence&quot;: []
+    }
+  ],
+  &quot;fact_types&quot;: [
+    {
+      &quot;fact_type_id&quot;: &quot;REQUIRES_APPROVAL_FROM&quot;,
+      &quot;subject_concept&quot;: &quot;TRANSACTION&quot;,
+      &quot;verb_term&quot;: &quot;requires approval from&quot;,
+      &quot;object_concept&quot;: &quot;COMPLIANCE_OFFICER&quot;,
+      &quot;grounding_status&quot;: &quot;supported&quot;,
+      &quot;source_evidence&quot;: [{&quot;chunk_path&quot;: &quot;policy.txt&quot;, &quot;section_id&quot;: &quot;s1&quot;}]
+    }
+  ],
+  &quot;unresolved_concept_ids&quot;: [&quot;TRANSACTION&quot;]
+}</code></pre>
+<p><strong>Real quirk:</strong> <code>TRANSACTION</code> had no <code>concept_kind</code> in its input, so it is typed <code>&quot;unresolved&quot;</code> and listed in <code>unresolved_concept_ids</code> — a fail-closed default, not an error. <code>preferred_term</code> is generated deterministically from the concept id (<code>&quot;TRANSACTION&quot;.replace(&quot;_&quot;, &quot; &quot;).title()</code>), and <code>verb_term</code> from the fact-type id — neither is a model-authored paraphrase.</p>
+<h3 id="65-lexec-ir-lexec_irjson-the-proof-checked-side-channel">6.5 LExec IR — <code>lexec_ir.json</code> (the proof-checked side channel)</h3>
+<p>Minimal v2 rule that compiles cleanly, fed to <code>lower_graph</code>:</p>
+<pre class="code-block" data-lang="python"><code>{
+    &quot;schema_version&quot;: &quot;2.0&quot;, &quot;rule_id&quot;: &quot;r_large_txn_approval&quot;, &quot;rule_type&quot;: &quot;obligation&quot;,
+    &quot;condition_predicates&quot;: [{&quot;predicate_id&quot;: &quot;p_amount&quot;, &quot;variable&quot;: &quot;transaction_amount&quot;,
+                               &quot;operator&quot;: &quot;&gt;&quot;, &quot;value&quot;: 10000, &quot;value_type&quot;: &quot;number&quot;}],
+    &quot;condition_logic&quot;: {&quot;all&quot;: [{&quot;predicate_ref&quot;: &quot;p_amount&quot;}]},
+    &quot;outcomes&quot;: [{&quot;variable&quot;: &quot;requires_approval&quot;, &quot;operator&quot;: &quot;=&quot;, &quot;value&quot;: True, &quot;value_type&quot;: &quot;boolean&quot;}],
+    &quot;variables&quot;: [
+        {&quot;name&quot;: &quot;transaction_amount&quot;, &quot;type&quot;: &quot;number&quot;, &quot;role&quot;: &quot;input&quot;},
+        {&quot;name&quot;: &quot;requires_approval&quot;, &quot;type&quot;: &quot;boolean&quot;, &quot;role&quot;: &quot;output&quot;},
+    ],
+    &quot;recommended_hit_policy&quot;: &quot;UNIQUE&quot;, &quot;mandatory&quot;: True,
+    &quot;source_reference&quot;: {&quot;chunk_path&quot;: &quot;fixture/aml_policy.txt&quot;, &quot;section_id&quot;: &quot;sec_4_2&quot;,
+                          &quot;source_text&quot;: &quot;Transactions exceeding $10,000 require compliance officer approval before processing.&quot;},
+}</code></pre>
+<p>Real generated output (condition + effect excerpt):</p>
+<pre class="code-block" data-lang="json"><code>&quot;condition&quot;: {
+  &quot;op&quot;: &quot;and&quot;,
+  &quot;args&quot;: [
+    {&quot;op&quot;: &quot;gt&quot;, &quot;left&quot;: {&quot;symbol&quot;: &quot;transaction_amount&quot;}, &quot;right&quot;: {&quot;literal&quot;: 10000, &quot;type&quot;: &quot;real&quot;}}
+  ]
+},
+&quot;exceptions&quot;: [],
+&quot;effects&quot;: [
+  {
+    &quot;kind&quot;: &quot;assignment&quot;, &quot;modality&quot;: &quot;obligation&quot;, &quot;target&quot;: &quot;requires_approval&quot;,
+    &quot;value&quot;: {&quot;literal&quot;: true, &quot;type&quot;: &quot;bool&quot;},
+    &quot;provenance&quot;: [{&quot;chunk_path&quot;: &quot;fixture/aml_policy.txt&quot;, &quot;section_id&quot;: &quot;sec_4_2&quot;,
+                     &quot;start_offset&quot;: 0, &quot;end_offset&quot;: 85, &quot;source_sha256&quot;: &quot;aaa…a&quot;}]
+  }
+]</code></pre>
+<p><strong>Real quirk:</strong> <code>transaction_amount</code> lowers to theory <code>real</code>, not <code>int</code> — v2&#x27;s <code>number</code> type is always conservatively treated as a real; the IR never infers an integer theory from an integral-looking value (<a href="https://github.com/rrahimi-uci/policy-logic-forge/blob/main/docs/ir-semantics-v1.md"><code>docs/ir-semantics-v1.md</code></a>). The full document additionally carries <code>semantics</code> (<code>null_model: kleene_three_valued</code>, <code>unknown_at_table_boundary: refuse</code>, <code>exception_reading: defeater_or</code>), a <code>tables</code> entry with <code>policy_proof.status: &quot;unknown&quot;</code> until <code>smt.py</code> proves it, and empty <code>refusals</code>/<code>ignored_fields</code> arrays for a rule this simple.</p>
+<h2 id="7-directory-reference">7. Directory reference</h2>
+<pre class="code-block" data-lang="text"><code>cli/                         orchestrators
+  extract.py                   agent_01–agent_12 pipeline runner
+  generate_executable_models.py  regenerate DMN/BPMN from an existing graph + DAGs
+agents/                      one zero-padded module per pipeline agent
+utils/                       shared services, compiler/proof layer, RegDelta engine
+compliance-files/&lt;domain&gt;/   source documents (gitignored, local)
+domain-prompts/&lt;domain&gt;/     per-domain extraction prompt overrides
+prompts/                     shared prompts (v2 rule contract, readiness/grounding/remediation)
+scripts/                     fixture builders, config/prompt-pack validators
+fixtures/regdelta/           hand-labeled fixtures for RegDelta&#x27;s acceptance tests
+results/aggregates/          retained run-evidence manifests (metadata only)
+docs/                        compiler/semantics notes + retained validation records
+plan/                        RegDelta product plan + LExec IR schema
+pipeline-output/&lt;batch&gt;/     run output (gitignored, regenerable)
+tests/                       pytest suite</code></pre>
+<h3 id="pipeline-outputbatch-layout"><code>pipeline-output/&lt;batch&gt;/</code> layout</h3>
+<p>Mirrors the stage table in §2.1 exactly:</p>
+<pre class="code-block" data-lang="text"><code>pipeline-output/&lt;batch&gt;/
+├── pipeline_run_state.json                    resume checkpoint
+├── agent_01-organized-documents/
+├── agent_02-entities/
+├── agent_03-rules/
+├── agent_04-validation/
+├── agent_05-rules-with-entities/
+├── agent_06-07-08-09-optimized/
+│   ├── optimized_compliance_knowledge_graph.json
+│   ├── kg_readiness_report.{json,md}
+│   ├── kg_grounding_report.{json,md}
+│   └── agent_0{7,8,9}_*_checkpoint.jsonl
+├── agent_10-dag-generation/
+│   └── dependency_dags.json
+├── agent_11-executable-models/
+│   ├── compliance_decisions.dmn
+│   ├── compliance_workflows.bpmn
+│   ├── compliance_reviews.cmmn
+│   ├── semantic_vocabulary_profile.json
+│   └── lexec_ir.json, compilation_report.json, proof_records.json
+└── agent_12-business-knowledge-report/
+    ├── business_knowledge_report.html
+    └── business_knowledge_report_manifest.json</code></pre>
+<h2 id="8-testing">8. Testing</h2>
+<p>No API key is required to run the suite — it tests contract validation, readiness/grounding logic, dependency-DAG partitioning, prompt-pack consistency, the LExec compiler/evaluator/proof search, and RegDelta&#x27;s alignment/diff/propagation engine against fixed graphs and prompt files, not live extraction runs.</p>
+<ul><li><strong>Unit/contract tests</strong> (<code>tests/test_agent_*</code>, <code>test_lexec_*</code>, <code>test_smt_*</code>, <code>test_feel*</code>, <code>test_readiness*</code>) — one file per agent/module, run against synthetic fixtures.</li><li><strong>RegDelta acceptance tests</strong> (<code>test_regdelta_engine.py</code>, <code>test_mortgage_tier1_fixture.py</code>, <code>test_regdelta_tier1_fixtures.py</code>, <code>test_mortgage_tier2_extraction.py</code>) — assert 100% agreement with hand-labeled outcomes over <code>fixtures/regdelta/</code>, including that incremental recomputation exactly matches full replay.</li><li><strong>Retained-run regression tests</strong> (<code>test_pipeline_smoke_manifest.py</code>, <code>test_full_smallest_run_manifest.py</code>) — pin configuration, stage status, and content hashes from real provider-backed runs, retained under <code>results/aggregates/</code>.</li></ul>
+<pre class="code-block" data-lang="bash"><code>.venv/bin/python scripts/validate_config.py
+pytest</code></pre>
+    <div class="arch-footer-nav">
+      <a class="btn btn-primary-alt" href="index.html">← Back to overview</a>
+      <a class="btn btn-ghost-alt" href="https://github.com/rrahimi-uci/policy-logic-forge">View source on GitHub →</a>
+    </div>
+  </main>
+</div>
+
+<footer>
+  <div class="wrap footer-grid">
+    <div>
+      <a class="brand" href="index.html"><span class="brand-mark" aria-hidden="true"></span>Policy Logic Forge</a>
+      <p class="muted">&copy; 2026 Reza Rahimi. MIT Licensed.</p>
+    </div>
+    <div class="links">
+      <a href="https://github.com/rrahimi-uci/policy-logic-forge">GitHub</a>
+      <a href="https://github.com/rrahimi-uci/policy-logic-forge/blob/main/README.md">README</a>
+      <a href="index.html">Landing page</a>
+      <a href="https://github.com/rrahimi-uci/policy-logic-forge/blob/main/LICENSE">License</a>
+    </div>
+  </div>
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/10.9.3/mermaid.min.js"></script>
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: "base",
+    securityLevel: "strict",
+    themeVariables: {
+      fontFamily: "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif",
+      fontSize: "13.5px",
+      primaryColor: "#eef1ff",
+      primaryBorderColor: "#5b5bd6",
+      primaryTextColor: "#101826",
+      lineColor: "#8b93ab",
+      edgeLabelBackground: "#f6f8fb"
+    }
+  });
+</script>
+</body>
+</html>
