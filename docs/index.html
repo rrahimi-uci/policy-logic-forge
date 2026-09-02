@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Policy Logic Forge</title>
-<meta name="description" content="Turns compliance policy text into a typed, source-grounded knowledge graph — with claim-level independent verification, honest quality metrics, and real DMN/BPMN/CMMN/SBVR output.">
+<meta name="description" content="Turns compliance policy text into a typed, source-grounded knowledge graph — with claim-level independent verification and real DMN/BPMN/CMMN/SBVR output.">
 <style>
   :root{
     --ink:#101826; --muted:#5b6b83; --line:#e3e8f0; --paper:#fff; --wash:#f6f8fb;
@@ -69,9 +69,12 @@
   .hero .eyebrow{color:#7ee9cf}
   .hero h1{font-size:clamp(32px,4.6vw,50px); color:#fff; margin:0 0 18px}
   .hero p.lede{color:#c4cde5; font-size:18px; max-width:none}
-  .hero-stats{display:flex; gap:28px; margin-top:28px; flex-wrap:wrap}
-  .hero-stat b{display:block; font-size:26px; color:#fff}
-  .hero-stat span{font-size:12.5px; color:#93a1c4}
+  .hero-badges{display:flex; gap:10px; margin-top:26px; flex-wrap:wrap}
+  .hero-badge{
+    display:inline-flex; align-items:center; gap:6px; font-size:12.5px; font-weight:700;
+    padding:8px 13px; border-radius:999px; background:rgba(126,233,207,.1);
+    border:1px solid rgba(126,233,207,.32); color:#c9f5e8;
+  }
   .hero-actions{margin-top:30px; display:flex; gap:12px; flex-wrap:wrap}
   .btn{
     display:inline-block; padding:12px 20px; border-radius:10px; font-weight:700;
@@ -120,38 +123,13 @@
   table.stage-table tr.gate-row{background:#fff9ef}
   table.stage-table code{font-size:12px; color:var(--violet)}
 
-  /* ---- results ---- */
-  .results-layout{display:grid; grid-template-columns:1fr 1fr; gap:44px; align-items:center}
-  .metric-list{list-style:none; margin:22px 0 0; padding:0; display:grid; gap:14px}
-  .metric-list li{
-    display:grid; grid-template-columns:76px 1fr; gap:16px; align-items:center;
-    padding:12px 0; border-bottom:1px solid var(--line);
-  }
-  .metric-list li:last-child{border-bottom:0}
-  .metric-num{font-size:26px; font-weight:800; color:var(--ink)}
-  .metric-label{font-size:14px; color:var(--muted)}
-  .metric-list li.headline .metric-num{color:var(--amber)}
   .callout{
     border-left:4px solid var(--teal); background:#effaf7; border-radius:8px;
     padding:14px 18px; font-size:14.5px; color:#0b5c4c; margin-top:20px;
   }
-  .results-chart svg{width:100%; height:auto; overflow:visible}
-  .rc-label{font-size:11.5px; font-weight:700; fill:var(--ink)}
-  .rc-value{font-size:12px; font-weight:800; fill:var(--ink)}
-  .rc-track{fill:var(--wash)}
-  .rc-fill.rc-teal{fill:var(--teal)}
-  .rc-fill.rc-violet{fill:var(--violet)}
-  .rc-fill.rc-amber{fill:var(--amber)}
-  .muted-note{color:var(--muted); font-size:13px; margin:18px 0 0}
 
   /* ---- verification ---- */
   .verify-block{display:grid; grid-template-columns:1fr 1fr; gap:36px; align-items:start}
-  .verify-stat{
-    display:inline-flex; align-items:baseline; gap:10px; background:var(--ink); color:#fff;
-    border-radius:12px; padding:16px 20px; margin-top:6px;
-  }
-  .verify-stat b{font-size:30px}
-  .verify-stat span{font-size:13px; color:#c3cbdb}
 
   /* ---- standards ---- */
   .standards-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-top:26px}
@@ -184,7 +162,7 @@
     .hero-figure{order:-1}
     nav.links{display:none}
     .grid-2, .grid-3, .problem-grid, .standards-grid{grid-template-columns:1fr}
-    .results-layout, .verify-block{grid-template-columns:1fr}
+    .verify-block{grid-template-columns:1fr}
   }
 </style>
 </head>
@@ -194,8 +172,8 @@
   <div class="nav-inner">
     <a class="brand" href="#top"><span class="brand-mark" aria-hidden="true"></span>Policy Logic Forge</a>
     <nav class="links">
+      <a href="#the-problem">The problem</a>
       <a href="#how-it-works">How it works</a>
-      <a href="#results">Results</a>
       <a href="#verification">Verification</a>
       <a href="#standards">Standards output</a>
       <a href="architecture.html">Architecture</a>
@@ -209,17 +187,17 @@
   <div class="wrap">
     <div>
       <span class="eyebrow">Open source · MIT licensed</span>
-      <h1>83.1% of the rules went on hold. That was the useful result.</h1>
+      <h1>Extraction that proves its work, not just cites it.</h1>
       <p class="lede">Policy Logic Forge turns compliance policy text into a typed,
-        source-grounded knowledge graph — every rule independently verified
-        against the source document, not just cited. It separates
-        "does this point to a source," "is each claim supported," and "is
-        this rule safe to auto-execute" into three different, honestly
-        reported numbers instead of collapsing them into one.</p>
-      <div class="hero-stats">
-        <div class="hero-stat"><b>100%</b><span>rules with source pointers</span></div>
-        <div class="hero-stat"><b>91.9%</b><span>grounding claims supported</span></div>
-        <div class="hero-stat"><b>13.1%</b><span>true human-review rate</span></div>
+        source-grounded knowledge graph. Every rule is independently
+        re-verified against the source document — not just cited — and the
+        system draws a hard line between three different questions: does
+        this point to a source, is each claim actually supported, and is
+        this rule safe to execute unattended.</p>
+      <div class="hero-badges">
+        <span class="hero-badge">Independently re-verified against source</span>
+        <span class="hero-badge">Fail-closed by default</span>
+        <span class="hero-badge">Real DMN · BPMN · CMMN · SBVR output</span>
       </div>
       <div class="hero-actions">
         <a class="btn btn-primary" href="https://github.com/rrahimi-uci/policy-logic-forge">Explore the code</a>
@@ -312,14 +290,15 @@
   <div class="hero-spacer"></div>
 </section>
 
-<section class="tight">
+<section id="the-problem" class="tight">
   <div class="wrap">
     <span class="eyebrow">The problem</span>
     <h2>One quality number usually hides three different questions</h2>
-    <p class="lede">On a real 1,191-page mortgage policy guide, 522 of 628
-      extracted rules — 83.1% — landed on a quality hold. Read on its own,
-      that looks like a system that mostly doesn't work. It isn't; it's a
-      single number standing in for questions that need separate answers.</p>
+    <p class="lede">Naive LLM extraction gives you one confidence-flavored
+      number and hopes you don't ask what it means. That number is almost
+      always quietly averaging three fundamentally different questions
+      together — and treating a passing average as permission to trust
+      every individual rule it covers.</p>
     <div class="problem-grid">
       <div class="problem-card">
         <div class="q">📎</div>
@@ -400,38 +379,6 @@ flowchart LR
   </div>
 </section>
 
-<section id="results">
-  <div class="wrap">
-    <span class="eyebrow">Real results, decomposed honestly</span>
-    <h2>The same run, reported as five separate signals</h2>
-    <div class="results-layout">
-      <div>
-        <p class="lede">This is the actual snapshot from the 628-rule
-          mortgage run that produced the 83.1% headline number above —
-          broken into the questions that number was quietly averaging
-          together.</p>
-        <ul class="metric-list">
-          <li><span class="metric-num">100%</span><span class="metric-label">of rules had a source pointer</span></li>
-          <li><span class="metric-num">91.9%</span><span class="metric-label">of individual grounding claims were supported</span></li>
-          <li><span class="metric-num">17.7%</span><span class="metric-label">of complete rules passed strict whole-rule grounding certification</span></li>
-          <li><span class="metric-num">13.1%</span><span class="metric-label">of rules required actual human judgment</span></li>
-          <li class="headline"><span class="metric-num">83.1%</span><span class="metric-label">remained on an automated quality hold — a fail-closed default, not a failure report</span></li>
-        </ul>
-      </div>
-      <div class="panel results-chart">
-        <svg viewBox="0 0 460 260" role="img" aria-label="Bar chart: 100% source pointers, 91.9% claims supported, 17.7% grounding certified, 13.1% human review, 83.1% quality hold">
-          <g class="rc-bar"><text x="0" y="14" class="rc-label">Source pointers</text><rect x="0" y="22" width="460" height="20" rx="5" class="rc-track"/><rect x="0" y="22" width="460" height="20" rx="5" class="rc-fill rc-teal"/><text x="466" y="38" class="rc-value">100%</text></g>
-          <g class="rc-bar" transform="translate(0,48)"><text x="0" y="14" class="rc-label">Claims supported</text><rect x="0" y="22" width="460" height="20" rx="5" class="rc-track"/><rect x="0" y="22" width="422.7" height="20" rx="5" class="rc-fill rc-teal"/><text x="428.7" y="38" class="rc-value">91.9%</text></g>
-          <g class="rc-bar" transform="translate(0,96)"><text x="0" y="14" class="rc-label">Whole-rule grounding-certified</text><rect x="0" y="22" width="460" height="20" rx="5" class="rc-track"/><rect x="0" y="22" width="81.4" height="20" rx="5" class="rc-fill rc-violet"/><text x="87.4" y="38" class="rc-value">17.7%</text></g>
-          <g class="rc-bar" transform="translate(0,144)"><text x="0" y="14" class="rc-label">True human-review rate</text><rect x="0" y="22" width="460" height="20" rx="5" class="rc-track"/><rect x="0" y="22" width="60.3" height="20" rx="5" class="rc-fill rc-violet"/><text x="66.3" y="38" class="rc-value">13.1%</text></g>
-          <g class="rc-bar" transform="translate(0,192)"><text x="0" y="14" class="rc-label">Quality hold (fail-closed default)</text><rect x="0" y="22" width="460" height="20" rx="5" class="rc-track"/><rect x="0" y="22" width="382.3" height="20" rx="5" class="rc-fill rc-amber"/><text x="388.3" y="38" class="rc-value">83.1%</text></g>
-        </svg>
-        <p class="muted-note">Same run, same 628 rules — five different, honestly separated questions. Source: the pipeline's own grounding and readiness reports.</p>
-      </div>
-    </div>
-  </div>
-</section>
-
 <section id="verification" class="wash">
   <div class="wrap">
     <span class="eyebrow">Independent verification</span>
@@ -443,19 +390,25 @@ flowchart LR
           weak, catching only the clearest false positives. It exists
           because it isn't the last line of defense: independent grounding
           verification is.</p>
-        <p>On a real mortgage-domain run, that independent pass — <code>agent_09</code>,
-          run separately from extraction — found that a large share of
-          claimed dependency/conflict relationships did not actually hold
-          up once checked structurally, despite having already passed the
-          pipeline's own deterministic guard.</p>
+        <p>A second, fully independent pass — <code>agent_09</code> — re-derives
+          evidence for every claim straight from the raw corpus, rather than
+          trusting what extraction already recorded. It shares no code path,
+          no prompt, and no state with extraction, so a mistake made during
+          extraction has to independently survive a second, differently-built
+          check before it's ever accepted.</p>
       </div>
       <div>
-        <div class="verify-stat"><b>44%</b><span>of dependency/conflict claims did not<br>hold up under independent verification</span></div>
-        <p style="margin-top:16px;color:var(--muted);font-size:14px">Every model verdict of <em>supported</em>/<em>contradicted</em>
+        <p style="color:var(--muted);font-size:14.5px">Every model verdict of <em>supported</em>/<em>contradicted</em>
           is downgraded to <em>insufficient evidence</em> unless the cited
           quote resolves to a genuine substring of the real corpus text —
           a hallucinated citation cannot pass, even if the model insists
           it's supported.</p>
+        <p style="color:var(--muted);font-size:14.5px">Claims that are pipeline-derived rather than sentences any
+          document states verbatim — condition logic, test vectors — are
+          deliberately excluded from this model-based check and verified
+          <strong>structurally</strong> instead: predicate coverage,
+          input/output consistency against the rule's own declared
+          variables.</p>
       </div>
     </div>
   </div>
@@ -491,9 +444,10 @@ flowchart LR
       <div class="standard-card">
         <span class="tag">SBVR</span>
         <p>A governed business vocabulary kept honestly separate from
-          executable decision variables — one run: 26 governed concepts
-          alongside 3,148 rule-local decision variables, not the same
-          number wearing two names.</p>
+          executable decision variables — a rule-local predicate isn't
+          promoted into the vocabulary just because it exists, so the
+          concept catalog stays a real glossary instead of a symbol
+          dump.</p>
       </div>
     </div>
   </div>
