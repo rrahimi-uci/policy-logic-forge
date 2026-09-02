@@ -139,8 +139,10 @@ def _apply_assignments(
     by_symbol = {attribute.symbol: attribute for attribute in model.unassigned}
     by_class = {klass.name: klass for klass in model.classes}
     proposed_new: dict[str, list[Any]] = {}
+    proposed_value_objects: dict[str, list[Any]] = {}
     stats = {"accepted": 0, "unclear": 0, "rejected_unknown_symbol": 0,
-             "rejected_unknown_class": 0, "rejected_bad_shape": 0, "value_objects": 0}
+             "rejected_unknown_class": 0, "rejected_bad_shape": 0,
+             "rejected_flag_class": 0, "value_objects": 0}
     placed: set[str] = set()
 
     for item in assignments:
@@ -166,10 +168,7 @@ def _apply_assignments(
         value_object = str(item.get("value_object") or "").strip()
 
         if value_object:
-            attribute.review_reasons = attribute.review_reasons + (
-                f"proposed component of value object {pascal_case(value_object)}",
-            )
-            stats["value_objects"] += 1
+            proposed_value_objects.setdefault(pascal_case(value_object), []).append(attribute)
 
         if owner and owner in by_class:
             by_class[owner].attributes.append(attribute)
@@ -183,10 +182,20 @@ def _apply_assignments(
         else:
             stats["unclear"] += 1
 
-    # A proposed class only becomes real once enough attributes back it; the
-    # prompt asks for three, and a class that thin is a label, not a model.
+    # A proposed class only becomes real once enough attributes back it, and
+    # once those attributes describe business state rather than rule outcomes.
+    #
+    # The prompt already forbids modelling a class out of compliance flags, and
+    # on a real run the model did it anyway -- proposing a `Lender` whose eight
+    # attributes were all booleans recording whether a policy had been met.
+    # Those are evaluation results, not what a lender *is*. A prompt cannot be
+    # relied on for a rule that matters, so it is enforced here: a proposed
+    # class needs at least two attributes that are not booleans, which any real
+    # business entity has (an identifier, an amount, a date, a category).
+    # Rejected attributes go back to unassigned with the reason, never silently.
     for name, members in proposed_new.items():
-        if len(members) >= 3 and name not in by_class:
+        substantive = [a for a in members if a.type != "Boolean"]
+        if len(members) >= 3 and len(substantive) >= 2 and name not in by_class:
             model.classes.append(Klass(
                 name=name,
                 concept_id=concept_of.get(name.lower(), name),
@@ -198,12 +207,42 @@ def _apply_assignments(
             ))
             stats["accepted"] += len(members)
         else:
+            reason = (
+                f"proposed class {name!r} carried only compliance flags, not business state"
+                if len(members) >= 3 and len(substantive) < 2
+                else f"proposed class {name!r} was not supported by enough attributes"
+            )
+            if len(members) >= 3 and len(substantive) < 2:
+                stats["rejected_flag_class"] += 1
             for attribute in members:
                 placed.discard(attribute.symbol)
                 attribute.needs_review = True
+                attribute.review_reasons = attribute.review_reasons + (reason,)
+
+    # Materialise value objects: a composite with no identity of its own, whose
+    # components are always handled together (a money-with-currency pair, an
+    # address, a date range). Two components are the minimum -- a "value object"
+    # wrapping one attribute is just that attribute with an extra hop.
+    for name, members in proposed_value_objects.items():
+        if len(members) < 2 or name in by_class:
+            for attribute in members:
+                attribute.needs_review = True
                 attribute.review_reasons = attribute.review_reasons + (
-                    f"proposed class {name!r} was not supported by enough attributes",
+                    f"proposed value object {name!r} had too few components to stand alone",
                 )
+            continue
+        model.classes.append(Klass(
+            name=name,
+            concept_id=name,
+            description="",
+            stereotype="value_object",
+            attributes=sorted(members, key=lambda a: a.name),
+            needs_review=True,
+            review_reasons=("value object proposed during modelling; confirm it has no identity of its own",),
+        ))
+        for attribute in members:
+            placed.add(attribute.symbol)
+        stats["value_objects"] += 1
 
     model.unassigned = [a for a in model.unassigned if a.symbol not in placed]
     for klass in model.classes:
@@ -272,6 +311,14 @@ def generate(
                 for a in model.unassigned
             ]
             batches = [payload[i:i + batch_size] for i in range(0, len(payload), batch_size)]
+            # A bounded run is genuinely useful beyond testing: it lets a smoke
+            # check exercise the real modelling path without paying for the whole
+            # corpus, and lets a large graph be modelled incrementally.
+            cap = int(os.getenv("KG_INFORMATION_MODEL_MAX_BATCHES", "0") or 0)
+            if cap > 0 and len(batches) > cap:
+                print(f"   modelling capped at {cap} of {len(batches)} batches "
+                      f"(KG_INFORMATION_MODEL_MAX_BATCHES)", flush=True)
+                batches = batches[:cap]
             concept_of = {pascal_case(k).lower(): k for k in (graph.get("entity_types") or {})}
             assignments: list[dict[str, Any]] = []
             for index, batch in enumerate(batches, 1):
