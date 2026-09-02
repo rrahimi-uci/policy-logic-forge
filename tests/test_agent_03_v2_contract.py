@@ -108,6 +108,82 @@ def test_agent_three_requests_json_mode_on_initial_and_parse_retry():
                for call in extractor.client.calls)
 
 
+def test_agent_three_compact_retry_has_independent_transport_budget(monkeypatch):
+    """A connection reset must not consume the only compact-response retry."""
+
+    class _Client:
+        def __init__(self):
+            self.calls = []
+            self.responses = iter([
+                SimpleNamespace(choices=[SimpleNamespace(
+                    message=SimpleNamespace(content=""), finish_reason="length"
+                )]),
+                RuntimeError("Connection error"),
+                SimpleNamespace(choices=[SimpleNamespace(
+                    message=SimpleNamespace(
+                        content='{"entity_types": {}, "relationships": {}}'
+                    ),
+                    finish_reason="stop",
+                )]),
+            ])
+
+        def chat_completion(self, **kwargs):
+            self.calls.append(kwargs)
+            response = next(self.responses)
+            if isinstance(response, Exception):
+                raise response
+            return response
+
+    monkeypatch.setenv("KG_BATCH_MAX_ATTEMPTS", "2")
+    monkeypatch.setenv("KG_BATCH_EMPTY_RESPONSE_ATTEMPTS", "1")
+    monkeypatch.setattr("agents.agent_03_rules_extractor.time.sleep", lambda _: None)
+    extractor = object.__new__(BusinessRulesExtractor)
+    extractor.client = _Client()
+    extractor.reasoning_effort = "high"
+    extractor.global_config = SimpleNamespace(
+        get_rules_max_tokens=lambda: 128,
+        get_rules_temperature=lambda: 0.0,
+    )
+    extractor._request_gate = None
+
+    result = extractor.extract_batch("extract rules", batch_num=1)
+
+    assert "error" not in result
+    assert result["total_rules"] == 0
+    assert len(extractor.client.calls) == 3
+    assert extractor.client.calls[1]["messages"] == extractor.client.calls[2]["messages"]
+
+
+def test_agent_three_rejects_nonempty_length_truncated_recovery(monkeypatch):
+    """Partial JSON with finish_reason=length never reaches downstream parsing."""
+
+    class _Client:
+        def __init__(self):
+            self.calls = 0
+
+        def chat_completion(self, **kwargs):
+            self.calls += 1
+            return SimpleNamespace(choices=[SimpleNamespace(
+                message=SimpleNamespace(content='{"entity_types": {}'),
+                finish_reason="length",
+            )])
+
+    monkeypatch.setenv("KG_BATCH_EMPTY_RESPONSE_ATTEMPTS", "1")
+    extractor = object.__new__(BusinessRulesExtractor)
+    extractor.client = _Client()
+    extractor.reasoning_effort = "high"
+    extractor.global_config = SimpleNamespace(
+        get_rules_max_tokens=lambda: 128,
+        get_rules_temperature=lambda: 0.0,
+    )
+    extractor._request_gate = None
+
+    result = extractor.extract_batch("extract rules", batch_num=1)
+
+    assert result["error"] == "Empty response after compact retries"
+    assert extractor.client.calls == 2
+
+
 def test_agent_three_strictly_repairs_single_malformed_json_object():
     """A recoverable delimiter error is repaired without accepting prose."""
 
