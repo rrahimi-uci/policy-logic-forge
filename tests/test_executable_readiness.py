@@ -1275,6 +1275,7 @@ def test_review_required_rules_without_v2_violations_do_not_fail_schema_consiste
 
     assert report["rules_requiring_review"] > 0
     assert report["invariants"]["schema_consistency"]["pass"] is True
+    assert all(rule.get("readiness", {}).get("status") == "review_required" for rule in final_graph["business_rules"])
 
 
 def test_normalise_rule_contract_repairs_fact_id_shape_and_collisions():
