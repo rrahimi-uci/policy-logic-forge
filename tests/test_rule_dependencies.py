@@ -316,6 +316,25 @@ def test_derive_relations_keeps_the_kinds_separate():
     assert payload["counts"]["dependencies"] == len(result.dependencies)
 
 
+def test_malformed_entries_are_skipped_rather_than_raising():
+    """Junk in the rule list must degrade, not crash.
+
+    Preserves the guarantee the removed agent_06 robustness test held: a
+    non-dict entry, a rule with no id, and rules missing whole sections all
+    have to pass through derivation without raising.
+    """
+    rules = [
+        "not-a-dict",
+        {"rule_id": ""},                                   # unusable id
+        {"rule_id": "R1"},                                 # no predicates/outcomes/variables
+        {"rule_id": "R2", "outcomes": ["not-a-dict"], "condition_predicates": None},
+        _rule("R3", writes=["x"]),
+        _rule("R4", reads=["x"]),
+    ]
+    result = derive_relations({"business_rules": rules})
+    assert [(r.source_rule_id, r.target_rule_id) for r in result.dependencies] == [("R3", "R4")]
+
+
 def test_empty_graph_produces_nothing_rather_than_failing():
     result = derive_relations({"business_rules": []})
     assert result.as_dict()["counts"] == {

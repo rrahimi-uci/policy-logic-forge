@@ -67,6 +67,7 @@ __all__ = [
     "revalidate",
     "refusal_for_declared_kind",
     "derive_relations",
+    "revalidate_graph",
 ]
 
 
@@ -601,3 +602,69 @@ def derive_relations(
             result.refusals.append(refusal)
     result.refusals.sort(key=lambda r: r.kind)
     return result
+
+
+def revalidate_graph(graph: Mapping[str, Any], *, stage: str = "") -> dict[str, Any]:
+    """Re-check stored relations against the graph as it now stands, in place.
+
+    Derivation and repair are separate stages.  Readiness and remediation
+    rewrite variables in place -- renaming an output into a list-typed
+    ``allowed_*_values`` form, for instance -- which can invalidate a relation
+    derived beforehand.  A real run shipped an edge asserting a rule produced
+    ``transaction_type`` after that output had been renamed, carrying
+    ``structurally_supported: true`` and a confidence of 98.6, because nothing
+    re-checked it.
+
+    Dropped relations are removed from the graph and returned, so the loss is
+    visible in the stage report rather than silent.  A relation stored without
+    ``symbols`` (from a graph produced before symbols were recorded) is checked
+    for any surviving write/read overlap instead, which is the weaker condition
+    the older model used.
+    """
+    details = graph.get("dependency_details")
+    if not isinstance(details, Mapping):
+        return {"stage": stage, "checked": 0, "held": 0, "dropped": []}
+
+    stored = [entry for entry in (details.get("dependencies") or []) if isinstance(entry, Mapping)]
+    rules = {_rule_id(rule): rule for rule in _rules_of(graph)}
+
+    held_payload, dropped_payload = [], []
+    for entry in stored:
+        source = rules.get(str(entry.get("source_rule_id") or ""))
+        target = rules.get(str(entry.get("target_rule_id") or ""))
+        symbols = tuple(normalise(s) for s in (entry.get("symbols") or []) if normalise(s))
+        if source is None or target is None:
+            holds = False
+        elif symbols:
+            holds = relation_holds(Relation(
+                source_rule_id=str(entry.get("source_rule_id")),
+                target_rule_id=str(entry.get("target_rule_id")),
+                kind=normalise(entry.get("dependency_type")) or "dataflow",
+                symbols=symbols, directed=True, basis="", rationale="",
+            ), graph)
+        else:
+            holds = bool(rule_writes(source) & rule_reads(target))
+        (held_payload if holds else dropped_payload).append(entry)
+
+    if isinstance(details, dict):
+        details["dependencies"] = held_payload
+        details["revalidation"] = {
+            "stage": stage,
+            "checked": len(stored),
+            "held": len(held_payload),
+            "dropped": len(dropped_payload),
+        }
+    return {
+        "stage": stage,
+        "checked": len(stored),
+        "held": len(held_payload),
+        "dropped": [
+            {
+                "source_rule_id": entry.get("source_rule_id"),
+                "target_rule_id": entry.get("target_rule_id"),
+                "dependency_type": entry.get("dependency_type"),
+                "reason": "acceptance condition no longer holds after this stage rewrote the graph",
+            }
+            for entry in dropped_payload
+        ],
+    }

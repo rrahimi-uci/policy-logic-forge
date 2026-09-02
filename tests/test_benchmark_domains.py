@@ -49,7 +49,6 @@ RUNTIME_DOMAIN_PROMPTS = [
     "entity_extraction_compact",
     "business_rules_extraction_compact",
     "rule_deduplication",
-    "dependency_analysis",
     "rule_matcher_batch",
 ]
 

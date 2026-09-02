@@ -550,6 +550,27 @@ class GroundingVerifier:
         for index, dependency in enumerate(details.get("dependencies", []) or []):
             if not isinstance(dependency, Mapping):
                 continue
+            # A relation derived from the rule contracts is not a claim about
+            # the source text, so asking a model to find it there is both
+            # wasteful and wrong: the derivation is the proof, and
+            # rule_dependencies.revalidate_graph re-checks it whenever the
+            # graph changes. Only narrative relations still need grounding.
+            if str(dependency.get("basis") or "").strip().lower() in {"deterministic", "solver"}:
+                deterministic.append({
+                    "relationship_id": f"@dependency:{index}",
+                    "field_path": f"dependency_details.dependencies[{index}]",
+                    "status": "supported",
+                    "affected_rule_ids": [
+                        str(dependency.get("source_rule_id", "")),
+                        str(dependency.get("target_rule_id", "")),
+                    ],
+                    "reasoning": (
+                        f"Derived deterministically from the rule contracts on "
+                        f"{', '.join(str(s) for s in (dependency.get('symbols') or [])) or 'shared symbols'}; "
+                        "re-validated against the current graph."
+                    ),
+                })
+                continue
             rule_ids = [str(dependency.get("source_rule_id", "")), str(dependency.get("target_rule_id", ""))]
             structured = {**dict(dependency), "affected_rule_ids": rule_ids}
             packets.append({

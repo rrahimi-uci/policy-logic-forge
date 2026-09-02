@@ -26,6 +26,7 @@ from agents.agent_07_executable_readiness import (
     _report_markdown,
 )
 from utils.config import get_config
+from utils.rule_dependencies import revalidate_graph
 from utils.kg_readiness import source_document_index
 from utils.llm_client import create_llm_client
 from utils.prompt_manager import get_prompt_manager
@@ -661,6 +662,14 @@ class ReadinessRemediator:
         baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
         graph = json.loads(graph_path.read_text(encoding="utf-8"))
         final_graph, report = self.remediate(baseline, graph, organized_dir, output_dir)
+        # Remediation renames and retypes variables (a list-typed output becomes
+        # an ``allowed_*_values`` form, for instance), so relations derived
+        # earlier must be re-checked before this graph is written.
+        revalidation = revalidate_graph(final_graph, stage="agent_08")
+        if revalidation["dropped"]:
+            print(f"⚠️  agent_08 dropped {len(revalidation['dropped'])} rule relationship(s) "
+                  f"invalidated by remediation", flush=True)
+        report["relation_revalidation"] = revalidation
         graph_path.write_text(json.dumps(final_graph, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         (output_dir / "corpus_manifest.json").write_text(json.dumps(final_graph["corpus_manifest"], indent=2) + "\n", encoding="utf-8")
         (output_dir / "kg_readiness_report.json").write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
