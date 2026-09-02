@@ -80,6 +80,7 @@ def test_graph_dependencies_and_conflicts_are_bounded_or_deterministic(tmp_path)
     )
 
     assert any(packet["claims"][0]["claim_type"] == "dependency" for packet in packets)
+    assert not any(item["relationship_id"].startswith("@dependency:") for item in deterministic)
     assert deterministic[0]["relationship_id"] == "@conflict:0"
 
 
@@ -764,12 +765,16 @@ def test_failed_relationship_does_not_blanket_fail_independently_grounded_rules(
         graph, organized, tmp_path / "output"
     )
 
-    assert report["pass"] is False
+    assert report["pass"] is True
     assert report["rule_grounding_pass"] is True
-    assert report["relationship_grounding_pass"] is False
+    assert report["relationship_grounding_pass"] is True
+    assert report["relationship_candidates_rejected"] == 1
     assert report["rules_certified"] == report["total_rules"] == 2
     assert all(rule["grounding"]["status"] == "certified" for rule in final_graph["business_rules"])
     assert any(rule["grounding"]["relationship_status"] == "failed" for rule in final_graph["business_rules"])
+    assert final_graph["dependency_details"]["dependencies"] == []
+    rejected, = final_graph["dependency_details"]["relationship_candidates"]
+    assert rejected["admission"] == "rejected_candidate"
 
 
 def test_test_vector_with_no_inputs_or_outputs_is_insufficient():

@@ -26,6 +26,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils.prompt_manager import get_prompt_manager
 from utils.llm_client import create_llm_client
 from utils.config import get_config
+from utils.scope import scope_shape_issues, scopes_may_overlap
 
 
 def validation_exit_code(report: Dict[str, Any]) -> int:
@@ -269,49 +270,56 @@ class RuleValidationAgent:
         print(f"  • Rules not independently scored: {len(missing_confidence)}")
     
     def _validate_numeric_consistency(self, rules: List[Dict], report: Dict):
-        """Check for numeric threshold inconsistencies."""
-        import re
-        
-        # Extract numeric patterns from rules
-        numeric_rules = {}
-        
+        """Flag incompatible numeric assignments under the same conditions.
+
+        Numbers mentioned in prose are not comparable thresholds.  This check
+        uses the structured contract and flags only two rules that assign
+        different numeric values to the same typed fact under identical
+        predicates and potentially overlapping scope.
+        """
+        candidates: Dict[tuple, List[Dict[str, Any]]] = {}
         for rule in rules:
-            rule_id = rule.get('rule_id', 'UNKNOWN')
-            description = rule.get('description', '')
-            
-            # Find numbers in description
-            numbers = re.findall(r'\d+\.?\d*', description)
-            
-            if numbers:
-                # Create a normalized key for similar rules
-                desc_normalized = description.lower()
-                key_terms = ['credit score', 'ltv', 'dti', 'loan amount', 'down payment']
-                
-                for term in key_terms:
-                    if term in desc_normalized:
-                        if term not in numeric_rules:
-                            numeric_rules[term] = []
-                        numeric_rules[term].append({
-                            'rule_id': rule_id,
-                            'numbers': numbers,
-                            'description': description[:200]
-                        })
-        
-        # Check for inconsistencies
+            declarations = {
+                str(item.get("name") or "").strip().casefold(): item
+                for item in rule.get("variables", []) or [] if isinstance(item, dict)
+            }
+            condition_key = json.dumps(
+                {
+                    "predicates": rule.get("condition_predicates") or [],
+                    "logic": rule.get("condition_logic"),
+                },
+                sort_keys=True,
+                ensure_ascii=False,
+                default=str,
+            )
+            for outcome in rule.get("outcomes", []) or []:
+                if not isinstance(outcome, dict) or not isinstance(outcome.get("value"), (int, float)):
+                    continue
+                local_name = str(outcome.get("variable") or "").strip().casefold()
+                declaration = declarations.get(local_name, {})
+                fact_id = str(declaration.get("fact_id") or local_name).strip().casefold()
+                key = (
+                    fact_id,
+                    str(declaration.get("type") or outcome.get("value_type") or "").casefold(),
+                    str(declaration.get("unit") or "").casefold(),
+                    condition_key,
+                )
+                candidates.setdefault(key, []).append({
+                    "rule_id": rule.get("rule_id", "UNKNOWN"),
+                    "value": outcome.get("value"),
+                    "scope": rule.get("applicability_scope"),
+                })
+
         inconsistencies = []
-        for term, term_rules in numeric_rules.items():
-            if len(term_rules) > 1:
-                # Compare numbers across rules
-                unique_numbers = set()
-                for tr in term_rules:
-                    unique_numbers.update(tr['numbers'])
-                
-                # If multiple different thresholds for same concept, flag it
-                if len(unique_numbers) > 1:
+        for (fact_id, _type, _unit, _conditions), assignments in candidates.items():
+            for index, left in enumerate(assignments):
+                for right in assignments[index + 1:]:
+                    if left["value"] == right["value"] or not scopes_may_overlap(left["scope"], right["scope"]):
+                        continue
                     inconsistencies.append({
-                        'term': term,
-                        'rules': [tr['rule_id'] for tr in term_rules],
-                        'thresholds': list(unique_numbers)
+                        "term": fact_id,
+                        "rules": [left["rule_id"], right["rule_id"]],
+                        "thresholds": [left["value"], right["value"]],
                     })
         
         if inconsistencies:
@@ -319,7 +327,7 @@ class RuleValidationAgent:
                 report['warnings'].append({
                     "check": "numeric_consistency",
                     "severity": "medium",
-                    "issue": f"Inconsistent thresholds for '{incon['term']}'",
+                    "issue": f"Different numeric assignments for fact '{incon['term']}' under identical conditions",
                     "rules": incon['rules'],
                     "thresholds": incon['thresholds'],
                     "recommendation": "Review rules for correct thresholds or contextual differences"
@@ -441,17 +449,14 @@ class RuleValidationAgent:
                     "recommendation": "Use a valid audit_frequency value"
                 })
             
-            scope = rule.get('applicability_scope', {})
-            if scope and isinstance(scope, dict):
-                for scope_key in ['loan_types', 'occupancy_types', 'transaction_types']:
-                    if scope_key not in scope or not isinstance(scope.get(scope_key), list):
-                        report['warnings'].append({
-                            "rule_id": rule_id,
-                            "check": "scope_validation",
-                            "severity": "medium",
-                            "issue": f"applicability_scope missing or invalid '{scope_key}' array",
-                            "recommendation": f"Ensure applicability_scope.{scope_key} is a non-empty array"
-                        })
+            for scope_issue in scope_shape_issues(rule.get('applicability_scope')):
+                report['warnings'].append({
+                    "rule_id": rule_id,
+                    "check": "scope_validation",
+                    "severity": "medium",
+                    "issue": scope_issue,
+                    "recommendation": "Use domain-defined scope dimensions with list values"
+                })
 
             # Validate structured source_reference
             src_ref = rule.get('source_reference', rule.get('legacy_source_reference', ''))

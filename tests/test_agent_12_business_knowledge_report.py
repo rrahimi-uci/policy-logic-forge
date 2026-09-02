@@ -118,6 +118,17 @@ def test_automation_readiness_is_policy_neutral_and_ignores_review_flags():
     assert set(first["components"]) == set(first["weights"])
 
 
+def test_readiness_does_not_award_evidence_or_relationship_points_for_absence():
+    rule = _graph()["business_rules"][0]
+    rule["grounding"].pop("evidence_records", None)
+    rule["grounding"].pop("relationship_claim_count", None)
+
+    readiness = _automation_readiness(rule)
+
+    assert readiness["components"]["Evidence integrity"] == 0.0
+    assert readiness["components"]["Relationship support"] is None
+
+
 def test_model_badges_html_marks_present_and_absent_kinds():
     model_rule_ids = {"DMN": {"R-1", "R-2"}, "BPMN": {"R-1"}, "CMMN": set()}
     html = _model_badges_html("R-1", model_rule_ids)

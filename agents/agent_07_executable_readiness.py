@@ -21,6 +21,7 @@ from utils.citations import normalise_text, repair_citation
 from utils.config import get_config
 from utils.feel_expression import compile_feel_expression, evaluate_feel_expression
 from utils.rule_dependencies import revalidate_graph
+from utils.rule_gating import make_entailment_oracle
 from utils.kg_readiness import (
     CANONICAL_ENTITY_RE,
     cited_sections,
@@ -39,6 +40,7 @@ from utils.llm_client import create_llm_client
 from utils.prompt_manager import get_prompt_manager
 from utils.rule_contract import annotate_rule_contract, quarantine_non_actor_counterparties
 from utils.rule_contract import EXCEPTION_BASES, SCOPE_BASES, validate_rule_v2
+from utils.scope import newly_populated_dimension_count, populated_scope
 from utils.semantic_routing import bpmn_eligibility
 
 # Completion fields that every downstream reader (kg_readiness.final_rule_issues,
@@ -1755,7 +1757,7 @@ def _normalise_final_evidence_states(rule: dict[str, Any], corpus: Mapping[str, 
 
     scope = rule.get("applicability_scope")
     scope_map = scope if isinstance(scope, Mapping) else {}
-    has_dimension = any(bool(scope_map.get(key)) for key in ("loan_types", "occupancy_types", "transaction_types"))
+    has_dimension = bool(populated_scope(scope_map))
     derivation = rule.get("scope_derivation")
     derivation_map = derivation if isinstance(derivation, Mapping) else {}
     complete_scope_review = (
@@ -2365,9 +2367,8 @@ class ExecutableReadinessCompleter:
 
         def finish_rule(index: int, original: Mapping[str, Any], completion: Mapping[str, Any] | None = None) -> tuple[int, dict[str, Any]]:
             rule = deepcopy(dict(original))
-            rule.setdefault("applicability_scope", {})
-            for key in ("loan_types", "occupancy_types", "transaction_types"):
-                rule["applicability_scope"].setdefault(key, [])
+            if not isinstance(rule.get("applicability_scope"), dict):
+                rule["applicability_scope"] = {}
             packet = self._evidence_packet(rule, corpus)
             cache_key = self._fingerprint(rule, packet)
             cached = self._checkpoint.get(cache_key)
@@ -2409,15 +2410,11 @@ class ExecutableReadinessCompleter:
                     derivation["reviewed_chunk_count"] = corpus.get("chunk_count", 0)
                     derivation["corpus_sha256"] = corpus.get("corpus_sha256")
             _recover_source_reference(rule, packet)
-            # Re-apply after the merge, not just before it: a completion's own
-            # applicability_scope (richer, but not obligated to repeat every
-            # standard key) replaces the pre-completion default wholesale
-            # above, which can silently drop a standard key the resolver
-            # didn't happen to populate.
+            # Re-apply the universal shape guard after the merge. Dimension
+            # names are domain-owned; this stage must not inject mortgage keys
+            # into privacy, contracts, or any future domain.
             if not isinstance(rule.get("applicability_scope"), dict):
                 rule["applicability_scope"] = {}
-            for key in ("loan_types", "occupancy_types", "transaction_types"):
-                rule["applicability_scope"].setdefault(key, [])
             _verify_completion_evidence(rule, corpus)
             _sync_completion_field_evidence(rule)
             rule = _normalise_rule_contract(rule)
@@ -2832,7 +2829,7 @@ class ExecutableReadinessCompleter:
             },
             "conflicts_and_dependencies": {"entities_checked": len(groups), "conflicts_found": len(conflicts), "dependency_chains_derived": len(chains), "conflict_examples": conflicts[:3], "non_conflict_examples": non_conflicts[:max(10, 3)], "conflict_example_shortfall": max(0, 3 - len(conflicts)), "non_conflict_example_shortfall": max(0, 3 - len(non_conflicts)), "cycles": cycles},
             "exception_recheck": {"rules_starting_with_not_found_in_chunk_recheck_needed": initial_chunk_rechecks, "resolved_to_explicit_in_source": exception_bases.count("explicit_in_source"), "resolved_to_explicitly_none_in_source": exception_bases.count("explicitly_none_in_source"), "resolved_to_no_cue_after_complete_search": exception_bases.count("no_exception_cue_found_in_complete_search"), "remaining_unresolved": exception_bases.count("unresolved_after_full_document_search"), "unresolved_rules": [{"rule_id": rule.get("rule_id"), "reason": (rule.get("exception_verification") or {}).get("unresolved_reason")} for rule in reviewed_rules if rule.get("exception_basis") == "unresolved_after_full_document_search"]},
-            "scope_derivation": {"newly_populated_from_source_evidence": sum(bool(rule.get("applicability_scope", {}).get(key)) and not (before_scope.get(str(rule.get("rule_id"))) or {}).get(key) for rule in reviewed_rules for key in ("loan_types", "occupancy_types", "transaction_types")), "confirmed_explicitly_universal_in_source": scope_bases.count("explicitly_universal_in_source"), "confirmed_genuinely_unscoped": scope_bases.count("genuinely_unscoped"), "examples": examples},
+            "scope_derivation": {"newly_populated_from_source_evidence": sum(newly_populated_dimension_count(before_scope.get(str(rule.get("rule_id"))), rule.get("applicability_scope")) for rule in reviewed_rules), "confirmed_explicitly_universal_in_source": scope_bases.count("explicitly_universal_in_source"), "confirmed_genuinely_unscoped": scope_bases.count("genuinely_unscoped"), "examples": examples},
             "rules_ready": sum(not rule.get("requires_review") for rule in reviewed_rules),
             "rules_requiring_review": len(unresolved),
             "review_required_rate_percent": round(len(unresolved) / max(1, len(reviewed_rules)) * 100, 2),
@@ -2858,7 +2855,11 @@ class ExecutableReadinessCompleter:
         # This stage rewrites variables in place, which can invalidate a
         # relation derived before the rewrite. Re-check before writing so a
         # stale relation is dropped loudly rather than shipped attested.
-        revalidation = revalidate_graph(final_graph, stage="agent_07")
+        try:
+            entails, _gating_stats = make_entailment_oracle(final_graph, document_id="agent_07-revalidation")
+        except Exception:
+            entails = None
+        revalidation = revalidate_graph(final_graph, stage="agent_07", entails=entails)
         if revalidation["dropped"]:
             print(f"⚠️  agent_07 dropped {len(revalidation['dropped'])} rule relationship(s) "
                   f"invalidated by this stage's edits", flush=True)

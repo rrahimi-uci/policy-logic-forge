@@ -34,6 +34,7 @@ from utils.config import get_config
 from utils.kg_readiness import mark_readiness, source_document_index
 from utils.llm_client import create_llm_client
 from utils.prompt_manager import get_prompt_manager
+from utils.scope import normalized_scope
 from utils.rule_contract import validate_rule_v2
 
 
@@ -171,11 +172,9 @@ def extract_claims(rule: Mapping[str, Any], graph: Mapping[str, Any] | None = No
                 f"Rule is attached to entity {entity}", entity,
             )
 
-    scope = rule.get("applicability_scope") or {}
-    if isinstance(scope, Mapping):
-        for key in ("loan_types", "occupancy_types", "transaction_types"):
-            for index, value in enumerate(scope.get(key, []) or []):
-                add(f"scope:{key}:{index}", f"applicability_scope.{key}[{index}]", "scope", f"Applies to {key}: {value}", value)
+    for key, values in normalized_scope(rule.get("applicability_scope")).items():
+        for index, value in enumerate(values):
+            add(f"scope:{key}:{index}", f"applicability_scope.{key}[{index}]", "scope", f"Applies to {key}: {value}", value)
     scope_basis = rule.get("scope_basis")
     if scope_basis in {"explicitly_universal_in_source", "genuinely_unscoped"}:
         add("scope_basis", "scope_basis", "scope", f"Scope basis is {scope_basis}", scope_basis)
@@ -517,7 +516,14 @@ class GroundingVerifier:
         corpus: Mapping[str, Any],
         max_chars: int,
     ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-        """Build bounded model packets and deterministic relationship checks."""
+        """Build bounded packets for independent relationship verification.
+
+        Contract derivation proves that an edge is structurally possible; it
+        does not independently prove that the two grounded rule meanings use
+        the shared fact in the asserted way.  Dependencies therefore go
+        through the same evidence-backed verification path regardless of
+        whether their candidate basis was deterministic or solver-backed.
+        """
         rules = {
             str(rule.get("rule_id")): rule
             for rule in graph.get("business_rules", [])
@@ -549,27 +555,6 @@ class GroundingVerifier:
         details = details if isinstance(details, Mapping) else {}
         for index, dependency in enumerate(details.get("dependencies", []) or []):
             if not isinstance(dependency, Mapping):
-                continue
-            # A relation derived from the rule contracts is not a claim about
-            # the source text, so asking a model to find it there is both
-            # wasteful and wrong: the derivation is the proof, and
-            # rule_dependencies.revalidate_graph re-checks it whenever the
-            # graph changes. Only narrative relations still need grounding.
-            if str(dependency.get("basis") or "").strip().lower() in {"deterministic", "solver"}:
-                deterministic.append({
-                    "relationship_id": f"@dependency:{index}",
-                    "field_path": f"dependency_details.dependencies[{index}]",
-                    "status": "supported",
-                    "affected_rule_ids": [
-                        str(dependency.get("source_rule_id", "")),
-                        str(dependency.get("target_rule_id", "")),
-                    ],
-                    "reasoning": (
-                        f"Derived deterministically from the rule contracts on "
-                        f"{', '.join(str(s) for s in (dependency.get('symbols') or [])) or 'shared symbols'}; "
-                        "re-validated against the current graph."
-                    ),
-                })
                 continue
             rule_ids = [str(dependency.get("source_rule_id", "")), str(dependency.get("target_rule_id", ""))]
             structured = {**dict(dependency), "affected_rule_ids": rule_ids}
@@ -1038,6 +1023,7 @@ class GroundingVerifier:
         relationship_failures_by_rule: dict[str, list[str]] = {}
         relationship_results: list[dict[str, Any]] = []
         relationship_invalid_evidence = 0
+        relationship_ids_by_rule: dict[str, list[str]] = {}
         for packet in relationship_packets:
             subject_id = str(packet["rule_id"])
             results = finalized_by_id[subject_id]
@@ -1050,20 +1036,104 @@ class GroundingVerifier:
                 and protocol["missing"] == 0
                 and protocol["duplicates"] == 0
             )
+            affected = list((packet["claims"][0].get("structured") or {}).get("affected_rule_ids", []))
             result = {
                 "relationship_id": subject_id,
                 "field_path": results[0].get("field_path") if results else None,
                 "status": "supported" if supported_relationship else "failed",
                 "invalid_evidence_records": invalid_records,
                 "claims": results,
+                "affected_rule_ids": affected,
             }
             relationship_results.append(result)
+            for affected_rule_id in affected:
+                relationship_ids_by_rule.setdefault(str(affected_rule_id), []).append(subject_id)
             if not supported_relationship:
-                affected = list((packet["claims"][0].get("structured") or {}).get("affected_rule_ids", []))
                 failure = {**result, "affected_rule_ids": affected}
                 relationship_failures.append(failure)
                 for affected_rule_id in affected:
                     relationship_failures_by_rule.setdefault(str(affected_rule_id), []).append(subject_id)
+        for record in deterministic_relationships:
+            subject_id = str(record.get("relationship_id") or "")
+            for affected_rule_id in record.get("affected_rule_ids", []) or []:
+                relationship_ids_by_rule.setdefault(str(affected_rule_id), []).append(subject_id)
+
+        # Admit only independently supported directed dependencies to the
+        # canonical graph consumed by Agents 10 and 11. Failed candidates stay
+        # in an auditable ledger rather than leaking into DAGs or models.
+        dependency_details = working.get("dependency_details")
+        if isinstance(dependency_details, dict):
+            original_dependencies = [
+                item for item in dependency_details.get("dependencies", []) or []
+                if isinstance(item, Mapping)
+            ]
+            verification_by_id = {
+                str(item.get("relationship_id") or ""): item for item in relationship_results
+            }
+            admitted_dependencies: list[dict[str, Any]] = []
+            rejected_candidates: list[dict[str, Any]] = []
+            for index, dependency in enumerate(original_dependencies):
+                relationship_id = f"@dependency:{index}"
+                verification = verification_by_id.get(relationship_id)
+                if verification and verification.get("status") == "supported":
+                    admitted_dependencies.append({
+                        **dict(dependency),
+                        "admission": "canonical",
+                        "independent_verification": {
+                            "status": "supported",
+                            "relationship_id": relationship_id,
+                        },
+                    })
+                else:
+                    rejected_candidates.append({
+                        **dict(dependency),
+                        "relationship_id": relationship_id,
+                        "admission": "rejected_candidate",
+                        "independent_verification": dict(verification or {"status": "missing"}),
+                    })
+            dependency_details["dependencies"] = admitted_dependencies
+            existing_candidates = [
+                dict(item) for item in dependency_details.get("relationship_candidates", []) or []
+                if isinstance(item, Mapping)
+            ]
+            dependency_details["relationship_candidates"] = existing_candidates + rejected_candidates
+            dependency_details["admission_summary"] = {
+                "candidates": len(original_dependencies),
+                "admitted": len(admitted_dependencies),
+                "rejected": len(rejected_candidates),
+                "basis": "independent_agent_09_verification",
+            }
+
+            admitted_keys = {
+                (
+                    str(item.get("source_rule_id") or ""),
+                    str(item.get("target_rule_id") or ""),
+                    str(item.get("dependency_type") or ""),
+                )
+                for item in admitted_dependencies
+            }
+            for rule in rules:
+                rule_id = str(rule.get("rule_id") or "")
+                if isinstance(rule.get("dependencies"), list):
+                    rule["dependencies"] = [
+                        item for item in rule["dependencies"]
+                        if isinstance(item, Mapping) and any(
+                            source == str(item.get("depends_on_rule") or "")
+                            and target == rule_id
+                            and kind == str(item.get("dependency_type") or "")
+                            for source, target, kind in admitted_keys
+                        )
+                    ]
+                if isinstance(rule.get("dependent_rules"), list):
+                    rule["dependent_rules"] = [
+                        item for item in rule["dependent_rules"]
+                        if isinstance(item, Mapping) and any(
+                            source == rule_id
+                            and target == str(item.get("dependent_rule") or "")
+                            and kind == str(item.get("dependency_type") or "")
+                            for source, target, kind in admitted_keys
+                        )
+                    ]
 
         failures = []
         rule_results: list[dict[str, Any]] = []
@@ -1081,6 +1151,7 @@ class GroundingVerifier:
             invalid_records = len(packet["evidence"]) - authentic_records
             repaired_records = sum(item.get("source_text_repaired") is True for item in packet["evidence"])
             failed_relationship_ids = relationship_failures_by_rule.get(rule_id, [])
+            relationship_ids = relationship_ids_by_rule.get(rule_id, [])
             dimensions = {
                 dimension: self._dimension_summary(combined_results, dimension)
                 for dimension in GROUNDING_DIMENSIONS
@@ -1106,7 +1177,13 @@ class GroundingVerifier:
                 "missing_claim_responses": protocol["missing"],
                 "duplicate_claim_responses": protocol["duplicates"],
                 "failed_relationship_ids": failed_relationship_ids,
-                "relationship_status": "failed" if failed_relationship_ids else "supported",
+                "relationship_ids": relationship_ids,
+                "relationship_claim_count": len(relationship_ids),
+                "relationship_status": (
+                    "failed" if failed_relationship_ids
+                    else "supported" if relationship_ids
+                    else "not_applicable"
+                ),
                 "dimensions": dimensions,
                 "claims": results,
                 "deterministic_claims": deterministic_results,
@@ -1178,15 +1255,17 @@ class GroundingVerifier:
                 (rule.get("grounding") or {}).get("relationship_status") == "failed"
                 for rule in rules
             ),
+            "not_applicable_rules": sum(
+                (rule.get("grounding") or {}).get("relationship_status") == "not_applicable"
+                for rule in rules
+            ),
         }
         relationship_dimension["hold_rate"] = round(
             relationship_dimension["failed_rules"] / max(1, len(rules)) * 100, 2
         )
         passed = (
             not failures
-            and not relationship_failures
             and total_claims > 0
-            and supported == total_claims
             and invalid_evidence == 0
             and not unexpected_responses
             and missing_responses == 0
@@ -1228,7 +1307,8 @@ class GroundingVerifier:
                 (rule.get("review_route") or {}).get("route", "none") for rule in rules
             )),
             "rule_grounding_pass": not failures,
-            "relationship_grounding_pass": not relationship_failures,
+            "relationship_grounding_pass": True,
+            "relationship_candidates_rejected": len(relationship_failures),
             "grounding_dimensions": {
                 **dimension_report,
                 "relationship": relationship_dimension,
@@ -1259,6 +1339,10 @@ class GroundingVerifier:
                 "deterministic_checks": deterministic_relationships,
                 "model_results": relationship_results,
                 "failures": relationship_failures,
+                "admission": (
+                    dict(working.get("dependency_details", {}).get("admission_summary", {}))
+                    if isinstance(working.get("dependency_details"), Mapping) else {}
+                ),
             },
             "checkpoint_file": str(checkpoint.path),
         }
@@ -1367,8 +1451,26 @@ def certification_issues(
     if report.get("rule_claims") != claim_count:
         issues.append("grounding report claim totals do not match the optimized graph")
     relationship_report = report.get("relationship_verification")
-    if not isinstance(relationship_report, Mapping) or relationship_report.get("model_failures") != 0:
-        issues.append("one or more graph relationships failed independent verification")
+    if not isinstance(relationship_report, Mapping):
+        issues.append("relationship admission report is missing")
+    else:
+        admission = relationship_report.get("admission")
+        dependencies = (
+            graph.get("dependency_details", {}).get("dependencies", [])
+            if isinstance(graph.get("dependency_details"), Mapping) else []
+        )
+        if not isinstance(admission, Mapping) or admission.get("admitted") != len(dependencies):
+            issues.append("relationship admission totals do not match the canonical graph")
+        for dependency in dependencies:
+            verification = dependency.get("independent_verification") if isinstance(dependency, Mapping) else None
+            if (
+                not isinstance(dependency, Mapping)
+                or dependency.get("admission") != "canonical"
+                or not isinstance(verification, Mapping)
+                or verification.get("status") != "supported"
+            ):
+                issues.append("an unverified relationship remains in the canonical graph")
+                break
     for field in (
         "contradicted_claims",
         "insufficient_evidence_claims",

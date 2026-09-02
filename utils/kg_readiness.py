@@ -14,6 +14,7 @@ import re
 from typing import Any, Iterable, Mapping
 
 from utils.semantic_routing import classify_review_route
+from utils.scope import scope_shape_issues
 
 
 CANONICAL_ENTITY_RE = re.compile(r"^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*$")
@@ -112,7 +113,22 @@ def dependency_edges(graph: Mapping[str, Any]) -> list[dict[str, Any]]:
     """
     details = graph.get("dependency_details", {})
     raw = details.get("dependencies", []) if isinstance(details, Mapping) else []
-    edges = [dict(edge) for edge in raw if isinstance(edge, Mapping) and _is_directed_dependency(edge)]
+    admission_active = isinstance(details, Mapping) and isinstance(details.get("admission_summary"), Mapping)
+    edges = [
+        dict(edge) for edge in raw
+        if isinstance(edge, Mapping)
+        and _is_directed_dependency(edge)
+        and (
+            not admission_active
+            or (
+                edge.get("admission") == "canonical"
+                and isinstance(edge.get("independent_verification"), Mapping)
+                and edge["independent_verification"].get("status") == "supported"
+            )
+        )
+    ]
+    if admission_active:
+        return edges
     if edges:
         return edges
     for rule in graph.get("business_rules", []):
@@ -321,16 +337,12 @@ def final_rule_issues(rule: Mapping[str, Any], entity_keys: Iterable[str]) -> li
     derivation_map = derivation if isinstance(derivation, Mapping) else {}
 
     scope = rule.get("applicability_scope")
-    # A rule that scopes itself with richer, domain-specific keys (e.g.
-    # "jurisdiction", "trigger_event") alongside the three standard ones is not
-    # thereby less scoped — but a resolver completion that replaces
-    # applicability_scope wholesale can drop a standard key it didn't happen to
-    # populate. agent_07's own defaulting (`.setdefault(key, [])`) only runs
-    # before that replacement, so a missing key here means "not stated", the
-    # same as an explicit empty list — `.get(key, [])` treats them alike
-    # rather than failing an absent key as if it were a wrong type.
-    if not isinstance(scope, Mapping) or any(not isinstance(scope.get(key, []), list) for key in ("loan_types", "occupancy_types", "transaction_types")):
-        issues.append({"requirement": "scope", "reason": "scope must contain list-valued loan_types, occupancy_types, and transaction_types"})
+    # Scope vocabulary belongs to the active domain.  The universal contract is
+    # only that every populated dimension is list-valued; requiring mortgage
+    # keys here contaminated privacy and contract graphs with empty (and, in a
+    # few real completions, non-empty) loan dimensions.
+    for reason in scope_shape_issues(scope):
+        issues.append({"requirement": "scope", "reason": reason})
     if rule.get("scope_basis") not in FINAL_SCOPE_BASES:
         issues.append({"requirement": "scope", "reason": "scope_basis is not a final evidence state"})
     if rule.get("scope_basis") == "unresolved_after_source_review" and not str(derivation_map.get("unresolved_reason", "")).strip():

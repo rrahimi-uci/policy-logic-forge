@@ -13,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from utils.rule_dependencies import (  # noqa: E402
     Relation,
+    build_fact_registry,
     classify_gating,
     derive_associations,
     derive_conflicts,
@@ -21,6 +22,7 @@ from utils.rule_dependencies import (  # noqa: E402
     refusal_for_declared_kind,
     relation_holds,
     revalidate,
+    revalidate_graph,
     rule_reads,
     rule_writes,
 )
@@ -126,6 +128,72 @@ def test_dataflow_is_deterministic_and_order_independent():
     assert derive_dataflow(rules) == derive_dataflow(list(reversed(rules)))
 
 
+def test_output_declaration_without_assignment_does_not_create_dataflow():
+    producer = _rule("A", writes=["x"], outcomes=[])
+    consumer = _rule("B", reads=["x"])
+
+    assert derive_dataflow([producer, consumer]) == []
+
+
+def test_incompatible_fact_types_do_not_create_dataflow():
+    producer = _rule(
+        "A", writes=["x"],
+        variables=[{"name": "x", "type": "number", "role": "output"}],
+    )
+    consumer = _rule(
+        "B", reads=["x"],
+        variables=[{"name": "x", "type": "date", "role": "input"}],
+    )
+
+    assert derive_dataflow([producer, consumer]) == []
+
+
+def test_incompatible_units_do_not_create_dataflow():
+    producer = _rule(
+        "A", writes=["amount"],
+        variables=[{"name": "amount", "type": "number", "unit": "USD", "role": "output"}],
+    )
+    consumer = _rule(
+        "B", reads=["amount"],
+        variables=[{"name": "amount", "type": "number", "unit": "months", "role": "input"}],
+    )
+
+    assert derive_dataflow([producer, consumer]) == []
+
+
+def test_provably_disjoint_scopes_do_not_create_dataflow():
+    producer = _rule("A", writes=["x"])
+    consumer = _rule("B", reads=["x"])
+    producer["applicability_scope"] = {"jurisdiction": ["US"]}
+    consumer["applicability_scope"] = {"jurisdiction": ["EU"]}
+
+    assert derive_dataflow([producer, consumer]) == []
+
+
+def test_fact_id_connects_different_local_names_without_guessing_aliases():
+    producer = _rule(
+        "A", writes=["approved"],
+        variables=[{
+            "name": "approved", "fact_id": "application_approved",
+            "type": "boolean", "role": "output",
+        }],
+    )
+    consumer = _rule(
+        "B", reads=["is_approved"],
+        variables=[{
+            "name": "is_approved", "fact_id": "application_approved",
+            "type": "boolean", "role": "input",
+        }],
+    )
+
+    edge, = derive_dataflow([producer, consumer])
+    assert edge.symbols == ("application_approved",)
+    registry = build_fact_registry([producer, consumer])
+    assert registry["application_approved"]["aliases"] == ["approved", "is_approved"]
+    assert registry["application_approved"]["producer_rule_ids"] == ["A"]
+    assert registry["application_approved"]["consumer_rule_ids"] == ["B"]
+
+
 # ---------------------------------------------------------------------------
 # conflict / association
 # ---------------------------------------------------------------------------
@@ -207,6 +275,17 @@ def test_an_oracle_failure_never_loses_the_relation():
     assert [r.kind for r in kept] == ["dataflow"]
 
 
+def test_gating_carries_a_contract_bound_solver_proof():
+    rules = [_rule("A", writes=["x"]), _rule("B", reads=["x"])]
+    relation, = classify_gating(
+        derive_dataflow(rules), rules, entails=lambda _source, _target, _symbol: True
+    )
+
+    assert relation.kind == "gating"
+    assert relation.proof["method"] == "smt_unsat"
+    assert len(relation.proof["contract_sha256"]) == 64
+
+
 # ---------------------------------------------------------------------------
 # re-validation — the stale-attestation defect
 # ---------------------------------------------------------------------------
@@ -234,6 +313,26 @@ def test_relation_stops_holding_when_a_rule_disappears():
     rules = [_rule("A", writes=["x"]), _rule("B", reads=["x"])]
     relation, = derive_dataflow(rules)
     assert not relation_holds(relation, [_rule("B", reads=["x"])])
+
+
+def test_stored_gating_is_downgraded_when_solver_proof_is_not_reproduced():
+    rules = [_rule("A", writes=["x"]), _rule("B", reads=["x"])]
+    graph = {
+        "business_rules": rules,
+        "dependency_details": {"dependencies": [{
+            "source_rule_id": "A", "target_rule_id": "B",
+            "dependency_type": "gating", "symbols": ["x"],
+            "basis": "solver", "proof": {"status": "proved"},
+        }]},
+    }
+
+    report = revalidate_graph(graph, stage="test", entails=lambda *_args: False)
+
+    assert report["held"] == 1
+    assert report["downgraded"][0]["to"] == "dataflow"
+    stored, = graph["dependency_details"]["dependencies"]
+    assert stored["dependency_type"] == "dataflow"
+    assert "proof" not in stored
 
 
 def test_each_kind_is_revalidated_by_its_own_condition():

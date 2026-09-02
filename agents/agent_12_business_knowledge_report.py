@@ -461,7 +461,7 @@ def _automation_readiness(rule: Mapping[str, Any]) -> dict[str, Any]:
     if isinstance(evidence_records, (int, float)) and evidence_records > 0:
         evidence = max(0.0, (float(evidence_records) - invalid - missing - duplicates) / float(evidence_records) * 100.0)
     else:
-        evidence = 100.0 if invalid == missing == duplicates == 0 else 0.0
+        evidence = 0.0
 
     execution = _mapping(rule.get("execution"))
     targets = [str(value).upper() for value in _list(execution.get("targets")) if value]
@@ -472,7 +472,10 @@ def _automation_readiness(rule: Mapping[str, Any]) -> dict[str, Any]:
         bool(_list(rule.get("variables"))) and bool(_list(rule.get("outcomes"))),
     ]
     executable = sum(execution_checks) / len(execution_checks) * 100.0
-    relationship = 100.0 if str(grounding.get("relationship_status") or "").casefold() == "supported" else 0.0
+    relationship_count = int(grounding.get("relationship_claim_count") or 0)
+    relationship = (
+        100.0 if str(grounding.get("relationship_status") or "").casefold() == "supported" else 0.0
+    ) if relationship_count > 0 else None
 
     components = {
         "Core grounding": round(core, 1),
@@ -480,9 +483,15 @@ def _automation_readiness(rule: Mapping[str, Any]) -> dict[str, Any]:
         "Contract integrity": round(contract, 1),
         "Evidence integrity": round(evidence, 1),
         "Executability": round(executable, 1),
-        "Relationship support": round(relationship, 1),
+        "Relationship support": round(relationship, 1) if relationship is not None else None,
     }
-    score = sum(components[name] * weight / 100.0 for name, weight in _READINESS_WEIGHTS.items())
+    applicable_weight = sum(
+        weight for name, weight in _READINESS_WEIGHTS.items() if components[name] is not None
+    )
+    score = sum(
+        float(components[name]) * weight for name, weight in _READINESS_WEIGHTS.items()
+        if components[name] is not None
+    ) / max(1.0, applicable_weight)
     return {"score": round(score, 1), "components": components, "weights": dict(_READINESS_WEIGHTS)}
 
 
@@ -493,6 +502,7 @@ def _readiness_score_html(readiness: Mapping[str, Any]) -> str:
         f'<div class="score-factor"><span>{_safe(name)}</span><strong>{float(value):.1f}</strong>'
         f'<span class="score-factor-track"><i style="width:{min(100.0, max(0.0, float(value))):.1f}%"></i></span></div>'
         for name, value in components.items()
+        if value is not None
     )
     return (
         f'<div class="readiness-score"><div class="score-number">{score:.1f}<span>/100</span></div>'
@@ -506,9 +516,9 @@ def _readiness_definition_html() -> str:
         ("Core grounding", "40%", "Supported core claims ÷ evaluated core claims", "All evaluated descriptions, conditions, and outcomes are supported."),
         ("Context grounding", "20%", "Supported enrichment claims ÷ evaluated enrichment claims", "All evaluated party, scope, and exception claims are supported."),
         ("Contract integrity", "15%", "Supported contract claims ÷ evaluated contract claims", "All evaluated structural contract claims are supported."),
-        ("Evidence integrity", "10%", "Clean evidence records ÷ all evidence records", "No invalid citations, missing responses, or duplicate responses were recorded."),
+        ("Evidence integrity", "10%", "Clean evidence records ÷ all evidence records; zero when none exist", "At least one evidence record exists and none are invalid, missing, or duplicated."),
         ("Executability", "10%", "Four checks worth 25 points each", "Targets, projections, test vectors, variables, and outcomes are complete."),
-        ("Relationship support", "5%", "Supported relationship status = 100; otherwise 0", "Emitted rule relationships are supported."),
+        ("Relationship support", "5%", "Supported asserted relationships ÷ evaluated asserted relationships", "Every asserted relationship affecting this rule is independently supported."),
     )
     body = "".join(
         f'<tr><td><strong>{_safe(component)}</strong></td><td>{weight}</td><td>{_safe(calculation)}</td><td>{_safe(meaning)}</td></tr>'
@@ -519,7 +529,8 @@ def _readiness_definition_html() -> str:
         '<h2>How the Automation Readiness Score is calculated</h2>'
         '<p>The six normalized component values are combined as: '
         '<code>ARS = 0.40 Core + 0.20 Context + 0.15 Contract + 0.10 Evidence + 0.10 Execution + 0.05 Relationships</code>. '
-        'Components and the final result are rounded to one decimal place.</p>'
+        'Components and the final result are rounded to one decimal place. If a rule has no asserted relationship, '
+        'that component is not applicable and the remaining weights are normalized to 100.</p>'
         '<div class="table-wrap"><table><thead><tr><th>Component</th><th>Weight</th><th>Calculation</th><th>Meaning of 100</th></tr></thead>'
         f'<tbody>{body}</tbody></table></div>'
         '<div class="callout score-interpretation"><strong>Interpretation:</strong> 100 means every measured component is complete; '
@@ -1325,7 +1336,12 @@ def generate(
         "status_counts": dict(sorted(relationship_statuses.items())),
         "certified_count": relationship_statuses.get("supported", 0),
         "failed_count": relationship_statuses.get("failed", 0),
-        "support_rate": _percent(relationship_statuses.get("supported", 0), len(rules)),
+        "not_applicable_count": relationship_statuses.get("not_applicable", 0),
+        "applicable_count": relationship_statuses.get("supported", 0) + relationship_statuses.get("failed", 0),
+        "support_rate": _percent(
+            relationship_statuses.get("supported", 0),
+            relationship_statuses.get("supported", 0) + relationship_statuses.get("failed", 0),
+        ),
     }
     grounding_claim_counts: Counter[str] = Counter()
     for rule in rules:
