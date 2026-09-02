@@ -175,6 +175,25 @@ def test_already_canonical_graph_is_unaffected():
     assert naming_issues(fixed) == []
 
 
+def test_naming_issues_reports_non_string_party_references_without_crashing():
+    graph = {
+        "entity_types": {"FIRST_PARTY": {}, "USER": {}},
+        "business_rules": [{
+            "rule_id": "R1",
+            "responsible_party": {"entity": "FIRST_PARTY"},
+            "counterparties": [{"entity": "USER"}],
+        }],
+    }
+
+    issues = naming_issues(graph)
+
+    assert [issue["path"] for issue in issues] == [
+        "R1.responsible_party",
+        "R1.counterparties[0]",
+    ]
+    assert all("exact canonical entity key" in issue["reason"] for issue in issues)
+
+
 def test_mixed_canonical_and_pascal_case_graph():
     graph = {
         "entity_types": {"FANNIE_MAE": {}, "PostClosingQCReview": {}},

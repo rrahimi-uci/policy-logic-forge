@@ -234,10 +234,18 @@ def naming_issues(graph: Mapping[str, Any]) -> list[dict[str, str]]:
             continue
         for field in ("responsible_party",):
             value = rule.get(field)
-            if value and (value not in keys or not CANONICAL_ENTITY_RE.fullmatch(str(value))):
+            if value and (
+                not isinstance(value, str)
+                or value not in keys
+                or not CANONICAL_ENTITY_RE.fullmatch(value)
+            ):
                 issues.append({"path": f"{rule.get('rule_id')}.{field}", "value": str(value), "reason": "party is not an exact canonical entity key"})
         for index, value in enumerate(rule.get("counterparties", []) or []):
-            if value not in keys or not CANONICAL_ENTITY_RE.fullmatch(str(value)):
+            if (
+                not isinstance(value, str)
+                or value not in keys
+                or not CANONICAL_ENTITY_RE.fullmatch(value)
+            ):
                 issues.append({"path": f"{rule.get('rule_id')}.counterparties[{index}]", "value": str(value), "reason": "party is not an exact canonical entity key"})
     return issues
 
