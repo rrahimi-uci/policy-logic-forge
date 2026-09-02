@@ -152,7 +152,7 @@ class TextReporter:
     def run_start(self, run: RunMetrics) -> None:
         cfg = run.config
         lines = [
-            "🚀 run started — monitoring canonical Stage 01/12 … Stage 12/12",
+            "🚀 run started — monitoring canonical Stage 01/13 … Stage 13/13",
             f"[bold]domain[/bold]        {run.domain}",
             f"[bold]source[/bold]        {run.source_dir}",
             f"[bold]batch name[/bold]    {run.batch_name}",

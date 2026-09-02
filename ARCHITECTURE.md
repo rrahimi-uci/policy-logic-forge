@@ -1,7 +1,7 @@
 # Architecture
 
 This document describes how Policy Logic Forge is put together: the
-twelve-agent extraction pipeline, the shared services and compiler layer
+thirteen-agent extraction pipeline, the shared services and compiler layer
 underneath it, the RegDelta differential-execution engine layered on top,
 and how configuration and prompts flow through all of it. For setup and CLI
 usage, see [`README.md`](README.md).
@@ -13,7 +13,7 @@ source-grounded knowledge graph, then optionally compares two versions of
 that graph to report what actually changed. There are three moving parts:
 
 - **The extraction pipeline** (`agents/`, orchestrated by `cli/extract.py`)
-  — twelve agents run in a fixed sequence, each consuming the previous
+  — thirteen agents run in a fixed sequence, each consuming the previous
   stage's output and writing its own artifacts under
   `pipeline-output/<batch>/`.
 - **Shared services and the compiler layer** (`utils/`) — configuration,
@@ -49,13 +49,14 @@ flowchart LR
         A6 --> A7["07<br/>Readiness"]
         A7 -.->|"review"| A8["08<br/>Remediate"]
         A8 -.->|"re-check"| A7
-        A7 --> A9["09<br/>Ground"] --> A10["10<br/>DAG"] --> A11["11<br/>Models"] --> A12["12<br/>Report"]
+        A7 --> A9["09<br/>Ground"] --> A10["10<br/>DAG"] --> A11["11<br/>Models"] --> A12["12<br/>Info model"] --> A13["13<br/>Report"]
     end
 
     subgraph OUTPUTS["Outputs (pipeline-output/&lt;batch&gt;/)"]
         GRAPH["optimized graph"]
         DAGS["dependency DAGs"]
         MODELS["DMN·BPMN·CMMN·SBVR"]
+        INFOMODEL["business information model"]
         REPORT["business knowledge report"]
     end
 
@@ -65,7 +66,8 @@ flowchart LR
     A6 -.-> GRAPH
     A10 -.-> DAGS
     A11 -.-> MODELS
-    A12 -.-> REPORT
+    A12 -.-> INFOMODEL
+    A13 -.-> REPORT
 
     subgraph SUPPORT["Support layers, used throughout the pipeline"]
         direction TB
@@ -88,11 +90,11 @@ flowchart LR
 
     class DOCS,CFG input
     class EXTRACT orchestration
-    class A1,A2,A3,A4,A5,A6,A7,A8,A9,A10,A11,A12 agent
+    class A1,A2,A3,A4,A5,A6,A7,A8,A9,A10,A11,A12,A13 agent
     class SHARED,PROMPTS shared
     class COMPILER compiler
     class RE regdelta
-    class GRAPH,DAGS,MODELS,REPORT output
+    class GRAPH,DAGS,MODELS,INFOMODEL,REPORT output
 ```
 
 Two things worth noticing immediately:
@@ -108,24 +110,25 @@ Two things worth noticing immediately:
    `agents/` or `cli/extract.py` imports from `utils/regdelta_engine.py` or
    its dependencies.
 
-## 2. The twelve-agent pipeline
+## 2. The thirteen-agent pipeline
 
 ### 2.1 Stage responsibilities
 
 | Stage | Agent | Responsibility | Primary output |
 | --- | --- | --- | --- |
-| 01/12 | `agent_01` | Document organization | `agent_01-organized-documents/` |
-| 02/12 | `agent_02` | Entity and relationship extraction | `agent_02-entities/` |
-| 03/12 | `agent_03` | Business-rule extraction | `agent_03-rules/` |
-| 04/12 | `agent_04` | Advisory rule validation | `agent_04-validation/` |
-| 05/12 | `agent_05` | Rules/entities merge | `agent_05-rules-with-entities/` |
-| 06/12 | `agent_06` | Knowledge-graph optimization (dedup + dependency analysis) | `agent_06-07-08-09-optimized/optimized_compliance_knowledge_graph.json` |
-| 07/12 | `agent_07` | Executable-readiness gate (four invariants) | readiness report, embedded in the shared optimized directory |
-| 08/12 | `agent_08` | Readiness remediation (only if agent_07 requests it) | focused rule fix-ups |
-| 09/12 | `agent_09` | Independent grounding verification | claim-level certification |
-| 10/12 | `agent_10` | Dependency-DAG generation, 100%-coverage guarantee | `agent_10-dag-generation/dependency_dags.json` |
-| 11/12 | `agent_11` | DMN/BPMN/CMMN/SBVR generation + LExec compile | `agent_11-executable-models/` |
-| 12/12 | `agent_12` | Self-contained business knowledge report | `agent_12-business-knowledge-report/business_knowledge_report.html` |
+| 01/13 | `agent_01` | Document organization | `agent_01-organized-documents/` |
+| 02/13 | `agent_02` | Entity and relationship extraction | `agent_02-entities/` |
+| 03/13 | `agent_03` | Business-rule extraction | `agent_03-rules/` |
+| 04/13 | `agent_04` | Advisory rule validation | `agent_04-validation/` |
+| 05/13 | `agent_05` | Rules/entities merge | `agent_05-rules-with-entities/` |
+| 06/13 | `agent_06` | Knowledge-graph optimization (dedup + dependency analysis) | `agent_06-07-08-09-optimized/optimized_compliance_knowledge_graph.json` |
+| 07/13 | `agent_07` | Executable-readiness gate (four invariants) | readiness report, embedded in the shared optimized directory |
+| 08/13 | `agent_08` | Readiness remediation (only if agent_07 requests it) | focused rule fix-ups |
+| 09/13 | `agent_09` | Independent grounding verification | claim-level certification |
+| 10/13 | `agent_10` | Dependency-DAG generation, 100%-coverage guarantee | `agent_10-dag-generation/dependency_dags.json` |
+| 11/13 | `agent_11` | DMN/BPMN/CMMN/SBVR generation + LExec compile | `agent_11-executable-models/` |
+| 12/13 | `agent_12` | Business information model (UML classes, attributes, enumerations) | `agent_12-business-information-model/` |
+| 13/13 | `agent_13` | Self-contained business knowledge report | `agent_13-business-knowledge-report/business_knowledge_report.html` |
 
 Stages 07–09 share one directory (`agent_06-07-08-09-optimized/`) because
 they all read and write the same optimized graph; their stage IDs and
@@ -144,7 +147,8 @@ sequenceDiagram
     participant A8 as agent_08<br/>Remediator
     participant A9 as agent_09<br/>Grounding
     participant A10 as agent_10/11<br/>DAG + Models
-    participant A12 as agent_12<br/>Report
+    participant A12 as agent_12<br/>Info model
+    participant A13 as agent_13<br/>Report
     participant FS as pipeline output
 
     Op->>CLI: extract.py --dir --domain --resume
@@ -173,8 +177,11 @@ sequenceDiagram
     CLI->>A10: run_agent_10() DAG, run_agent_11() models
     A10->>FS: dependency_dags.json + DMN/BPMN/CMMN/SBVR + lexec_ir.json
 
-    CLI->>A12: run_agent_12() business knowledge report
-    A12->>FS: business_knowledge_report.html + manifest
+    CLI->>A12: run_agent_12() business information model
+    A12->>FS: UML model + catalog + validation
+
+    CLI->>A13: run_agent_13() business knowledge report
+    A13->>FS: business_knowledge_report.html + manifest
 
     CLI-->>Op: COMPLETE — optimized graph, DAGs, executable models
 ```
@@ -433,11 +440,62 @@ Its findings are never read by any other agent or by the orchestrator's control 
 
 A per-rule gate, `bpmn_eligibility`, decides DMN/CMMN-only vs. also-BPMN: it requires `workflow_semantics.kind == "prescriptive_process"`, `basis == "explicit_in_source"`, a non-empty trigger event and actor role, and direct evidence — "a party plus an outcome is not a process." Rules failing this stay visible in DMN/CMMN, with the omission reason recorded in `bpmn_omissions`.
 
-#### `agent_12` — Business Knowledge Report
+#### `agent_12` — Business Information Model
 
 | | |
 | --- | --- |
-| **File** | `agents/agent_12_business_knowledge_report.py` |
+| **File** | `agents/agent_12_business_information_model.py`, deterministic core in `utils/information_model.py` |
+| **Purpose** | Turns the certified graph into the canonical UML picture of the business *data* the rules operate on — classes, typed attributes, enumerations, multiplicity, constraints — as the bridge from policy knowledge to schemas, APIs and code. |
+| **Inputs** | Optimized graph (`agent_06`–`09`) and `semantic_vocabulary_profile.json` (`agent_11`). Fails fast (exit 2) if the graph is missing. |
+| **Outputs** | `business_information_model.json`, `.mmd` (Mermaid `classDiagram`), `.puml` (PlantUML), `class_attribute_catalog.{json,md}`, `information_model_validation.json`. |
+| **Exit codes** | 0 clean; **3** when validation reports an error — a data-quality signal, matching the readiness/grounding convention; **2** on missing input or generation failure. |
+
+##### What is derived rather than asked
+
+Business types come from what the rule contract already declares, not from a
+model's reading of names. Evidence is consulted in a fixed order: a closed
+`allowed_values` set is an enumeration *even when the rule declared `string`*,
+because modelling it as text would discard a real constraint; a declared `unit`
+outranks any name pattern (`usd` → `Money`, `basis_points` → `Percentage`,
+`months` → `Duration`); an integral `allowed_range` implies `Integer`; and only
+a variable with nothing declared falls through to its name — a result always
+flagged for review. On a real 614-rule mortgage graph this types 2,546
+attributes and leaves **24** as a generic `String`.
+
+Multiplicity, optionality, constraints (from ranges and value sets), and per-
+attribute source rules and passages are derived the same way.
+
+##### What is genuine judgment
+
+Which class an attribute describes, whether a group of attributes forms a value
+object, and which concepts deserve to be classes cannot be read off a contract,
+so one prompt decides those — bounded hard. The model may not invent, retype or
+rename anything: each proposal is checked against the deterministic facts, and
+one naming an unknown symbol or class is discarded. A proposed class needs three
+supporting attributes or it stays a label. An attribute the model cannot place
+stays **unassigned** and is reported, because a misfiled attribute silently
+corrupts the model while an unplaced one is merely reviewed.
+
+**Actors are excluded from attribute ownership.** A rule names the party
+responsible for applying it, which is not what its variables describe — a lender
+does not own a loan's LTV ratio. Assigning by `related_entities` without this
+exclusion put 1,454 attributes on `LENDER` and 10 on `MortgageLoan`.
+
+##### Validation
+
+Ten checks run after generation and **repair nothing** — a validator that
+silently fixes what it finds cannot also report how good the model was:
+concept representation, attribute presence, type defensibility, type
+consistency, relationship direction and multiplicity, enumeration usage,
+constraint coverage, absence of superfluous elements, consistency with the
+source graph, and whether ambiguity was flagged rather than guessed. Every
+finding names its subject.
+
+#### `agent_13` — Business Knowledge Report
+
+| | |
+| --- | --- |
+| **File** | `agents/agent_13_business_knowledge_report.py` |
 | **Purpose** | Renders the certified graph into a single, self-contained, source-traceable HTML dashboard for human exploration and review — never invents rules, concepts, or process semantics. |
 | **Inputs** | Optimized graph (`agent_06`–`09`), `agent_11-executable-models/` (DMN/BPMN/CMMN + SBVR profile), organized-document text (for source-passage fallback lookup). Fails fast (exit 2) if the optimized graph is missing. |
 | **Outputs** | `business_knowledge_report.html` (zero external network calls — inline CSS/JS/SVG, no CDN, no webfonts) and `business_knowledge_report_manifest.json`. Six tabs: Overview (chart-based analytics — category/confidence/route/model-type/dependency-degree distributions, most-connected and isolated rules), SBVR vocabulary, Rule explorer (per-rule traceability breadcrumb and inline DMN/BPMN/CMMN diagrams), Relationships (click-to-highlight dependency graph with pan/zoom), Review queue (severity-triaged), and Source traceability. |
@@ -536,7 +594,7 @@ flowchart TB
     classDef regdelta fill:#ffe4e6,stroke:#be123c,color:#881337,stroke-width:1px
 
     A11["agent_11_executable_model_generator.py"]:::pipeline
-    A12["agent_12_business_knowledge_report.py"]:::pipeline
+    A12["agent_13_business_knowledge_report.py"]:::pipeline
 
     EM["executable_models.py<br/>(real DMN + BPMN emitter)"]:::core
     SA["semantic_artifacts.py<br/>(real CMMN + SBVR emitter)"]:::core
@@ -983,7 +1041,7 @@ it, and empty `refusals`/`ignored_fields` arrays for a rule this simple.
 
 ```text
 cli/                         orchestrators
-  extract.py                   agent_01–agent_12 pipeline runner
+  extract.py                   agent_01–agent_13 pipeline runner
   generate_executable_models.py  regenerate DMN/BPMN from an existing graph + DAGs
 agents/                      one zero-padded module per pipeline agent
 utils/                       shared services, compiler/proof layer, RegDelta engine
@@ -1024,7 +1082,12 @@ pipeline-output/<batch>/
 │   ├── compliance_reviews.cmmn
 │   ├── semantic_vocabulary_profile.json
 │   └── lexec_ir.json, compilation_report.json, proof_records.json
-└── agent_12-business-knowledge-report/
+├── agent_12-business-information-model/
+│   ├── business_information_model.json
+│   ├── business_information_model.{mmd,puml}
+│   ├── class_attribute_catalog.{json,md}
+│   └── information_model_validation.json
+└── agent_13-business-knowledge-report/
     ├── business_knowledge_report.html
     └── business_knowledge_report_manifest.json
 ```
