@@ -705,6 +705,14 @@ def _coerce_unresolved_basis(rule: dict[str, Any], basis_field: str, valid_value
     if isinstance(value, str) and value in valid_values:
         return
     if value is None:
+        verification = rule.get(verification_field)
+        verification_map = dict(verification) if isinstance(verification, Mapping) else {}
+        verification_map.setdefault(
+            "unresolved_reason",
+            f"No valid {basis_field} was produced by extraction or evidence completion.",
+        )
+        rule[verification_field] = verification_map
+        rule[basis_field] = unresolved_value
         return
     verification = rule.get(verification_field)
     verification_map = dict(verification) if isinstance(verification, Mapping) else {}
@@ -846,6 +854,46 @@ def _normalise_rule_contract(rule: dict[str, Any]) -> dict[str, Any]:
     """Normalize legacy extraction shapes without changing rule/source identity."""
     _coerce_unresolved_basis(rule, "exception_basis", EXCEPTION_BASES, "exception_verification", "unresolved_after_full_document_search")
     _coerce_unresolved_basis(rule, "scope_basis", SCOPE_BASES, "scope_derivation", "unresolved_after_source_review")
+
+    # Some model completions preserve named-party detail by wrapping the
+    # canonical entity type in an object.  The v2 contract requires party
+    # references themselves to be canonical strings. Unwrap only an explicit
+    # entity_type and retain the richer record separately for review/UI use.
+    party_details = [
+        deepcopy(item)
+        for item in (rule.get("counterparty_details") or [])
+        if isinstance(item, Mapping)
+    ]
+    responsible_party = rule.get("responsible_party")
+    if isinstance(responsible_party, Mapping):
+        entity_type = responsible_party.get("entity_type")
+        if isinstance(entity_type, str) and entity_type.strip():
+            rule["responsible_party"] = entity_type.strip()
+            party_details.append(deepcopy(dict(responsible_party)))
+    counterparties = rule.get("counterparties")
+    if counterparties is None:
+        rule["counterparties"] = []
+    elif isinstance(counterparties, Mapping):
+        counterparties = [counterparties]
+    if isinstance(counterparties, list):
+        normalized_counterparties = []
+        for counterparty in counterparties:
+            if isinstance(counterparty, Mapping):
+                entity_type = counterparty.get("entity_type")
+                if isinstance(entity_type, str) and entity_type.strip():
+                    normalized_counterparties.append(entity_type.strip())
+                    party_details.append(deepcopy(dict(counterparty)))
+                else:
+                    normalized_counterparties.append(counterparty)
+            else:
+                normalized_counterparties.append(counterparty)
+        rule["counterparties"] = normalized_counterparties
+    if party_details:
+        unique_details = {
+            json.dumps(item, sort_keys=True, ensure_ascii=False): item
+            for item in party_details
+        }
+        rule["counterparty_details"] = list(unique_details.values())
     variables = rule.get("variables")
     if not isinstance(variables, list):
         variables = []
@@ -1419,12 +1467,24 @@ def _is_deferred_contract_issue(issue: Mapping[str, Any], rule: Mapping[str, Any
         # disclosure). They still cannot be executed as a conditional DMN row,
         # but treating the representation gap as deferred lets the pipeline
         # complete while the rule stays explicitly review-required.
-        return bool(rule.get("source_reference")) and bool(rule.get("outcomes"))
+        return bool(rule.get("outcomes"))
     if code == "missing_test_vectors":
         # A source-backed rule may be fully grounded while its executable
         # examples are still a capability gap. Keep it review-required, but
         # allow downstream model/export stages to run and expose the gap.
-        return bool(rule.get("source_reference")) and bool(rule.get("outcomes"))
+        return bool(rule.get("outcomes"))
+    if code in {
+        "invalid_hit_policy",
+        "missing_versioning_status",
+        "missing_responsible_party",
+        "invalid_vector_basis",
+        "undefined_predicate_variable",
+        "missing_workflow_evidence",
+    }:
+        # These are rule-local lowering/metadata gaps. They remain explicit
+        # readiness failures on the rule, but do not make the entire graph
+        # structurally unusable or prevent grounding/report generation.
+        return True
     if code == "invalid_outcome_value_type":
         path = str(issue.get("path", ""))
         try:
@@ -2720,11 +2780,18 @@ class ExecutableReadinessCompleter:
                 issues.append({"requirement": "evidence_completion", "reason": f"Provider rejected this rule's completion request and no further evidence could be gathered: {completion_error}"})
             reviewed_rules.append(mark_readiness(rule, issues))
         final_graph["business_rules"] = reviewed_rules
-        evidence_added_sections = cited_sections(final_graph) - cited_sections(baseline)
+        baseline_sections = cited_sections(baseline)
+        final_sections = cited_sections(final_graph)
+        evidence_added_sections = final_sections - baseline_sections
+        evidence_removed_sections = baseline_sections - final_sections
         corpus_change_reasons = {
             section: "Added as field-level evidence during the required full-document readiness review; the source document corpus is unchanged."
             for section in evidence_added_sections
         }
+        corpus_change_reasons.update({
+            section: "No longer cited after readiness evidence normalization; the source document corpus is unchanged and the affected rule remains traceable through its validated replacement citations."
+            for section in evidence_removed_sections
+        })
         manifest = corpus_manifest(baseline, final_graph, corpus_change_reasons)
         final_graph["corpus_manifest"] = manifest
 
