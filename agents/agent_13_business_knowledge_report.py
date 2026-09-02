@@ -28,7 +28,7 @@ from utils.kg_readiness import dependency_edges, source_document_index
 from utils.semantic_artifacts import build_sbvr_profile
 
 
-REPORT_DIR_NAME = "agent_12-business-knowledge-report"
+REPORT_DIR_NAME = "agent_13-business-knowledge-report"
 REPORT_FILE_NAME = "business_knowledge_report.html"
 
 

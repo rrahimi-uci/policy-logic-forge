@@ -1,7 +1,7 @@
 # CLI reference: `cli/extract.py`
 
 `cli/extract.py` is the extraction pipeline's orchestrator: it runs the
-twelve canonical agents (`agent_01`–`agent_12`) against a source-document
+thirteen canonical agents (`agent_01`–`agent_13`) against a source-document
 directory and writes a grounding-certified, DMN/BPMN-ready knowledge graph
 under `pipeline-output/<batch-name>/`. This document is the complete,
 stand-alone reference for running it — commands, options, configuration,
@@ -38,7 +38,7 @@ cp /path/to/your/*.txt compliance-files/nda_confidentiality/
 python3 cli/extract.py --dir nda_confidentiality --domain nda_confidentiality --target-rules 20
 ```
 
-This runs all twelve stages in order against
+This runs all thirteen stages in order against
 `compliance-files/nda_confidentiality/`, writing to a timestamped folder such
 as `pipeline-output/nda_confidentiality-run-2026-09-01-09-05/` (the default
 uses the source basename and US Pacific time). You'll see a configuration panel, a live stage-by-stage progress
@@ -65,7 +65,7 @@ cli/extract.py --dir DIR --domain DOMAIN [options] [selector]
 | `--skip-optimize` | no | Skip `agent_06`–`agent_08` (KG optimization, readiness, remediation). Independent `agent_09` grounding still runs before `agent_10` DAG generation. |
 | `--keep-going` | no | With `--stages`, run every selected stage even after an earlier one fails, instead of stopping at the first failure. No effect on a single-stage selector or a full run — see [Selecting stages](#selecting-stages). |
 | `--output {text,json}` | no | `text` (default): the polished interactive display below. `json`: line-delimited JSON events on stdout for automation — see [Output modes](#output-modes). |
-| `--agent AGENT_ID` | no* | Run exactly one agent by canonical id (`agent_01`–`agent_12`). |
+| `--agent AGENT_ID` | no* | Run exactly one agent by canonical id (`agent_01`–`agent_13`). |
 | `--stage N` | no* | Run exactly one stage by number (`1`–`12`; accepts `7` or `07`). Same agent as `--agent agent_07`. |
 | `--stages RANGE` | no* | Run **multiple** stages in order — a range, a list, or a mix: `3-6`, `3,5,7`, `3-6,9,11`. See [Selecting stages](#selecting-stages). |
 | `--step ALIAS` | no* | Deprecated legacy selector (`1`, `3.5`, `5.7`, ...) from a prior ten-stage numbering. Prints the canonical stage it maps to. Prefer `--stage`/`--agent`. |
@@ -402,7 +402,7 @@ already wrote their output — re-run only the remaining stages against the
 # Original run failed at stage 6:
 python3 cli/extract.py --dir nda_confidentiality --domain nda_confidentiality \
   --batch-name nda-2026-q1 --target-rules 30
-# ... fails at Stage 06/12 ...
+# ... fails at Stage 06/13 ...
 
 # Fix whatever caused the failure, then continue from stage 6 onward,
 # same batch name so it reuses stages 1-5's already-written output:

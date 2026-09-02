@@ -1,7 +1,7 @@
-"""Canonical identifiers and numbering for the twelve pipeline agents.
+"""Canonical identifiers and numbering for the thirteen pipeline agents.
 
-The public pipeline contract is one sequence: Stage 01/12 is ``agent_01``
-and Stage 12/12 is ``agent_12``.  Keeping the sequence, display labels,
+The public pipeline contract is one sequence: Stage 01/13 is ``agent_01``
+and Stage 13/13 is ``agent_13``.  Keeping the sequence, display labels,
 output directories, and the legacy CLI aliases in one module prevents the
 orchestrator, review UI, checkpoints, and documentation from drifting apart.
 """
@@ -32,7 +32,8 @@ PIPELINE_AGENTS: tuple[AgentSpec, ...] = (
     AgentSpec("agent_09", "agent_09_grounding_verifier.py", "Grounding Verifier"),
     AgentSpec("agent_10", "agent_10_dag_generator.py", "Dependency DAG Generator"),
     AgentSpec("agent_11", "agent_11_executable_model_generator.py", "Executable DMN/BPMN Model Generator"),
-    AgentSpec("agent_12", "agent_12_business_knowledge_report.py", "Business Knowledge Report"),
+    AgentSpec("agent_12", "agent_12_business_information_model.py", "Business Information Model"),
+    AgentSpec("agent_13", "agent_13_business_knowledge_report.py", "Business Knowledge Report"),
 )
 
 AGENT_BY_ID = {spec.identifier: spec for spec in PIPELINE_AGENTS}
@@ -43,7 +44,7 @@ CANONICAL_STAGE_NUMBERS = tuple(str(index) for index in range(1, PIPELINE_STAGE_
 # These aliases are intentionally isolated from the canonical numbering.  A
 # prior release exposed a ten-stage selector with fractional stages; callers
 # using that interface must keep receiving the same agent, but new commands
-# should use ``--stage 1``–``--stage 12`` or ``--agent agent_01``–``agent_12``.
+# should use ``--stage 1``–``--stage 13`` or ``--agent agent_01``–``agent_13``.
 LEGACY_STEP_ALIASES = {
     "1": "agent_01", "2": "agent_02", "3": "agent_03", "3.5": "agent_04",
     "4": "agent_05", "5": "agent_06", "5.5": "agent_07", "5.6": "agent_08",
@@ -69,7 +70,8 @@ PIPELINE_OUTPUT_DIRS = {
     "agent_09": OPTIMIZED_OUTPUT_DIR,
     "agent_10": "agent_10-dag-generation",
     "agent_11": "agent_11-executable-models",
-    "agent_12": "agent_12-business-knowledge-report",
+    "agent_12": "agent_12-business-information-model",
+    "agent_13": "agent_13-business-knowledge-report",
 }
 
 

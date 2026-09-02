@@ -58,7 +58,7 @@ def test_stages_argument_rejects_out_of_range():
     with pytest.raises(argparse.ArgumentTypeError):
         _parse_stages_arg("0-3")
     with pytest.raises(argparse.ArgumentTypeError):
-        _parse_stages_arg("13")
+        _parse_stages_arg("14")
 
 
 def test_stages_argument_rejects_backwards_range():
@@ -297,7 +297,8 @@ def test_run_all_continues_to_grounding_and_dag_for_review_only_readiness(tmp_pa
         return run
 
     for name in ("run_agent_01", "run_agent_02", "run_agent_03", "run_agent_04",
-                 "run_agent_05", "run_agent_06", "run_agent_09", "run_agent_10", "run_agent_11", "run_agent_12"):
+                 "run_agent_05", "run_agent_06", "run_agent_09", "run_agent_10", "run_agent_11", "run_agent_12",
+                 "run_agent_13"):
         monkeypatch.setattr(pipeline, name, ok(name))
 
     readiness_calls = iter((False, False))
@@ -315,7 +316,7 @@ def test_run_all_continues_to_grounding_and_dag_for_review_only_readiness(tmp_pa
     monkeypatch.setattr(pipeline, "run_agent_07", readiness)
     monkeypatch.setattr(pipeline, "run_agent_08", remediation)
     assert pipeline.run_all() is True
-    assert calls[-4:] == ["run_agent_09", "run_agent_10", "run_agent_11", "run_agent_12"]
+    assert calls[-5:] == ["run_agent_09", "run_agent_10", "run_agent_11", "run_agent_12", "run_agent_13"]
 
 
 def test_run_all_continues_to_dag_for_complete_review_only_grounding(tmp_path, monkeypatch):
@@ -327,7 +328,8 @@ def test_run_all_continues_to_dag_for_complete_review_only_grounding(tmp_path, m
     calls = []
 
     for name in ("run_agent_01", "run_agent_02", "run_agent_03", "run_agent_04",
-                 "run_agent_05", "run_agent_06", "run_agent_10", "run_agent_11", "run_agent_12"):
+                 "run_agent_05", "run_agent_06", "run_agent_10", "run_agent_11", "run_agent_12",
+                 "run_agent_13"):
         monkeypatch.setattr(pipeline, name, lambda name=name: calls.append(name) or True)
 
     def grounding():
@@ -338,7 +340,7 @@ def test_run_all_continues_to_dag_for_complete_review_only_grounding(tmp_path, m
     monkeypatch.setattr(pipeline, "run_agent_09", grounding)
     monkeypatch.setattr(pipeline, "_review_only_grounding", lambda: True)
     assert pipeline.run_all() is True
-    assert calls[-4:] == ["run_agent_09", "run_agent_10", "run_agent_11", "run_agent_12"]
+    assert calls[-5:] == ["run_agent_09", "run_agent_10", "run_agent_11", "run_agent_12", "run_agent_13"]
 
 
 def test_readiness_verification_reuses_remediated_conflicts(monkeypatch):
@@ -381,7 +383,7 @@ def test_legacy_step_selector_remains_explicit_compatibility_alias(monkeypatch, 
 
     assert pipeline.run_step("5.7") is True
     assert observed == ["agent_09"]
-    assert "Legacy --step 5.7 maps to Stage 09/12 · agent_09" in capsys.readouterr().out
+    assert "Legacy --step 5.7 maps to Stage 09/13 · agent_09" in capsys.readouterr().out
 
 
 def test_initial_readiness_analysis_does_not_reuse_conflicts(monkeypatch):

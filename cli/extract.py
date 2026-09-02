@@ -4,9 +4,9 @@ Extraction orchestrator: compliance documents -> a grounding-certified,
 DMN/BPMN-ready knowledge graph.
 
 This is a lean, single-batch orchestrator by design (see README.md "Scope").
-It runs the twelve canonical stages in order, streaming each subprocess's
+It runs the thirteen canonical stages in order, streaming each subprocess's
 output.  The stage number and agent identifier are deliberately identical:
-Stage 01/12 is ``agent_01`` through Stage 12/12, ``agent_12``:
+Stage 01/13 is ``agent_01`` through Stage 13/13, ``agent_13``:
 
   01/12  agent_01  Document Organizer        chunk raw documents
   02/12  agent_02  Entity Extractor          entities & relationships
@@ -19,7 +19,8 @@ Stage 01/12 is ``agent_01`` through Stage 12/12, ``agent_12``:
   09/12  agent_09  Grounding Verifier         independent claim-level certification
   10/12  agent_10  Dependency DAG Generator   100%-coverage DAG partition of the graph
   11/12  agent_11  Executable Model Generator  DMN 1.3 and BPMN 2.0 projection
-  12/12  agent_12  Business Knowledge Report    self-contained HTML report
+  12/13  agent_12  Business Information Model  UML domain model + catalog
+  13/13  agent_13  Business Knowledge Report    self-contained HTML report
 
 Each agent subprocess shares an adaptive API-concurrency limiter (see
 utils/adaptive_limiter.py) via KG_GLOBAL_LLM_STATE_FILE, so running multiple
@@ -445,8 +446,12 @@ class ExtractionPipeline:
         return self._run("agent_11", [])
 
     def run_agent_12(self) -> bool:
-        """Generate the self-contained business knowledge report."""
+        """Build the UML business information model from the certified graph."""
         return self._run("agent_12", [])
+
+    def run_agent_13(self) -> bool:
+        """Generate the self-contained business knowledge report."""
+        return self._run("agent_13", [])
 
     def _review_only_readiness(self) -> bool:
         """Return true when readiness is structurally sound but still review-gated.
@@ -573,6 +578,8 @@ class ExtractionPipeline:
             return False
         if not self.run_agent_12():
             return False
+        if not self.run_agent_13():
+            return False
 
         elapsed = datetime.now() - start
         self._operator_message("\n🎉 PIPELINE COMPLETE in " + str(elapsed))
@@ -589,6 +596,7 @@ class ExtractionPipeline:
             "agent_07": self.run_agent_07, "agent_08": self.run_agent_08,
             "agent_09": self.run_agent_09, "agent_10": self.run_agent_10,
             "agent_11": self.run_agent_11, "agent_12": self.run_agent_12,
+            "agent_13": self.run_agent_13,
         }
         if agent_id not in dispatch:
             self._operator_message(f"❌ Invalid agent: {agent_id}. Valid: {', '.join(AGENT_IDS)}", "error")
@@ -614,7 +622,7 @@ class ExtractionPipeline:
             remediation_index = stage_ids.index("agent_08")
             has_downstream = any(
                 selected in stage_ids[remediation_index + 1:]
-                for selected in ("agent_09", "agent_10", "agent_11", "agent_12")
+                for selected in ("agent_09", "agent_10", "agent_11", "agent_12", "agent_13")
             )
             if has_downstream and "agent_07" not in stage_ids[:remediation_index]:
                 # A resume beginning at Agent 08 automatically rechecks Agent
@@ -661,7 +669,7 @@ class ExtractionPipeline:
                 should_recheck = readiness_pending or "agent_07" not in stage_ids[:index]
                 if should_recheck and any(
                     selected in stage_ids[index + 1:]
-                    for selected in ("agent_09", "agent_10", "agent_11", "agent_12")
+                    for selected in ("agent_09", "agent_10", "agent_11", "agent_12", "agent_13")
                 ):
                     readiness_pending = False
                     recheck_ok = self.run_agent_07(reuse_conflicts=True)
@@ -743,7 +751,7 @@ def main():
                               "go to stderr instead so stdout stays machine-parseable.")
     selector = parser.add_mutually_exclusive_group()
     selector.add_argument("--agent", choices=list(AGENT_IDS), help="Run one canonical agent only (for example: agent_07)")
-    selector.add_argument("--stage", type=_parse_stage_arg, choices=list(CANONICAL_STAGE_NUMBERS), help="Run one canonical pipeline stage (1–12; Stage 07 maps to agent_07 and Stage 12 maps to agent_12)")
+    selector.add_argument("--stage", type=_parse_stage_arg, choices=list(CANONICAL_STAGE_NUMBERS), help="Run one canonical pipeline stage (1–13; Stage 07 maps to agent_07 and Stage 13 maps to agent_13)")
     selector.add_argument("--step", choices=list(LEGACY_STEP_ALIASES), help="Deprecated legacy selector; use --stage or --agent (fractional aliases retain historical meanings)")
     selector.add_argument("--stages", type=_parse_stages_arg, metavar="RANGE",
                            help="Run multiple canonical stages in order, e.g. '3-6', '3,5,7', or '3-6,9,11' "

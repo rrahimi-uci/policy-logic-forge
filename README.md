@@ -15,12 +15,12 @@ real DMN/BPMN/CMMN/SBVR examples — see [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
 ## What's here
 
-**The extraction pipeline** — twelve canonical agents, `agent_01` through
-`agent_12` (document organization → entity/relationship extraction →
+**The extraction pipeline** — thirteen canonical agents, `agent_01` through
+`agent_13` (document organization → entity/relationship extraction →
 business-rule extraction → validation → merge → deduplication + dependency
 analysis → four-invariant executable-readiness gate → focused remediation →
 independent grounding certification → dependency DAG generation → DMN/BPMN/
-CMMN model generation → self-contained business knowledge report). A lean CLI
+CMMN model generation → UML business information model → self-contained business knowledge report). A lean CLI
 orchestrator (`cli/extract.py`) runs them in order.
 
 **RegDelta** — a rule-change/version differential-execution engine layered on
@@ -31,8 +31,17 @@ graph. See [`plan/regdelta-product-plan.md`](plan/regdelta-product-plan.md).
 **No UI.** This is a CLI-and-library tool; there is currently no web
 frontend or backend service.
 
-**Agent 12 report layer** — after Agent 11 has produced its model bundle,
-`agents/agent_12_business_knowledge_report.py` creates one self-contained
+**Agent 12 business information model** — `agents/agent_12_business_information_model.py`
+turns the certified graph into a UML domain model: classes with fully typed
+business attributes (`Money`, `Percentage`, `Duration`, named enumerations —
+derived from declared units and value sets, not guessed from names),
+multiplicity, optionality, constraints, and per-attribute source rules. Emits a
+Mermaid and a PlantUML class diagram, a machine-readable model, a class/attribute
+catalog, and a ten-check validation report. Attributes it cannot confidently
+place are held for review rather than filed under a guess.
+
+**Agent 13 report layer** — after Agent 11 has produced its model bundle,
+`agents/agent_13_business_knowledge_report.py` creates one self-contained
 `business_knowledge_report.html`. The report provides tabbed SBVR vocabulary,
 rule and score exploration, DMN/BPMN/CMMN coverage, dependency views, embedded
 source chunks, search/filter controls, and inline SVG visualizations. Each rule
@@ -128,32 +137,33 @@ explicit batch name when resuming a previous run.
 - `agent_11-executable-models/` — DMN/BPMN/CMMN/SBVR review projections, plus
   a compiled, proof-checked LExec IR document for rules the compiler can
   represent (`lexec_ir.json`, `compilation_report.json`, `proof_records.json`).
-- `agent_12-business-knowledge-report/business_knowledge_report.html` — the
+- `agent_13-business-knowledge-report/business_knowledge_report.html` — the
   self-contained human-review and exploration report generated from the Agent
   11 bundle. Open it directly in a browser; no server or network access is
   required.
 
 ### Numbering contract
 
-The pipeline has one canonical sequence of twelve stages. The stage number and
-agent identifier are the same value, so `Stage 09/12` always means
+The pipeline has one canonical sequence of thirteen stages. The stage number and
+agent identifier are the same value, so `Stage 09/13` always means
 `agent_09` (grounding verification). Use `--stage N` when selecting by number
 or `--agent agent_NN` when selecting by identifier:
 
 | Stage | Agent | Responsibility |
 | --- | --- | --- |
-| 01/12 | `agent_01` | Document organization |
-| 02/12 | `agent_02` | Entity and relationship extraction |
-| 03/12 | `agent_03` | Business-rule extraction |
-| 04/12 | `agent_04` | Advisory rule validation |
-| 05/12 | `agent_05` | Rules/entities merge |
-| 06/12 | `agent_06` | Knowledge-graph optimization |
-| 07/12 | `agent_07` | Executable-readiness gate |
-| 08/12 | `agent_08` | Readiness remediation |
-| 09/12 | `agent_09` | Independent grounding verification |
-| 10/12 | `agent_10` | Dependency-DAG generation |
-| 11/12 | `agent_11` | DMN/BPMN/CMMN model generation |
-| 12/12 | `agent_12` | Self-contained business knowledge report |
+| 01/13 | `agent_01` | Document organization |
+| 02/13 | `agent_02` | Entity and relationship extraction |
+| 03/13 | `agent_03` | Business-rule extraction |
+| 04/13 | `agent_04` | Advisory rule validation |
+| 05/13 | `agent_05` | Rules/entities merge |
+| 06/13 | `agent_06` | Knowledge-graph optimization |
+| 07/13 | `agent_07` | Executable-readiness gate |
+| 08/13 | `agent_08` | Readiness remediation |
+| 09/13 | `agent_09` | Independent grounding verification |
+| 10/13 | `agent_10` | Dependency-DAG generation |
+| 11/13 | `agent_11` | DMN/BPMN/CMMN model generation |
+| 12/13 | `agent_12` | Business information model (UML classes, attributes, enumerations) |
+| 13/13 | `agent_13` | Self-contained business knowledge report |
 
 Stages 07–09 intentionally write reports into the shared
 `agent_06-07-08-09-optimized/` directory because they operate on the same optimized
@@ -168,7 +178,7 @@ extraction numbering contract. Generate it for an existing batch with:
 
 ```bash
 KG_BATCH_NAME=my-batch KG_DOMAIN=privacy_policy \
-  .venv/bin/python agents/agent_12_business_knowledge_report.py
+  .venv/bin/python agents/agent_13_business_knowledge_report.py
 ```
 
 Optional `--graph`, `--dags`, `--models-dir`, `--organized-dir`, and
@@ -198,7 +208,7 @@ still stop the run.
 ## Structure
 
 ```text
-cli/extract.py              `agent_01`–`agent_12` orchestrator
+cli/extract.py              `agent_01`–`agent_13` orchestrator
 agents/                     one zero-padded module per extraction agent plus Agent 12 report layer
 utils/                      config, LLM client, adaptive rate limiter,
                             rule contract + validator, readiness/grounding

@@ -57,7 +57,7 @@ _STATUS_STYLE: dict[str, tuple[str, str]] = {
     SKIPPED: ("dim", "⏭️"),
 }
 
-# A small, stable visual vocabulary for the canonical twelve-stage contract.
+# A small, stable visual vocabulary for the canonical thirteen-stage contract.
 # The raw stage label remains unchanged in JSON events and persisted metrics.
 _STAGE_ICON: dict[str, str] = {
     "agent_01": "📚",  # organize source documents
@@ -71,7 +71,8 @@ _STAGE_ICON: dict[str, str] = {
     "agent_09": "📎",  # grounding
     "agent_10": "🕸️",  # dependency DAG
     "agent_11": "⚙️",  # executable models
-    "agent_12": "📊",  # business knowledge report
+    "agent_12": "🧩",  # business information model
+    "agent_13": "📊",  # business knowledge report
 }
 
 
@@ -151,7 +152,7 @@ class TextReporter:
     def run_start(self, run: RunMetrics) -> None:
         cfg = run.config
         lines = [
-            "🚀 run started — monitoring canonical Stage 01/12 … Stage 12/12",
+            "🚀 run started — monitoring canonical Stage 01/13 … Stage 13/13",
             f"[bold]domain[/bold]        {run.domain}",
             f"[bold]source[/bold]        {run.source_dir}",
             f"[bold]batch name[/bold]    {run.batch_name}",

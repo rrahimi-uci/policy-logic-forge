@@ -1,4 +1,4 @@
-"""Contracts for the repository-wide ``agent_01``–``agent_12`` naming scheme."""
+"""Contracts for the repository-wide ``agent_01``–``agent_13`` naming scheme."""
 
 import re
 from pathlib import Path
@@ -23,27 +23,28 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
 def test_agent_ids_are_sequential_and_zero_padded():
-    assert AGENT_IDS == tuple(f"agent_{index:02d}" for index in range(1, 13))
-    assert PIPELINE_STAGE_COUNT == len(AGENT_IDS) == 12
-    assert CANONICAL_STAGE_NUMBERS == tuple(str(index) for index in range(1, 13))
+    assert AGENT_IDS == tuple(f"agent_{index:02d}" for index in range(1, 14))
+    assert PIPELINE_STAGE_COUNT == len(AGENT_IDS) == 13
+    assert CANONICAL_STAGE_NUMBERS == tuple(str(index) for index in range(1, 14))
 
 
 def test_canonical_stage_numbers_map_directly_to_agent_ids():
     assert [agent_id_for_stage(stage) for stage in CANONICAL_STAGE_NUMBERS] == list(AGENT_IDS)
     assert agent_id_for_stage("07") == "agent_07"
     assert stage_number("agent_11") == 11
-    assert stage_number("agent_12") == 12
-    assert stage_label("agent_09") == "Stage 09/12 · agent_09 · Grounding Verifier"
-    assert stage_label("agent_12") == "Stage 12/12 · agent_12 · Business Knowledge Report"
+    assert stage_number("agent_13") == 13
+    assert stage_label("agent_09") == "Stage 09/13 · agent_09 · Grounding Verifier"
+    assert stage_label("agent_12") == "Stage 12/13 · agent_12 · Business Information Model"
+    assert stage_label("agent_13") == "Stage 13/13 · agent_13 · Business Knowledge Report"
 
 
 def test_invalid_canonical_stage_number_is_rejected():
     import pytest
 
-    with pytest.raises(ValueError, match="expected an integer from 1 to 12"):
+    with pytest.raises(ValueError, match="expected an integer from 1 to 13"):
         agent_id_for_stage("5.7")
-    with pytest.raises(ValueError, match="expected an integer from 1 to 12"):
-        agent_id_for_stage(13)
+    with pytest.raises(ValueError, match="expected an integer from 1 to 13"):
+        agent_id_for_stage(14)
 
 
 def test_legacy_step_aliases_are_explicitly_separate_from_canonical_stages():
@@ -73,7 +74,8 @@ def test_pipeline_output_directories_use_current_agent_identifiers():
     assert output_dir_names("agent_10") == ("agent_10-dag-generation",)
     assert output_dir_name("agent_10") == "agent_10-dag-generation"
     assert output_dir_name("agent_11") == "agent_11-executable-models"
-    assert output_dir_name("agent_12") == "agent_12-business-knowledge-report"
+    assert output_dir_name("agent_12") == "agent_12-business-information-model"
+    assert output_dir_name("agent_13") == "agent_13-business-knowledge-report"
 
 
 def test_cli_advertises_canonical_agent_selector():
