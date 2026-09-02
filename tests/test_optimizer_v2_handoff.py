@@ -186,43 +186,9 @@ def test_deduplication_prompt_carries_v2_structure():
     assert "related_entities" not in sent[0], "dedup never included related_entities before this change"
 
 
-def test_single_batch_dependency_prompt_carries_v2_structure():
-    optimizer = _optimizer()
-
-    optimizer.analyze_dependencies([_v2_rule()])
-
-    kwargs = optimizer.prompt_manager.format_prompt.call_args.kwargs
-    sent = json.loads(kwargs["rules_json"])
-    assert sent[0]["outcomes"], "v2 outcomes must reach the single-batch dependency prompt"
-    assert sent[0]["related_entities"] == ["RECIPIENT", "DISCLOSING_PARTY"]
-
-
-def test_batched_within_batch_dependency_prompt_carries_v2_structure():
-    optimizer = _optimizer()
-    optimizer.config.get_optimizer_batch_size.return_value = 1  # force the batched path
-
-    rules = [_v2_rule("R2"), _v2_rule("R3")]
-    optimizer._analyze_dependencies_batched(rules, batch_size=1)
-
-    calls = optimizer.prompt_manager.format_prompt.call_args_list
-    assert calls, "batched dependency analysis must still build at least one prompt"
-    sent = json.loads(calls[0].kwargs["rules_json"])
-    assert sent[0]["condition_predicates"], "v2 predicates must reach the within-batch prompt"
-
-
-def test_batched_cross_batch_dependency_prompt_carries_v2_structure():
-    optimizer = _optimizer()
-    optimizer.config.get_optimizer_batch_size.return_value = 1
-    optimizer.config.get_optimizer_max_cross_batch_pairs = MagicMock(return_value=20)
-
-    rules = [_v2_rule("R2"), _v2_rule("R3"), _v2_rule("R4")]
-    optimizer._analyze_dependencies_batched(rules, batch_size=1)
-
-    # Every format_prompt call in this run — within-batch and cross-batch —
-    # must carry v2 structure; none may have silently fallen back to legacy
-    # fields the rules don't have.
-    for call in optimizer.prompt_manager.format_prompt.call_args_list:
-        sent = json.loads(call.kwargs["rules_json"])
-        for entry in sent:
-            assert "conditions" not in entry
-            assert entry.get("condition_predicates") or entry.get("outcomes")
+# The three dependency-prompt handoff tests that lived here were removed with
+# the prompt itself: rule relationships are now derived deterministically from
+# the rule contracts by utils/rule_dependencies.py, so no dependency prompt
+# exists whose v2 payload needs pinning. The dedup handoff above still applies,
+# because deduplication remains model-driven. Derivation is covered directly in
+# tests/test_rule_dependencies.py.

@@ -90,7 +90,6 @@ def _prompt_contains_any(prompt_text: str, *values: str) -> bool:
 EXPECTED_PROMPT_FILES = [
     "business_rules_extraction",
     "business_rules_extraction_compact",  # what agent_03 actually requests
-    "dependency_analysis",
     "document_structure_analysis",
     "entity_extraction",
     "entity_extraction_compact",  # what agent_02 actually requests
@@ -214,97 +213,12 @@ class TestRuleDeduplicationContract:
 #      rule["dependencies"][i]["dependency_type"]
 # ─────────────────────────────────────────────────────────────────────────────
 
-class TestDependencyAnalysisContract:
-    """dependency_analysis.txt must produce fields that agent_06 reads."""
+# NOTE: TestDependencyAnalysisContract was removed along with the
+# dependency_analysis prompt itself. Rule relationships are now derived
+# deterministically from the rule contracts by utils/rule_dependencies.py,
+# so there is no prompt whose output shape needs pinning -- the acceptance
+# conditions are unit-tested directly in tests/test_rule_dependencies.py.
 
-    REQUIRED_DEP_FIELDS = [
-        "source_rule_id",
-        "target_rule_id",
-        "dependency_type",
-        "rationale",
-        "impact",
-    ]
-    VALID_DEPENDENCY_TYPES = [
-        "prerequisite",
-        "sequential",
-        "conditional",
-        "complementary",
-        "contradictory",
-        "override",
-        "validation",
-    ]
-
-    @pytest.mark.parametrize("domain", DOMAINS)
-    def test_top_level_dependencies_key(self, domain):
-        prompt = _load_prompt(domain, "dependency_analysis")
-        assert _prompt_contains_field(prompt, "dependencies"), (
-            f'{domain}/dependency_analysis.txt must instruct "dependencies" array'
-        )
-
-    @pytest.mark.parametrize("domain", DOMAINS)
-    @pytest.mark.parametrize("field", REQUIRED_DEP_FIELDS)
-    def test_required_dependency_field(self, domain, field):
-        prompt = _load_prompt(domain, "dependency_analysis")
-        assert _prompt_contains_field(prompt, field), (
-            f'{domain}/dependency_analysis.txt must include "{field}" '
-            f"(agent_06 reads dep[\"{field}\"])"
-        )
-
-    @pytest.mark.parametrize("domain", DOMAINS)
-    def test_strength_field(self, domain):
-        prompt = _load_prompt(domain, "dependency_analysis")
-        assert _prompt_contains_field(prompt, "strength"), (
-            f'{domain}/dependency_analysis.txt must include "strength" '
-            f"(agent_06 reads dep.get('strength', 3))"
-        )
-
-    @pytest.mark.parametrize("domain", DOMAINS)
-    def test_circular_dependencies_key(self, domain):
-        prompt = _load_prompt(domain, "dependency_analysis")
-        assert _prompt_contains_field(prompt, "circular_dependencies") or \
-               _prompt_contains_any(prompt, "circular_dependencies"), (
-            f'{domain}/dependency_analysis.txt should include "circular_dependencies"'
-        )
-
-    @pytest.mark.parametrize("domain", DOMAINS)
-    def test_dependency_chains_key(self, domain):
-        prompt = _load_prompt(domain, "dependency_analysis")
-        assert _prompt_contains_field(prompt, "dependency_chains") or \
-               _prompt_contains_any(prompt, "dependency_chains"), (
-            f'{domain}/dependency_analysis.txt should include "dependency_chains"'
-        )
-
-    @pytest.mark.parametrize("domain", DOMAINS)
-    def test_all_seven_dependency_types_mentioned(self, domain):
-        prompt = _load_prompt(domain, "dependency_analysis")
-        for dep_type in self.VALID_DEPENDENCY_TYPES:
-            assert dep_type in prompt.lower(), (
-                f'{domain}/dependency_analysis.txt must mention dependency type '
-                f'"{dep_type}". agent_06 expects all 7 types.'
-            )
-
-    @pytest.mark.parametrize("domain", DOMAINS)
-    def test_no_legacy_field_names(self, domain):
-        """Ensure old broken field names are NOT present."""
-        prompt = _load_prompt(domain, "dependency_analysis")
-        for legacy in ["prerequisite_rule_id", "dependent_rule_id"]:
-            assert not _prompt_contains_field(prompt, legacy), (
-                f'{domain}/dependency_analysis.txt contains legacy field '
-                f'"{legacy}" — agent_06 reads source_rule_id/target_rule_id'
-            )
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# 3. rule_matcher_batch  → upstream comparison matcher (not shipped here)
-#
-#    The upstream comparison matcher reads from each result:
-#      result.get("relationship", "UNRELATED")
-#      result.get("confidence", 0.5)
-#      result.get("similarity_score", 0)
-#      result.get("reasoning", "")
-#      result.get("key_comparison", {})
-#      result.get("conflict_detail", {})
-# ─────────────────────────────────────────────────────────────────────────────
 
 class TestRuleMatcherBatchContract:
     """rule_matcher_batch.txt preserves the upstream comparison contract."""
@@ -604,7 +518,6 @@ class TestCrossDomainConsistency:
 
     CRITICAL_PAIRS = [
         ("rule_deduplication", ["duplicate_groups"]),
-        ("dependency_analysis", ["dependencies", "circular_dependencies", "dependency_chains"]),
         ("rule_matcher_batch", ["pair_id", "relationship", "confidence", "similarity_score", "reasoning"]),
         ("entity_extraction", ["relationships"]),
     ]

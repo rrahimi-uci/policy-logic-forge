@@ -28,6 +28,7 @@ from utils.prompt_manager import get_prompt_manager
 from utils.llm_client import create_llm_client
 from utils.config import get_config
 from utils.rule_uniqueness import enforce_rule_uniqueness
+from utils.rule_dependencies import Relation, derive_relations
 
 # Helper for real-time output
 def _print(msg):
@@ -35,22 +36,26 @@ def _print(msg):
     print(msg, flush=True)
 
 
-def _rule_variable_names(rule: Dict[str, Any]) -> set:
-    """Every variable name a rule's own logic references — its declared
-    variables plus whichever of them actually appear in its predicates and
-    outcomes. This is the vocabulary through which one rule could genuinely
-    affect another's evaluation."""
-    names = set()
-    for variable in rule.get("variables", []) or []:
-        if isinstance(variable, dict) and variable.get("name"):
-            names.add(str(variable["name"]).strip().lower())
-    for predicate in rule.get("condition_predicates", []) or []:
-        if isinstance(predicate, dict) and predicate.get("variable"):
-            names.add(str(predicate["variable"]).strip().lower())
-    for outcome in rule.get("outcomes", []) or []:
-        if isinstance(outcome, dict) and outcome.get("variable"):
-            names.add(str(outcome["variable"]).strip().lower())
-    return names
+def _relation_to_dependency(relation: "Relation") -> Dict[str, Any]:
+    """Adapt a derived relation onto the dependency shape consumers already read.
+
+    ``confidence`` is retained because downstream readers expect the key, but a
+    derived relation is not estimated -- it either satisfies its acceptance
+    condition or it is not emitted -- so the payload says so rather than
+    dressing a certainty up as a score.
+    """
+    return {
+        "source_rule_id": relation.source_rule_id,
+        "target_rule_id": relation.target_rule_id,
+        "dependency_type": relation.kind,
+        "symbols": list(relation.symbols),
+        "basis": relation.basis,
+        "rationale": relation.rationale,
+        "structurally_supported": True,
+        "strength": len(relation.symbols),
+        "confidence": {"overall_score": 100.0, "basis": relation.basis,
+                       "note": "derived from the rule contracts, not estimated"},
+    }
 
 
 def dependency_has_structural_support(source_rule: Any, target_rule: Any) -> bool:
@@ -581,409 +586,97 @@ class KnowledgeGraphOptimizer:
         return deduplicated_rules, metadata
     
     def analyze_dependencies(self, rules: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
-        """
-        Analyze dependencies between business rules using GPT-5 reasoning.
-        Uses batching for large rule sets to avoid token limits.
-        
-        Returns:
-            - Rules with dependency information added
-            - Dependency analysis metadata
+        """Derive rule relationships deterministically from the rule contracts.
+
+        This replaced an LLM proposal pass that was screened by a single
+        structural check.  Three measured problems motivated the change, all
+        from real runs in this repository:
+
+        * The proposal pass read batched rule summaries with a hard cap on
+          cross-batch comparisons, so on a 613-rule run roughly 96% of rule
+          pairs were never examined.  It asserted 4 edges where 66 were
+          derivable from the same contracts.
+        * ``dependency_type`` accepted six values that were defined nowhere and
+          were all validated by the same check -- correct for one of them,
+          irrelevant to four.  No code branched on the value.
+        * The check ran once, here, and later stages rewrite variables in
+          place, so an edge could outlive the symbol that justified it.
+
+        Derivation is a hash join over ``(symbol, rule)`` entries, so it is
+        exhaustive at a cost linear in declared symbols rather than quadratic
+        in rules.  ``utils.rule_dependencies`` owns the relation kinds and
+        their acceptance conditions; this method adapts the result onto the
+        ``dependency_details`` shape the rest of the pipeline already reads.
         """
         print(f"\n{'='*70}", flush=True)
-        print(f"STEP 2: Analyzing Rule Dependencies", flush=True)
+        print(f"STEP 2: Deriving Rule Relationships", flush=True)
         print(f"{'='*70}", flush=True)
-        print(f"Analyzing {len(rules)} rules for dependencies...", flush=True)
-        
-        # Determine if batching is needed (threshold: 100 rules)
-        BATCH_SIZE = self.config.get_optimizer_batch_size()
-        if len(rules) > 100:
-            print(f"📦 Large rule set detected - using batched analysis", flush=True)
-            print(f"   Batch size: {BATCH_SIZE} rules per batch", flush=True)
-            print(f"   Using {self.model} for dependency analysis", flush=True)
-            return self._analyze_dependencies_batched(rules, BATCH_SIZE)
-        
-        # Original single-batch analysis for smaller rule sets
-        print(f"📊 Preparing {len(rules)} rules for dependency analysis...", flush=True)
-        
-        # Prepare rules for analysis
-        rules_summary = [
-            self._rule_summary_v2(rule, include_related_entities=True)
-            for rule in rules
-        ]
+        print(f"Deriving relationships across {len(rules)} rules (deterministic, no model calls)...", flush=True)
 
-        rules_json = json.dumps(rules_summary, indent=2)
-        total_rules = len(rules)
-        
-        prompt = self.prompt_manager.format_prompt(
-            "dependency_analysis",
-            rules_json=rules_json,
-            total_rules=total_rules
-        )
-        
-        prompt_size = len(prompt)
-        print(f"\n🤖 Calling {self.model} for dependency analysis...", flush=True)
-        print(f"   • Rules to analyze: {len(rules)}", flush=True)
-        print(f"   • Prompt size: {prompt_size:,} characters (~{prompt_size//4:,} tokens)", flush=True)
-        print(f"   • Looking for: prerequisite, sequential, conditional, complementary relationships", flush=True)
-        print(f"\n   ⏳ Processing (this may take 1-2 minutes)...", flush=True)
-        print(f"      → Sending request to {self.model}...", flush=True)
-        
-        try:
-            response = self.client.chat_completion(
-                messages=[{"role": "user", "content": prompt}],
-                temperature=self.config.get_optimizer_dependency_temperature(),
-                max_tokens=self.config.get_optimizer_dependency_max_tokens(),
-                reasoning_effort=self.reasoning_effort
-            )
-            
-            if not response or not response.choices:
-                print(f"⚠️  Warning: Empty or invalid response from model", flush=True)
-                return rules, {"error": "Empty or invalid response from model", "dependencies": [], "statistics": {}}
-            
-            result_text = response.choices[0].message.content
-            
-            # Debug: Log response for troubleshooting
-            if not result_text or len(result_text.strip()) == 0:
-                print(f"⚠️  Warning: Empty response from model", flush=True)
-                return rules, {"error": "Empty response from model", "dependencies": [], "statistics": {}}
-            
-            print(f"      ✓ Response received ({len(result_text):,} characters)", flush=True)
-            print(f"      → Parsing JSON response...", flush=True)
-            
-            # Parse JSON response
-            dep_result = self._parse_json_response(result_text)
-            dep_count = len(dep_result.get('dependencies', []))
-            print(f"      ✓ Found {dep_count} dependencies", flush=True)
-            
-        except Exception as e:
-            print(f"❌ Error during dependency analysis: {e}", flush=True)
-            return rules, {"error": str(e), "dependencies": [], "statistics": {}}
-        
-        # Add dependencies to rules with confidence calculation
-        rule_dependencies_map = {}
-        rule_dependents_map = {}
-        rule_lookup = {r.get("rule_id"): r for r in rules}
-        rejected_dependencies = []
+        derived = derive_relations(rules)
 
-        for dep in dep_result.get("dependencies", []):
-            rejection_reason = dependency_rejection_reason(dep, rule_lookup)
-            if rejection_reason:
-                rejected_dependencies.append({
-                    **(dict(dep) if isinstance(dep, dict) else {"raw_dependency": dep}),
-                    "rejection_reason": rejection_reason,
-                })
-                continue
-            source_id = dep["source_rule_id"]
-            target_id = dep["target_rule_id"]
+        accepted_dependencies = [_relation_to_dependency(relation) for relation in derived.dependencies]
 
-            # Calculate confidence if breakdown provided
-            if 'confidence' in dep and isinstance(dep['confidence'], dict):
-                dep['confidence'] = self._calculate_dependency_confidence(dep['confidence'])
-            elif 'confidence' not in dep:
-                # Default confidence as int (consistent with batched path)
-                dep['confidence'] = dep.get('strength', 3) * 20
-
-            # Annotate `dep` itself (not just the derived entry below) so that
-            # downstream consumers reading the raw dependency_analysis metadata
-            # directly — e.g. optimize_parallel's post-dedup re-application —
-            # see the same structural-support signal and discounted confidence.
-            annotate_dependency_structural_support(dep, rule_lookup.get(source_id), rule_lookup.get(target_id))
-
-            # Track what each rule depends on
-            if target_id not in rule_dependencies_map:
-                rule_dependencies_map[target_id] = []
-            rule_dependencies_map[target_id].append({
+        rule_dependencies_map: Dict[str, List[Dict[str, Any]]] = {}
+        rule_dependents_map: Dict[str, List[Dict[str, Any]]] = {}
+        for dependency in accepted_dependencies:
+            source_id = dependency["source_rule_id"]
+            target_id = dependency["target_rule_id"]
+            rule_dependencies_map.setdefault(target_id, []).append({
                 "depends_on_rule": source_id,
-                "dependency_type": dep["dependency_type"],
-                "rationale": dep["rationale"],
-                "impact_if_fails": dep.get("impact", "Unknown"),
-                "strength": dep.get("strength", "medium"),
-                "confidence": dep.get("confidence", 60),
-                "structurally_supported": dep["structurally_supported"],
+                "dependency_type": dependency["dependency_type"],
+                "rationale": dependency["rationale"],
+                "symbols": dependency["symbols"],
+                "basis": dependency["basis"],
+                "structurally_supported": True,
             })
-            
-            # Track what depends on each rule
-            if source_id not in rule_dependents_map:
-                rule_dependents_map[source_id] = []
-            rule_dependents_map[source_id].append({
+            rule_dependents_map.setdefault(source_id, []).append({
                 "dependent_rule": target_id,
-                "dependency_type": dep["dependency_type"]
+                "dependency_type": dependency["dependency_type"],
             })
-        
-        # Enhance rules with dependency information
+
         rules_with_deps = []
         for rule in rules:
             rule_id = rule.get("rule_id")
-            
-            # Add dependencies (what this rule depends on)
             if rule_id in rule_dependencies_map:
                 rule["dependencies"] = rule_dependencies_map[rule_id]
-            
-            # Add dependents (what depends on this rule)
             if rule_id in rule_dependents_map:
                 rule["dependent_rules"] = rule_dependents_map[rule_id]
-            
             rules_with_deps.append(rule)
-        
-        metadata = {
-            "dependency_analysis": {
-                **dep_result,
-                "dependencies": [
-                    dep for dep in dep_result.get("dependencies", [])
-                    if dependency_rejection_reason(dep, rule_lookup) is None
-                ],
-                "rejected_dependencies": rejected_dependencies,
-            },
-            "total_dependencies": sum(
-                dependency_rejection_reason(dep, rule_lookup) is None
-                for dep in dep_result.get("dependencies", [])
-            ),
-            "proposed_dependencies": len(dep_result.get("dependencies", [])),
-            "rejected_dependencies": len(rejected_dependencies),
-            "dependency_chains": dep_result.get("dependency_chains", []),
-            "circular_dependencies": dep_result.get("circular_dependencies", []),
-            "conflicts": dep_result.get("conflict_groups", []),
-            "rules_with_dependencies": len(rule_dependencies_map),
-            "rules_with_dependents": len(rule_dependents_map)
-        }
-        
-        print(f"\n{'='*50}", flush=True)
-        print(f"✅ DEPENDENCY ANALYSIS COMPLETE", flush=True)
-        print(f"{'='*50}", flush=True)
-        print(f"   • Dependencies accepted:   {metadata['total_dependencies']:>5}", flush=True)
-        print(f"   • Dependencies rejected:   {len(rejected_dependencies):>5}", flush=True)
-        print(f"   • Dependency chains:       {len(dep_result.get('dependency_chains', [])):>5}", flush=True)
-        print(f"   • Circular dependencies:   {len(dep_result.get('circular_dependencies', [])):>5}", flush=True)
-        print(f"   • Potential conflicts:     {len(dep_result.get('conflict_groups', [])):>5}", flush=True)
-        print(f"   • Rules with dependencies: {len(rule_dependencies_map):>5}", flush=True)
-        print(f"   • Rules with dependents:   {len(rule_dependents_map):>5}", flush=True)
-        
-        return rules_with_deps, metadata
-    
-    def _analyze_dependencies_batched(self, rules: List[Dict[str, Any]], batch_size: int) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
-        """
-        Analyze dependencies in batches to handle large rule sets.
-        
-        Process:
-        1. Split rules into batches of `batch_size`
-        2. Analyze dependencies within each batch
-        3. Analyze cross-batch dependencies (batch A rules → batch B rules)
-        4. Merge all results
-        """
-        import math
-        
-        num_batches = math.ceil(len(rules) / batch_size)
-        print(f"   Total batches: {num_batches}", flush=True)
-        print(f"   Rules per batch: ~{batch_size}", flush=True)
-        
-        all_dependencies = []
-        
-        # Create rule batches
-        batches = []
-        for i in range(0, len(rules), batch_size):
-            batch = rules[i:i + batch_size]
-            batches.append(batch)
-        
-        # Step 1: Analyze within-batch dependencies (parallelised)
-        api_gate = max(1, int(os.getenv("KG_LLM_CONCURRENCY", str(self.max_workers))))
-        workers = min(self.max_workers, api_gate, num_batches)
-        print(f"\n📦 Step 1: Analyzing within-batch dependencies ({num_batches} batches, {workers} workers)...", flush=True)
 
-        def _call_within_batch(args):
-            batch_idx, batch = args
-            rules_summary = [
-                self._rule_summary_v2(rule, include_related_entities=True)
-                for rule in batch
-            ]
-            rules_json = json.dumps(rules_summary, indent=2)
-            prompt = self.prompt_manager.format_prompt(
-                "dependency_analysis",
-                rules_json=rules_json,
-                total_rules=len(batch)
-            )
-            print(f"\n   Batch {batch_idx}/{num_batches}: {len(batch)} rules → Using {self.model}...", flush=True)
-            try:
-                    dep_result = self._json_request(
-                        [{"role": "user", "content": prompt}],
-                        temperature=self.config.get_optimizer_batched_temperature(),
-                        max_tokens=self.config.get_optimizer_batched_max_tokens(),
-                        label=f"Dependency batch {batch_idx}",
-                    )
-                    batch_deps = dep_result.get("dependencies", [])
-                    print(f"   ✓ Found {len(batch_deps)} dependencies in batch {batch_idx}", flush=True)
-                    return batch_deps
-            except Exception as e:
-                print(f"   ❌ Error analyzing batch {batch_idx}: {e}", flush=True)
-                return []
+        by_kind: Dict[str, int] = {}
+        for relation in derived.dependencies:
+            by_kind[relation.kind] = by_kind.get(relation.kind, 0) + 1
 
-        with ThreadPoolExecutor(max_workers=workers) as executor:
-            for batch_deps in executor.map(_call_within_batch, enumerate(batches, 1)):
-                all_dependencies.extend(batch_deps)
-        
-# Step 2: Analyze cross-batch dependencies (parallelised)
-        cross_batch_sample_size = min(20, batch_size // 4)  # Sample ~25% of each batch
-        pairs = [(i, j) for i in range(len(batches)) for j in range(i + 1, len(batches))]
-        get_max_pairs = getattr(
-            self.config, "get_optimizer_max_cross_batch_pairs", lambda: 20
-        )
-        max_pairs = get_max_pairs()
-        if len(pairs) > max_pairs:
-            # Keep a deterministic spread across the batch matrix instead of
-            # always favoring the first batches.  A zero cap intentionally
-            # disables the expensive cross-batch pass.
-            if max_pairs == 0:
-                pairs = []
-            else:
-                stride = len(pairs) / max_pairs
-                pairs = [pairs[min(len(pairs) - 1, int(i * stride))] for i in range(max_pairs)]
-        cross_workers = min(self.max_workers, api_gate, len(pairs)) if pairs else 1
-        print(f"\n📦 Step 2: Analyzing cross-batch dependencies ({len(pairs)} pairs, {cross_workers} workers)...", flush=True)
-        print(f"   (Checking if rules in one batch depend on rules in another batch)", flush=True)
-
-        def _call_cross_batch(args):
-            i, j = args
-            sample_i = batches[i][:cross_batch_sample_size]
-            sample_j = batches[j][:cross_batch_sample_size]
-            combined_sample = sample_i + sample_j
-            print(f"   Cross-batch {i+1}↔{j+1}: {len(combined_sample)} sampled rules", flush=True)
-            rules_summary = [
-                self._rule_summary_v2(rule, include_related_entities=True)
-                for rule in combined_sample
-            ]
-            rules_json = json.dumps(rules_summary, indent=2)
-            prompt = self.prompt_manager.format_prompt(
-                "dependency_analysis",
-                rules_json=rules_json,
-                total_rules=len(combined_sample)
-            )
-            try:
-                dep_result = self._json_request(
-                    [{"role": "user", "content": prompt}],
-                    temperature=self.config.get_optimizer_cross_batch_temperature(),
-                    max_tokens=self.config.get_optimizer_cross_batch_max_tokens(),
-                    label=f"Cross-batch {i+1}↔{j+1}",
-                )
-                cross_deps = dep_result.get("dependencies", [])
-                batch_i_ids = {r.get('rule_id') for r in batches[i]}
-                batch_j_ids = {r.get('rule_id') for r in batches[j]}
-                true_cross_deps = [
-                    d for d in cross_deps
-                    if isinstance(d, dict) and d.get('source_rule_id') and d.get('target_rule_id') and (
-                        (d['source_rule_id'] in batch_i_ids and d['target_rule_id'] in batch_j_ids) or
-                        (d['source_rule_id'] in batch_j_ids and d['target_rule_id'] in batch_i_ids)
-                    )
-                ]
-                if true_cross_deps:
-                    print(f"   ✓ Found {len(true_cross_deps)} cross-batch dependencies ({i+1}↔{j+1})", flush=True)
-                return true_cross_deps
-            except Exception as e:
-                print(f"   ⚠️ Error analyzing cross-batch {i+1}↔{j+1}: {e}", flush=True)
-                return []
-
-        if pairs:
-            with ThreadPoolExecutor(max_workers=cross_workers) as executor:
-                for cross_deps in executor.map(_call_cross_batch, pairs):
-                    all_dependencies.extend(cross_deps)
-        
-        # Step 3: Merge results and apply to rules
-        print(f"\n✓ Batched analysis complete:", flush=True)
-        print(f"  • Total dependencies found: {len(all_dependencies)}", flush=True)
-        
-        # Create maps
-        rule_dependencies_map = {}
-        rule_dependents_map = {}
-        rule_lookup = {r.get("rule_id"): r for r in rules}
-        accepted_dependencies = []
-        rejected_dependencies = []
-
-        for dep in all_dependencies:
-            # The model occasionally returns a dependency object missing one of
-            # the id keys. Skip those instead of letting a raw subscript raise a
-            # KeyError that would abort the entire optimization run.
-            rejection_reason = dependency_rejection_reason(dep, rule_lookup)
-            if rejection_reason:
-                rejected_dependencies.append({
-                    **(dict(dep) if isinstance(dep, dict) else {"raw_dependency": dep}),
-                    "rejection_reason": rejection_reason,
-                })
-                continue
-            source_id = dep["source_rule_id"]
-            target_id = dep["target_rule_id"]
-
-            # Calculate confidence if breakdown provided
-            if 'confidence' in dep and isinstance(dep['confidence'], dict):
-                dep['confidence'] = self._calculate_dependency_confidence(dep['confidence'])
-            elif 'confidence' not in dep:
-                # Default confidence based on strength
-                strength = dep.get('strength', 3)
-                dep['confidence'] = {
-                    5: 95, 4: 85, 3: 75, 2: 65, 1: 55
-                }.get(strength, 70)
-
-            # Annotate `dep` itself so optimize_parallel's post-dedup
-            # re-application (which reads the raw dependency_analysis
-            # metadata, not this per-target map) sees the same signal.
-            annotate_dependency_structural_support(dep, rule_lookup.get(source_id), rule_lookup.get(target_id))
-            accepted_dependencies.append(dep)
-
-            # Track what this rule depends on
-            if target_id not in rule_dependencies_map:
-                rule_dependencies_map[target_id] = []
-            rule_dependencies_map[target_id].append({
-                "depends_on_rule": source_id,
-                "dependency_type": dep.get("dependency_type", "unknown"),
-                "rationale": dep.get("rationale", ""),
-                "impact_if_fails": dep.get("impact", "Unknown"),
-                "strength": dep.get("strength", "medium"),
-                "confidence": dep.get("confidence", 70),
-                "structurally_supported": dep["structurally_supported"],
-            })
-
-            # Track what depends on this rule
-            if source_id not in rule_dependents_map:
-                rule_dependents_map[source_id] = []
-            rule_dependents_map[source_id].append({
-                "dependent_rule": target_id,
-                "dependency_type": dep.get("dependency_type", "unknown")
-            })
-        
-        # Apply to rules
-        rules_with_deps = []
-        for rule in rules:
-            rule_id = rule.get("rule_id")
-            
-            if rule_id in rule_dependencies_map:
-                rule["dependencies"] = rule_dependencies_map[rule_id]
-            
-            if rule_id in rule_dependents_map:
-                rule["dependent_rules"] = rule_dependents_map[rule_id]
-            
-            rules_with_deps.append(rule)
-        
         metadata = {
             "dependency_analysis": {
                 "dependencies": accepted_dependencies,
-                "rejected_dependencies": rejected_dependencies,
-                "batched_analysis": True,
-                "num_batches": num_batches,
-                "batch_size": batch_size
+                "rejected_dependencies": [],
+                "derivation": "deterministic",
+                "kinds": by_kind,
             },
             "total_dependencies": len(accepted_dependencies),
-            "proposed_dependencies": len(all_dependencies),
-            "rejected_dependencies": len(rejected_dependencies),
+            "proposed_dependencies": len(accepted_dependencies),
+            "rejected_dependencies": 0,
             "dependency_chains": [],
             "circular_dependencies": [],
             "conflicts": [],
+            # Symmetric co-sensitivity, carried separately on purpose: it is not
+            # a dependency and must never enter a topological ordering.
+            "associations": [relation.as_dict() for relation in derived.associations],
+            "conflict_candidates": [relation.as_dict() for relation in derived.conflicts],
+            "relation_refusals": [refusal.as_dict() for refusal in derived.refusals],
             "rules_with_dependencies": len(rule_dependencies_map),
-            "rules_with_dependents": len(rule_dependents_map)
+            "rules_with_dependents": len(rule_dependents_map),
         }
-        
-        print(f"  • Rules with dependencies: {len(rule_dependencies_map)}", flush=True)
-        print(f"  • Rules with dependents: {len(rule_dependents_map)}", flush=True)
-        print(f"  • Unsupported proposals rejected: {len(rejected_dependencies)}", flush=True)
-        
+
+        print(f"  \u2022 Dependencies derived:    {len(accepted_dependencies):>5}  {by_kind or '{}'}", flush=True)
+        print(f"  \u2022 Conflict candidates:     {len(derived.conflicts):>5}", flush=True)
+        print(f"  \u2022 Associations (symmetric):{len(derived.associations):>5}", flush=True)
+        print(f"  \u2022 Rules with dependencies: {len(rule_dependencies_map):>5}", flush=True)
+
         return rules_with_deps, metadata
-    
+
     def optimize_parallel(self, rules: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], Dict[str, Any], Dict[str, Any]]:
         """
         Run deduplication and dependency analysis in parallel (thread-safe).
@@ -1165,7 +858,13 @@ class KnowledgeGraphOptimizer:
             "dependency_details": {
                 "dependencies": dep_metadata.get("dependency_analysis", {}).get("dependencies", []),
                 "dependency_chains": dep_metadata.get("dependency_chains", []),
-                "conflicts": dep_metadata.get("conflicts", [])
+                "conflicts": dep_metadata.get("conflicts", []),
+                # Derived alongside the dependencies and kept separate: both are
+                # symmetric, so neither may enter a topological ordering.
+                "associations": dep_metadata.get("associations", []),
+                "conflict_candidates": dep_metadata.get("conflict_candidates", []),
+                "relation_refusals": dep_metadata.get("relation_refusals", []),
+                "derivation": dep_metadata.get("dependency_analysis", {}).get("derivation", "deterministic"),
             },
             "entity_types": original_data.get("entity_types", {}),
             "relationships": original_data.get("relationships", [])

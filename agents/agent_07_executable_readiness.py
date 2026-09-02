@@ -20,6 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from utils.citations import normalise_text, repair_citation
 from utils.config import get_config
 from utils.feel_expression import compile_feel_expression, evaluate_feel_expression
+from utils.rule_dependencies import revalidate_graph
 from utils.kg_readiness import (
     CANONICAL_ENTITY_RE,
     cited_sections,
@@ -2854,6 +2855,14 @@ class ExecutableReadinessCompleter:
         self.checkpoint_path = output_dir / "agent_07_rule_checkpoint.jsonl"
         final_graph, report = self.complete(baseline, graph, str(organized_dir))
         output_dir.mkdir(parents=True, exist_ok=True)
+        # This stage rewrites variables in place, which can invalidate a
+        # relation derived before the rewrite. Re-check before writing so a
+        # stale relation is dropped loudly rather than shipped attested.
+        revalidation = revalidate_graph(final_graph, stage="agent_07")
+        if revalidation["dropped"]:
+            print(f"⚠️  agent_07 dropped {len(revalidation['dropped'])} rule relationship(s) "
+                  f"invalidated by this stage's edits", flush=True)
+        report["relation_revalidation"] = revalidation
         graph_path.write_text(json.dumps(final_graph, indent=2, ensure_ascii=False) + "\n")
         (output_dir / "corpus_manifest.json").write_text(json.dumps(final_graph["corpus_manifest"], indent=2) + "\n")
         (output_dir / "kg_readiness_report.json").write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n")

@@ -51,7 +51,6 @@ RUNTIME_KWARGS = {
     "entity_resolution": {"entities_by_source": "X", "source_documents": "X"},
     "rule_resolution": {"rules_by_source": "X", "source_documents": "X"},
     "rule_deduplication": {"rules_json": "X", "total_rules": 10},
-    "dependency_analysis": {"rules_json": "X", "total_rules": 10},
     "rule_matcher": {"g1_name": "A", "g2_name": "B", "rule_a": "X", "rule_b": "Y"},
     "rule_matcher_batch": {"g1_name": "A", "g2_name": "B", "num_pairs": 3, "rule_pairs_json": "X"},
     "validation_report": {"metrics_json": "X"},
@@ -1217,75 +1216,6 @@ RULES:
 {rules_json}
 """
 
-DEPENDENCY_ANALYSIS = """You are an independent business-rule data-flow analyst for a
-$title knowledge graph. Build only executable, directed dependencies provable
-from the structured rule contracts. Do not use domain knowledge, typical
-workflow order, thematic similarity, shared entities, or plausible business
-practice as evidence.
-
-A dependency is valid only when a source outcome variable exactly matches a
-target condition-predicate variable. The direction is source producer to target
-consumer. Shared inputs, categories, scopes, parties, or words do not establish
-direction. Contradictory relationships belong in conflict analysis, not the
-dependency DAG. Explicit ordered processes belong in source-grounded
-workflow_semantics and must not be inferred here.
-
-Use these dependency_type values only for a proven producer-consumer link:
-- prerequisite
-- sequential
-- conditional
-- complementary
-- override
-- validation
-
-The word contradictory is documented here only to make the boundary explicit:
-never return it as a dependency_type. Precision is more important than graph
-density; return zero dependencies when the contracts prove none.
-
-Return ONLY valid JSON, no Markdown:
-{{
-  "dependencies": [
-    {{
-      "source_rule_id": "BR_SOURCE_001",
-      "target_rule_id": "BR_TARGET_002",
-      "dependency_type": "prerequisite",
-      "produced_variable": "exact source outcome variable",
-      "consumed_variable": "exact target predicate variable",
-      "rationale": "source produces X and target consumes X",
-      "impact": "target cannot evaluate this predicate until X is available",
-      "strength": 4,
-      "confidence": 95
-    }}
-  ],
-  "dependency_chains": [
-    {{
-      "chain_id": "C1",
-      "rule_sequence": ["BR_A_001", "BR_B_002", "BR_C_003"],
-      "description": "what this chain governs end to end"
-    }}
-  ],
-  "circular_dependencies": [
-    {{
-      "cycle": ["BR_A_001", "BR_B_002", "BR_A_001"],
-      "severity": "high|medium|low",
-      "recommendation": "how to break the cycle"
-    }}
-  ],
-  "analysis_summary": {{
-    "total_rules_analyzed": {total_rules},
-    "dependencies_found": 0,
-    "chains_found": 0,
-    "cycles_found": 0
-  }}
-}}
-
-Strength is 1-5. Report only strength 3-5 producer-consumer dependencies. Never
-use a weak inference to create an executable edge.
-
-RULES:
-{rules_json}
-"""
-
 RULE_MATCHER = """You are $persona comparing one pair of rules drawn from two $title
 knowledge graphs, {g1_name} and {g2_name}.
 
@@ -1406,7 +1336,6 @@ TEMPLATES = {
     "entity_resolution": ENTITY_RESOLUTION,
     "rule_resolution": RULE_RESOLUTION,
     "rule_deduplication": RULE_DEDUPLICATION,
-    "dependency_analysis": DEPENDENCY_ANALYSIS,
     "rule_matcher": RULE_MATCHER,
     "rule_matcher_batch": RULE_MATCHER_BATCH,
     "validation_report": VALIDATION_REPORT,

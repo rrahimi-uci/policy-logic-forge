@@ -154,6 +154,25 @@ Rules:
    only for genuine free text and add `"free_text": true`; use `enum` plus
    `allowed_values` for categories. Use `time` only for ISO local-time values
    such as `21:00`; use `date_time` for an ISO timestamp with a date.
+3a. Name a variable after the fact it holds, not after the rule holding it.
+   Rules are extracted independently, so two rules that test the same fact
+   must arrive at the same variable name on their own or the connection
+   between them is lost. Use the plainest name for the fact and reuse it
+   verbatim wherever that same fact appears.
+   - Do not prefix a general fact with this rule's subject, scope or purpose.
+     Write `occupancy_type`, not `manual_underwriting_occupancy_type`. Write
+     `personal_information_collection_allowed` once and reuse it; do not also
+     introduce `child_personal_information_collection_allowed` when the child
+     case is a condition on the same fact -- express it as a separate
+     predicate on `user_age_bracket`, not as a second variable.
+   - Keep the unit or qualifier out of the name when the type already carries
+     it: `ltv_ratio`, not `ltv_ratio_percent`.
+   - State the fact positively and consistently. Do not introduce both a fact
+     and its negation as separate variables (`atr_covered_...` alongside
+     `atr_exempt_...`); pick one and negate it in the predicate.
+   - A variable genuinely local to one rule -- an intermediate this rule
+     alone computes -- may be named freely. The discipline above is for facts
+     about the policy's subject, which recur across many rules.
 4. `responsible_party` and `counterparties` must use an existing entity whose
    `concept_kind` is `actor_role`. A loan, property, document, report, process,
    decision variable, or other business object is never a party merely because
