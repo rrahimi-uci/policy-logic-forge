@@ -135,12 +135,13 @@ def _parse_stages_arg(value: str) -> list[str]:
 _PERFORMANCE_ENV = {
     # Worker pools can be larger than the request gate. The shared adaptive
     # limiter caps aggregate provider load while allowing enough local work to
-    # keep the doubled 32-request default profile saturated.
-    "KG_LLM_CONCURRENCY": ("llm_concurrency", 32),
+    # keep a provider-safe 16-request profile saturated. The shared limiter
+    # starts lower and grows only after consecutive healthy calls.
+    "KG_LLM_CONCURRENCY": ("llm_concurrency", 16),
     "KG_ORGANIZER_WORKERS": ("document_workers", 32),
-    "KG_REASONING_MAX_COMPLETION_TOKENS": ("reasoning_max_completion_tokens", 24576),
-    "KG_GLOBAL_LLM_CONCURRENCY_INITIAL": ("global_llm_concurrency_initial", 16),
-    "KG_GLOBAL_LLM_CONCURRENCY_MAX": ("global_llm_concurrency_max", 32),
+    "KG_REASONING_MAX_COMPLETION_TOKENS": ("reasoning_max_completion_tokens", 32768),
+    "KG_GLOBAL_LLM_CONCURRENCY_INITIAL": ("global_llm_concurrency_initial", 8),
+    "KG_GLOBAL_LLM_CONCURRENCY_MAX": ("global_llm_concurrency_max", 16),
     "KG_GLOBAL_LLM_CONCURRENCY_MIN": ("global_llm_concurrency_min", 1),
     "KG_GLOBAL_LLM_SUCCESS_WINDOW": ("global_llm_success_window", 3),
     # Must cover the LLM watchdog (timeout * SDK attempts + margin), otherwise
@@ -151,17 +152,17 @@ _PERFORMANCE_ENV = {
     "KG_LLM_WATCHDOG_MARGIN": ("llm_watchdog_margin", 30),
     "KG_BATCH_CONNECTION_BACKOFF_SECONDS": ("batch_connection_backoff_seconds", 10),
     "KG_READINESS_WORKERS": ("readiness_workers", 80),
-    "KG_READINESS_LLM_CONCURRENCY": ("readiness_llm_concurrency", 32),
+    "KG_READINESS_LLM_CONCURRENCY": ("readiness_llm_concurrency", 16),
     "KG_READINESS_RULES_PER_REQUEST": ("readiness_rules_per_request", 8),
     "KG_READINESS_MAX_EVIDENCE_CHARS": ("readiness_max_evidence_chars", 12000),
     "KG_REMEDIATION_WORKERS": ("remediation_workers", 80),
-    "KG_REMEDIATION_LLM_CONCURRENCY": ("remediation_llm_concurrency", 32),
+    "KG_REMEDIATION_LLM_CONCURRENCY": ("remediation_llm_concurrency", 16),
     "KG_REMEDIATION_RULES_PER_REQUEST": ("remediation_rules_per_request", 8),
     "KG_REMEDIATION_PAIRS_PER_REQUEST": ("remediation_pairs_per_request", 12),
     "KG_REMEDIATION_MAX_CONFLICT_PAIRS": ("remediation_max_conflict_pairs", 5000),
     "KG_REMEDIATION_MAX_PASSES": ("remediation_max_passes", 3),
     "KG_GROUNDING_WORKERS": ("grounding_workers", 80),
-    "KG_GROUNDING_LLM_CONCURRENCY": ("grounding_llm_concurrency", 32),
+    "KG_GROUNDING_LLM_CONCURRENCY": ("grounding_llm_concurrency", 16),
     "KG_GROUNDING_RULES_PER_REQUEST": ("grounding_rules_per_request", 4),
     "KG_GROUNDING_CLAIMS_PER_REQUEST": ("grounding_claims_per_request", 48),
     "KG_GROUNDING_RELATIONSHIPS_PER_REQUEST": ("grounding_relationships_per_request", 12),
