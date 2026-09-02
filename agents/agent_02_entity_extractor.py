@@ -28,6 +28,10 @@ from utils.llm_client import create_llm_client
 from utils.config import get_config
 
 
+class _EntityResponseError(ValueError):
+    """A model response was present but could not be used as a catalog."""
+
+
 class EntityRelationshipExtractor:
     """Simple stub for meta-agent functionality."""
     
@@ -256,80 +260,115 @@ class ComplianceEntityRelationshipAgent:
         Returns:
             Dictionary with entity types and relationships
         """
-        try:
-            print(f"  → Calling {self.extraction_model} model for extraction...")
+        print(f"  → Calling {self.extraction_model} model for extraction...")
 
-            # The entity pass is a small number of high-value requests, so a
-            # transient provider reset must not abort the entire 1,185-page
-            # run.  Retry transport failures here (before JSON parsing) with a
-            # bounded exponential cooldown.  Parse/contract errors still fail
-            # immediately and remain visible to the caller.
-            attempts = max(1, int(os.getenv("KG_ENTITY_REQUEST_ATTEMPTS", "3")))
+        # The entity pass is a small number of high-value requests, so a
+        # transient provider reset or a reasoning model that spends its whole
+        # budget before closing JSON must not abort the run.  Transport retries
+        # and response/parse retries are deliberately separate: the former
+        # retries the connection, while the latter asks the model for a
+        # smaller, complete catalog.  We never salvage a partial JSON object.
+        transport_attempts = max(1, int(os.getenv("KG_ENTITY_REQUEST_ATTEMPTS", "3")))
+        response_attempts = max(1, int(os.getenv("KG_ENTITY_RESPONSE_ATTEMPTS", "3")))
+        active_prompt = prompt
+        last_error: Exception | None = None
+
+        for response_attempt in range(1, response_attempts + 1):
             response = None
-            for attempt in range(1, attempts + 1):
-                try:
-                    response = self.client.chat_completion(
-                        messages=[{"role": "user", "content": prompt}],
-                        temperature=self.config.get_entity_extractor_temperature(),
-                        max_tokens=self.config.get_entity_extractor_max_tokens(),
-                        reasoning_effort=self.reasoning_effort
-                    )
-                    break
-                except Exception as exc:
-                    if attempt >= attempts:
-                        raise
-                    text = str(exc).casefold()
-                    transport = any(marker in text for marker in (
-                        "connection", "timeout", "timed out", "socket", "readerror",
-                    ))
-                    if not transport:
-                        raise
-                    base = max(1, int(os.getenv("KG_ENTITY_CONNECTION_BACKOFF_SECONDS", "10")))
-                    delay = min(60, base * (2 ** (attempt - 1)))
-                    print(
-                        f"  ⚠️ Entity extraction transport failure on attempt "
-                        f"{attempt}/{attempts}; retrying in {delay}s: {exc}",
-                        flush=True,
-                    )
-                    time.sleep(delay)
+            content = ""
+            try:
+                for transport_attempt in range(1, transport_attempts + 1):
+                    try:
+                        response = self.client.chat_completion(
+                            messages=[{"role": "user", "content": active_prompt}],
+                            temperature=self.config.get_entity_extractor_temperature(),
+                            max_tokens=self.config.get_entity_extractor_max_tokens(),
+                            reasoning_effort=self.reasoning_effort,
+                        )
+                        break
+                    except Exception as exc:
+                        if transport_attempt >= transport_attempts:
+                            raise
+                        text = str(exc).casefold()
+                        transport = any(marker in text for marker in (
+                            "connection", "timeout", "timed out", "socket", "readerror",
+                        ))
+                        if not transport:
+                            raise
+                        base = max(1, int(os.getenv("KG_ENTITY_CONNECTION_BACKOFF_SECONDS", "10")))
+                        delay = min(60, base * (2 ** (transport_attempt - 1)))
+                        print(
+                            f"  ⚠️ Entity extraction transport failure on attempt "
+                            f"{transport_attempt}/{transport_attempts}; retrying in {delay}s: {exc}",
+                            flush=True,
+                        )
+                        time.sleep(delay)
 
-            if response is None:
-                raise RuntimeError("Entity extraction returned no response")
-            
-            # Extract the response content
-            content = response.choices[0].message.content
-            
-            if not content:
-                raise ValueError("Empty response from model")
-            
-            # Try to parse JSON from the response
-            # Handle cases where the model might wrap JSON in markdown code blocks
-            if "```json" in content:
-                json_str = content.split("```json", 1)[1].split("```", 1)[0].strip()
-            elif "```" in content:
-                json_str = content.split("```", 1)[1].split("```", 1)[0].strip()
-            else:
-                # Try to find JSON object directly
-                json_start = content.find("{")
-                json_end = content.rfind("}") + 1
-                if json_start < 0 or json_end <= json_start:
-                    raise ValueError("No JSON object found in response")
-                json_str = content[json_start:json_end]
-            
-            result = json.loads(json_str)
-            
-            print(f"  ✓ Extraction complete: {len(result.get('entity_types', {}))} entities, "
-                  f"{len(result.get('relationships', {}))} relationships")
-            
-            return result
-            
-        except json.JSONDecodeError as e:
-            print(f"  ✗ Error parsing JSON response: {e}")
-            print(f"  Response preview: {content[:500] if content else 'None'}...")
-            raise RuntimeError("Entity extraction returned invalid JSON") from e
-        except Exception as e:
-            print(f"  ✗ Error calling OpenAI API: {e}")
-            raise RuntimeError("Entity extraction request failed") from e
+                if response is None:
+                    raise RuntimeError("Entity extraction returned no response")
+
+                content = response.choices[0].message.content or ""
+                if not content.strip():
+                    raise _EntityResponseError("Empty response from model")
+
+                if "```json" in content:
+                    json_str = content.split("```json", 1)[1].split("```", 1)[0].strip()
+                elif "```" in content:
+                    json_str = content.split("```", 1)[1].split("```", 1)[0].strip()
+                else:
+                    json_start = content.find("{")
+                    if json_start < 0:
+                        raise _EntityResponseError("No JSON object found in response")
+                    # Decode one complete object and reject a truncated object
+                    # or non-whitespace commentary after it.
+                    json_str = content[json_start:].strip()
+
+                result = json.loads(json_str)
+                if not isinstance(result, dict):
+                    raise _EntityResponseError("Entity extraction response must be a JSON object")
+
+                print(f"  ✓ Extraction complete: {len(result.get('entity_types', {}))} entities, "
+                      f"{len(result.get('relationships', {}))} relationships")
+                return result
+
+            except json.JSONDecodeError as exc:
+                last_error = exc
+                if response_attempt >= response_attempts:
+                    break
+                print(
+                    f"  ⚠️ Entity catalog JSON was incomplete on response attempt "
+                    f"{response_attempt}/{response_attempts}; retrying with a compact contract.",
+                    flush=True,
+                )
+                active_prompt = (
+                    prompt
+                    + "\n\nRECOVERY INSTRUCTION: The previous catalog response was incomplete or invalid JSON. "
+                    "Return a COMPLETE JSON object now. To guarantee completion, return no more "
+                    "than 4 entity types and 4 relationships, keep every string concise, and "
+                    "omit any item without exact evidence. Do not include Markdown or commentary."
+                )
+            except _EntityResponseError as exc:
+                last_error = exc
+                if response_attempt >= response_attempts:
+                    break
+                print(
+                    f"  ⚠️ Entity catalog response was unusable on response attempt "
+                    f"{response_attempt}/{response_attempts}; retrying with a compact contract: {exc}",
+                    flush=True,
+                )
+                active_prompt = (
+                    prompt
+                    + "\n\nRECOVERY INSTRUCTION: Return a complete, valid JSON object only. "
+                    "Return no more than 4 entity types and 4 relationships, keep strings concise, "
+                    "and omit any item without exact evidence."
+                )
+            except Exception as exc:
+                print(f"  ✗ Error calling OpenAI API: {exc}")
+                raise RuntimeError("Entity extraction request failed") from exc
+
+        print(f"  ✗ Error parsing JSON response: {last_error}")
+        print(f"  Response preview: {content[:500] if content else 'None'}...")
+        raise RuntimeError("Entity extraction returned invalid JSON") from last_error
 
     @staticmethod
     def validate_catalog_evidence(
