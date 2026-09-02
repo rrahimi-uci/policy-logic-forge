@@ -251,6 +251,7 @@ class Attribute:
     type: str
     type_basis: str
     type_reason: str
+    unit: str = ""                  # as declared by the rule, e.g. usd / percent / months
     multiplicity: str = "1"
     required: bool = True
     default: Any = None
@@ -264,7 +265,7 @@ class Attribute:
     def as_dict(self) -> dict[str, Any]:
         return {
             "name": self.name, "symbol": self.symbol, "type": self.type,
-            "type_basis": self.type_basis, "type_reason": self.type_reason,
+            "type_basis": self.type_basis, "type_reason": self.type_reason, "unit": self.unit,
             "multiplicity": self.multiplicity, "required": self.required,
             "default": self.default, "allowed_values": list(self.allowed_values),
             "constraints": [c.as_dict() for c in self.constraints],
@@ -377,11 +378,14 @@ def collect_attributes(graph: Mapping[str, Any]) -> tuple[dict[str, Attribute], 
             key=lambda i: {"declared": 3, "derived": 2, "heuristic": 1, "fallback": 0}.get(i.basis, 0),
         )
 
+        unit = ""
         values: list[str] = []
         default = None
         ranges: list[Any] = []
         is_list = False
         for _, variable in decls:
+            if not unit and _norm(variable.get("unit")):
+                unit = _norm(variable.get("unit"))
             if isinstance(variable.get("allowed_values"), list):
                 for value in variable["allowed_values"]:
                     text = str(value)
@@ -429,6 +433,7 @@ def collect_attributes(graph: Mapping[str, Any]) -> tuple[dict[str, Attribute], 
             type=best.type,
             type_basis=best.basis,
             type_reason=best.reason,
+            unit=unit,
             multiplicity="0..*" if is_list else ("1" if required else "0..1"),
             required=required,
             default=default,
@@ -734,94 +739,36 @@ def build_model(
 # rendering
 # ---------------------------------------------------------------------------
 
-def _mermaid_safe(text: str) -> str:
-    return re.sub(r"[^A-Za-z0-9_]", "_", str(text or ""))
+def _canonical(model: "InformationModel") -> dict[str, Any]:
+    from utils.linkml_schema import to_linkml
+
+    return to_linkml(model)
 
 
-def to_mermaid(model: InformationModel, *, max_attributes: int = 12) -> str:
-    """A Mermaid ``classDiagram``.
+def to_mermaid(model: "InformationModel", **kwargs: Any) -> str:
+    """A Mermaid ``classDiagram``, rendered from the canonical LinkML schema.
 
-    Large models are truncated per class rather than rendered unreadably: the
-    full listing lives in the catalog, and a diagram nobody can read is not a
-    more complete diagram.
+    Rendering goes through LinkML rather than straight off these dataclasses so
+    the diagram, the JSON Schema and the catalog are all projections of one
+    artifact and cannot disagree with each other.
     """
-    lines = ["classDiagram"]
-    for enum in sorted(model.enumerations.values(), key=lambda e: e.name)[:40]:
-        lines.append(f"    class {_mermaid_safe(enum.name)} {{")
-        lines.append("        <<enumeration>>")
-        for value in enum.values[:10]:
-            lines.append(f"        {_mermaid_safe(value)}")
-        if len(enum.values) > 10:
-            lines.append(f"        {len(enum.values) - 10}_more")
-        lines.append("    }")
-    for klass in model.classes:
-        lines.append(f"    class {_mermaid_safe(klass.name)} {{")
-        if klass.stereotype != "entity":
-            lines.append(f"        <<{klass.stereotype}>>")
-        for attribute in klass.attributes[:max_attributes]:
-            marker = "" if attribute.required else "?"
-            multi = "" if attribute.multiplicity in ("1", "0..1") else f"[{attribute.multiplicity}]"
-            lines.append(f"        +{_mermaid_safe(attribute.type)}{multi} {attribute.name}{marker}")
-        if len(klass.attributes) > max_attributes:
-            lines.append(f"        +{len(klass.attributes) - max_attributes} more attributes")
-        lines.append("    }")
-    for rel in model.relationships:
-        lines.append(
-            f'    {_mermaid_safe(rel.source)} "{rel.source_multiplicity}" --> '
-            f'"{rel.target_multiplicity}" {_mermaid_safe(rel.target)} : {_mermaid_safe(rel.verb)}'
-        )
-    return "\n".join(lines)
+    from utils.linkml_schema import to_mermaid as render
+
+    return render(_canonical(model), **kwargs)
 
 
-def to_plantuml(model: InformationModel, *, max_attributes: int = 12) -> str:
-    """A PlantUML class diagram carrying multiplicity and stereotypes."""
-    lines = ["@startuml", "hide empty members", "skinparam classAttributeIconSize 0"]
-    for enum in sorted(model.enumerations.values(), key=lambda e: e.name)[:40]:
-        lines.append(f"enum {enum.name} {{")
-        for value in enum.values[:10]:
-            lines.append(f"  {_mermaid_safe(value)}")
-        if len(enum.values) > 10:
-            lines.append(f"  .. {len(enum.values) - 10} more ..")
-        lines.append("}")
-    for klass in model.classes:
-        stereo = "" if klass.stereotype == "entity" else f" <<{klass.stereotype}>>"
-        lines.append(f"class {klass.name}{stereo} {{")
-        for attribute in klass.attributes[:max_attributes]:
-            optional = "" if attribute.required else " {optional}"
-            lines.append(f"  +{attribute.name} : {attribute.type} [{attribute.multiplicity}]{optional}")
-        if len(klass.attributes) > max_attributes:
-            lines.append(f"  .. {len(klass.attributes) - max_attributes} more ..")
-        lines.append("}")
-    for rel in model.relationships:
-        lines.append(
-            f'{rel.source} "{rel.source_multiplicity}" --> "{rel.target_multiplicity}" '
-            f'{rel.target} : {rel.verb}'
-        )
-    lines.append("@enduml")
-    return "\n".join(lines)
+def to_plantuml(model: "InformationModel", **kwargs: Any) -> str:
+    """A PlantUML class diagram, rendered from the canonical LinkML schema."""
+    from utils.linkml_schema import to_plantuml as render
+
+    return render(_canonical(model), **kwargs)
 
 
-def catalog_rows(model: InformationModel) -> list[dict[str, Any]]:
-    """One row per attribute: name, type, multiplicity, constraints, sources."""
-    rows: list[dict[str, Any]] = []
-    for klass in model.classes:
-        for attribute in klass.attributes:
-            rows.append({
-                "class": klass.name,
-                "attribute": attribute.name,
-                "type": attribute.type,
-                "type_basis": attribute.type_basis,
-                "multiplicity": attribute.multiplicity,
-                "required": attribute.required,
-                "default": attribute.default,
-                "allowed_values": list(attribute.allowed_values[:12]),
-                "constraints": [c.expression for c in attribute.constraints],
-                "source_rule_ids": list(attribute.source_rule_ids[:8]),
-                "source_passages": list(attribute.source_passages[:4]),
-                "needs_review": attribute.needs_review,
-                "review_reasons": list(attribute.review_reasons),
-            })
-    return rows
+def catalog_rows(model: "InformationModel") -> list[dict[str, Any]]:
+    """One row per attribute, read off the canonical LinkML schema."""
+    from utils.linkml_schema import catalog_rows as rows
+
+    return rows(_canonical(model))
 
 
 # ---------------------------------------------------------------------------

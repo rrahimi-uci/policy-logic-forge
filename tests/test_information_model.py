@@ -255,7 +255,8 @@ def test_catalog_row_carries_type_multiplicity_constraints_and_sources():
     _, model = _sample_model()
     row = next(r for r in catalog_rows(model) if r["attribute"] == "ltvRatio")
     assert row["type"] == "Percentage" and row["multiplicity"] == "1" and row["required"]
-    assert row["constraints"] and row["source_rule_ids"] == ["R1"]
+    assert row["constraints"] and row["source_rules"] == "R1"
+    assert row["unit"] == "%"   # the declared unit survives into the catalog
 
 
 def test_validation_reports_every_check_and_repairs_nothing():
@@ -293,3 +294,121 @@ def test_empty_graph_produces_an_empty_model_rather_than_failing():
     model = build_model({"business_rules": []}, {})
     assert model.as_dict()["counts"]["classes"] == 0
     assert to_mermaid(model).startswith("classDiagram")
+
+
+# ---------------------------------------------------------------------------
+# the agent's guards on model proposals
+# ---------------------------------------------------------------------------
+
+def _unassigned(symbol, type_="Boolean"):
+    from utils.information_model import Attribute
+    return Attribute(name=symbol, symbol=symbol, type=type_, type_basis="declared",
+                     type_reason="test fixture")
+
+
+def test_a_proposed_class_of_pure_compliance_flags_is_rejected():
+    """A class whose attributes are all yes/no rule outcomes is not an entity.
+
+    The prompt forbids this and a real run produced it anyway -- a `Lender`
+    whose eight attributes all recorded whether a policy had been met. Those
+    are evaluation results, not what a lender is, so the rule is enforced in
+    code rather than hoped for in the prompt.
+    """
+    from agents.agent_12_business_information_model import _apply_assignments
+    from utils.information_model import InformationModel
+
+    model = InformationModel(unassigned=[_unassigned(f"flag_{i}") for i in range(4)])
+    stats = _apply_assignments(model, [
+        {"symbol": f"flag_{i}", "owner": None, "new_class": "Lender",
+         "confidence": "clear", "reasoning": "r"} for i in range(4)
+    ], concept_of={})
+
+    assert stats["rejected_flag_class"] == 1
+    assert [k.name for k in model.classes] == []
+    assert len(model.unassigned) == 4
+    assert all("compliance flags" in " ".join(a.review_reasons) for a in model.unassigned)
+
+
+def test_a_proposed_class_with_real_business_state_is_accepted():
+    from agents.agent_12_business_information_model import _apply_assignments
+    from utils.information_model import InformationModel
+
+    model = InformationModel(unassigned=[
+        _unassigned("policy_number", "Identifier"),
+        _unassigned("coverage_amount", "Money"),
+        _unassigned("is_active"),
+    ])
+    stats = _apply_assignments(model, [
+        {"symbol": s, "owner": None, "new_class": "InsurancePolicy",
+         "confidence": "clear", "reasoning": "r"}
+        for s in ("policy_number", "coverage_amount", "is_active")
+    ], concept_of={})
+
+    assert stats["rejected_flag_class"] == 0
+    assert [k.name for k in model.classes] == ["InsurancePolicy"]
+    assert model.unassigned == []
+
+
+def test_a_proposal_naming_an_unknown_symbol_is_discarded():
+    """The model may not introduce attributes that were never extracted."""
+    from agents.agent_12_business_information_model import _apply_assignments
+    from utils.information_model import InformationModel
+
+    model = InformationModel(unassigned=[_unassigned("real_symbol")])
+    stats = _apply_assignments(model, [
+        {"symbol": "invented_symbol", "owner": None, "new_class": "X",
+         "confidence": "clear", "reasoning": "r"}
+    ], concept_of={})
+    assert stats["rejected_unknown_symbol"] == 1
+    assert len(model.unassigned) == 1
+
+
+def test_an_unclear_verdict_leaves_the_attribute_unassigned_and_annotated():
+    """Unplaced is a correct answer, and the reason travels with it."""
+    from agents.agent_12_business_information_model import _apply_assignments
+    from utils.information_model import InformationModel
+
+    model = InformationModel(unassigned=[_unassigned("ambiguous")])
+    stats = _apply_assignments(model, [
+        {"symbol": "ambiguous", "owner": None, "new_class": None,
+         "confidence": "unclear", "reasoning": "could belong to loan or property"}
+    ], concept_of={})
+    assert stats["unclear"] == 1 and len(model.unassigned) == 1
+    assert "loan or property" in " ".join(model.unassigned[0].review_reasons)
+
+
+def test_a_proposed_value_object_becomes_a_stereotyped_class():
+    """A composite with no identity of its own is a value object, not an entity."""
+    from agents.agent_12_business_information_model import _apply_assignments
+    from utils.information_model import InformationModel, to_mermaid, to_plantuml
+
+    model = InformationModel(unassigned=[
+        _unassigned("street_line", "String"), _unassigned("postal_code", "String"),
+    ])
+    stats = _apply_assignments(model, [
+        {"symbol": s, "owner": None, "new_class": None, "value_object": "Address",
+         "confidence": "clear", "reasoning": "r"}
+        for s in ("street_line", "postal_code")
+    ], concept_of={})
+
+    assert stats["value_objects"] == 1
+    address = next(k for k in model.classes if k.name == "Address")
+    assert address.stereotype == "value_object" and len(address.attributes) == 2
+    assert model.unassigned == []
+    assert "<<value_object>>" in to_mermaid(model)
+    assert "<<value_object>>" in to_plantuml(model)
+
+
+def test_a_single_component_value_object_is_refused():
+    """Wrapping one attribute in a value object just adds a hop."""
+    from agents.agent_12_business_information_model import _apply_assignments
+    from utils.information_model import InformationModel
+
+    model = InformationModel(unassigned=[_unassigned("street_line", "String")])
+    stats = _apply_assignments(model, [
+        {"symbol": "street_line", "owner": None, "value_object": "Address",
+         "confidence": "clear", "reasoning": "r"}
+    ], concept_of={})
+    assert stats["value_objects"] == 0
+    assert len(model.unassigned) == 1
+    assert "too few components" in " ".join(model.unassigned[0].review_reasons)
