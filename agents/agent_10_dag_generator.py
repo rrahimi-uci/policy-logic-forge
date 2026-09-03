@@ -132,7 +132,7 @@ def main() -> None:
         print(f"     - {optimized_file}", flush=True)
         print(f"     - {rules_with_entities_file}", flush=True)
         print("   Please run the pipeline through agent_05 or agent_06 first.", flush=True)
-        sys.exit(1)
+        sys.exit(2)
 
     output_dir = config.get_dag_dir()
 

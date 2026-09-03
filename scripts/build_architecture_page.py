@@ -40,6 +40,14 @@ LINK_MAP = {
 _seen_slugs: dict[str, int] = {}
 
 
+def _mathvar(text: str) -> str:
+    """Render ``x_{i}`` as ``x<sub>i</sub>`` inside a math-variable span."""
+    # Built by concatenation rather than an f-string: an f-string expression
+    # may not contain a backslash before Python 3.12, and this repo targets 3.11.
+    inner = re.sub(r"_\{([^}]+)\}", r"<sub>\1</sub>", text)
+    return '<span class="mathvar">' + inner + "</span>"
+
+
 def slugify(text: str) -> str:
     text = re.sub(r"[`*]", "", text)
     text = text.lower()
@@ -71,7 +79,9 @@ def inline(text: str) -> str:
     text = re.sub(r"`([^`]+)`", lambda m: stash(f"<code>{html.escape(m.group(1))}</code>"), text)
     text = re.sub(
         r"\\\(([^)]+)\\\)",
-        lambda m: stash(f'<span class="mathvar">{re.sub(r"_\{([^}]+)\}", r"<sub>\1</sub>", m.group(1))}</span>'),
+        # Subscript substitution is hoisted out of the f-string: an f-string
+        # expression may not contain a backslash before Python 3.12.
+        lambda m: stash(_mathvar(m.group(1))),
         text,
     )
 
