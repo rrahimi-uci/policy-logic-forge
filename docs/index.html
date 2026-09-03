@@ -176,6 +176,7 @@
       <a href="#how-it-works">How it works</a>
       <a href="#verification">Verification</a>
       <a href="#standards">Standards output</a>
+      <a href="#information-model">Information model</a>
       <a href="architecture.html">Architecture</a>
     </nav>
     <a class="nav-cta" href="https://github.com/rrahimi-uci/policy-logic-forge">View on GitHub</a>
@@ -205,7 +206,7 @@
       </div>
     </div>
     <div class="hero-figure">
-      <svg viewBox="0 0 600 440" role="img" aria-label="Source documents flowing through a twelve-stage pipeline into a certified, source-traceable knowledge graph" class="hero-art">
+      <svg viewBox="0 0 600 440" role="img" aria-label="Source documents flowing through a thirteen-stage pipeline into a certified, source-traceable knowledge graph" class="hero-art">
         <defs>
           <radialGradient id="hg-panel" cx="30%" cy="20%" r="90%">
             <stop offset="0%" stop-color="#26306b"/>
@@ -325,7 +326,7 @@
 <section id="how-it-works" class="wash">
   <div class="wrap">
     <span class="eyebrow">How it works</span>
-    <h2>Twelve agents, one continuous evidence spine</h2>
+    <h2>Thirteen agents, one continuous evidence spine</h2>
     <p class="lede">Source passage → concept → rule → decision or process
       model — and back again: model element → rule → claim → the exact
       passage that supports it. Every stage writes its own checkpointed
@@ -345,9 +346,10 @@ flowchart LR
     A6 --> A7{{07 · Readiness gate}}:::gate
     A7 -. review .-> A8[08 · Remediate]:::stage
     A8 -. re-check .-> A7
-    A7 --> A9{{09 · Ground independently}}:::gate --> A10[10 · Dependency DAGs]:::stage --> A11[11 · DMN·BPMN·CMMN·SBVR]:::stage --> A12[12 · Knowledge report]:::stage
+    A7 --> A9{{09 · Ground independently}}:::gate --> A10[10 · Dependency DAGs]:::stage --> A11[11 · DMN·BPMN·CMMN·SBVR]:::stage
+    A11 --> A12[12 · LinkML information model]:::stage --> A13[13 · Knowledge report]:::stage
     DOCS --> A1
-    A12 --> OUT([Certified graph + review-ready models]):::io
+    A13 --> OUT([Certified graph + review-ready models<br/>+ one traceable report]):::io
       </pre>
     </div>
     <p class="callout">Stage 09 (Grounding Verifier) is deliberately
@@ -361,18 +363,19 @@ flowchart LR
       <table class="stage-table">
         <thead><tr><th>Stage</th><th>Agent</th><th>Responsibility</th><th>Primary output</th></tr></thead>
         <tbody>
-          <tr><td>01/12</td><td><code>agent_01</code></td><td>Document organization</td><td><code>agent_01-organized-documents/</code></td></tr>
-          <tr><td>02/12</td><td><code>agent_02</code></td><td>Entity &amp; relationship extraction</td><td><code>agent_02-entities/</code></td></tr>
-          <tr><td>03/12</td><td><code>agent_03</code></td><td>Business-rule extraction</td><td><code>agent_03-rules/</code></td></tr>
-          <tr><td>04/12</td><td><code>agent_04</code></td><td>Advisory rule validation</td><td><code>agent_04-validation/</code></td></tr>
-          <tr><td>05/12</td><td><code>agent_05</code></td><td>Rules/entities merge</td><td><code>agent_05-rules-with-entities/</code></td></tr>
-          <tr><td>06/12</td><td><code>agent_06</code></td><td>Knowledge-graph optimization (dedup + dependency analysis)</td><td><code>optimized_compliance_knowledge_graph.json</code></td></tr>
-          <tr class="gate-row"><td>07/12</td><td><code>agent_07</code></td><td>Executable-readiness gate — four invariants</td><td>readiness report</td></tr>
-          <tr><td>08/12</td><td><code>agent_08</code></td><td>Readiness remediation (only if agent_07 requests it)</td><td>focused rule fix-ups</td></tr>
-          <tr class="gate-row"><td>09/12</td><td><code>agent_09</code></td><td>Independent, claim-level grounding verification</td><td>grounding certification report</td></tr>
-          <tr><td>10/12</td><td><code>agent_10</code></td><td>Dependency-DAG generation — 100%-coverage guarantee</td><td><code>dependency_dags.json</code></td></tr>
-          <tr><td>11/12</td><td><code>agent_11</code></td><td>DMN/BPMN/CMMN/SBVR generation + LExec compile</td><td><code>agent_11-executable-models/</code></td></tr>
-          <tr><td>12/12</td><td><code>agent_12</code></td><td>Self-contained business knowledge report</td><td><code>business_knowledge_report.html</code></td></tr>
+          <tr><td>01/13</td><td><code>agent_01</code></td><td>Document organization</td><td><code>agent_01-organized-documents/</code></td></tr>
+          <tr><td>02/13</td><td><code>agent_02</code></td><td>Entity &amp; relationship extraction</td><td><code>agent_02-entities/</code></td></tr>
+          <tr><td>03/13</td><td><code>agent_03</code></td><td>Business-rule extraction</td><td><code>agent_03-rules/</code></td></tr>
+          <tr><td>04/13</td><td><code>agent_04</code></td><td>Advisory rule validation</td><td><code>agent_04-validation/</code></td></tr>
+          <tr><td>05/13</td><td><code>agent_05</code></td><td>Rules/entities merge</td><td><code>agent_05-rules-with-entities/</code></td></tr>
+          <tr><td>06/13</td><td><code>agent_06</code></td><td>Knowledge-graph optimization (dedup + dependency analysis)</td><td><code>optimized_compliance_knowledge_graph.json</code></td></tr>
+          <tr class="gate-row"><td>07/13</td><td><code>agent_07</code></td><td>Executable-readiness gate — four invariants</td><td>readiness report</td></tr>
+          <tr><td>08/13</td><td><code>agent_08</code></td><td>Readiness remediation (only if agent_07 requests it)</td><td>focused rule fix-ups</td></tr>
+          <tr class="gate-row"><td>09/13</td><td><code>agent_09</code></td><td>Independent, claim-level grounding verification</td><td>grounding certification report</td></tr>
+          <tr><td>10/13</td><td><code>agent_10</code></td><td>Dependency-DAG generation — 100%-coverage guarantee</td><td><code>dependency_dags.json</code></td></tr>
+          <tr><td>11/13</td><td><code>agent_11</code></td><td>DMN/BPMN/CMMN/SBVR generation + LExec compile</td><td><code>agent_11-executable-models/</code></td></tr>
+          <tr><td>12/13</td><td><code>agent_12</code></td><td>Business information model — LinkML schema, typed attributes, enumerations</td><td><code>business_information_model.yaml</code></td></tr>
+          <tr><td>13/13</td><td><code>agent_13</code></td><td>Self-contained business knowledge report</td><td><code>business_knowledge_report.html</code></td></tr>
         </tbody>
       </table>
     </div>
@@ -450,6 +453,68 @@ flowchart LR
           dump.</p>
       </div>
     </div>
+  </div>
+</section>
+
+<section id="information-model" class="wash">
+  <div class="wrap">
+    <span class="eyebrow">The data behind the rules</span>
+    <h2>A business information model you can validate, not just read</h2>
+    <p class="lede">Rules test and set business values. Those values are a
+      domain model in their own right — and it is emitted as a
+      <strong>LinkML schema</strong> rather than a class diagram, because a
+      schema can be checked, generated from, and diffed where a picture can
+      only be looked at.</p>
+
+    <div class="pipeline-figure">
+      <pre class="mermaid">
+flowchart LR
+    classDef canon fill:#fff2dc,stroke:#c8790f,color:#4a2f04,stroke-width:1.6px
+    classDef proj fill:#eef1ff,stroke:#5b5bd6,color:#232a55,stroke-width:1.2px
+    classDef check fill:#e6f7f2,stroke:#0f9d80,color:#0b3b30,stroke-width:1.3px
+
+    C[[business_information_model.yaml&lt;br/&gt;canonical]]:::canon
+    V{{validated against LinkML's own metamodel}}:::check
+    C --> V
+    V --> A[JSON Schema]:::proj
+    V --> B[class diagrams]:::proj
+    V --> D[class/attribute catalog]:::proj
+    V --> E[validation report]:::proj
+    V -.-> F[SHACL · OWL · SQL DDL&lt;br/&gt;Pydantic · TypeScript]:::proj
+      </pre>
+    </div>
+
+    <div class="standards-grid">
+      <div class="standard-card">
+        <span class="tag">Typed from evidence</span>
+        <p>A declared unit gives <code>Money</code>, <code>Percentage</code> or
+          <code>Duration</code>; a closed value set gives a named enumeration
+          even when the rule said <code>string</code>. Only a variable with
+          nothing declared falls through to its name — and that is always
+          flagged.</p>
+      </div>
+      <div class="standard-card">
+        <span class="tag">Cannot drift</span>
+        <p>The diagrams, the catalog and the JSON Schema are generated from the
+          one canonical schema, so they cannot disagree with the model or with
+          each other.</p>
+      </div>
+      <div class="standard-card">
+        <span class="tag">Says what it is made of</span>
+        <p>Classes group by what kind of thing they are; attributes by what kind
+          of value they hold. On a real privacy corpus that inventory reports
+          <strong>70% of attributes are booleans recording whether a rule
+          passed</strong> — describing what was decided, not what the business
+          holds state about.</p>
+      </div>
+      <div class="standard-card">
+        <span class="tag">Refuses to guess</span>
+        <p>An attribute the pipeline cannot confidently place is held for review
+          rather than filed under a guess, because a misfiled attribute quietly
+          corrupts the model while an unplaced one is merely reviewed.</p>
+      </div>
+    </div>
+    <a class="btn btn-ghost" href="architecture.html#agent_12-business-information-model">Read how the model is derived →</a>
   </div>
 </section>
 
