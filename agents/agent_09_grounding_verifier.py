@@ -1400,8 +1400,12 @@ class GroundingVerifier:
             json.dumps(report, indent=2, ensure_ascii=False) + "\n",
         )
         _write_text_atomic(output_dir / "kg_grounding_report.md", self.report_markdown(report))
+        # A non-passing report is an expected fail-closed review outcome
+        # (main exits 3 and the orchestrator continues), not a crashed stage.
+        # Keep the console severity aligned with that contract so monitoring
+        # does not count a healthy review result as an error line.
         print(
-            f"{'✅' if report['pass'] else '❌'} agent_09 completed: "
+            f"{'✅' if report['pass'] else '🔎'} agent_09 completed: "
             f"{report['rules_certified']}/{report['total_rules']} rules and "
             f"{report['supported_claims']}/{report['total_claims']} claims certified",
             flush=True,

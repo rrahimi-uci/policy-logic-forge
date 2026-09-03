@@ -27,6 +27,7 @@ reviewed.
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import json
 import os
 import sys
@@ -279,6 +280,65 @@ def _catalog_markdown(rows: Sequence[Mapping[str, Any]]) -> str:
     )
 
 
+def _assign_batches(
+    synthesiser: InformationModelSynthesiser,
+    batches: Sequence[Sequence[Mapping[str, Any]]],
+    class_names: Sequence[str],
+    *,
+    workers: int,
+) -> list[dict[str, Any]]:
+    """Assign independent batches concurrently and return source-batch order.
+
+    Each request classifies a read-only batch against the same existing class
+    names. A failure remains isolated to that batch, while ordered collection
+    keeps generated artifacts reproducible regardless of completion order.
+    """
+    if not batches:
+        return []
+    ordered: list[list[dict[str, Any]] | None] = [None] * len(batches)
+    failed: dict[int, Exception] = {}
+    worker_count = min(max(1, workers), len(batches))
+    with ThreadPoolExecutor(
+        max_workers=worker_count, thread_name_prefix="information-model"
+    ) as executor:
+        futures = {
+            executor.submit(synthesiser.assign, batch, class_names): index
+            for index, batch in enumerate(batches)
+        }
+        for future in as_completed(futures):
+            index = futures[future]
+            try:
+                ordered[index] = future.result()
+                print(f"   modelled batch {index + 1}/{len(batches)}", flush=True)
+            except Exception as exc:  # one batch must not lose the model
+                failed[index] = exc
+                print(
+                    f"⚠️ agent_12 batch {index + 1}/{len(batches)} concurrent attempt "
+                    f"failed; queued for sequential retry: {exc}",
+                    flush=True,
+                )
+    # A shared network interruption can exhaust several concurrent calls at
+    # once. Retry only those batches, sequentially, after the pool drains so
+    # the client's adaptive limiter and provider connection can recover. A
+    # persistent failure still stays isolated and leaves the affected symbols
+    # visibly unassigned rather than inventing classifications.
+    for index in sorted(failed):
+        try:
+            ordered[index] = synthesiser.assign(batches[index], class_names)
+            print(
+                f"   recovered batch {index + 1}/{len(batches)} on sequential retry",
+                flush=True,
+            )
+        except Exception as exc:
+            ordered[index] = []
+            print(
+                f"⚠️ agent_12 batch {index + 1}/{len(batches)} failed after "
+                f"sequential retry: {exc}",
+                flush=True,
+            )
+    return [item for batch in ordered if batch is not None for item in batch]
+
+
 def generate(
     graph_file: Path,
     models_dir: Path | None,
@@ -332,14 +392,15 @@ def generate(
                       f"(KG_INFORMATION_MODEL_MAX_BATCHES)", flush=True)
                 batches = batches[:cap]
             concept_of = {pascal_case(k).lower(): k for k in (graph.get("entity_types") or {})}
-            assignments: list[dict[str, Any]] = []
-            for index, batch in enumerate(batches, 1):
-                names = [k.name for k in model.classes]
-                try:
-                    assignments.extend(synthesiser.assign(batch, names))
-                except Exception as exc:  # a batch failure must not lose the model
-                    print(f"⚠️ agent_12 batch {index}/{len(batches)} failed: {exc}", flush=True)
-                print(f"   modelled batch {index}/{len(batches)}", flush=True)
+            workers = max(
+                1, int(os.getenv("KG_INFORMATION_MODEL_LLM_CONCURRENCY", "8"))
+            )
+            assignments = _assign_batches(
+                synthesiser,
+                batches,
+                [klass.name for klass in model.classes],
+                workers=workers,
+            )
             synthesis = _apply_assignments(model, assignments, concept_of=concept_of)
             synthesis["batches"] = len(batches)
             synthesis["skipped"] = False

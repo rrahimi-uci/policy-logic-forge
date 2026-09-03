@@ -433,10 +433,21 @@ class ExtractionPipeline:
             return True
         return self._run("agent_06", [])
 
-    def run_agent_07(self, *, reuse_conflicts: bool = False) -> bool:
-        extra_env = {"KG_READINESS_SKIP_CONFLICTS": "true"} if reuse_conflicts else None
+    def run_agent_07(
+        self, *, reuse_conflicts: bool = False, reuse_evidence: bool = False
+    ) -> bool:
+        extra_env = {}
+        if reuse_conflicts:
+            extra_env["KG_READINESS_SKIP_CONFLICTS"] = "true"
+        if reuse_evidence:
+            # Agent 08 already reruns all deterministic readiness gates over
+            # the completed evidence records before writing its graph. The
+            # orchestrator's post-remediation Agent 07 pass is therefore a
+            # contract/invariant recheck, not authority to spend another full
+            # corpus of LLM calls recreating evidence that Stage 08 preserved.
+            extra_env["KG_READINESS_SKIP_EVIDENCE"] = "true"
         return self._run(
-            "agent_07", [], extra_env=extra_env
+            "agent_07", [], extra_env=extra_env or None
         )
 
     def run_agent_08(self) -> bool:
@@ -566,7 +577,7 @@ class ExtractionPipeline:
                     if self._last_exit_codes.get("agent_08") != 3:
                         return False
                     self._operator_message("🔎 agent_08 retained review-required rules; continuing fail-closed", "warning")
-                if not self.run_agent_07(reuse_conflicts=True):
+                if not self.run_agent_07(reuse_conflicts=True, reuse_evidence=True):
                     if self._last_exit_codes.get("agent_07") != 3 or not self._review_only_readiness():
                         self._operator_message("\n🛑 STOPPED: readiness invariants still failing after remediation.", "error")
                         return False
@@ -685,7 +696,7 @@ class ExtractionPipeline:
                     for selected in ("agent_09", "agent_10", "agent_11", "agent_12", "agent_13")
                 ):
                     readiness_pending = False
-                    recheck_ok = self.run_agent_07(reuse_conflicts=True)
+                    recheck_ok = self.run_agent_07(reuse_conflicts=True, reuse_evidence=True)
                     if not recheck_ok and not (
                         self._last_exit_codes.get("agent_07") == 3
                         and self._review_only_readiness()

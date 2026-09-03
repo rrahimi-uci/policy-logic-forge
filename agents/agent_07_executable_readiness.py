@@ -375,6 +375,14 @@ LEGACY_VALUE_TYPES = {
     # contract's list value type; ``enum_reference`` is an extraction-only
     # label for that same literal set.
     "enum_reference": "list",
+    # Structured lookup outcomes have appeared under both spellings in real
+    # provider output. They are not scalar literals and therefore must not be
+    # coerced to string. ``conditional_map`` is the pipeline's canonical
+    # review-only spelling: validation still records the unsupported lowering
+    # capability, while readiness treats it as deferred instead of failing the
+    # entire graph schema invariant.
+    "mapping": "conditional_map",
+    "conditional_mapping": "conditional_map",
 }
 # Deliberately NOT normalised: outcome value_types "formula"/"expression"
 # (e.g. "min(0.10 * new_refinance_loan_balance, 15000)") and "object" (a
@@ -983,6 +991,17 @@ def _normalise_rule_contract(rule: dict[str, Any]) -> dict[str, Any]:
                     item["operator"] = "=="
             item["value_type"] = _normalise_value_type(item.get("value_type"))
             item["variable"] = normalise_declared_reference(item.get("variable"))
+            # The predicate value, rather than the declared variable, is a
+            # collection for membership operators. Providers sometimes copy
+            # the variable's scalar type (for example number) into value_type
+            # while returning [2, 3, 4]. Preserve both the typed variable and
+            # list values by canonicalizing only this unambiguous shape.
+            if (
+                field != "outcomes"
+                and item.get("operator") in {"in", "not_in"}
+                and isinstance(item.get("value"), list)
+            ):
+                item["value_type"] = "list"
             if item.get("value_type") == "boolean" and isinstance(item.get("value"), str):
                 lowered = item["value"].strip().lower()
                 if lowered in {"true", "false"}:
@@ -1084,6 +1103,18 @@ def _normalise_rule_contract(rule: dict[str, Any]) -> dict[str, Any]:
     if not predicates and _has_explicit_unconditional_source(rule):
         rule["condition_logic"] = {"constant": True}
         rule["condition_basis"] = "unconditional_explicit_in_source"
+    # A known provider slip shifts a declared variable name into predicate_id
+    # and emits variable=null. Recover it only when that identifier resolves
+    # uniquely to a variable declared by the same rule. Keep predicate_id
+    # unchanged because condition_logic may already reference that descriptive
+    # ID. Arbitrary missing variables remain invalid and fail closed.
+    for predicate in predicates:
+        if not isinstance(predicate, dict) or str(predicate.get("variable") or "").strip():
+            continue
+        candidate = str(predicate.get("predicate_id") or "").strip()
+        declared = declared_aliases.get(_compact_identifier(candidate))
+        if declared is not None:
+            predicate["variable"] = declared
     # Every atomic predicate must have an ID before condition_logic is
     # resolved. Assign the first available deterministic pN identifier to
     # missing IDs so a logic tree such as ``predicate_ref: p4`` can resolve to

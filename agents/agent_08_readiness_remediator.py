@@ -422,7 +422,17 @@ class ReadinessRemediator:
             if isinstance(chunk, Mapping)
         ]
         corpus["_token_index"] = _build_token_index(corpus["_search_index"])
-        rules = [dict(rule) for rule in working.get("business_rules", []) if isinstance(rule, Mapping)]
+        # Normalize every rule before selecting remediation work. A resumed
+        # Stage 08 can load a graph written by an older normalizer, and generic
+        # contract-shape repairs (membership lists, provider field shifts, and
+        # review-only structured mappings) must not depend on an LLM patch or
+        # wait until the final invariant check.
+        rules = [
+            _normalise_rule_contract(dict(rule))
+            for rule in working.get("business_rules", [])
+            if isinstance(rule, Mapping)
+        ]
+        working["business_rules"] = rules
         initial_review = sum(bool(rule.get("requires_review")) for rule in rules)
         workers = max(1, int(os.getenv("KG_REMEDIATION_WORKERS", "40")))
         rule_batch_size = max(1, int(os.getenv("KG_REMEDIATION_RULES_PER_REQUEST", "4")))
