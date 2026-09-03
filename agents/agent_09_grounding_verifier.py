@@ -1386,7 +1386,15 @@ class GroundingVerifier:
     def run(self, graph_path: Path, organized_dir: Path, output_dir: Path) -> dict[str, Any]:
         graph = json.loads(graph_path.read_text(encoding="utf-8"))
         final_graph, report = self.verify_graph(graph, organized_dir, output_dir)
-        _write_text_atomic(graph_path, json.dumps(final_graph, indent=2, ensure_ascii=False) + "\n")
+        # The certified graph always lands in the optimized directory, whatever
+        # it was read from. On a ``--skip-optimize`` run the input is agent_05's
+        # pre-optimization graph, and writing back over it would both destroy
+        # that stage's own output and leave the certified graph somewhere no
+        # downstream stage looks.
+        _write_text_atomic(
+            output_dir / "optimized_compliance_knowledge_graph.json",
+            json.dumps(final_graph, indent=2, ensure_ascii=False) + "\n",
+        )
         _write_text_atomic(
             output_dir / "kg_grounding_report.json",
             json.dumps(report, indent=2, ensure_ascii=False) + "\n",
@@ -1484,17 +1492,41 @@ def certification_issues(
     return issues
 
 
+def resolve_input_graph(config) -> Path | None:
+    """Pick the graph to certify, newest stage first.
+
+    Mirrors agent_10's resolution order so ``--skip-optimize`` -- which the CLI
+    documents as still running independent grounding -- has an input at all.
+    Without this the stage died on an unhandled ``FileNotFoundError`` and the
+    orchestrator reported a grounding failure, which is not what happened.
+    """
+    optimized = config.get_optimized_dir() / "optimized_compliance_knowledge_graph.json"
+    if optimized.exists():
+        return optimized
+    merged = config.get_rules_with_entities_dir() / "compliance_knowledge_graph.json"
+    if merged.exists():
+        print("⚠️  agent_09: optimized graph not found — certifying agent_05 output "
+              "(pre-optimization). The certified graph is still written to the "
+              "optimized directory for downstream stages.", flush=True)
+        return merged
+    return None
+
+
 def main() -> None:
     config = get_config()
+    output_dir = config.get_optimized_dir()
+    graph_path = resolve_input_graph(config)
+    if graph_path is None:
+        print("❌ agent_09: no input graph found. Looked for:", flush=True)
+        print(f"     - {output_dir / 'optimized_compliance_knowledge_graph.json'}", flush=True)
+        print(f"     - {config.get_rules_with_entities_dir() / 'compliance_knowledge_graph.json'}", flush=True)
+        print("   Run the pipeline through agent_05 or agent_06 first.", flush=True)
+        raise SystemExit(2)
     resolver = OpenAIGroundingResolver(
         config.get_api_key(), config.get_optimizer_model_name(), config.get_reasoning_effort()
     )
-    output_dir = config.get_optimized_dir()
-    report = GroundingVerifier(resolver).run(
-        output_dir / "optimized_compliance_knowledge_graph.json",
-        config.get_organized_dir(),
-        output_dir,
-    )
+    output_dir.mkdir(parents=True, exist_ok=True)
+    report = GroundingVerifier(resolver).run(graph_path, config.get_organized_dir(), output_dir)
     if not report["pass"]:
         raise SystemExit(3)
 

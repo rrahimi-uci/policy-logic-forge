@@ -225,7 +225,7 @@ PAGE_TEMPLATE = """<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Architecture — Policy Logic Forge</title>
-<meta name="description" content="How Policy Logic Forge is put together: the twelve-agent extraction pipeline, the compiler layer, RegDelta, and real DMN/BPMN/CMMN/SBVR output.">
+<meta name="description" content="How Policy Logic Forge is put together: the thirteen-agent extraction pipeline, the compiler layer, RegDelta, and real DMN/BPMN/CMMN/SBVR output.">
 <style>
 {css}
 </style>
@@ -260,7 +260,7 @@ PAGE_TEMPLATE = """<!doctype html>
     <div class="arch-hero">
       <span class="eyebrow">Technical reference</span>
       <h1>Architecture</h1>
-      <p class="lede">How Policy Logic Forge is put together: the twelve-agent extraction pipeline, the shared services and compiler layer underneath it, the RegDelta differential-execution engine, and how configuration and prompts flow through all of it.</p>
+      <p class="lede">How Policy Logic Forge is put together: the thirteen-agent extraction pipeline, the shared services and compiler layer underneath it, the RegDelta differential-execution engine, and how configuration and prompts flow through all of it.</p>
     </div>
 {body}
     <div class="arch-footer-nav">

@@ -135,6 +135,34 @@ they all read and write the same optimized graph; their stage IDs and
 checkpoints stay distinct. The stage number and agent identifier are always
 the same value — `--stage 9` and `--agent agent_09` select the same stage.
 
+#### Exit-code contract
+
+Every stage is a subprocess, so its exit code is the only thing the
+orchestrator can route on. There are three meanings, and one of them is
+overloaded:
+
+| Code | Meaning | Orchestrator |
+| --- | --- | --- |
+| 0 | The stage did its work | continue |
+| 2 | A required upstream artifact is missing, or the stage could not produce its output | stop |
+| 3 (agents 07, 08, 09, 12) | **Data quality.** The stage did its work and wrote its output; the result needs review | continue, carrying the review flags |
+| 3 (agent 03) | **Incomplete extraction.** Partial artifacts are kept for resume | stop, so no later stage consumes a partial graph |
+| 1 | Unhandled runtime or configuration error | stop |
+
+Two invariants follow, and both were violated in practice:
+
+- **A stage may never exit 0 for work it did not do.** `agent_02` and
+  `agent_03` printed "No documents found" and returned normally, so a run over
+  an empty corpus was reported as successful through three further stages and
+  only stopped at `agent_05`, blaming its own missing inputs.
+- **A missing input is reported, not raised.** `agent_07`, `agent_08` and
+  `agent_09` died on an unhandled `FileNotFoundError`, which exits 1 — a code
+  the orchestrator reads as a runtime crash — and prints a traceback that says
+  nothing about which stage to run first.
+
+`tests/test_pipeline_end_to_end.py` checks both for every agent whose
+missing-input path runs before any provider call.
+
 ### 2.2 Execution flow, including the readiness/remediation loop
 
 ```mermaid
@@ -334,6 +362,7 @@ Its findings are never read by any other agent or by the orchestrator's control 
 - **Relationship derivation** is deterministic (`utils/rule_dependencies.py`), not model-driven. Every relation kind carries a decidable acceptance condition, and a kind the rule contract cannot express is refused rather than emitted as an unenforced label — the posture `lexec_ir.py` takes toward constructs it cannot lower. `dataflow`: the target reads a symbol the source assigns. `gating`: dataflow *and* the target provably cannot fire unless the source's outcome holds (needs an entailment oracle; without one a relation stays `dataflow` rather than being promoted on faith). `conflict`: both rules assign the same symbol. `association`: shared input symbol or shared source passage — **symmetric, deliberately not a dependency**, and excluded from any topological ordering. Refused with a stated reason: `sequential` (no temporal semantics in the contract), `override` (no precedence field), `complementary` (symmetric), `validation` (no condition was ever defined), `contradictory` (belongs to conflict analysis).
 - This replaced an LLM proposal pass screened by a single structural check. That arrangement had three measured defects on real runs: proposal read batched summaries under a hard cap on cross-batch comparisons, so ~96% of the 187,578 rule pairs in a 613-rule run were never examined (4 edges asserted where 66 were derivable); the six accepted `dependency_type` values were defined nowhere and were all validated by the same check, which is correct for one of them and irrelevant to four; and the check ran only here, so a later stage renaming a variable left an edge asserting a symbol flow that no longer existed. On that same historical run, `agent_09`'s independent grounding pass found **44% of dependency/conflict claims did not hold up structurally** — the reason a second, independent verification stage exists at all.
 - Derivation is re-run as a *validation* pass at the end of `agent_07` and `agent_08` (`revalidate_graph`), because both rewrite variables in place. Gating carries a contract fingerprint and must reproduce its solver proof; otherwise it is downgraded to valid dataflow or dropped. Other relations whose acceptance condition no longer holds are dropped and reported.
+- The graph carries a **second, older dependency channel**: each rule's `related_rules`, which the extraction prompt asks the model to fill with "rule_ids that interact with this rule". It is not derived, not typed, and not part of the acceptance-condition machinery above. Nothing validated it, and nothing pruned it when deduplication removed a rule, so an 832-rule privacy run shipped 18 references to 17 rule ids that were not in the graph — 9 to rules optimization had deleted, and **8 that never existed in any graph at any stage**. `agent_10` discarded them while building DAGs and recorded `dropped_edges: 0`, so the loss was invisible as well. `prune_dangling_related_rules` now runs alongside `revalidate_graph` in both stages: dangling targets are dropped with a reason, and `divergent_from_typed` records how far the two channels disagree (135 of 137 surviving pairs on that run) so the field is never mistaken for the derived relations.
 - `gating` promotion is solver-backed (`utils/rule_gating.py`): the graph is lowered to LExec IR once, then for a relation on symbol `s` assigned value `v`, `condition(target) ∧ s ≠ v` is handed to `utils/smt.py`. Unsatisfiable means the target cannot fire without the source's outcome. Coverage is reported alongside the result rather than implied, because it is bounded by what lowers: a rule that refuses, or a query the solver cannot close, returns *undecided* and the relation stays `dataflow`.
 - In practice that coverage is currently thin, and for an instructive reason. The symbols carrying the most dataflow — `transaction_type`, `occupancy_type` — are declared with incompatible `theory`/`domain`/`unit` across the rules that share them, so those rules refuse with `SYMBOL_CONFLICT`. The rules with the most structure are therefore the least analysable, which is the same uncanonical-symbol problem that suppresses edge discovery in the first place, surfacing again one layer down.
 - `utils/kg_readiness.py` is **not** used by `agent_06`; its deterministic primitives (cited-section tracking, naming/referential-integrity checks) first come into play in `agent_07`.

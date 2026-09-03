@@ -1,7 +1,7 @@
 # RegDelta plan
 
 RegDelta is a rule-change/version differential-execution engine layered on
-top of the eleven-agent extraction pipeline: given two versions of a policy
+top of the thirteen-agent extraction pipeline: given two versions of a policy
 document, it compiles both to LExec IR, aligns rules, classifies semantic
 changes, and propagates impact through the dependency graph.
 

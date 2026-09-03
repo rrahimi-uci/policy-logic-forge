@@ -19,6 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from agents.agent_07_executable_readiness import (
     ExecutableReadinessCompleter,
     OpenAIEvidenceResolver,
+    required_inputs,
     _build_token_index,
     _compact_readiness_rule,
     _normalise_rule_contract,
@@ -26,7 +27,7 @@ from agents.agent_07_executable_readiness import (
     _report_markdown,
 )
 from utils.config import get_config
-from utils.rule_dependencies import revalidate_graph
+from utils.rule_dependencies import prune_dangling_related_rules, revalidate_graph
 from utils.rule_gating import make_entailment_oracle
 from utils.kg_readiness import source_document_index
 from utils.llm_client import create_llm_client
@@ -675,6 +676,11 @@ class ReadinessRemediator:
             print(f"⚠️  agent_08 dropped {len(revalidation['dropped'])} rule relationship(s) "
                   f"invalidated by remediation", flush=True)
         report["relation_revalidation"] = revalidation
+        related_integrity = prune_dangling_related_rules(final_graph, stage="agent_08")
+        if related_integrity["dropped"]:
+            print(f"⚠️  agent_08 dropped {len(related_integrity['dropped'])} related_rules "
+                  f"reference(s) naming rules that are not in the graph", flush=True)
+        report["related_rules_integrity"] = related_integrity
         graph_path.write_text(json.dumps(final_graph, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         (output_dir / "corpus_manifest.json").write_text(json.dumps(final_graph["corpus_manifest"], indent=2) + "\n", encoding="utf-8")
         (output_dir / "kg_readiness_report.json").write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
@@ -686,6 +692,13 @@ class ReadinessRemediator:
 
 def main() -> None:
     config = get_config()
+    # Same contract as agent_07: name the artifact that is missing instead of
+    # dying on an unhandled FileNotFoundError deep inside the run.
+    missing = [str(path) for path in required_inputs(config) if not path.exists()]
+    if missing:
+        print("ERROR: required upstream artifact(s) missing: " + ", ".join(missing), flush=True)
+        print("   Run the pipeline through agent_07 first.", flush=True)
+        raise SystemExit(2)
     resolver = OpenAIRemediationResolver(
         config.get_api_key(),
         config.get_optimizer_model_name(),

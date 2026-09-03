@@ -1901,9 +1901,12 @@ def main():
         sys.exit(2)
 
     if not batches:
+        # Returning normally here reported success for a stage that extracted
+        # nothing, so the orchestrator carried on to validation and merge with
+        # no rules at all instead of stopping at the empty corpus.
         print("❌ Error: No documents found!", flush=True)
         print(f"   Please check if {SOURCE_DIRECTORY} exists and contains .txt files", flush=True)
-        return
+        sys.exit(2)
 
     print(f"\n{'='*80}", flush=True)
     print(f"PROCESSING {len(batches)} BATCHES (PARALLEL MODE)", flush=True)
