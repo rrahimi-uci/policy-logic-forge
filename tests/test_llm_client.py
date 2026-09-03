@@ -81,6 +81,17 @@ class TestProviderClassification:
         assert LLMClient.is_reasoning_model("claude-opus-5") is True
         assert LLMClient.is_openai_reasoning_model("claude-opus-5") is False
 
+    @pytest.mark.parametrize("error", [
+        RuntimeError("InternalServerError: upstream unavailable"),
+        RuntimeError("503 service unavailable"),
+    ])
+    def test_server_errors_penalize_adaptive_concurrency(self, error):
+        """Transient provider 5xx responses reduce shared request pressure."""
+        throttled, penalize = LLMClient._classify_backpressure_error(error)
+
+        assert throttled is False
+        assert penalize is True
+
 
 @allure.feature("Pipeline LLM client")
 @allure.story("Chat completion parameter building")

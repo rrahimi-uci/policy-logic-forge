@@ -564,7 +564,18 @@ class LLMClient:
         status_code = getattr(error, "status_code", None)
         value = f"{type(error).__name__}: {error}".lower()
         throttled = status_code == 429 or "429" in value or "rate limit" in value
-        penalize = throttled or any(token in value for token in ("timeout", "timed out", "connection", "socket"))
+        # Provider 5xx responses are transient backpressure too.  Treating an
+        # InternalServerError as a permanent application failure leaves the
+        # shared limiter at an unsafe concurrency and lets every worker repeat
+        # the same overload burst.  Preserve the explicit status-code check for
+        # SDK exception classes whose message does not include the code.
+        server_error = (
+            isinstance(status_code, int) and status_code >= 500
+        ) or any(token in value for token in (
+            "internalservererror", "internal server error", "service unavailable",
+            "bad gateway", "gateway timeout", "server error", " 500", " 502", " 503", " 504",
+        ))
+        penalize = throttled or server_error or any(token in value for token in ("timeout", "timed out", "connection", "socket"))
         return throttled, penalize
 
     def _emit_request_metric(
