@@ -1,0 +1,50 @@
+% The evidence spine. The reverse arrow along the bottom is the one that
+% matters: agent_09 does not trust a stored citation, it rebuilds the
+% evidence from the raw corpus, so a hallucinated citation cannot pass.
+%
+% Edge labels are deliberately placed BELOW their arrows on the long
+% horizontal runs only. On short runs there is no room for a label that
+% does not sit on a box, so those carry none and the caption explains.
+\begin{tikzpicture}[font=\plexsans\scriptsize, x=3.30cm, y=-1.70cm]
+
+  \tikzset{sp/.style={box, text width=2.15cm, minimum height=1.20cm}}
+
+  % --- the chain -------------------------------------------------------
+  \node[sp, src]  (doc)  at (0,0) {\textbf{Source passage}\\[1pt]
+                                   {\plexsanslight chunk + section}};
+  \node[sp]       (rule) at (1,0) {\textbf{Rule}\\[1pt]
+                                   {\plexsanslight typed conditions\\and outcomes}};
+  \node[sp]       (sym)  at (2,0) {\textbf{Symbol}\\[1pt]
+                                   {\plexsanslight unit, value set,\\range}};
+  \node[sp, pass] (attr) at (3,0) {\textbf{Attribute}\\[1pt]
+                                   {\plexsanslight on a class}};
+
+  % No inline edge labels: the gaps between these boxes are narrower than
+  % any label that would go in them, so a label here can only be set on top
+  % of a box. The caption names the stage that performs each step instead.
+  \foreach \a/\b in {doc/rule, rule/sym, sym/attr}
+    \draw[flow] (\a) -- (\b);
+
+  % --- the gates that sit on the chain ---------------------------------
+  \node[sp, gate] (g1) at (1,1.15) {\code{agent\_07}\\[1pt]
+                                    {\plexsanslight four invariants}};
+  \node[sp, gate] (g2) at (2,1.15) {\code{agent\_09}\\[1pt]
+                                    {\plexsanslight claim-level\\certification}};
+  \draw[draw=amberdeep, line width=.9pt] (rule) -- (g1);
+  \draw[draw=amberdeep, line width=.9pt] (sym)  -- (g2);
+
+  % --- what the chain produces -----------------------------------------
+  \node[sp, pass] (model)  at (3,1.15) {\textbf{DMN · BPMN}\\\textbf{CMMN · SBVR}\\
+                                        {\plexsanslight LinkML}};
+  \node[sp, pass] (report) at (3,2.30) {\textbf{Report row}};
+
+  \draw[flow] (attr)  -- (model);
+  \draw[flow] (model) -- (report);
+  \draw[flow] (rule.north) -- ++(0,-0.34) -| (model.north);
+
+  % --- the reverse arrow: the property the whole design protects --------
+  \draw[backflow] (g2.south) -- ++(0,0.62) -| (doc.south);
+  \node[edgelabel, font=\plexsans\tiny, text=forge]
+        at (1.0,1.92) {evidence rebuilt from the raw corpus, not from the citation};
+
+\end{tikzpicture}

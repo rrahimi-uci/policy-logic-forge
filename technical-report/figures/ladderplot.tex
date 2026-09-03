@@ -1,0 +1,28 @@
+% Compile-rate ladder: privacy policies against the tax statute, at each
+% repair stage. Coordinates generated from research/pilot/results/.
+\begin{tikzpicture}
+  \begin{axis}[reportaxis,
+      height=4.9cm,
+      xbar, y dir=reverse,
+      xlabel={Rules lowering to the checkable IR (\%)},
+      xmin=0, xmax=72,
+      ytick={0,1,2},
+      yticklabels={raw, normalised, repaired},
+      y tick label style={font=\plexsans\small, text=inkwell},
+      bar width=8pt,
+      enlarge y limits=0.30,
+      nodes near coords,
+      nodes near coords style={font=\plexsans\tiny, text=slate,
+                               /pgf/number format/fixed,
+                               /pgf/number format/precision=1},
+      legend style={at={(0.98,0.94)}, anchor=north east},
+      legend cell align=left]
+
+    \addplot[draw=forge, fill=forgelight] coordinates {\ladderPrivacy};
+    \addlegendentry{privacy policies}
+
+    \addplot[draw=rosedeep, fill=rosepale] coordinates {\ladderStatute};
+    \addlegendentry{tax statute (\code{sara\_binary})}
+
+  \end{axis}
+\end{tikzpicture}

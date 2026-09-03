@@ -1,0 +1,5 @@
+_build/
+*.log
+*.aux
+*.out
+*.toc

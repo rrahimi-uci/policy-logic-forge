@@ -1,0 +1,59 @@
+% Thirteen stages, grouped by the responsibility each boundary carries.
+% Nodes are placed on an integer grid; the phase bands are then FITTED to
+% the nodes they contain on a background layer, so no height or offset is
+% ever computed by hand and a band can never drift from its contents.
+\begin{tikzpicture}[font=\plexsans\scriptsize, x=2.95cm, y=-1.42cm]
+
+  \tikzset{st/.style={box, text width=2.06cm, minimum height=1.05cm,
+                      inner sep=4pt}}
+
+  % ---- stages, by (column = phase, row) --------------------------------
+  \node[st, src]  (s1)  at (0,0) {\textbf{01}\enspace Document\\organisation};
+  \node[st, src]  (s2)  at (0,1) {\textbf{02}\enspace Entities \&\\relationships};
+
+  \node[st]       (s3)  at (1,0) {\textbf{03}\enspace Rule\\extraction};
+  \node[st]       (s4)  at (1,1) {\textbf{04}\enspace Advisory\\validation};
+  \node[st]       (s5)  at (1,2) {\textbf{05}\enspace Merge \&\\reconcile};
+
+  \node[st]       (s6)  at (2,0) {\textbf{06}\enspace Graph\\optimisation};
+  \node[st, gate] (s7)  at (2,1) {\textbf{07}\enspace Readiness\\gate};
+  \node[st, gate] (s8)  at (2,2) {\textbf{08}\enspace Remediation};
+  \node[st, gate] (s9)  at (2,3) {\textbf{09}\enspace Grounding\\verification};
+
+  \node[st]       (s10) at (3,0) {\textbf{10}\enspace Dependency\\DAGs};
+  \node[st, pass] (s11) at (3,1) {\textbf{11}\enspace Executable\\models};
+
+  \node[st, pass] (s12) at (4,0) {\textbf{12}\enspace Information\\model};
+  \node[st, pass] (s13) at (4,1) {\textbf{13}\enspace Knowledge\\report};
+
+  % ---- phase bands, fitted to their contents ---------------------------
+  \begin{scope}[on background layer]
+    \node[phaseband, fit=(s1)(s2),                inner sep=6pt] (b0) {};
+    \node[phaseband, fit=(s3)(s4)(s5),            inner sep=6pt] (b1) {};
+    \node[phaseband, fit=(s6)(s7)(s8)(s9),        inner sep=6pt] (b2) {};
+    \node[phaseband, fit=(s10)(s11),              inner sep=6pt] (b3) {};
+    \node[phaseband, fit=(s12)(s13),              inner sep=6pt] (b4) {};
+  \end{scope}
+
+  % all five labels share one baseline, set from the tallest band
+  \foreach \c/\name in {0/SOURCE, 1/KNOWLEDGE, 2/VERIFICATION,
+                        3/MODEL, 4/DELIVERY}
+    \node[phaselabel, anchor=south] at (\c, -0.52) {\name};
+
+  % ---- flow within a phase ---------------------------------------------
+  \foreach \a/\b in {s1/s2, s3/s4, s4/s5, s6/s7, s7/s8, s8/s9, s10/s11, s12/s13}
+    \draw[flow] (\a) -- (\b);
+
+  % ---- hand-off between phases (always from the last stage of a phase) --
+  \draw[flow] (s2.east)  -- ++(0.16,0) |- (s3.west);
+  \draw[flow] (s5.east)  -- ++(0.16,0) |- (s6.west);
+  \draw[flow] (s9.east)  -- ++(0.16,0) |- (s10.west);
+  \draw[flow] (s11.east) -- ++(0.16,0) |- (s12.west);
+
+  % ---- remediation loop: 08 re-enters the gate at 07 -------------------
+  % Routed down the left gutter, which is empty; the right of this column
+  % carries the 09 -> 10 hand-off. No inline label -- at this scale it can
+  % only be set on top of stage 04, so the caption carries the meaning.
+  \draw[backflow] (s8.west) -- ++(-0.13,0) |- (s7.west);
+
+\end{tikzpicture}
