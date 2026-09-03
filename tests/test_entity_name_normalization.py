@@ -175,7 +175,7 @@ def test_already_canonical_graph_is_unaffected():
     assert naming_issues(fixed) == []
 
 
-def test_naming_issues_reports_non_string_party_references_without_crashing():
+def test_naming_issues_leaves_rich_counterparty_records_to_contract_validation():
     graph = {
         "entity_types": {"FIRST_PARTY": {}, "USER": {}},
         "business_rules": [{
@@ -187,10 +187,10 @@ def test_naming_issues_reports_non_string_party_references_without_crashing():
 
     issues = naming_issues(graph)
 
-    assert [issue["path"] for issue in issues] == [
-        "R1.responsible_party",
-        "R1.counterparties[0]",
-    ]
+    # A structured counterparty record is not itself a name. Its canonical
+    # identifier/shape is validated by rule_contract and can be repaired by
+    # Agent 08; naming consistency must not turn it into a graph-level stop.
+    assert [issue["path"] for issue in issues] == ["R1.responsible_party"]
     assert all("exact canonical entity key" in issue["reason"] for issue in issues)
 
 
