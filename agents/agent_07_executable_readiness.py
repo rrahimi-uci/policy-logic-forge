@@ -9,6 +9,7 @@ import os
 import re
 import sys
 import threading
+import time
 from copy import deepcopy
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from itertools import combinations
@@ -49,6 +50,89 @@ from utils.semantic_routing import bpmn_eligibility
 # else for one of these — a plain string, most often — must not overwrite the
 # rule's existing value; see the two field-copy loops in this file.
 _DICT_SHAPED_COMPLETION_FIELDS = {"exception_verification", "scope_derivation", "applicability_scope"}
+
+_TRANSIENT_CONFLICT_ERROR_MARKERS = (
+    "timeout",
+    "timed out",
+    "connection",
+    "socket",
+    "internalservererror",
+    "internal server error",
+    "service unavailable",
+    "bad gateway",
+    "gateway timeout",
+    "server error",
+    " overloaded",
+    "overloaded_error",
+    " 500",
+    " 502",
+    " 503",
+    " 504",
+)
+
+
+def _is_transient_conflict_error(exc: BaseException) -> bool:
+    """Return whether a conflict-analysis failure is safe to retry.
+
+    Conflict analysis is an auxiliary request: a provider timeout should not
+    permanently become an unresolved business conflict when a bounded retry
+    can recover it.  Provider SDK exceptions do not share one common type, so
+    classify by the standard HTTP status attribute plus transport/backpressure
+    markers while leaving validation and content-policy errors fail-closed.
+    """
+
+    status = getattr(exc, "status_code", None)
+    try:
+        if status is not None and int(status) >= 500:
+            return True
+    except (TypeError, ValueError):
+        pass
+    text = f"{type(exc).__name__}: {exc}".lower()
+    return any(marker in text for marker in _TRANSIENT_CONFLICT_ERROR_MARKERS)
+
+
+def _analyse_entity_with_retries(
+    analyser,
+    entity: str,
+    summaries: list[Mapping[str, Any]],
+    *,
+    scope_label: str,
+    attempts: int | None = None,
+    backoff_seconds: float | None = None,
+    sleep_fn=time.sleep,
+):
+    """Run one conflict-analysis request with bounded transient retries."""
+
+    if attempts is None:
+        try:
+            attempts = max(1, int(os.getenv("KG_CONFLICT_ANALYSIS_ATTEMPTS", "3")))
+        except (TypeError, ValueError):
+            attempts = 3
+    if backoff_seconds is None:
+        try:
+            backoff_seconds = max(0.0, float(os.getenv("KG_CONFLICT_ANALYSIS_BACKOFF_SECONDS", "10")))
+        except (TypeError, ValueError):
+            backoff_seconds = 10.0
+
+    last_error: BaseException | None = None
+    for attempt in range(1, attempts + 1):
+        try:
+            return analyser(entity, summaries)
+        except Exception as exc:
+            last_error = exc
+            if attempt >= attempts or not _is_transient_conflict_error(exc):
+                raise
+            delay = backoff_seconds * (2 ** (attempt - 1))
+            print(
+                f"⚠️ agent_07 transient conflict-analysis error for {scope_label!r}; "
+                f"retry {attempt + 1}/{attempts} in {delay:g}s ({exc})",
+                flush=True,
+            )
+            sleep_fn(delay)
+    # The loop always returns or raises; keep a defensive raise for static
+    # type checkers and unusual custom iterables for ``attempts``.
+    assert last_error is not None
+    raise last_error
 
 
 def _build_token_index(search_chunks: list[tuple[Mapping[str, Any], str, str]]) -> dict[str, list[int]]:
@@ -2670,18 +2754,17 @@ class ExecutableReadinessCompleter:
                 }]
             if len(member_ids) <= max_rules_per_call:
                 try:
-                    analyses = self.resolver.analyse_entity(
+                    analyses = _analyse_entity_with_retries(
+                        self.resolver.analyse_entity,
                         display_entity,
                         [item for item in summaries if str(item.get("rule_id")) in overlapping_ids],
+                        scope_label=entity,
                     ) if self.resolver else []
                 except Exception as exc:
-                    # No retry level below this one exists for this group --
-                    # crashing the whole multi-hour run over one provider
-                    # rejection (real case: a content-policy filter) would
-                    # discard every other entity's completed analysis for
-                    # nothing. Fall through to the same "no entries returned"
-                    # path just below, which already turns an empty result
-                    # into an explicit unresolved/manual-review entry.
+                    # A final provider rejection (for example a content-policy
+                    # filter) still remains fail-closed. Transient transport
+                    # and provider-5xx failures have already received bounded
+                    # retries in _analyse_entity_with_retries.
                     print(f"⚠️ agent_07 conflict analysis failed for entity {entity!r} ({exc}); marking unresolved", flush=True)
                     analyses = []
                 entries.extend(dict(item) for item in analyses if isinstance(item, Mapping))
@@ -2701,15 +2784,16 @@ class ExecutableReadinessCompleter:
 
                 def _call_bucket(batch_ids: list[str]) -> list[dict[str, Any]]:
                     try:
-                        analyses = self.resolver.analyse_entity(
+                        analyses = _analyse_entity_with_retries(
+                            self.resolver.analyse_entity,
                             display_entity,
                             [item for item in summaries if str(item.get("rule_id")) in batch_ids],
+                            scope_label=f"{entity} bucket",
                         ) if self.resolver else []
                     except Exception as exc:
-                        # Same reasoning as the single-call branch above: one
-                        # bucket's provider rejection must not cost every
-                        # other bucket (and every other entity) its
-                        # completed analysis.
+                        # Keep non-transient or exhausted failures explicit;
+                        # transient transport/provider failures were retried
+                        # by _analyse_entity_with_retries first.
                         print(f"⚠️ agent_07 conflict analysis failed for entity {entity!r} bucket ({exc}); marking unresolved", flush=True)
                         analyses = []
                     return [dict(item) for item in analyses if isinstance(item, Mapping)]

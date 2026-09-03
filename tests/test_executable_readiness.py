@@ -21,6 +21,64 @@ normalise_conflict_entries = readiness_module._normalise_conflict_entries
 recover_source_reference = readiness_module._recover_source_reference
 normalise_field_evidence_references = readiness_module._normalise_field_evidence_references
 is_deferred_contract_issue = readiness_module._is_deferred_contract_issue
+analyse_entity_with_retries = readiness_module._analyse_entity_with_retries
+is_transient_conflict_error = readiness_module._is_transient_conflict_error
+
+
+def test_conflict_analysis_retries_transient_provider_failure(monkeypatch):
+    calls = []
+    sleeps = []
+
+    class ProviderError(RuntimeError):
+        status_code = 503
+
+    def analyser(entity, summaries):
+        calls.append((entity, summaries))
+        if len(calls) == 1:
+            raise ProviderError("service unavailable")
+        return [{"entity": entity, "status": "non_conflict", "rule_ids": ["BR-1", "BR-2"]}]
+
+    result = analyse_entity_with_retries(
+        analyser,
+        "SELLER_SERVICER",
+        [{"rule_id": "BR-1"}, {"rule_id": "BR-2"}],
+        scope_label="SELLER_SERVICER::source:policy-a",
+        attempts=3,
+        backoff_seconds=2,
+        sleep_fn=sleeps.append,
+    )
+
+    assert result[0]["status"] == "non_conflict"
+    assert len(calls) == 2
+    assert sleeps == [2]
+    assert is_transient_conflict_error(ProviderError("service unavailable")) is True
+
+
+def test_conflict_analysis_does_not_retry_non_transient_provider_failure():
+    calls = []
+    sleeps = []
+
+    def analyser(_entity, _summaries):
+        calls.append(True)
+        raise ValueError("content policy rejection")
+
+    try:
+        analyse_entity_with_retries(
+            analyser,
+            "SELLER_SERVICER",
+            [{"rule_id": "BR-1"}],
+            scope_label="SELLER_SERVICER",
+            attempts=3,
+            backoff_seconds=2,
+            sleep_fn=sleeps.append,
+        )
+    except ValueError as exc:
+        assert "content policy" in str(exc)
+    else:  # pragma: no cover - defensive assertion for a failed test
+        raise AssertionError("non-transient conflict errors must remain fail-closed")
+
+    assert calls == [True]
+    assert sleeps == []
 
 
 class Resolver:
