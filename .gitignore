@@ -23,20 +23,12 @@ config.json
 # Generated pipeline output (regenerable by re-running the pipeline)
 pipeline-output/
 
-# Local pilot-sized samples, if you create one locally by hand. Nothing is
-# committed under compliance-files/ for any domain.
-compliance-files/privacy_policy_pilot/
-compliance-files/mobile_app_privacy_pilot/
-
-# Source documents you put under compliance-files/<domain>/ for a real run —
-# never committed, regardless of content or license.
-compliance-files/commercial_contracts/
-compliance-files/nda_confidentiality/
-compliance-files/privacy_policy/
-compliance-files/mobile_app_privacy/
-compliance-files/deonticbench/
-compliance-files/mortgage/
-compliance-files/mortgage-v2/
+# Source documents and locally built corpora. Nothing is committed under
+# compliance-files/ for any domain, regardless of content or license — so
+# ignore the whole tree rather than enumerating domains one at a time. The
+# per-domain list this replaces had already drifted: every directory was
+# covered except a newly added one, which was left stageable by accident.
+compliance-files/
 
 # OS / editor
 .DS_Store
