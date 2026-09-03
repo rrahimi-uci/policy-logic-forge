@@ -841,3 +841,74 @@ def test_the_tab_adds_no_external_asset_reference(tmp_path: Path):
     _manifest, report = _report_with_model(
         tmp_path, information_model_dir=_information_model_dir(tmp_path))
     assert "<script src=\"http" not in report and "<link href=\"http" not in report
+
+
+# ---------------------------------------------------------------------------
+# Responsive layout
+#
+# The report overflowed horizontally on every tab at phone widths — 566px of
+# content in a 390px viewport on Overview. Three separate causes, all "a long
+# unbroken identifier refuses to shrink": a 64-character SHA-256 in the footer,
+# rule/concept ids in links, and grid tracks with a `minmax` floor wider than
+# the screen.
+# ---------------------------------------------------------------------------
+
+def _report_css(tmp_path: Path) -> str:
+    graph_file = tmp_path / "graph.json"
+    graph_file.write_text(json.dumps(_graph()), encoding="utf-8")
+    generate(graph_file, None, tmp_path / "models", tmp_path / "report")
+    report = (tmp_path / "report" / "business_knowledge_report.html").read_text(encoding="utf-8")
+    return report[report.index("<style>"):report.index("</style>")]
+
+
+def test_identifiers_are_allowed_to_wrap(tmp_path: Path):
+    """The footer prints a 64-character hash and links carry rule ids; neither
+    has a natural break point, so both need one."""
+    css = _report_css(tmp_path)
+    assert "a{color:#4251bd;text-decoration:none;overflow-wrap:anywhere}" in css
+    assert "footer{padding:28px 0;color:var(--muted);font-size:12px;overflow-wrap:anywhere}" in css
+
+
+def test_narrow_screens_collapse_every_multi_column_grid(tmp_path: Path):
+    css = _report_css(tmp_path)
+    assert "@media(max-width:760px)" in css
+    for selector in (".grid-2", ".metric-grid", ".insight-grid", ".concept-grid",
+                     ".im-class-grid", ".outcome-grid"):
+        assert selector in css.split("@media(max-width:760px)")[1], selector
+
+
+def test_collapsed_grids_use_a_zero_floor_not_a_bare_fraction(tmp_path: Path):
+    """`1fr` means `minmax(auto,1fr)`, and `auto` floors at min-content — which
+    for a track holding a wide table is enormous. Using it made two tabs worse,
+    not better."""
+    css = _report_css(tmp_path)
+    responsive = css.split("@media(max-width:760px)")[1]
+    assert "grid-template-columns:minmax(0,1fr)" in responsive
+    assert "grid-template-columns:1fr}" not in responsive
+
+
+def test_flex_children_may_shrink_below_their_content(tmp_path: Path):
+    """Flex items default to min-width:auto, so one long identifier stops the
+    whole row from shrinking however narrow the screen gets."""
+    responsive = _report_css(tmp_path).split("@media(max-width:760px)")[1]
+    assert "min-width:0" in responsive
+    assert ".concept-card-head>*" in responsive
+
+
+def test_the_responsive_block_comes_after_the_rules_it_narrows(tmp_path: Path):
+    """This is the bug that made the first fix silently do nothing: the media
+    query sat in an earlier chunk of the stylesheet than the base grid rules,
+    so on equal specificity the base rules won on source order."""
+    css = _report_css(tmp_path)
+    responsive_at = css.index("@media(max-width:760px)")
+    for base_rule in (".concept-grid{display:grid", ".insight-grid{display:grid",
+                      ".im-class-grid{display:grid"):
+        assert css.index(base_rule) < responsive_at, f"{base_rule} is declared after the override"
+
+
+def test_the_stacked_dependency_graph_keeps_its_width_pinned(tmp_path: Path):
+    """Stacked, `flex:1` governs height, so the scroll container would otherwise
+    grow to the width of the graph it is supposed to be scrolling."""
+    responsive = _report_css(tmp_path).split("@media(max-width:760px)")[1]
+    assert ".dependency-graph-layout{flex-direction:column}" in responsive
+    assert ".dependency-graph-scroll,.dep-side-panel{width:100%;max-width:100%" in responsive

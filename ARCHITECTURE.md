@@ -144,7 +144,7 @@ overloaded:
 | Code | Meaning | Orchestrator |
 | --- | --- | --- |
 | 0 | The stage did its work | continue |
-| 2 | A required upstream artifact is missing, or the stage could not produce its output | stop |
+| 2 | A required upstream artifact is missing, or the stage could not produce its output. **Every agent uses this one code for that one condition** — several used to return 1, which the orchestrator cannot tell from a crash | stop |
 | 3 (agents 07, 08, 09, 12) | **Data quality.** The stage did its work and wrote its output; the result needs review | continue, carrying the review flags |
 | 3 (agent 03) | **Incomplete extraction.** Partial artifacts are kept for resume | stop, so no later stage consumes a partial graph |
 | 1 | Unhandled runtime or configuration error | stop |

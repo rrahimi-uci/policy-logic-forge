@@ -353,12 +353,12 @@ def main():
     if not entity_file.exists():
         print(f"❌ Error: Entity definitions file not found: {entity_file}", flush=True)
         print("   Please run agent_02 (entity extraction) first.", flush=True)
-        sys.exit(1)
+        sys.exit(2)
     
     if not rules_file.exists():
         print(f"❌ Error: Business rules file not found: {rules_file}", flush=True)
         print("   Please run agent_03 (rules extraction) first.", flush=True)
-        sys.exit(1)
+        sys.exit(2)
     
     # Create enricher and run
     enricher = KnowledgeEnricher(entity_file, rules_file, output_dir)

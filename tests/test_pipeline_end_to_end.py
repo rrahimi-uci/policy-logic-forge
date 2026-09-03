@@ -410,6 +410,11 @@ def test_every_agent_refuses_a_missing_input_without_crashing(module, tmp_path):
     combined = result.stdout + result.stderr
     assert result.returncode != 0, f"{module} reported success with no input:\n{combined}"
     assert "Traceback" not in combined, f"{module} crashed instead of reporting:\n{combined}"
+    # One code for one meaning. Agents used to split between 1 and 2 for the
+    # same condition, which left the orchestrator unable to tell a missing
+    # artifact from a runtime crash.
+    assert result.returncode == 2, (
+        f"{module} exited {result.returncode}; a missing upstream artifact is exit 2")
 
 
 def test_grounding_reports_when_there_is_no_graph_at_all(tmp_path):

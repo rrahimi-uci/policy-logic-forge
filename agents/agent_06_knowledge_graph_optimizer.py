@@ -945,8 +945,8 @@ def main():
     
     if not input_file.exists():
         print(f"❌ Error: Input file not found: {input_file}", flush=True)
-        print(f"   Please run the pipeline through agent_05 (consolidation) first.", flush=True)
-        sys.exit(1)
+        print("   Please run the pipeline through agent_05 (consolidation) first.", flush=True)
+        sys.exit(2)
     
     # Initialize optimizer
     optimizer = KnowledgeGraphOptimizer(
