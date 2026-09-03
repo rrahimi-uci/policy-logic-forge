@@ -539,6 +539,54 @@ def _readiness_definition_html() -> str:
     )
 
 
+def _metrics_appendix_html() -> str:
+    """Render plain-language definitions for every report-level metric.
+
+    The report intentionally separates values from their definitions: KPI cards
+    stay scannable, while this appendix gives reviewers the denominator,
+    scope, and interpretation needed to compare runs without guessing what a
+    percentage means.  Definitions are domain-independent and describe the
+    deterministic calculations performed by Agent 13.
+    """
+    rows = (
+        ("Total business rules", "Count of records in the graph's business_rules collection.", "Every extracted rule is included; this is a count, not a quality judgment."),
+        ("Average readiness score", "Arithmetic mean of each rule's 0–100 Automation Readiness Score.", "A higher value indicates stronger measured support across the reported rules; it is not an accuracy probability."),
+        ("Median readiness score", "50th percentile of the per-rule Automation Readiness Scores.", "Half of the rules score at or above this value and half at or below it."),
+        ("10th-percentile readiness score", "10th percentile of the per-rule Automation Readiness Scores.", "Approximately 90% of rules score at or above this value; it exposes the lower tail."),
+        ("Grounding claim support", "Supported grounding claims ÷ all evaluated grounding claims × 100.", "Claims are atomic rule or relationship assertions evaluated by the independent grounding stage; protocol completeness is reported separately in the source artifact."),
+        ("Contract integrity", "Rules with a certified contract projection ÷ total rules × 100.", "A certified projection has structurally consistent inputs, conditions, outcomes, and executable representation."),
+        ("Relationship support", "Supported asserted relationships ÷ applicable asserted relationships × 100.", "Rules without an asserted relationship are excluded from the denominator; direction and evidence are checked independently."),
+        ("Concept evidence coverage", "Concepts with at least one concept-specific source reference ÷ reported concepts × 100.", "This measures source-pointer presence for vocabulary concepts, not semantic completeness of the vocabulary."),
+        ("Rule source-pointer coverage", "Rules with at least one source reference ÷ total rules × 100.", "A pointer proves that a location was recorded; it does not by itself prove that the cited text supports the rule."),
+        ("Rules grounding-certified", "Rules whose independent grounding status is certified ÷ total rules × 100.", "A rule is certified only when its evaluated claims pass the grounding contract."),
+        ("Confidence distribution", "Count of rules grouped into the displayed confidence bands.", "Only confidence values present in the source graph are included; Agent 13 does not invent or independently rescore confidence."),
+        ("Executable model coverage", "Count of rules linked to generated DMN, BPMN, or CMMN model elements.", "A model link indicates a generated projection exists, not that the projection is approved for production."),
+        ("Dependency degree", "Number of unique incoming plus outgoing dependency edges for a rule.", "The chart groups this count into ranges; it measures structural connectivity, not business importance."),
+        ("Dependency depth", "Shortest directed-path distance from a zero-indegree root in the dependency graph.", "The maximum depth is the largest such distance; cyclic or rootless components use a deterministic anchor."),
+        ("Isolated rules", "Rules with zero unique dependency edges.", "An isolated rule may be self-contained or may indicate a relationship that was not asserted; the metric is not an error count."),
+        ("Fact types", "Count of SBVR vocabulary relationships represented in the graph.", "Fact types connect concepts; they are not workflow sequence flows."),
+        ("Fact grounding rate", "Grounded fact types ÷ total fact types × 100.", "Grounding status is taken from the vocabulary artifact and is separate from rule grounding."),
+        ("Information-model classes", "Number of classes represented in the Agent 12 business information model.", "Classes are schema projections of the values used by rules."),
+        ("Information-model attributes", "Number of typed attributes in the Agent 12 model, including unassigned attributes.", "The count describes model inventory; it does not indicate that every attribute is source-grounded."),
+        ("Information-model enumerations", "Number of controlled-vocabulary enumerations referenced by the information model.", "Enumerations constrain allowed values and are counted from the generated schema."),
+        ("Schema validity", "Whether the generated information model passes the LinkML metamodel validation.", "VALID means the schema satisfies the validator; it does not certify the source extraction itself."),
+    )
+    body = "".join(
+        f'<tr><td><strong>{_safe(name)}</strong></td><td>{_safe(definition)}</td><td>{_safe(interpretation)}</td></tr>'
+        for name, definition, interpretation in rows
+    )
+    return (
+        '<section id="appendix" class="tab"><div class="panel"><div class="eyebrow">Appendix</div>'
+        '<h2>Metric definitions</h2>'
+        '<p>These definitions specify the population, denominator, and interpretation of every report-level metric. '
+        'Values are calculated from the generated artifacts for this run; they should not be read as universal acceptance thresholds.</p>'
+        '<div class="table-wrap metric-definitions"><table><thead><tr><th>Metric</th><th>Definition</th><th>How to read it</th></tr></thead>'
+        f'<tbody>{body}</tbody></table></div>'
+        '<div class="callout"><strong>Scope note:</strong> A metric can be complete as a calculation while the underlying extraction remains uncertain. '
+        'Use the rule-level evidence, grounding details, and source traceability links for review decisions.</div></div></section>'
+    )
+
+
 def _source_chunks(organized_dir: Path | None) -> tuple[dict[tuple[str, str], Mapping[str, Any]], list[Mapping[str, Any]]]:
     if organized_dir is None or not organized_dir.exists():
         return {}, []
@@ -1239,11 +1287,12 @@ def _validate_report_html(document: str, rule_ids: Sequence[str], source_anchors
     required = (
         '<!doctype html>', 'id="report-data"',
         'data-tab="overview"', 'data-tab="vocabulary"', 'data-tab="rules"', 'data-tab="dependencies"',
-        'data-tab="information-model"', 'data-tab="sources"',
+        'data-tab="information-model"', 'data-tab="sources"', 'data-tab="appendix"',
         'id="information-model"',
         'id="concept-search"', 'id="concept-grid"', 'id="fact-types"',
         'dependency-graph-shell', 'dependency-graph-scroll', 'id="dep-side-panel"',
         'model-badges', 'readiness-score', 'score-factors', 'score-definition', 'trace-path',
+        'id="appendix"', 'metric-definitions',
     )
     missing = [marker for marker in required if marker not in document]
     if missing:
@@ -1836,8 +1885,8 @@ def generate(
 .readiness-score{{min-width:180px}}.score-number{{font-size:25px;font-weight:850;letter-spacing:-.03em}}.score-number span{{font-size:11px;color:var(--muted);letter-spacing:0;margin-left:3px}}.score-track,.score-factor-track{{display:block;height:8px;border-radius:99px;background:#e9edf5;overflow:hidden}}.score-track{{margin:5px 0 8px}}.score-track i,.score-factor-track i{{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,var(--violet),var(--teal))}}.score-factors{{display:grid;gap:7px;margin-top:9px}}.score-factor{{display:grid;grid-template-columns:minmax(115px,1fr) 38px;gap:4px 8px;align-items:center;font-size:11px}}.score-factor strong{{text-align:right}}.score-factor-track{{grid-column:1/-1;height:5px}}.score-definition{{scroll-margin-top:18px}}.score-definition code{{display:inline-block;margin-top:6px;padding:7px 10px;border-radius:8px;background:#f4f6fb;color:#4251bd;font:12px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace}}.score-definition .table-wrap{{max-height:none;margin:16px 0}}.score-definition th:nth-child(2),.score-definition td:nth-child(2){{white-space:nowrap;text-align:center}}.score-interpretation{{margin-top:14px}}.hero-score-link{{position:relative;z-index:1;display:inline-flex;margin:4px 0 14px;padding:8px 12px;border:1px solid rgba(255,255,255,.34);border-radius:999px;background:rgba(255,255,255,.1);color:#fff;font-weight:750}}.hero-score-link:hover{{background:rgba(255,255,255,.18);text-decoration:none}}
  </style></head><body><div class="shell">
 <header class="hero"><div class="eyebrow">Presentation &amp; Knowledge Exploration</div><h1>Business knowledge, made transparent.</h1><p>A self-contained, source-traceable view of the extracted domain knowledge. Every rule is linked to its source and assigned a neutral <strong>0–100 Automation Readiness Score</strong>, providing a consistent measure of its suitability for automation. Your environment, risk tolerance, and domain policies determine the appropriate acceptance threshold.</p><a class="hero-score-link" href="#scoring-definition">View scoring definition ↓</a><div class="muted" style="color:#cbd9ee">Generated from {_safe(graph_file.name)} · no external assets or network calls required</div></header>
-<div class="metric-grid">{_metric_card('Total business rules', len(rules), 'All extracted rules shown')}{_metric_card('Average readiness score', f'{report_data["automation_readiness_score_average"]:.1f}/100', 'Mean across all rules')}{_metric_card('Median readiness score', f'{report_data["automation_readiness_score_median"]:.1f}/100', 'Half of rules score at or above this value')}{_metric_card('10th-percentile readiness score', f'{report_data["automation_readiness_score_p10"]:.1f}/100', '90% of rules score at or above this value')}{_metric_card('Grounding claim support', f'{report_data["grounding_claim_support_rate"]:.1f}%', f'{grounding_claim_counts.get("supported", 0)} of {grounding_claim_total} claims supported')}{_metric_card('Contract integrity', f'{grounding_dimension_metrics["contract"]["support_rate"]:.1f}%', 'Rules with certified contract projections')}{_metric_card('Relationship support', f'{grounding_dimension_metrics["relationship"]["support_rate"]:.1f}%', 'Rules with supported graph relationships')}{_metric_card('Contradicted and insufficient-evidence claims', grounding_claim_counts.get('contradicted', 0) + grounding_claim_counts.get('insufficient_evidence', 0), f'{grounding_claim_counts.get("contradicted", 0)} contradicted · {grounding_claim_counts.get("insufficient_evidence", 0)} insufficient evidence')}</div>
-<nav class="tabs" aria-label="Report sections"><button class="active" data-tab="overview">Overview</button><button data-tab="vocabulary">SBVR vocabulary</button><button data-tab="rules">Rule explorer</button><button data-tab="dependencies">Relationships</button><button data-tab="information-model">Information model</button><button data-tab="sources">Source traceability</button></nav>
+<div class="metric-grid">{_metric_card('Total business rules', len(rules), 'All extracted rules shown')}{_metric_card('Average readiness score', f'{report_data["automation_readiness_score_average"]:.1f}/100', 'Mean across all rules')}{_metric_card('Median readiness score', f'{report_data["automation_readiness_score_median"]:.1f}/100', 'Half of rules score at or above this value')}{_metric_card('10th-percentile readiness score', f'{report_data["automation_readiness_score_p10"]:.1f}/100', '90% of rules score at or above this value')}{_metric_card('Grounding claim support', f'{report_data["grounding_claim_support_rate"]:.1f}%', f'{grounding_claim_counts.get("supported", 0)} of {grounding_claim_total} claims supported')}{_metric_card('Contract integrity', f'{grounding_dimension_metrics["contract"]["support_rate"]:.1f}%', 'Rules with certified contract projections')}{_metric_card('Relationship support', f'{grounding_dimension_metrics["relationship"]["support_rate"]:.1f}%', 'Rules with supported graph relationships')}</div>
+<nav class="tabs" aria-label="Report sections"><button class="active" data-tab="overview">Overview</button><button data-tab="vocabulary">SBVR vocabulary</button><button data-tab="rules">Rule explorer</button><button data-tab="dependencies">Relationships</button><button data-tab="information-model">Information model</button><button data-tab="sources">Source traceability</button><button data-tab="appendix">Appendix</button></nav>
 <section id="overview" class="tab active"><div class="grid-2"><div class="panel"><div class="eyebrow">Executive summary</div><h2>What this domain contains</h2><p>The report presents <strong>{len(rules)}</strong> rules across <strong>{len(categories)}</strong> categories, <strong>{concept_supported}</strong> governed SBVR concepts, and <strong>{len(decision_variables)}</strong> separately managed decision variables.</p><div class="callout">The readiness score measures observed grounding, contract, evidence, execution, and relationship signals. It is not an accuracy probability and does not authorize automation. A score of 100 means every measured component is complete; this report applies no acceptance threshold.</div></div><div class="panel"><div class="eyebrow">Coverage and quality</div><h2>At a glance</h2><table><tr><td>Average automation-readiness score</td><td><strong>{report_data["automation_readiness_score_average"]:.1f}/100</strong></td></tr><tr><td>Concept evidence coverage</td><td><strong>{vocabulary_coverage:.1f}%</strong></td></tr><tr><td>Rule source-pointer coverage</td><td><strong>{report_data["source_pointer_coverage_rate"]:.1f}%</strong></td></tr><tr><td>Rules grounding-certified</td><td><strong>{report_data["grounding_coverage_rate"]:.1f}%</strong> ({grounded_count} rules)</td></tr><tr><td>Grounding claims supported</td><td><strong>{grounding_claim_counts.get("supported", 0)}/{grounding_claim_total}</strong> ({report_data["grounding_claim_support_rate"]:.1f}%)</td></tr></table></div></div>
 {_readiness_definition_html()}
 <div class="grid-2"><div class="panel"><h3>Rule categories</h3><p class="muted">How the extracted rules are distributed across business categories.</p>{category_chart}</div>{confidence_panel}</div>
@@ -1850,6 +1899,7 @@ def generate(
 <section id="dependencies" class="tab"><div class="panel"><div class="eyebrow">Relationship and dependency view</div><h2>Directed rule relationship graph</h2><p>These are the dependency edges emitted by the knowledge-graph optimizer and DAG generator. They are not treated as BPMN sequence flows. The graph preserves the emitted direction and groups nodes into degree layers for readable traversal. <strong>Click a rule</strong> to highlight it and its direct connections; everything else dims. Scroll to zoom, drag to pan.</p><div class="dependency-graph-shell"><div class="dependency-graph-toolbar"><h3>Dependency topology</h3><span class="muted">{len(dependency_layout["nodes"])} nodes · {len(dependency_layout["edges"])} unique directed edges · {len(dependency_layers)} degree layers</span></div><div class="dependency-graph-stats">{dependency_layer_chips}<span class="graph-layer-chip"><strong>isolated</strong> · {len(dependency_layout["isolated_nodes"])} nodes</span></div><div class="dependency-graph-layout"><div class="dependency-graph-scroll">{dependency_graph}</div><aside id="dep-side-panel" class="dep-side-panel" hidden></aside></div><p class="dependency-graph-note">{_safe(dependency_graph_note)} Hover an edge for its dependency type and full source → target direction.</p></div><div class="table-wrap"><table><thead><tr><th>Source rule</th><th>Target rule</th><th>Type</th></tr></thead><tbody>{edge_rows}</tbody></table></div></div></section>
 <section id="information-model" class="tab">{information_model_section}</section>
 <section id="sources" class="tab"><div class="panel"><div class="eyebrow">Source traceability</div><h2>Embedded source chunks</h2><p>These source blocks are embedded in this HTML file. Links from concepts, rules, and score details land on the exact referenced chunk/section without requiring filesystem access.</p>{''.join(source_blocks.values()) or '<div class="empty">No source references were present in the graph.</div>'}</div></section>
+{_metrics_appendix_html()}
 <footer>Policy Logic Forge Agent 13 · presentation-only artifact · source graph SHA-256: {_safe(hashlib.sha256(graph_file.read_bytes()).hexdigest())}</footer></div>
 <script type="application/json" id="report-data">{_json_for_script(report_data)}</script><script>
 const tabs=[...document.querySelectorAll('[data-tab]')], sections=[...document.querySelectorAll('section.tab')];

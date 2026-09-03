@@ -254,6 +254,10 @@ def test_agent_12_generates_self_contained_report_with_traceability(tmp_path: Pa
     assert 'id="scoring-definition" class="panel score-definition"' in report
     assert '<a class="hero-score-link" href="#scoring-definition">View scoring definition ↓</a>' in report
     assert "How the Automation Readiness Score is calculated" in report
+    assert 'data-tab="appendix"' in report
+    assert 'id="appendix"' in report
+    assert "Metric definitions" in report
+    assert 'class="table-wrap metric-definitions"' in report
     assert "0.40 Core + 0.20 Context + 0.15 Contract + 0.10 Evidence + 0.10 Execution + 0.05 Relationships" in report
     for component, weight in (("Core grounding", "40%"), ("Context grounding", "20%"), ("Contract integrity", "15%"), ("Evidence integrity", "10%"), ("Executability", "10%"), ("Relationship support", "5%")):
         assert component in report
@@ -272,11 +276,22 @@ def test_agent_12_generates_self_contained_report_with_traceability(tmp_path: Pa
         "Grounding claim support",
         "Contract integrity",
         "Relationship support",
-        "Contradicted and insufficient-evidence claims",
     )
     assert report.count('<div class="metric-card') == len(metric_labels)
     for label in metric_labels:
         assert f'<div class="metric-label">{label}</div>' in report
+    assert "Contradicted and insufficient-evidence claims" not in report
+    for metric in (
+        "Total business rules", "Average readiness score", "Median readiness score",
+        "10th-percentile readiness score", "Grounding claim support",
+        "Contract integrity", "Relationship support", "Concept evidence coverage",
+        "Rule source-pointer coverage", "Rules grounding-certified",
+        "Confidence distribution", "Executable model coverage", "Dependency degree",
+        "Dependency depth", "Isolated rules", "Fact types", "Fact grounding rate",
+        "Information-model classes", "Information-model attributes",
+        "Information-model enumerations", "Schema validity",
+    ):
+        assert f"<strong>{metric}</strong>" in report
     for removed_card in ("Score range", "SBVR concepts", "Decision variables", "Source pointers", "Grounding claims"):
         assert f'<div class="metric-label">{removed_card}</div>' not in report
     assert "Rules below the user-selected threshold" not in report
@@ -366,7 +381,10 @@ def test_agent_12_omits_empty_confidence_distribution(tmp_path: Path):
 
     assert manifest["confidence_distribution"] == {}
     assert manifest["confidence_source_counts"] == {"not_reported": 1}
-    assert "Confidence distribution" not in report
+    # The chart is omitted when no confidence values exist, but its definition
+    # remains in the appendix so the report documents every supported metric.
+    assert '<h3>Confidence distribution</h3>' not in report
+    assert '<strong>Confidence distribution</strong>' in report
     assert "Confidence provenance:" not in report
     assert '<div class="metric-label">Median readiness score</div>' in report
     assert "Median confidence score" not in report
