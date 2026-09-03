@@ -18,7 +18,7 @@
   a:hover{text-decoration:underline}
   .wrap{max-width:1080px; margin:0 auto; padding:0 24px}
   .eyebrow{display:inline-block; font-size:12px; font-weight:800; letter-spacing:.12em; text-transform:uppercase; color:var(--teal); margin-bottom:10px}
-  code{font:.88em ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; background:#f0f2f8; color:#3b2fae; padding:1px 5px; border-radius:5px}
+  code{font:.88em ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; background:#f0f2f8; color:#3b2fae; padding:1px 5px; border-radius:5px; overflow-wrap:anywhere}
   .mathvar{font:italic 500 .95em Georgia,"Times New Roman",serif; color:var(--ink)}
   .mathvar sub{font-size:.7em}
 
@@ -122,6 +122,7 @@
         <summary class="eyebrow">On this page</summary>
         <nav>
 <a class="toc-h1" style="padding-left:0px" href="#1-system-overview">1. System overview</a>
+<a class="toc-h2" style="padding-left:14px" href="#11-the-evidence-spine">1.1 The evidence spine</a>
 <a class="toc-h1" style="padding-left:0px" href="#2-the-thirteen-agent-pipeline">2. The thirteen-agent pipeline</a>
 <a class="toc-h2" style="padding-left:14px" href="#21-stage-responsibilities">2.1 Stage responsibilities</a>
 <a class="toc-h3" style="padding-left:28px" href="#exit-code-contract">Exit-code contract</a>
@@ -184,7 +185,7 @@
         EXTRACT[&quot;ExtractionPipeline&quot;]
     end
 
-    subgraph PIPELINE[&quot;12-Agent Pipeline (agents/)&quot;]
+    subgraph PIPELINE[&quot;13-Agent Pipeline (agents/)&quot;]
         direction LR
         A1[&quot;01&lt;br/&gt;Organize&quot;] --&gt; A2[&quot;02&lt;br/&gt;Entities&quot;] --&gt; A3[&quot;03&lt;br/&gt;Rules&quot;]
         A3 --&gt; A4[&quot;04&lt;br/&gt;Validate&quot;] --&gt; A5[&quot;05&lt;br/&gt;Merge&quot;] --&gt; A6[&quot;06&lt;br/&gt;Optimize&quot;]
@@ -239,6 +240,36 @@
     class GRAPH,DAGS,MODELS,INFOMODEL,REPORT output</pre></div>
 <p>Two things worth noticing immediately:</p>
 <ol><li><strong>The compiler layer is additive, not required.</strong> Agents 01–10 and most of agent_11 (the review-projection DMN/BPMN/CMMN/SBVR) never touch <code>lexec_ir.py</code>/<code>lexec_compile.py</code>/<code>smt.py</code>. Only the proof-checked side output (<code>lexec_ir.json</code>, <code>compilation_report.json</code>, <code>proof_records.json</code>) goes through the compiler, and a failure there never blocks or replaces the review-projection output.</li><li><strong>RegDelta consumes the pipeline&#x27;s output, it doesn&#x27;t run inside it.</strong> It reads two already-completed runs&#x27; optimized graphs; nothing in <code>agents/</code> or <code>cli/extract.py</code> imports from <code>utils/regdelta_engine.py</code> or its dependencies.</li></ol>
+<h3 id="11-the-evidence-spine">1.1 The evidence spine</h3>
+<p>Every artifact the pipeline emits can be walked back to the sentence it came from, and every step of that walk is checked rather than asserted. This is the single property the rest of the design exists to protect:</p>
+<div class="arch-mermaid"><pre class="mermaid">flowchart LR
+    classDef src fill:#e0f2fe,stroke:#0369a1,color:#0c4a6e,stroke-width:1px
+    classDef mid fill:#fae8ff,stroke:#a21caf,color:#701a75,stroke-width:1px
+    classDef out fill:#dcfce7,stroke:#15803d,color:#14532d,stroke-width:1px
+    classDef gate fill:#fef3c7,stroke:#b45309,color:#78350f,stroke-width:2px
+
+    DOC[&quot;Source passage&lt;br/&gt;&lt;i&gt;chunk + section&lt;/i&gt;&quot;]:::src
+    RULE[&quot;Rule&lt;br/&gt;&lt;i&gt;typed conditions&lt;br/&gt;and outcomes&lt;/i&gt;&quot;]:::mid
+    SYM[&quot;Symbol&lt;br/&gt;&lt;i&gt;unit, value set,&lt;br/&gt;range&lt;/i&gt;&quot;]:::mid
+    ATTR[&quot;Attribute&lt;br/&gt;&lt;i&gt;on a class&lt;/i&gt;&quot;]:::out
+    MODEL[&quot;DMN · BPMN · CMMN&lt;br/&gt;SBVR · LinkML&quot;]:::out
+    REPORT[&quot;Report row&quot;]:::out
+
+    DOC --&gt;|&quot;agent_03 extracts&quot;| RULE
+    RULE --&gt;|&quot;agent_09 re-verifies&lt;br/&gt;against the raw corpus&quot;| DOC
+    RULE --&gt; SYM
+    SYM --&gt;|&quot;agent_12 types&lt;br/&gt;from declared evidence&quot;| ATTR
+    RULE --&gt; MODEL
+    ATTR --&gt; MODEL
+    MODEL --&gt; REPORT
+    ATTR --&gt; REPORT
+    REPORT -.-&gt;|&quot;every link resolves back&quot;| DOC
+
+    G1{{&quot;agent_07&lt;br/&gt;four invariants&quot;}}:::gate
+    G2{{&quot;agent_09&lt;br/&gt;claim-level&lt;br/&gt;certification&quot;}}:::gate
+    RULE --- G1
+    RULE --- G2</pre></div>
+<p>The reverse arrow is the important one. <code>agent_09</code> does not trust the citation a rule carries; it rebuilds the evidence from the raw corpus, so a hallucinated citation cannot pass. On one real run that pass rejected <strong>44% of the dependency and conflict claims</strong> the pipeline&#x27;s own deterministic guard had already accepted.</p>
 <h2 id="2-the-thirteen-agent-pipeline">2. The thirteen-agent pipeline</h2>
 <h3 id="21-stage-responsibilities">2.1 Stage responsibilities</h3>
 <div class="table-wrap"><table><thead><tr><th>Stage</th><th>Agent</th><th>Responsibility</th><th>Primary output</th></tr></thead><tbody><tr><td>01/13</td><td><code>agent_01</code></td><td>Document organization</td><td><code>agent_01-organized-documents/</code></td></tr><tr><td>02/13</td><td><code>agent_02</code></td><td>Entity and relationship extraction</td><td><code>agent_02-entities/</code></td></tr><tr><td>03/13</td><td><code>agent_03</code></td><td>Business-rule extraction</td><td><code>agent_03-rules/</code></td></tr><tr><td>04/13</td><td><code>agent_04</code></td><td>Advisory rule validation</td><td><code>agent_04-validation/</code></td></tr><tr><td>05/13</td><td><code>agent_05</code></td><td>Rules/entities merge</td><td><code>agent_05-rules-with-entities/</code></td></tr><tr><td>06/13</td><td><code>agent_06</code></td><td>Knowledge-graph optimization (dedup + dependency analysis)</td><td><code>agent_06-07-08-09-optimized/optimized_compliance_knowledge_graph.json</code></td></tr><tr><td>07/13</td><td><code>agent_07</code></td><td>Executable-readiness gate (four invariants)</td><td>readiness report, embedded in the shared optimized directory</td></tr><tr><td>08/13</td><td><code>agent_08</code></td><td>Readiness remediation (only if agent_07 requests it)</td><td>focused rule fix-ups</td></tr><tr><td>09/13</td><td><code>agent_09</code></td><td>Independent grounding verification</td><td>claim-level certification</td></tr><tr><td>10/13</td><td><code>agent_10</code></td><td>Dependency-DAG generation, 100%-coverage guarantee</td><td><code>agent_10-dag-generation/dependency_dags.json</code></td></tr><tr><td>11/13</td><td><code>agent_11</code></td><td>DMN/BPMN/CMMN/SBVR generation + LExec compile</td><td><code>agent_11-executable-models/</code></td></tr><tr><td>12/13</td><td><code>agent_12</code></td><td>Business information model (LinkML schema; classes, typed attributes, enumerations)</td><td><code>agent_12-business-information-model/</code></td></tr><tr><td>13/13</td><td><code>agent_13</code></td><td>Self-contained business knowledge report</td><td><code>agent_13-business-knowledge-report/business_knowledge_report.html</code></td></tr></tbody></table></div>
@@ -246,6 +277,28 @@
 <h4 id="exit-code-contract">Exit-code contract</h4>
 <p>Every stage is a subprocess, so its exit code is the only thing the orchestrator can route on. There are three meanings, and one of them is overloaded:</p>
 <div class="table-wrap"><table><thead><tr><th>Code</th><th>Meaning</th><th>Orchestrator</th></tr></thead><tbody><tr><td>0</td><td>The stage did its work</td><td>continue</td></tr><tr><td>2</td><td>A required upstream artifact is missing, or the stage could not produce its output. <strong>Every agent uses this one code for that one condition</strong> — several used to return 1, which the orchestrator cannot tell from a crash</td><td>stop</td></tr><tr><td>3 (agents 07, 08, 09, 12)</td><td><strong>Data quality.</strong> The stage did its work and wrote its output; the result needs review</td><td>continue, carrying the review flags</td></tr><tr><td>3 (agent 03)</td><td><strong>Incomplete extraction.</strong> Partial artifacts are kept for resume</td><td>stop, so no later stage consumes a partial graph</td></tr><tr><td>1</td><td>Unhandled runtime or configuration error</td><td>stop</td></tr></tbody></table></div>
+<div class="arch-mermaid"><pre class="mermaid">flowchart TD
+    classDef ok fill:#dcfce7,stroke:#15803d,color:#14532d,stroke-width:1px
+    classDef review fill:#fef3c7,stroke:#b45309,color:#78350f,stroke-width:1px
+    classDef stop fill:#ffe4e6,stroke:#be123c,color:#881337,stroke-width:1px
+    classDef neutral fill:#e2e8f0,stroke:#334155,color:#1e293b,stroke-width:1px
+
+    START[&quot;Stage exits&quot;]:::neutral
+    START --&gt; C{&quot;exit code&quot;}
+
+    C --&gt;|0| OK[&quot;Work done, nothing to flag&quot;]:::ok
+    C --&gt;|2| MISSING[&quot;Required upstream artifact missing,&lt;br/&gt;or the stage could not produce output&quot;]:::stop
+    C --&gt;|1| CRASH[&quot;Unhandled runtime or&lt;br/&gt;configuration error&quot;]:::stop
+    C --&gt;|3| WHICH{&quot;which stage?&quot;}:::neutral
+
+    WHICH --&gt;|&quot;07 · 08 · 09 · 12&quot;| QUALITY[&quot;Data quality.&lt;br/&gt;Output was written; it needs review&quot;]:::review
+    WHICH --&gt;|&quot;03&quot;| PARTIAL[&quot;Extraction incomplete.&lt;br/&gt;Partial artifacts kept for resume&quot;]:::stop
+
+    OK --&gt; CONT([&quot;continue&quot;]):::ok
+    QUALITY --&gt; CONT
+    MISSING --&gt; HALT([&quot;stop&quot;]):::stop
+    CRASH --&gt; HALT
+    PARTIAL --&gt; HALT</pre></div>
 <p>Two invariants follow, and both were violated in practice:</p>
 <ul><li><strong>A stage may never exit 0 for work it did not do.</strong> <code>agent_02</code> and <code>agent_03</code> printed &quot;No documents found&quot; and returned normally, so a run over an empty corpus was reported as successful through three further stages and only stopped at <code>agent_05</code>, blaming its own missing inputs.</li><li><strong>A missing input is reported, not raised.</strong> <code>agent_07</code>, <code>agent_08</code> and <code>agent_09</code> died on an unhandled <code>FileNotFoundError</code>, which exits 1 — a code the orchestrator reads as a runtime crash — and prints a traceback that says nothing about which stage to run first.</li></ul>
 <p><code>tests/test_pipeline_end_to_end.py</code> checks both for every agent whose missing-input path runs before any provider call.</p>
@@ -369,6 +422,41 @@
 <p>A UML class diagram is a picture. It can be read but not executed, not validated, and not diffed — and when the same model is emitted as a diagram <em>and</em> a JSON model <em>and</em> a catalog, the three drift the moment one of them is edited. <a href="https://linkml.io">LinkML</a> is a schema language with a metamodel, so the model becomes an artifact that tools can check rather than one a human must eyeball.</p>
 <p>Three properties earn it the canonical slot:</p>
 <ul><li><strong>It validates.</strong> The emitted schema is loaded back through LinkML&#x27;s own <code>SchemaView</code> before it is written; the result is recorded in <code>information_model_validation.json</code> under <code>schema_validation</code>. A schema that no LinkML tool would accept fails here rather than downstream.</li><li><strong>It generates.</strong> JSON Schema, SHACL, OWL, SQL DDL, Pydantic/TypeScript/Java classes and GraphQL all come from LinkML&#x27;s own generators. <code>.schema.json</code> is produced this way, so the JSON Schema is not a hand-written approximation of the model — it <em>is</em> the model, mechanically translated.</li><li><strong>It carries the semantics that matter here.</strong> <code>unit</code>, <code>minimum_value</code>, <code>pattern</code>, <code>permissible_values</code> and free-form <code>annotations</code> are first-class metamodel slots, so declared units, numeric bounds, controlled vocabularies and per-attribute provenance survive into every downstream artifact instead of being lost at the diagram boundary.</li></ul>
+<p>One artifact is canonical and everything else is generated from it, so the diagram, the catalog and the JSON Schema cannot disagree with the model or with each other:</p>
+<div class="arch-mermaid"><pre class="mermaid">flowchart LR
+    classDef source fill:#e0f2fe,stroke:#0369a1,color:#0c4a6e,stroke-width:1px
+    classDef canon fill:#fef3c7,stroke:#b45309,color:#78350f,stroke-width:2px
+    classDef gen fill:#dcfce7,stroke:#15803d,color:#14532d,stroke-width:1px
+    classDef proj fill:#e2e8f0,stroke:#334155,color:#1e293b,stroke-width:1px
+    classDef check fill:#ede9fe,stroke:#6d28d9,color:#4c1d95,stroke-width:1px
+
+    GRAPH[(&quot;certified graph&lt;br/&gt;rule variables, units,&lt;br/&gt;value sets, ranges&quot;)]:::source
+    PROFILE[(&quot;SBVR profile&lt;br/&gt;concept kinds&quot;)]:::source
+
+    DET[&quot;information_model.py&lt;br/&gt;&lt;i&gt;deterministic&lt;/i&gt;&lt;br/&gt;type · unit · multiplicity&lt;br/&gt;constraint · provenance&quot;]:::gen
+    LLM[&quot;one bounded prompt&lt;br/&gt;&lt;i&gt;judgment only&lt;/i&gt;&lt;br/&gt;which class owns an attribute&quot;]:::gen
+
+    CANON[[&quot;business_information_model.yaml&lt;br/&gt;&lt;b&gt;canonical LinkML schema&lt;/b&gt;&quot;]]:::canon
+    VALID{{&quot;linkml-runtime SchemaView&lt;br/&gt;round-trip&quot;}}:::check
+
+    JS[&quot;.schema.json&lt;br/&gt;&lt;i&gt;LinkML JsonSchemaGenerator&lt;/i&gt;&quot;]:::proj
+    MMD[&quot;.mmd · .puml&lt;br/&gt;class diagrams&quot;]:::proj
+    CAT[&quot;class_attribute_catalog&lt;br/&gt;.json · .md&quot;]:::proj
+    REP[&quot;information_model_validation.json&lt;br/&gt;10 checks + inventory&quot;]:::proj
+    ONDEMAND[&quot;on demand:&lt;br/&gt;SHACL · OWL · SQL DDL&lt;br/&gt;Pydantic · TypeScript&quot;]:::proj
+
+    GRAPH --&gt; DET
+    PROFILE --&gt; DET
+    DET --&gt; CANON
+    GRAPH --&gt; LLM
+    LLM --&gt;|&quot;checked against&lt;br/&gt;the deterministic facts&quot;| CANON
+    CANON --&gt; VALID
+    VALID --&gt;|&quot;must pass before writing&quot;| JS
+    CANON --&gt; MMD
+    CANON --&gt; CAT
+    CANON --&gt; REP
+    CANON -.-&gt; ONDEMAND
+    CAT -.-&gt;|&quot;stage 13 reads this&quot;| REP</pre></div>
 <p>Everything else is a <strong>projection</strong>: <code>to_mermaid</code>, <code>to_plantuml</code> and <code>catalog_rows</code> in <code>utils/information_model.py</code> delegate through <code>to_linkml()</code>, so the diagram and the catalog read their facts back out of the canonical schema and cannot disagree with it.</p>
 <p>Units sit on the <strong>slot</strong>, never on the type. Two <code>Money</code> attributes need not be denominated in the same currency, so folding the currency into the type would assert something the source never said; <code>Money</code> is <code>decimal</code> and the currency rides on the attribute that declares it.</p>
 <h5 id="high-level-categories">High-level categories</h5>
@@ -389,6 +477,37 @@
 <p>Ten domain checks run after generation, alongside the LinkML metamodel check described above, and they <strong>repair nothing</strong> — a validator that silently fixes what it finds cannot also report how good the model was: concept representation, attribute presence, type defensibility, type consistency, relationship direction and multiplicity, enumeration usage, constraint coverage, absence of superfluous elements, consistency with the source graph, and whether ambiguity was flagged rather than guessed. Every finding names its subject.</p>
 <h4 id="agent_13-business-knowledge-report"><code>agent_13</code> — Business Knowledge Report</h4>
 <div class="table-wrap"><table><thead><tr><th></th><th></th></tr></thead><tbody><tr><td><strong>File</strong></td><td><code>agents/agent_13_business_knowledge_report.py</code></td></tr><tr><td><strong>Purpose</strong></td><td>Renders the certified graph into a single, self-contained, source-traceable HTML dashboard for human exploration and review — never invents rules, concepts, or process semantics.</td></tr><tr><td><strong>Inputs</strong></td><td>Optimized graph (<code>agent_06</code>–<code>09</code>), <code>agent_11-executable-models/</code> (DMN/BPMN/CMMN + SBVR profile), <code>agent_12-business-information-model/</code> (catalog + validation + LinkML schema), organized-document text (for source-passage fallback lookup). Fails fast (exit 2) if the optimized graph is missing; a missing information model degrades to an explanatory empty state, because <code>agent_12</code> can legitimately be skipped with <code>--stages</code>.</td></tr><tr><td><strong>Outputs</strong></td><td><code>business_knowledge_report.html</code> (zero external network calls — inline CSS/JS/SVG, no CDN, no webfonts) and <code>business_knowledge_report_manifest.json</code>. Tabs: Overview (chart-based analytics — category/confidence/route/model-type/dependency-degree distributions, most-connected and isolated rules), SBVR vocabulary, Rule explorer (per-rule traceability breadcrumb and inline DMN/BPMN/CMMN diagrams), Relationships (click-to-highlight dependency graph with pan/zoom), <strong>Information model</strong>, and Source traceability.</td></tr><tr><td><strong>Exit codes</strong></td><td>0 on success; <strong>2</strong> if the optimized graph is missing or generation raises.</td></tr></tbody></table></div>
+<p>Every upstream stage feeds exactly one part of the report, and the report invents nothing of its own:</p>
+<div class="arch-mermaid"><pre class="mermaid">flowchart LR
+    classDef stage fill:#fae8ff,stroke:#a21caf,color:#701a75,stroke-width:1px
+    classDef tab fill:#dcfce7,stroke:#15803d,color:#14532d,stroke-width:1px
+    classDef soft fill:#e2e8f0,stroke:#334155,color:#1e293b,stroke-width:1px
+
+    G[&quot;agent_06–09&lt;br/&gt;certified graph&quot;]:::stage
+    D[&quot;agent_10&lt;br/&gt;dependency DAGs&quot;]:::stage
+    M[&quot;agent_11&lt;br/&gt;DMN·BPMN·CMMN·SBVR&quot;]:::stage
+    I[&quot;agent_12&lt;br/&gt;information model&quot;]:::stage
+    O[&quot;agent_01&lt;br/&gt;organized chunks&quot;]:::stage
+
+    T1[&quot;Overview&quot;]:::tab
+    T2[&quot;SBVR vocabulary&quot;]:::tab
+    T3[&quot;Rule explorer&quot;]:::tab
+    T4[&quot;Relationships&quot;]:::tab
+    T5[&quot;Information model&quot;]:::tab
+    T6[&quot;Source traceability&quot;]:::tab
+
+    G --&gt; T1
+    G --&gt; T3
+    M --&gt; T2
+    M --&gt; T3
+    D --&gt; T4
+    I --&gt; T5
+    O --&gt; T6
+    T3 -.-&gt;|&quot;links to&quot;| T6
+    T5 -.-&gt;|&quot;attribute → rule&quot;| T3
+
+    NOTE[&quot;a missing input degrades to&lt;br/&gt;an explanatory empty state,&lt;br/&gt;never a failed report&quot;]:::soft
+    I -.- NOTE</pre></div>
 <h5 id="the-information-model-tab">The Information model tab</h5>
 <p><code>agent_12</code> used to be the one stage whose output nothing consumed: it wrote seven artifacts and the final report never mentioned the information model at all. The tab closes that seam, reading <code>class_attribute_catalog.json</code> (already the tabular projection of the LinkML schema) and <code>information_model_validation.json</code>, and embedding <code>business_information_model.yaml</code> so the canonical artifact travels with the report.</p>
 <p>It leads with the one fact that matters most about a model and is otherwise invisible: <strong>which kind of value dominates it.</strong> On a real privacy run, 70% of modelled attributes are <code>flag</code>s — booleans recording whether a rule passed rather than business state — which the tab states outright rather than leaving to be counted. Below that sit the category distribution, the ten validation checks, and a searchable card per class whose attribute catalog carries type, declared unit, multiplicity, constraints, allowed values, and evidence tier.</p>
@@ -416,20 +535,26 @@
     classDef regdelta fill:#ffe4e6,stroke:#be123c,color:#881337,stroke-width:1px
 
     A11[&quot;agent_11_executable_model_generator.py&quot;]:::pipeline
-    A12[&quot;agent_13_business_knowledge_report.py&quot;]:::pipeline
+    A12[&quot;agent_12_business_information_model.py&quot;]:::pipeline
+    A13[&quot;agent_13_business_knowledge_report.py&quot;]:::pipeline
 
     EM[&quot;executable_models.py&lt;br/&gt;(real DMN + BPMN emitter)&quot;]:::core
     SA[&quot;semantic_artifacts.py&lt;br/&gt;(real CMMN + SBVR emitter)&quot;]:::core
     LC[&quot;lexec_compile.py&quot;]:::core
     IR[&quot;lexec_ir.py&quot;]:::hub
     SMT[&quot;smt.py&lt;br/&gt;(bounded proof search)&quot;]:::core
+    IM[&quot;information_model.py&lt;br/&gt;(deterministic typing + validation)&quot;]:::core
+    LK[&quot;linkml_schema.py&lt;br/&gt;(canonical schema + projections)&quot;]:::core
 
     OTHER[&quot;14 other utils/ modules&lt;br/&gt;config · llm_client · adaptive_limiter · agent_names&lt;br/&gt;prompt_manager · rule_contract · rule_uniqueness · dag_builder&lt;br/&gt;readiness · kg_readiness · citations · semantic_routing …&lt;br/&gt;&lt;i&gt;used directly by agents/, no internal utils/ dependencies&lt;/i&gt;&quot;]:::core
 
     A11 --&gt; EM
     A11 --&gt; SA
-    A12 --&gt; SA
+    A13 --&gt; SA
     A11 --&gt;|&quot;proof-checked path&quot;| LC
+    A12 --&gt; IM
+    IM --&gt; LK
+    A13 -.-&gt;|&quot;reads the catalog&quot;| LK
     LC --&gt; IR
     LC --&gt; SMT
 

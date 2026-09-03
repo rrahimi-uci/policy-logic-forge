@@ -329,7 +329,7 @@ CSS = """
   a:hover{text-decoration:underline}
   .wrap{max-width:1080px; margin:0 auto; padding:0 24px}
   .eyebrow{display:inline-block; font-size:12px; font-weight:800; letter-spacing:.12em; text-transform:uppercase; color:var(--teal); margin-bottom:10px}
-  code{font:.88em ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; background:#f0f2f8; color:#3b2fae; padding:1px 5px; border-radius:5px}
+  code{font:.88em ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; background:#f0f2f8; color:#3b2fae; padding:1px 5px; border-radius:5px; overflow-wrap:anywhere}
   .mathvar{font:italic 500 .95em Georgia,"Times New Roman",serif; color:var(--ink)}
   .mathvar sub{font-size:.7em}
 
