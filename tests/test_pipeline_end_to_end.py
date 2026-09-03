@@ -101,9 +101,21 @@ def _batch(work_dir: Path, graph: dict, name: str = "e2e") -> Path:
     return base
 
 
+def _no_credentials(**overrides) -> dict[str, str]:
+    """Environment with deliberately unusable provider keys.
+
+    These tests exercise paths that must complete before any provider call, so
+    a real key must never be picked up from the developer's own ``.env`` — that
+    is what made two of them pass locally and fail on CI, where no key exists
+    and credential resolution raised before the check under test could run.
+    """
+    return dict(os.environ, OPENAI_API_KEY="sk-invalid", ANTHROPIC_API_KEY="sk-invalid",
+                **overrides)
+
+
 def _run_tail(work_dir: Path, batch: str = "e2e"):
     """Run stages 10-13 in order; return each stage's completed process."""
-    env = dict(os.environ, KG_BATCH_NAME=batch, KG_DOMAIN="privacy_policy")
+    env = _no_credentials(KG_BATCH_NAME=batch, KG_DOMAIN="privacy_policy")
     results = {}
     for module, extra in TAIL:
         results[module] = subprocess.run(
@@ -241,7 +253,7 @@ def test_the_report_consumes_the_information_model_stage_12_produced(two_rule_ru
 def test_the_report_explains_itself_when_stage_12_was_skipped(tmp_path):
     """A selective run may skip stage 12 entirely; the report must still build."""
     _batch(tmp_path, _graph([_rule("r_only", writes=["ok"])]))
-    env = dict(os.environ, KG_BATCH_NAME="e2e", KG_DOMAIN="privacy_policy")
+    env = _no_credentials(KG_BATCH_NAME="e2e", KG_DOMAIN="privacy_policy")
     for module, extra in TAIL:
         if module.startswith("agent_12"):
             continue                                  # stage 12 deliberately not run
@@ -329,7 +341,7 @@ def test_entity_extraction_fails_loudly_on_an_empty_corpus(tmp_path):
     (tmp_path / "pipeline-output" / "e2e" / "agent_01-organized-documents").mkdir(parents=True)
     result = subprocess.run(
         [sys.executable, str(AGENTS / "agent_02_entity_extractor.py")],
-        cwd=tmp_path, env=dict(os.environ, KG_BATCH_NAME="e2e", KG_DOMAIN="privacy_policy"),
+        cwd=tmp_path, env=_no_credentials(KG_BATCH_NAME="e2e", KG_DOMAIN="privacy_policy"),
         capture_output=True, text=True, timeout=300,
     )
     assert result.returncode != 0, "agent_02 reported success having extracted nothing"
@@ -348,7 +360,7 @@ def test_grounding_falls_back_to_the_merged_graph_when_optimization_was_skipped(
 
     result = subprocess.run(
         [sys.executable, str(AGENTS / "agent_09_grounding_verifier.py")],
-        cwd=tmp_path, env=dict(os.environ, KG_BATCH_NAME="e2e", KG_DOMAIN="privacy_policy"),
+        cwd=tmp_path, env=_no_credentials(KG_BATCH_NAME="e2e", KG_DOMAIN="privacy_policy"),
         capture_output=True, text=True, timeout=600,
     )
     combined = result.stdout + result.stderr
@@ -392,8 +404,7 @@ def test_every_agent_refuses_a_missing_input_without_crashing(module, tmp_path):
     result = subprocess.run(
         [sys.executable, str(AGENTS / f"{module}.py")],
         cwd=tmp_path,
-        env=dict(os.environ, KG_BATCH_NAME="e2e", KG_DOMAIN="privacy_policy",
-                 OPENAI_API_KEY="sk-invalid", ANTHROPIC_API_KEY="sk-invalid"),
+        env=_no_credentials(KG_BATCH_NAME="e2e", KG_DOMAIN="privacy_policy"),
         capture_output=True, text=True, timeout=300,
     )
     combined = result.stdout + result.stderr
@@ -405,7 +416,7 @@ def test_grounding_reports_when_there_is_no_graph_at_all(tmp_path):
     (tmp_path / "pipeline-output" / "e2e").mkdir(parents=True)
     result = subprocess.run(
         [sys.executable, str(AGENTS / "agent_09_grounding_verifier.py")],
-        cwd=tmp_path, env=dict(os.environ, KG_BATCH_NAME="e2e", KG_DOMAIN="privacy_policy"),
+        cwd=tmp_path, env=_no_credentials(KG_BATCH_NAME="e2e", KG_DOMAIN="privacy_policy"),
         capture_output=True, text=True, timeout=300,
     )
     assert result.returncode == 2
