@@ -490,6 +490,23 @@ def test_legacy_naming_and_rule_shapes_normalise_to_one_v2_contract():
     assert rule["variables"][-1]["free_text"] is True
 
 
+def test_structured_party_aliases_normalise_without_losing_party_details():
+    rule = valid_rule()
+    rule["counterparties"] = [{"entity": "FANNIE_MAE", "name": "the purchaser"}]
+
+    normalise_rule_contract(rule)
+
+    assert rule["counterparties"] == ["FANNIE_MAE"]
+    assert rule["counterparty_details"] == [{"entity": "FANNIE_MAE", "name": "the purchaser"}]
+    assert not any(issue.code == "unknown_counterparty" for issue in validate_rule_v2(rule, {"SELLER_SERVICER", "FANNIE_MAE"}))
+
+
+def test_rule_local_contract_slips_are_deferred_to_remediation():
+    rule = valid_rule()
+    for code in ("unknown_counterparty", "unknown_predicate_reference", "invalid_predicate_operator"):
+        assert is_deferred_contract_issue({"code": code}, rule) is True
+
+
 # ─────────────────────────────────────────────────────────────────────────
 # variables[].type / condition_predicates[].operator: the same
 # LEGACY_VALUE_TYPES/LEGACY_OPERATORS alias tables already used for

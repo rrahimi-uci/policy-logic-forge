@@ -980,7 +980,11 @@ def _normalise_rule_contract(rule: dict[str, Any]) -> dict[str, Any]:
     # Some model completions preserve named-party detail by wrapping the
     # canonical entity type in an object.  The v2 contract requires party
     # references themselves to be canonical strings. Unwrap only an explicit
-    # entity_type and retain the richer record separately for review/UI use.
+    # entity identifier (the providers have used ``entity_type``, ``entity``,
+    # and ``name_ref`` for this same field) and retain the richer record
+    # separately for review/UI use. A name-only record remains a structured
+    # candidate and is left for the contract/remediation path rather than
+    # guessed into an ontology type.
     party_details = [
         deepcopy(item)
         for item in (rule.get("counterparty_details") or [])
@@ -988,7 +992,15 @@ def _normalise_rule_contract(rule: dict[str, Any]) -> dict[str, Any]:
     ]
     responsible_party = rule.get("responsible_party")
     if isinstance(responsible_party, Mapping):
-        entity_type = responsible_party.get("entity_type")
+        entity_type = next(
+            (
+                responsible_party.get(key)
+                for key in ("entity_type", "entity", "name_ref")
+                if isinstance(responsible_party.get(key), str)
+                and responsible_party.get(key).strip()
+            ),
+            None,
+        )
         if isinstance(entity_type, str) and entity_type.strip():
             rule["responsible_party"] = entity_type.strip()
             party_details.append(deepcopy(dict(responsible_party)))
@@ -1001,7 +1013,15 @@ def _normalise_rule_contract(rule: dict[str, Any]) -> dict[str, Any]:
         normalized_counterparties = []
         for counterparty in counterparties:
             if isinstance(counterparty, Mapping):
-                entity_type = counterparty.get("entity_type")
+                entity_type = next(
+                    (
+                        counterparty.get(key)
+                        for key in ("entity_type", "entity", "name_ref")
+                        if isinstance(counterparty.get(key), str)
+                        and counterparty.get(key).strip()
+                    ),
+                    None,
+                )
                 if isinstance(entity_type, str) and entity_type.strip():
                     normalized_counterparties.append(entity_type.strip())
                     party_details.append(deepcopy(dict(counterparty)))
@@ -1622,6 +1642,18 @@ def _is_deferred_contract_issue(issue: Mapping[str, Any], rule: Mapping[str, Any
     not receive this exception.
     """
     code = str(issue.get("code", ""))
+    # These rule-local representation slips are safe to carry into Agent 08's
+    # focused contract/remediation pass. They must remain attached to the rule
+    # (and therefore keep it review-required), but they should not abort the
+    # graph-level readiness stage before the remediator can repair them. The
+    # classification is intentionally code-based and source/domain agnostic:
+    # no missing party, predicate, or operator is ever silently invented here.
+    if code in {
+        "unknown_counterparty",
+        "unknown_predicate_reference",
+        "invalid_predicate_operator",
+    }:
+        return True
     if code == "missing_field_evidence":
         return True
     if code == "missing_evidence_reference_field":

@@ -275,6 +275,15 @@ def naming_issues(graph: Mapping[str, Any]) -> list[dict[str, str]]:
             ):
                 issues.append({"path": f"{rule.get('rule_id')}.{field}", "value": str(value), "reason": "party is not an exact canonical entity key"})
         for index, value in enumerate(rule.get("counterparties", []) or []):
+            # Rich counterparty records (for example ``{"name": ..., "role":
+            # ...}``) are extraction candidates, not canonical identifiers.
+            # Their shape is validated by rule_contract and routed to focused
+            # remediation; naming consistency should only judge the canonical
+            # identifier once one is present. Treating the whole mapping as a
+            # string here made every named provider a graph-level invariant
+            # failure and prevented Agent 08 from repairing the rule.
+            if isinstance(value, Mapping):
+                continue
             if (
                 not isinstance(value, str)
                 or value not in keys
