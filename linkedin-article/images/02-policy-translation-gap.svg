@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="title desc">
+  <title id="title">The risk lives between policy and the system</title>
+  <desc id="desc">A source clause moves through six manual handoffs. Actor, trigger, timing, exception, scope, and evidence can be lost before reaching the operational system.</desc>
+  <defs>
+    <linearGradient id="bg2" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#071426"/><stop offset="1" stop-color="#101b31"/></linearGradient>
+    <marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0l10 5-10 5z" fill="#607a9a"/></marker>
+    <filter id="s2" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#020914" flood-opacity=".42"/></filter>
+  </defs>
+  <rect width="1600" height="900" fill="url(#bg2)"/>
+  <text x="82" y="92" fill="#31d6c6" font-family="Inter,Arial,sans-serif" font-size="22" font-weight="700" letter-spacing="3">THE PROBLEM</text>
+  <text x="82" y="158" fill="#f7fbff" font-family="Inter,Arial,sans-serif" font-size="50" font-weight="750">The risk lives between the policy and the system.</text>
+  <text x="82" y="204" fill="#b4c4d9" font-family="Inter,Arial,sans-serif" font-size="24">Every handoff can preserve the sentence while losing part of its meaning.</text>
+
+  <g filter="url(#s2)">
+    <rect x="82" y="262" width="455" height="190" rx="22" fill="#17253a" stroke="#ffbd66" stroke-width="2"/>
+    <text x="112" y="306" fill="#ffbd66" font-family="Inter,Arial,sans-serif" font-size="18" font-weight="700">ILLUSTRATIVE POLICY CLAUSE</text>
+    <text x="112" y="345" fill="#f7fbff" font-family="Georgia,serif" font-size="21" font-style="italic">“When a customer submits a complete</text>
+    <text x="112" y="375" fill="#f7fbff" font-family="Georgia,serif" font-size="21" font-style="italic">request, the institution must respond</text>
+    <text x="112" y="405" fill="#f7fbff" font-family="Georgia,serif" font-size="21" font-style="italic">within 30 days unless identity verification</text>
+    <text x="112" y="435" fill="#f7fbff" font-family="Georgia,serif" font-size="21" font-style="italic">is unresolved.”</text>
+
+    <rect x="1063" y="262" width="455" height="190" rx="22" fill="#17253a" stroke="#9b8cff" stroke-width="2"/>
+    <text x="1093" y="306" fill="#9b8cff" font-family="Inter,Arial,sans-serif" font-size="18" font-weight="700">OPERATIONAL SYSTEM</text>
+    <text x="1093" y="351" fill="#f7fbff" font-family="Inter,Arial,sans-serif" font-size="26" font-weight="700">A timer starts.</text>
+    <text x="1093" y="387" fill="#f7fbff" font-family="Inter,Arial,sans-serif" font-size="26" font-weight="700">A decision is made.</text>
+    <text x="1093" y="423" fill="#b4c4d9" font-family="Inter,Arial,sans-serif" font-size="20">But did the meaning survive?</text>
+  </g>
+
+  <path d="M560 357h480" stroke="#607a9a" stroke-width="4" stroke-dasharray="10 10" marker-end="url(#a2)"/>
+  <rect x="650" y="304" width="300" height="106" rx="53" fill="#2d1830" stroke="#ff6577" stroke-width="2"/>
+  <text x="800" y="346" text-anchor="middle" fill="#ff8795" font-family="Inter,Arial,sans-serif" font-size="18" font-weight="700" letter-spacing="2">INTERPRETATION GAP</text>
+  <text x="800" y="379" text-anchor="middle" fill="#f7fbff" font-family="Inter,Arial,sans-serif" font-size="21">meaning changes silently</text>
+
+  <text x="82" y="535" fill="#f7fbff" font-family="Inter,Arial,sans-serif" font-size="27" font-weight="700">What can disappear across manual handoffs?</text>
+  <g font-family="Inter,Arial,sans-serif">
+    <g transform="translate(82 575)"><rect width="218" height="110" rx="18" fill="#10233d" stroke="#2c4563"/><text x="24" y="42" fill="#31d6c6" font-size="17" font-weight="700">ACTOR</text><text x="24" y="75" fill="#f7fbff" font-size="21">Who is responsible?</text></g>
+    <g transform="translate(323 575)"><rect width="218" height="110" rx="18" fill="#10233d" stroke="#2c4563"/><text x="24" y="42" fill="#54b8ff" font-size="17" font-weight="700">TRIGGER</text><text x="24" y="75" fill="#f7fbff" font-size="21">What starts it?</text></g>
+    <g transform="translate(564 575)"><rect width="218" height="110" rx="18" fill="#10233d" stroke="#2c4563"/><text x="24" y="42" fill="#ffbd66" font-size="17" font-weight="700">TIMING</text><text x="24" y="75" fill="#f7fbff" font-size="21">When is it due?</text></g>
+    <g transform="translate(805 575)"><rect width="218" height="110" rx="18" fill="#10233d" stroke="#2c4563"/><text x="24" y="42" fill="#ff8795" font-size="17" font-weight="700">EXCEPTION</text><text x="24" y="75" fill="#f7fbff" font-size="19">What changes the rule?</text></g>
+    <g transform="translate(1046 575)"><rect width="218" height="110" rx="18" fill="#10233d" stroke="#2c4563"/><text x="24" y="42" fill="#9b8cff" font-size="17" font-weight="700">SCOPE</text><text x="24" y="75" fill="#f7fbff" font-size="21">Where does it apply?</text></g>
+    <g transform="translate(1287 575)"><rect width="231" height="110" rx="18" fill="#10233d" stroke="#2c4563"/><text x="24" y="42" fill="#31d6c6" font-size="17" font-weight="700">EVIDENCE</text><text x="24" y="75" fill="#f7fbff" font-size="19">Which passage proves it?</text></g>
+  </g>
+
+  <rect x="82" y="738" width="1436" height="82" rx="18" fill="#10233d" stroke="#31d6c6" stroke-opacity=".55"/>
+  <text x="800" y="788" text-anchor="middle" fill="#f7fbff" font-family="Inter,Arial,sans-serif" font-size="25" font-weight="650">A reliable pipeline must preserve semantics—not only move text from one format to another.</text>
+  <text x="82" y="862" fill="#7186a1" font-family="Inter,Arial,sans-serif" font-size="17">Policy Logic Forge · problem framing</text>
+</svg>

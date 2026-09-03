@@ -1,5 +1,12 @@
 # Quality-Hold Reduction Program
 
+> **Historical implementation plan.** This document preserves the terminology,
+> stage numbering, and mortgage baseline used when the quality-improvement work
+> was proposed. The current pipeline has 13 canonical stages and the public
+> article uses a neutral Automation Readiness Score rather than presenting every
+> unresolved signal as a “quality hold.” Treat the figures below as a dated
+> diagnostic cohort, not as current product performance or a general benchmark.
+
 ## From 83.1% to 10% or less without weakening grounding
 
 Status: Phase 0 and non-mutating Phase 1 foundation in development
