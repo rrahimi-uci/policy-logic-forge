@@ -17,31 +17,31 @@
     <rect x="80" y="330" width="315" height="280" rx="24" fill="#10233d" stroke="#2c4563"/>
     <rect x="80" y="330" width="315" height="8" rx="4" fill="#ffbd66"/>
     <text x="112" y="391" fill="#ffbd66" font-family="Inter,Arial,sans-serif" font-size="20" font-weight="700">01 · POLICY</text>
-    <text x="112" y="437" fill="#f7fbff" font-family="Inter,Arial,sans-serif" font-size="31" font-weight="700">Source corpus</text>
+    <text x="112" y="437" fill="#f7fbff" font-family="Inter,Arial,sans-serif" font-size="28" font-weight="700">Source corpus</text>
     <path d="M120 474h58l18 18v76h-76z" fill="none" stroke="#ffbd66" stroke-width="3"/><path d="M178 474v20h18" fill="none" stroke="#ffbd66" stroke-width="3"/><path d="M137 514h42M137 535h42" stroke="#b4c4d9" stroke-width="3"/>
-    <text x="220" y="494" fill="#b4c4d9" font-family="Inter,Arial,sans-serif" font-size="20">clauses · tables</text>
-    <text x="220" y="527" fill="#b4c4d9" font-family="Inter,Arial,sans-serif" font-size="20">scope · exceptions</text>
-    <text x="220" y="560" fill="#b4c4d9" font-family="Inter,Arial,sans-serif" font-size="20">source identity</text>
+    <text x="206" y="494" fill="#b4c4d9" font-family="Inter,Arial,sans-serif" font-size="20">clauses · tables</text>
+    <text x="206" y="527" fill="#b4c4d9" font-family="Inter,Arial,sans-serif" font-size="20">scope · exceptions</text>
+    <text x="206" y="560" fill="#b4c4d9" font-family="Inter,Arial,sans-serif" font-size="20">source identity</text>
 
     <rect x="455" y="330" width="315" height="280" rx="24" fill="#10233d" stroke="#2c4563"/>
     <rect x="455" y="330" width="315" height="8" rx="4" fill="#31d6c6"/>
     <text x="487" y="391" fill="#31d6c6" font-family="Inter,Arial,sans-serif" font-size="20" font-weight="700">02 · KNOWLEDGE</text>
-    <text x="487" y="437" fill="#f7fbff" font-family="Inter,Arial,sans-serif" font-size="31" font-weight="700">Structured meaning</text>
-    <circle cx="532" cy="516" r="27" fill="#31d6c6" opacity=".2" stroke="#31d6c6" stroke-width="3"/><circle cx="648" cy="488" r="22" fill="#31d6c6" opacity=".2" stroke="#31d6c6" stroke-width="3"/><circle cx="663" cy="555" r="25" fill="#31d6c6" opacity=".2" stroke="#31d6c6" stroke-width="3"/><path d="M558 509l68-17M557 527l82 23" stroke="#31d6c6" stroke-width="3"/>
+    <text x="487" y="437" fill="#f7fbff" font-family="Inter,Arial,sans-serif" font-size="28" font-weight="700">Structured meaning</text>
+    <g opacity=".95"><path d="M536 510 L612 470M536 510 L620 552M536 510 L600 512M612 470 L690 486M612 470 L660 464M620 552 L694 538M690 486 L694 538M600 512 L612 470M600 512 L620 552" stroke="#31d6c6" stroke-width="2.4" opacity=".5" fill="none"/><circle cx="536" cy="510" r="22" fill="#31d6c6" opacity=".28" stroke="#31d6c6" stroke-width="3"/><circle cx="612" cy="470" r="15" fill="#31d6c6" opacity=".2" stroke="#31d6c6" stroke-width="2.6"/><circle cx="620" cy="552" r="16" fill="#31d6c6" opacity=".2" stroke="#31d6c6" stroke-width="2.6"/><circle cx="600" cy="512" r="11" fill="#31d6c6" opacity=".2" stroke="#31d6c6" stroke-width="2.4"/><circle cx="690" cy="486" r="13" fill="#54b8ff" opacity=".24" stroke="#54b8ff" stroke-width="2.4"/><circle cx="694" cy="538" r="11" fill="#54b8ff" opacity=".24" stroke="#54b8ff" stroke-width="2.4"/><circle cx="660" cy="464" r="10" fill="#9b8cff" opacity=".26" stroke="#9b8cff" stroke-width="2.4"/></g>
     <text x="487" y="591" fill="#b4c4d9" font-family="Inter,Arial,sans-serif" font-size="20">concepts · rules · relations</text>
 
     <rect x="830" y="330" width="315" height="280" rx="24" fill="#10233d" stroke="#2c4563"/>
     <rect x="830" y="330" width="315" height="8" rx="4" fill="#54b8ff"/>
     <text x="862" y="391" fill="#54b8ff" font-family="Inter,Arial,sans-serif" font-size="20" font-weight="700">03 · REASONING</text>
-    <text x="862" y="437" fill="#f7fbff" font-family="Inter,Arial,sans-serif" font-size="31" font-weight="700">Verify before export</text>
+    <text x="862" y="437" fill="#f7fbff" font-family="Inter,Arial,sans-serif" font-size="28" font-weight="700">Verify before export</text>
     <path d="M935 476l54 18v46c0 39-25 60-54 73-29-13-54-34-54-73v-46z" fill="#54b8ff" opacity=".16" stroke="#54b8ff" stroke-width="3"/><path d="M910 540l18 18 35-41" fill="none" stroke="#54b8ff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
     <text x="1008" y="506" fill="#b4c4d9" font-family="Inter,Arial,sans-serif" font-size="20">readiness</text><text x="1008" y="539" fill="#b4c4d9" font-family="Inter,Arial,sans-serif" font-size="20">grounding</text><text x="1008" y="572" fill="#b4c4d9" font-family="Inter,Arial,sans-serif" font-size="20">dependencies</text>
 
     <rect x="1205" y="330" width="315" height="280" rx="24" fill="#10233d" stroke="#2c4563"/>
     <rect x="1205" y="330" width="315" height="8" rx="4" fill="#9b8cff"/>
     <text x="1237" y="391" fill="#9b8cff" font-family="Inter,Arial,sans-serif" font-size="20" font-weight="700">04 · ARTIFACTS</text>
-    <text x="1237" y="437" fill="#f7fbff" font-family="Inter,Arial,sans-serif" font-size="31" font-weight="700">Selective outputs</text>
-    <g font-family="Inter,Arial,sans-serif" font-size="18" font-weight="700"><rect x="1237" y="476" width="83" height="42" rx="10" fill="#9b8cff" opacity=".2" stroke="#9b8cff"/><text x="1255" y="504" fill="#d9d3ff">DMN</text><rect x="1332" y="476" width="83" height="42" rx="10" fill="#9b8cff" opacity=".2" stroke="#9b8cff"/><text x="1346" y="504" fill="#d9d3ff">BPMN</text><rect x="1427" y="476" width="61" height="42" rx="10" fill="#9b8cff" opacity=".2" stroke="#9b8cff"/><text x="1435" y="504" fill="#d9d3ff">CMMN</text><rect x="1237" y="532" width="83" height="42" rx="10" fill="#9b8cff" opacity=".2" stroke="#9b8cff"/><text x="1251" y="560" fill="#d9d3ff">SBVR</text><rect x="1332" y="532" width="83" height="42" rx="10" fill="#9b8cff" opacity=".2" stroke="#9b8cff"/><text x="1344" y="560" fill="#d9d3ff">LinkML</text><rect x="1427" y="532" width="61" height="42" rx="10" fill="#9b8cff" opacity=".2" stroke="#9b8cff"/><text x="1435" y="560" fill="#d9d3ff">HTML</text></g>
+    <text x="1237" y="437" fill="#f7fbff" font-family="Inter,Arial,sans-serif" font-size="28" font-weight="700">Selective outputs</text>
+    <g font-family="Inter,Arial,sans-serif" font-size="18" font-weight="700"><rect x="1229" y="476" width="83" height="42" rx="10" fill="#9b8cff" opacity=".2" stroke="#9b8cff"/><text x="1270" y="504" text-anchor="middle" fill="#d9d3ff">DMN</text><rect x="1321" y="476" width="83" height="42" rx="10" fill="#9b8cff" opacity=".2" stroke="#9b8cff"/><text x="1362" y="504" text-anchor="middle" fill="#d9d3ff">BPMN</text><rect x="1413" y="476" width="83" height="42" rx="10" fill="#9b8cff" opacity=".2" stroke="#9b8cff"/><text x="1454" y="504" text-anchor="middle" fill="#d9d3ff">CMMN</text><rect x="1229" y="532" width="83" height="42" rx="10" fill="#9b8cff" opacity=".2" stroke="#9b8cff"/><text x="1270" y="560" text-anchor="middle" fill="#d9d3ff">SBVR</text><rect x="1321" y="532" width="83" height="42" rx="10" fill="#9b8cff" opacity=".2" stroke="#9b8cff"/><text x="1362" y="560" text-anchor="middle" fill="#d9d3ff">LinkML</text><rect x="1413" y="532" width="83" height="42" rx="10" fill="#9b8cff" opacity=".2" stroke="#9b8cff"/><text x="1454" y="560" text-anchor="middle" fill="#d9d3ff">HTML</text></g>
   </g>
 
   <g stroke="#54b8ff" stroke-width="4" fill="none" marker-end="url(#arrow)"><path d="M400 470h45"/><path d="M775 470h45"/><path d="M1150 470h45"/></g>
