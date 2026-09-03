@@ -1,0 +1,26 @@
+{
+  "batch": "pilot-sara-binary",
+  "ladder": {
+    "raw": {
+      "rules": 9,
+      "compiled": 0,
+      "pct": 0.0,
+      "refusals": {
+        "UNSUPPORTED_OPERATOR": 8,
+        "TYPE_MISMATCH": 1
+      },
+      "symbol_theories": {}
+    },
+    "normalised": {
+      "rules": 9,
+      "compiled": 0,
+      "pct": 0.0,
+      "refusals": {
+        "UNSUPPORTED_VALUE_TYPE": 5,
+        "UNREPRESENTABLE_SCOPE": 3,
+        "TYPE_MISMATCH": 1
+      },
+      "symbol_theories": {}
+    }
+  }
+}
