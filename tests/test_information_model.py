@@ -7,6 +7,8 @@ such, and nothing may be quietly filed under a class the evidence doesn't
 support.
 """
 import sys
+import threading
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -613,3 +615,77 @@ def test_the_validation_report_carries_the_inventory():
                  _var("principal_amount", unit="usd")], predicates=["principal_amount"])]}
     report = validate_model(build_model(graph, {}), graph, {})
     assert report["inventory"]["attributes"]["by_category"]["quantity"] == 1
+
+
+def test_information_model_batches_run_concurrently_but_collect_in_source_order():
+    from agents.agent_12_business_information_model import _assign_batches
+
+    class Synthesiser:
+        def __init__(self):
+            self.lock = threading.Lock()
+            self.active = 0
+            self.max_active = 0
+
+        def assign(self, batch, _class_names):
+            with self.lock:
+                self.active += 1
+                self.max_active = max(self.max_active, self.active)
+            try:
+                # Force later batches to complete first so output ordering is
+                # verified independently from completion ordering.
+                time.sleep(0.01 * (4 - batch[0]["index"]))
+                return [{"index": batch[0]["index"]}]
+            finally:
+                with self.lock:
+                    self.active -= 1
+
+    synthesiser = Synthesiser()
+    batches = [[{"index": index}] for index in range(4)]
+
+    assignments = _assign_batches(synthesiser, batches, ["Loan"], workers=4)
+
+    assert synthesiser.max_active > 1
+    assert [item["index"] for item in assignments] == [0, 1, 2, 3]
+
+
+def test_information_model_batch_failure_is_retried_sequentially(capsys):
+    from agents.agent_12_business_information_model import _assign_batches
+
+    class Synthesiser:
+        def __init__(self):
+            self.calls = {}
+
+        def assign(self, batch, _class_names):
+            index = batch[0]["index"]
+            self.calls[index] = self.calls.get(index, 0) + 1
+            if index == 1 and self.calls[index] == 1:
+                raise RuntimeError("bad batch")
+            return [{"index": index}]
+
+    synthesiser = Synthesiser()
+    assignments = _assign_batches(
+        synthesiser, [[{"index": index}] for index in range(3)], ["Loan"], workers=3
+    )
+
+    assert [item["index"] for item in assignments] == [0, 1, 2]
+    assert synthesiser.calls[1] == 2
+    output = capsys.readouterr().out
+    assert "batch 2/3 concurrent attempt failed; queued for sequential retry" in output
+    assert "recovered batch 2/3 on sequential retry" in output
+
+
+def test_information_model_persistent_batch_failure_is_isolated(capsys):
+    from agents.agent_12_business_information_model import _assign_batches
+
+    class Synthesiser:
+        def assign(self, batch, _class_names):
+            if batch[0]["index"] == 1:
+                raise RuntimeError("persistently bad batch")
+            return [{"index": batch[0]["index"]}]
+
+    assignments = _assign_batches(
+        Synthesiser(), [[{"index": index}] for index in range(3)], ["Loan"], workers=3
+    )
+
+    assert [item["index"] for item in assignments] == [0, 2]
+    assert "batch 2/3 failed after sequential retry" in capsys.readouterr().out

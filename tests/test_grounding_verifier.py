@@ -195,6 +195,26 @@ def test_supported_graph_is_certified_without_rewriting_rule_claims(tmp_path, mo
     assert certification_issues(final_graph, report, report["corpus_sha256"]) == []
 
 
+def test_review_only_grounding_completion_is_not_logged_as_an_error(tmp_path, monkeypatch, capsys):
+    graph_path = tmp_path / "graph.json"
+    graph_path.write_text(json.dumps({"business_rules": []}), encoding="utf-8")
+    verifier = GroundingVerifier(None)
+    report = {
+        "pass": False,
+        "rules_certified": 0,
+        "total_rules": 1,
+        "supported_claims": 1,
+        "total_claims": 2,
+    }
+    monkeypatch.setattr(verifier, "verify_graph", lambda *_args: ({"business_rules": []}, report))
+
+    verifier.run(graph_path, tmp_path / "organized", tmp_path / "output")
+
+    output = capsys.readouterr().out
+    assert "🔎 agent_09 completed" in output
+    assert "❌ agent_09 completed" not in output
+
+
 def test_verifier_selected_evidence_id_uses_canonical_quote_not_model_transcription():
     packet = {
         "rule_id": "R1",

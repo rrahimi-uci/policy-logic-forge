@@ -577,6 +577,82 @@ def test_enum_set_and_number_array_predicate_value_types_normalise_to_list():
     assert rule["condition_predicates"][-1]["value_type"] == "list"
 
 
+def test_membership_list_overrides_a_stale_scalar_value_type():
+    """The membership operand is a collection even when the model copies the
+    declared variable's scalar type into the predicate value_type."""
+    rule = valid_rule()
+    rule["variables"].append({
+        "name": "property_unit_count", "type": "number", "role": "input",
+    })
+    rule["condition_predicates"] = [{
+        "predicate_id": "p1", "variable": "property_unit_count", "operator": "in",
+        "value": [2, 3, 4], "value_type": "number",
+    }]
+    rule["condition_logic"] = {"predicate_ref": "p1"}
+
+    normalise_rule_contract(rule)
+    issues = validate_rule_v2(rule, {"SELLER_SERVICER", "FANNIE_MAE"})
+
+    assert rule["condition_predicates"][0]["value_type"] == "list"
+    assert not any(issue.code == "invalid_numeric_value" for issue in issues)
+
+
+def test_shifted_predicate_variable_is_recovered_only_from_a_declared_identifier():
+    rule = valid_rule()
+    rule["variables"].append({
+        "name": "loan_delivered_under_bailee_letter", "type": "boolean", "role": "input",
+    })
+    rule["condition_predicates"] = [{
+        "predicate_id": "loan_delivered_under_bailee_letter",
+        "variable": None,
+        "operator": "==",
+        "value": False,
+        "value_type": "boolean",
+    }]
+    rule["condition_logic"] = {"predicate_ref": "loan_delivered_under_bailee_letter"}
+
+    normalise_rule_contract(rule)
+    issues = validate_rule_v2(rule, {"SELLER_SERVICER", "FANNIE_MAE"})
+
+    assert rule["condition_predicates"][0]["variable"] == "loan_delivered_under_bailee_letter"
+    assert rule["condition_predicates"][0]["predicate_id"] == "loan_delivered_under_bailee_letter"
+    assert not any(issue.code == "missing_predicate_variable" for issue in issues)
+
+
+def test_unknown_shifted_predicate_identifier_remains_invalid():
+    rule = valid_rule()
+    rule["condition_predicates"] = [{
+        "predicate_id": "not_a_declared_variable",
+        "variable": None,
+        "operator": "==",
+        "value": False,
+        "value_type": "boolean",
+    }]
+    rule["condition_logic"] = {"predicate_ref": "not_a_declared_variable"}
+
+    normalise_rule_contract(rule)
+    issues = validate_rule_v2(rule, {"SELLER_SERVICER", "FANNIE_MAE"})
+
+    assert rule["condition_predicates"][0]["variable"] is None
+    assert any(issue.code == "missing_predicate_variable" for issue in issues)
+
+
+def test_structured_mapping_aliases_remain_review_only_without_blocking_the_graph():
+    for alias in ("mapping", "conditional_mapping"):
+        rule = valid_rule()
+        rule["outcomes"][0].update({
+            "value": {"purchase": 60, "refinance": 30},
+            "value_type": alias,
+        })
+
+        normalise_rule_contract(rule)
+        issues = [issue.as_dict() for issue in validate_rule_v2(rule, {"SELLER_SERVICER", "FANNIE_MAE"})]
+        mapping_issue = next(issue for issue in issues if issue["code"] == "invalid_outcome_value_type")
+
+        assert rule["outcomes"][0]["value_type"] == "conditional_map"
+        assert is_deferred_contract_issue(mapping_issue, rule) is True
+
+
 def test_enum_value_predicate_value_type_normalises_to_enum():
     rule = valid_rule()
     rule["condition_predicates"].append({

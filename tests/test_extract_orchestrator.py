@@ -122,7 +122,7 @@ def test_selective_readiness_failure_routes_through_remediation_and_recheck(monk
     monkeypatch.setattr(
         pipeline,
         "run_agent_07",
-        lambda *, reuse_conflicts=False: calls.append("agent_07_recheck") or True,
+        lambda *, reuse_conflicts=False, reuse_evidence=False: calls.append("agent_07_recheck") or True,
     )
 
     assert pipeline.run_stages(["agent_07", "agent_08", "agent_09"]) is True
@@ -172,7 +172,11 @@ def test_resume_from_agent_08_plans_automatic_readiness_recheck(monkeypatch):
     monkeypatch.setattr(pipeline, "_begin_run", begin)
     monkeypatch.setattr(pipeline, "_end_run", lambda overall_status: None)
     monkeypatch.setattr(pipeline, "run_agent", lambda agent_id: True)
-    monkeypatch.setattr(pipeline, "run_agent_07", lambda *, reuse_conflicts=False: True)
+    monkeypatch.setattr(
+        pipeline,
+        "run_agent_07",
+        lambda *, reuse_conflicts=False, reuse_evidence=False: True,
+    )
 
     assert pipeline.run_stages(["agent_08", "agent_09", "agent_10"]) is True
     assert planned["ids"] == ["agent_08", "agent_07", "agent_09", "agent_10"]
@@ -303,7 +307,7 @@ def test_run_all_continues_to_grounding_and_dag_for_review_only_readiness(tmp_pa
 
     readiness_calls = iter((False, False))
 
-    def readiness(*, reuse_conflicts=False):
+    def readiness(*, reuse_conflicts=False, reuse_evidence=False):
         calls.append("run_agent_07")
         pipeline._last_exit_codes["agent_07"] = 3
         return next(readiness_calls)
@@ -354,8 +358,14 @@ def test_readiness_verification_reuses_remediated_conflicts(monkeypatch):
 
     monkeypatch.setattr(ExtractionPipeline, "_run", fake_run)
 
-    assert pipeline.run_agent_07(reuse_conflicts=True)
-    assert observed == {"agent_id": "agent_07", "extra_env": {"KG_READINESS_SKIP_CONFLICTS": "true"}}
+    assert pipeline.run_agent_07(reuse_conflicts=True, reuse_evidence=True)
+    assert observed == {
+        "agent_id": "agent_07",
+        "extra_env": {
+            "KG_READINESS_SKIP_CONFLICTS": "true",
+            "KG_READINESS_SKIP_EVIDENCE": "true",
+        },
+    }
 
 
 def test_canonical_stage_selector_dispatches_by_agent_number(monkeypatch):

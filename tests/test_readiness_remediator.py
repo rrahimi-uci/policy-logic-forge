@@ -193,6 +193,51 @@ def test_agent_08_routes_contract_exception_codes_into_rule_batches():
     assert packet["failed_findings"][0]["code"] == "exception_uses_output_variable"
 
 
+def test_agent_08_normalizes_legacy_contract_shapes_before_rechecking(tmp_path, monkeypatch):
+    organized = tmp_path / "organized" / "B2-1-01"
+    organized.mkdir(parents=True)
+    (organized / "001.txt").write_text(
+        "A seller servicer must limit the number of pools to three.", encoding="utf-8"
+    )
+    baseline = graph_with_two_rules()
+    graph = deepcopy(baseline)
+    mapping_rule, membership_rule = graph["business_rules"]
+
+    mapping_rule["outcomes"][0].update({
+        "value": {"purchase": 60, "refinance": 30},
+        "value_type": "conditional_mapping",
+    })
+    membership_rule["condition_predicates"][0].update({
+        "operator": "in",
+        "value": [100000, 200000],
+        "value_type": "number",
+    })
+    for rule, code in (
+        (mapping_rule, "invalid_outcome_value_type"),
+        (membership_rule, "invalid_numeric_value"),
+    ):
+        rule["requires_review"] = True
+        rule["readiness"] = {
+            "status": "review_required",
+            "failed_requirements": [{"code": code, "message": "legacy contract shape"}],
+        }
+
+    monkeypatch.setenv("KG_REMEDIATION_MAX_PASSES", "1")
+    final_graph, report = ReadinessRemediator(None).remediate(
+        baseline, graph, tmp_path / "organized", tmp_path / "output"
+    )
+    by_id = {rule["rule_id"]: rule for rule in final_graph["business_rules"]}
+
+    assert report["invariants"]["schema_consistency"]["pass"] is True
+    assert by_id["BR-1"]["outcomes"][0]["value_type"] == "conditional_map"
+    assert by_id["BR-1"]["requires_review"] is True
+    assert by_id["BR-2"]["condition_predicates"][0]["value_type"] == "list"
+    assert not any(
+        finding.get("code") == "invalid_numeric_value"
+        for finding in by_id["BR-2"]["readiness"]["failed_requirements"]
+    )
+
+
 def test_multi_value_output_contract_is_graph_wide_and_resolves_collect_collision():
     graph = graph_with_two_rules()
     left, right = graph["business_rules"]
