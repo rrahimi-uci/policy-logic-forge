@@ -612,11 +612,33 @@ finding names its subject.
 | --- | --- |
 | **File** | `agents/agent_13_business_knowledge_report.py` |
 | **Purpose** | Renders the certified graph into a single, self-contained, source-traceable HTML dashboard for human exploration and review — never invents rules, concepts, or process semantics. |
-| **Inputs** | Optimized graph (`agent_06`–`09`), `agent_11-executable-models/` (DMN/BPMN/CMMN + SBVR profile), organized-document text (for source-passage fallback lookup). Fails fast (exit 2) if the optimized graph is missing. |
-| **Outputs** | `business_knowledge_report.html` (zero external network calls — inline CSS/JS/SVG, no CDN, no webfonts) and `business_knowledge_report_manifest.json`. Six tabs: Overview (chart-based analytics — category/confidence/route/model-type/dependency-degree distributions, most-connected and isolated rules), SBVR vocabulary, Rule explorer (per-rule traceability breadcrumb and inline DMN/BPMN/CMMN diagrams), Relationships (click-to-highlight dependency graph with pan/zoom), Review queue (severity-triaged), and Source traceability. |
+| **Inputs** | Optimized graph (`agent_06`–`09`), `agent_11-executable-models/` (DMN/BPMN/CMMN + SBVR profile), `agent_12-business-information-model/` (catalog + validation + LinkML schema), organized-document text (for source-passage fallback lookup). Fails fast (exit 2) if the optimized graph is missing; a missing information model degrades to an explanatory empty state, because `agent_12` can legitimately be skipped with `--stages`. |
+| **Outputs** | `business_knowledge_report.html` (zero external network calls — inline CSS/JS/SVG, no CDN, no webfonts) and `business_knowledge_report_manifest.json`. Tabs: Overview (chart-based analytics — category/confidence/route/model-type/dependency-degree distributions, most-connected and isolated rules), SBVR vocabulary, Rule explorer (per-rule traceability breadcrumb and inline DMN/BPMN/CMMN diagrams), Relationships (click-to-highlight dependency graph with pan/zoom), **Information model**, and Source traceability. |
 | **Exit codes** | 0 on success; **2** if the optimized graph is missing or generation raises. |
 
-Agent 12 is a presentation-only stage. It renders every rule with a neutral
+##### The Information model tab
+
+`agent_12` used to be the one stage whose output nothing consumed: it wrote
+seven artifacts and the final report never mentioned the information model at
+all. The tab closes that seam, reading `class_attribute_catalog.json` (already
+the tabular projection of the LinkML schema) and
+`information_model_validation.json`, and embedding
+`business_information_model.yaml` so the canonical artifact travels with the
+report.
+
+It leads with the one fact that matters most about a model and is otherwise
+invisible: **which kind of value dominates it.** On a real privacy run, 70% of
+modelled attributes are `flag`s — booleans recording whether a rule passed
+rather than business state — which the tab states outright rather than leaving
+to be counted. Below that sit the category distribution, the ten validation
+checks, and a searchable card per class whose attribute catalog carries type,
+declared unit, multiplicity, constraints, allowed values, and evidence tier.
+
+Every attribute links back to the rules that declared it, and those link on to
+the embedded source passage, so the tab extends the evidence spine rather than
+terminating it.
+
+Agent 13 is a presentation-only stage. It renders every rule with a neutral
 0–100 automation-readiness score composed of core grounding (40%), contextual
 grounding (20%), contract integrity (15%), evidence integrity (10%),
 executability (10%), and relationship support (5%). The score does not consume

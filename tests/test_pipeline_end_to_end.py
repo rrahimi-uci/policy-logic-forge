@@ -219,6 +219,41 @@ def test_the_report_is_self_contained(two_rule_run):
         assert forbidden not in html, f"report reaches out to the network: {forbidden}"
 
 
+def test_the_report_consumes_the_information_model_stage_12_produced(two_rule_run):
+    """Stage 12 wrote seven artifacts that nothing read: the final report never
+    mentioned the information model. This is the seam, checked after a real
+    stage-12 run rather than against a fixture."""
+    base, _results = two_rule_run
+    html = (base / "agent_13-business-knowledge-report/business_knowledge_report.html").read_text()
+    assert 'data-tab="information-model"' in html
+    assert "Not generated for this run" not in html, "stage 12 ran, so the tab must be populated"
+
+    manifest = json.loads(
+        (base / "agent_13-business-knowledge-report/business_knowledge_report_manifest.json").read_text())
+    assert manifest["information_model_present"] is True
+    assert manifest["information_model_schema_valid"] is True
+    # and the counts agree with what stage 12 itself reported
+    validation = json.loads(
+        (base / "agent_12-business-information-model/information_model_validation.json").read_text())
+    assert manifest["information_model_attribute_count"] == validation["inventory"]["attributes"]["total"]
+
+
+def test_the_report_explains_itself_when_stage_12_was_skipped(tmp_path):
+    """A selective run may skip stage 12 entirely; the report must still build."""
+    _batch(tmp_path, _graph([_rule("r_only", writes=["ok"])]))
+    env = dict(os.environ, KG_BATCH_NAME="e2e", KG_DOMAIN="privacy_policy")
+    for module, extra in TAIL:
+        if module.startswith("agent_12"):
+            continue                                  # stage 12 deliberately not run
+        result = subprocess.run([sys.executable, str(AGENTS / f"{module}.py"), *extra],
+                                cwd=tmp_path, env=env, capture_output=True, text=True, timeout=300)
+        assert result.returncode == 0, f"{module}\n{result.stdout}{result.stderr}"
+    html = (tmp_path / "pipeline-output" / "e2e"
+            / "agent_13-business-knowledge-report/business_knowledge_report.html").read_text()
+    assert 'data-tab="information-model"' in html     # the tab is always present
+    assert "Not generated for this run" in html
+
+
 def test_the_report_names_every_rule_in_the_graph(two_rule_run):
     base, _results = two_rule_run
     graph = json.loads((base / OPTIMIZED / "optimized_compliance_knowledge_graph.json").read_text())
