@@ -1169,14 +1169,17 @@ def _attribute_row_html(row: Mapping[str, Any], rule_slugs: Mapping[str, str]) -
     review = ""
     if row.get("needs_review"):
         review = f'<div class="muted im-review">⚠ {_safe(row.get("review_reasons") or "flagged for review")}</div>'
+    # Held in a name rather than inlined: an f-string expression may not contain
+    # a backslash before Python 3.12, and CI runs 3.11.
+    dash = '<span class="muted">—</span>'
     return (
         f'<tr><td><code>{_safe(row.get("attribute"))}</code>'
         f'<div class="muted">{_safe(row.get("description") or "")}</div>{review}</td>'
         f'<td><span class="im-type" style="border-color:{tint}">{_safe(row.get("type"))}</span>'
         f'{unit_html}<div>{basis_html}</div></td>'
         f'<td><code>{_safe(row.get("multiplicity"))}</code></td>'
-        f'<td class="im-constraints">{constraint_html or "<span class=\'muted\'>—</span>"}</td>'
-        f'<td>{rule_html or "<span class=\'muted\'>—</span>"}</td></tr>'
+        f'<td class="im-constraints">{constraint_html or dash}</td>'
+        f'<td>{rule_html or dash}</td></tr>'
     )
 
 
