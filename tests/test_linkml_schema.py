@@ -221,3 +221,52 @@ def test_an_empty_model_still_produces_a_valid_schema():
     schema = to_linkml(build_model({"business_rules": []}, {}))
     assert validate_schema(schema) == []
     assert schema["classes"] == {}
+
+
+# ---------------------------------------------------------------------------
+# high-level categories, carried as LinkML subsets
+# ---------------------------------------------------------------------------
+
+def test_categories_are_emitted_as_linkml_subsets():
+    """``subsets`` is the metamodel's own grouping mechanism, so the categories
+    survive into generated documentation and downstream tools rather than
+    living only in this repository's reading of the model."""
+    schema = _schema()
+    assert set(schema["subsets"]) >= {"entity", "quantity", "temporal", "categorical", "flag"}
+    for definition in schema["subsets"].values():
+        assert definition["description"]
+
+
+def test_only_populated_subsets_are_declared():
+    """An empty grouping is a category the reader looks for and never finds."""
+    schema = _schema()
+    assert "value_object" not in schema["subsets"]
+    assert "event" not in schema["subsets"]
+
+
+def test_classes_are_grouped_by_what_kind_of_thing_they_are():
+    assert _schema()["classes"]["MortgageLoan"]["in_subset"] == ["entity"]
+
+
+def test_attributes_are_grouped_by_what_kind_of_value_they_hold():
+    loan = _schema()["classes"]["MortgageLoan"]["attributes"]
+    assert loan["principalAmount"]["in_subset"] == ["quantity"]
+    assert loan["termMonths"]["in_subset"] == ["temporal"]
+    assert loan["occupancyType"]["in_subset"] == ["categorical"]
+    assert loan["eligible"]["in_subset"] == ["flag"]
+
+
+def test_a_schema_carrying_subsets_still_validates_as_linkml():
+    """Subsets are only worth adding if the metamodel actually accepts them."""
+    assert validate_schema(_schema()) == []
+
+
+def test_the_catalog_exposes_kind_and_category_as_columns():
+    """The catalog is the artifact people filter, so the category has to be a
+    column rather than something the reader rebuilds from the type."""
+    rows = {r["attribute"]: r for r in catalog_rows(_schema())}
+    assert rows["ltvRatio"]["category"] == "quantity"
+    assert rows["ltvRatio"]["element_kind"] == "attribute"
+    assert rows["ltvRatio"]["class_stereotype"] == "entity"
+    assert rows["occupancyType"]["category"] == "categorical"
+    assert rows["eligible"]["category"] == "flag"

@@ -31,6 +31,7 @@ from typing import Any, Mapping, Sequence
 __all__ = [
     "BUSINESS_TYPE_DEFINITIONS",
     "UNIT_ENCODINGS",
+    "SUBSET_DESCRIPTIONS",
     "to_linkml",
     "dump_yaml",
     "validate_schema",
@@ -41,6 +42,30 @@ __all__ = [
 ]
 
 SCHEMA_ID_BASE = "https://github.com/rrahimi-uci/policy-logic-forge/information-model"
+
+#: The high-level categories the model is partitioned into, emitted as LinkML
+#: ``subsets`` -- the metamodel's own mechanism for grouping elements, so the
+#: grouping survives into generated documentation and every downstream tool
+#: rather than living only in this repository's reading of the model.
+#:
+#: Classes are grouped by what kind of thing they are; attributes by what kind
+#: of value they hold. Both axes are derived from evidence the rules declare,
+#: which is why they mean the same thing in any domain.
+SUBSET_DESCRIPTIONS: dict[str, str] = {
+    # class stereotypes
+    "entity": "Things the business keeps state about and can identify.",
+    "actor": "Parties that act on or are governed by the policy.",
+    "event": "Things that happen at a point in time.",
+    "process": "Ordered work the policy prescribes.",
+    "value_object": "Composite values with no identity of their own.",
+    # attribute categories
+    "identifier": "Attributes that name or reference something.",
+    "quantity": "Measured or counted values, including amounts, rates and ratios.",
+    "temporal": "Points in time and durations.",
+    "categorical": "Values drawn from a controlled vocabulary.",
+    "flag": "Boolean state, most often the outcome of evaluating a rule.",
+    "descriptive": "Free text carrying no further declared structure.",
+}
 
 #: The business types the deterministic layer assigns, declared as real LinkML
 #: types so a consumer sees ``Money`` rather than ``float``.  ``typeof`` keeps
@@ -164,10 +189,15 @@ def to_linkml(
         "default_prefix": prefix,
         "default_range": "string",
         "imports": ["linkml:types"],
+        "subsets": {},
         "types": {},
         "enums": {},
         "classes": {},
     }
+
+    from utils.information_model import categorise_attribute
+
+    used_subsets: set[str] = set()
 
     # Only declare the business types the model actually uses.
     used_types = {a.type for k in model.classes for a in k.attributes}
@@ -229,12 +259,16 @@ def to_linkml(
                 if attribute.review_reasons:
                     annotations["review_reasons"] = "; ".join(attribute.review_reasons)
             slot["annotations"] = annotations
+            slot["in_subset"] = [categorise_attribute(attribute)]
+            used_subsets.add(categorise_attribute(attribute))
             attributes[_safe(attribute.name)] = slot
 
         entry: dict[str, Any] = {
             "description": klass.description or f"Business entity {klass.concept_id}.",
+            "in_subset": [klass.stereotype],
             "attributes": attributes,
         }
+        used_subsets.add(klass.stereotype)
         annotations = {"concept_id": klass.concept_id, "stereotype": klass.stereotype}
         if klass.source_passages:
             annotations["source_passages"] = ", ".join(klass.source_passages[:4])
@@ -259,7 +293,9 @@ def to_linkml(
             "multivalued": relationship.target_multiplicity.endswith("*"),
             "required": relationship.source_multiplicity.startswith("1"),
             "description": f"{relationship.source} {relationship.verb} {relationship.target}.",
+            "in_subset": ["identifier"],
             "annotations": {
+                "element_kind": "relationship",
                 "relationship_kind": relationship.kind,
                 "basis": relationship.basis,
                 "needs_review": "true" if relationship.needs_review else "false",
@@ -268,6 +304,14 @@ def to_linkml(
                     "never multiplicity" if relationship.needs_review else ""
                 ),
             },
+        }
+        used_subsets.add("identifier")
+
+    # Declare only the subsets the model actually populates: an empty grouping
+    # is a category the reader would look for and never find.
+    for subset in sorted(used_subsets):
+        schema["subsets"][subset] = {
+            "description": SUBSET_DESCRIPTIONS.get(subset, f"Elements categorised as {subset}."),
         }
     return schema
 
@@ -480,7 +524,14 @@ def catalog_rows(schema: Mapping[str, Any]) -> list[dict[str, Any]]:
                 bounds.append(f"<= {slot['maximum_value']}")
             rows.append({
                 "class": class_name,
+                "class_stereotype": (klass.get("annotations") or {}).get("stereotype", "entity"),
                 "attribute": slot_name,
+                # The catalog is the artifact people filter, so the element's
+                # kind and category have to be columns in it, not something the
+                # reader reconstructs from the type.
+                "element_kind": annotations.get(
+                    "element_kind", "relationship" if rng in (schema.get("classes") or {}) else "attribute"),
+                "category": (slot.get("in_subset") or [""])[0],
                 "type": rng,
                 "type_basis": annotations.get("type_basis", ""),
                 "multiplicity": "0..*" if slot.get("multivalued")
