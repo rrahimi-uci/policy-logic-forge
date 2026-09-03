@@ -154,6 +154,44 @@ def test_agent_three_compact_retry_has_independent_transport_budget(monkeypatch)
     assert extractor.client.calls[1]["messages"] == extractor.client.calls[2]["messages"]
 
 
+def test_agent_three_treats_provider_5xx_as_transport_retry(monkeypatch):
+    """A transient Anthropic 5xx uses the transport cooldown, not a burst retry."""
+
+    class _Client:
+        def __init__(self):
+            self.calls = 0
+
+        def chat_completion(self, **kwargs):
+            self.calls += 1
+            if self.calls == 1:
+                error = RuntimeError("upstream service unavailable")
+                error.status_code = 503
+                raise error
+            return SimpleNamespace(choices=[SimpleNamespace(
+                message=SimpleNamespace(content='{"entity_types": {}, "relationships": {}}'),
+                finish_reason="stop",
+            )])
+
+    delays = []
+    monkeypatch.setenv("KG_BATCH_MAX_ATTEMPTS", "2")
+    monkeypatch.setenv("KG_BATCH_CONNECTION_BACKOFF_SECONDS", "7")
+    monkeypatch.setattr("agents.agent_03_rules_extractor.time.sleep", delays.append)
+    extractor = object.__new__(BusinessRulesExtractor)
+    extractor.client = _Client()
+    extractor.reasoning_effort = "high"
+    extractor.global_config = SimpleNamespace(
+        get_rules_max_tokens=lambda: 128,
+        get_rules_temperature=lambda: 0.0,
+    )
+    extractor._request_gate = None
+
+    result = extractor.extract_batch("extract rules", batch_num=1)
+
+    assert "error" not in result
+    assert extractor.client.calls == 2
+    assert delays == [7]
+
+
 def test_agent_three_rejects_nonempty_length_truncated_recovery(monkeypatch):
     """Partial JSON with finish_reason=length never reaches downstream parsing."""
 

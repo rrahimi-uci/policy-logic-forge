@@ -610,9 +610,17 @@ class BusinessRulesExtractor:
                         # for transport errors while retaining the short
                         # exponential delay for other request failures.
                         error_text = str(exc).lower()
-                        is_transport_error = any(
+                        status_code = getattr(exc, "status_code", None)
+                        is_transport_error = (
+                            isinstance(status_code, int) and status_code >= 500
+                        ) or any(
                             marker in error_text
-                            for marker in ("connection", "timed out", "timeout", "readerror")
+                            for marker in (
+                                "connection", "timed out", "timeout", "readerror",
+                                "internalservererror", "internal server error",
+                                "service unavailable", "bad gateway", "gateway timeout",
+                                "server error", " 500", " 502", " 503", " 504",
+                            )
                         )
                         if is_transport_error:
                             delay = max(
