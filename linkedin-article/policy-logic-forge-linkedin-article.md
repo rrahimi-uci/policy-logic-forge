@@ -1,246 +1,272 @@
 ---
-title: "83% of My AI-Extracted Rules Failed Review. That Was the Most Valuable Result."
-subtitle: "What building an auditable, standards-based policy-to-knowledge pipeline taught me about grounding, executable semantics, and honest AI metrics"
+title: "A Policy Is Not an Algorithm: What It Takes to Turn Regulation Into Executable Systems"
+subtitle: "Inside an evidence-first, 13-stage architecture for translating policy text into traceable knowledge, verified rules, and code-ready artifacts"
 author: "Reza Rahimi"
-status: "Publication draft"
+status: "Publication-ready draft"
 ---
 
-# 83% of My AI-Extracted Rules Failed Review. That Was the Most Valuable Result.
+# A Policy Is Not an Algorithm: What It Takes to Turn Regulation Into Executable Systems
 
-![Policy documents transformed into traceable business knowledge, with a human reviewer inspecting the evidence](images/policy-logic-forge-hero.png)
+![Policy Logic Forge transforms policy into knowledge, verification, and code-ready artifacts while preserving a trace back to evidence](images/01-policy-logic-forge-hero.png)
 
-I fed a 1,191-page mortgage policy guide into an AI pipeline and asked it to turn the document into structured, executable business knowledge.
+Most business systems do not implement a policy.
 
-The result looked alarming:
+They implement **someone's interpretation of a policy**.
 
-**522 of 628 rules—83.1%—were placed on quality hold.**
+That distinction matters. Between a paragraph written by a regulator and a decision made by software, people must identify the governed concepts, separate obligations from exceptions, resolve dependencies, translate prose into logic, and decide what is safe to automate. Every handoff creates another opportunity to lose meaning.
 
-My first reaction was probably the same as yours: *If 83% failed, did we build anything useful?*
+This is already difficult for one document. In a regulated enterprise, the source material may span statutes, guidance, contracts, internal procedures, amendments, and product-specific instructions. The result changes over time, must survive audit, and may control decisions that affect a person's money, privacy, eligibility, or legal rights.
 
-But that number exposed a much more important problem than model accuracy. We were collapsing several fundamentally different questions into one metric:
+The challenge is therefore not simply:
 
-- Does a rule point to a source?
-- Is each claim supported by that source?
-- Is the complete rule safe to execute automatically?
-- Does a human actually need to make a judgment?
+> Can an AI read a policy document?
 
-Those questions are not interchangeable.
+It is:
 
-Once we separated them, the same pipeline snapshot told a very different—and much more useful—story:
+> Can a system transform policy into operational knowledge without breaking the chain of evidence—and can it show exactly where it is uncertain?
 
-- **100%** of rules had source pointers.
-- **91.9%** of individual grounding claims were supported.
-- **17.7%** of complete rules passed strict whole-rule grounding certification.
-- **13.1%** of rules required actual human review.
-- **83.1%** remained on an automated quality hold.
+That is the problem behind **Policy Logic Forge**.
 
-The system was not saying, “A human must manually review 83% of everything.”
+## The problem: policy meaning is lost in translation
 
-It was saying, “Most rules are not yet safe to promote into unattended execution.”
+Consider this illustrative clause:
 
-That distinction changed the architecture.
+> When a customer submits a complete request, the institution must respond within 30 days unless identity verification remains unresolved.
 
-## The dangerous shortcut: treating a citation as proof
+A person can read that sentence in seconds. A reliable system must make several meanings explicit:
 
-A source link proves that the pipeline found a passage. It does **not** prove that every part of the extracted rule is entailed by that passage.
+- Who is responsible: the institution or a specific role?
+- What event starts the clock: submission, receipt, or confirmation of completeness?
+- What qualifies as a “complete request”?
+- Is the deadline 30 calendar days or business days?
+- Does unresolved identity verification pause the clock or remove the obligation?
+- What response is required?
+- Which products, customers, regions, and effective dates are in scope?
+- Which exact source passage supports each answer?
 
-Consider a seemingly simple policy rule:
+Dropping only one of those details can change the outcome. A rule with the right action but the wrong trigger is not “mostly correct” when software executes it.
 
-> A lender must perform an annual review, retain evidence for seven years, notify the borrower within 30 days, and escalate unresolved exceptions to compliance.
+![The interpretation gap between policy language and operational systems, with the semantic details most often lost in handoffs](images/02-policy-translation-gap.png)
 
-That is not one claim. It may contain claims about:
+### Why the manual approach does not scale
 
-- the responsible party;
-- the triggering condition;
-- the required action;
-- the frequency;
-- the retention period;
-- the notification deadline;
-- the exception path;
-- the escalation recipient;
-- the applicability scope; and
-- the final outcome.
+Traditional policy implementation often resembles a relay race:
 
-If the source directly supports nine claims but never states the seven-year retention period, the rule is mostly grounded—but it is not safe to execute as written.
+**Policy author → subject-matter expert → analyst → architect → developer → tester → auditor**
 
-This is why whole-rule certification falls much faster than claim-level support.
+Each person creates a new representation: notes, spreadsheets, requirements, diagrams, tickets, code, and test cases. Those artifacts are useful, but the connection to the original evidence weakens with every translation.
 
-As a rough illustration, if a rule contains 26 required claims and each claim has a 91.9% chance of being supported, then under a simplifying independence assumption:
+The consequences are familiar:
 
-> Probability that the whole rule is supported ≈ 0.919²⁶ ≈ **11.1%**
+- **Slow change:** a revised clause triggers a new round of analysis across teams and systems.
+- **High cost:** scarce experts repeatedly explain the same policy in different formats.
+- **Interpretation gaps:** conditions, exceptions, and scope qualifiers disappear between prose and code.
+- **Inconsistent implementations:** two teams can encode the same clause differently.
+- **Difficult audits:** reconstructing why a system behaved a certain way becomes forensic work.
+- **Fragile maintenance:** teams know that a rule changed, but not which decisions, processes, data fields, or tests depend on it.
 
-Real claims are not independent, so this is not a performance estimator. It simply demonstrates the compounding effect: **high claim accuracy can coexist with low whole-rule certification.**
+In highly regulated domains, these are not documentation inconveniences. They are operational and governance risks.
 
-That is not a reason to weaken the gate. It is a reason to improve the representation.
+## What a reliable solution actually needs
 
-![Supported claims flow into whole-rule quality gates, while a separate smaller path represents genuine human review](images/quality-holds-vs-human-review.png)
+An LLM that emits a list of plausible rules solves only the first few minutes of the problem. A dependable policy-to-system pipeline needs a set of connected capabilities.
 
-## What we built: an evidence spine, not a chain of prompts
+| Capability | Question it must answer | Failure it helps prevent |
+|---|---|---|
+| Source integrity | Did we ingest and preserve the complete corpus? | Missing pages, tables, sections, or attachments |
+| Shared business vocabulary | What do the governed concepts mean? | Duplicate terms and inconsistent interpretation |
+| Structured rule contracts | What are the actor, trigger, conditions, action, exception, scope, and outcome? | Attractive prose that cannot be tested or executed |
+| Dependency semantics | Which rules use, produce, constrain, or conflict with the same facts? | Hidden downstream impact and invented sequence |
+| Independent verification | Does the cited evidence support each extracted claim? | Treating a nearby citation as proof |
+| Selective model generation | Is this a decision, an ordered process, a case, or only a rule? | Forcing every requirement into the wrong notation |
+| Human review and explainability | What is uncertain, why, and where is the evidence? | Review queues with no actionable context |
+| Change awareness | What could a policy revision affect? | Revalidating everything—or overlooking impact |
 
-The project evolved into a 12-stage pipeline called **Policy Logic Forge**.
+These capabilities need a common backbone: an **evidence spine** that survives every transformation.
 
-It does more than ask an LLM to “extract rules.” It progressively transforms documents into a typed, source-grounded knowledge system:
+![The capabilities needed for reliable policy transformation arranged around a continuous evidence spine](images/03-capabilities-evidence-spine.png)
 
-1. Organize and chunk source documents without losing corpus coverage.
-2. Extract business entities and relationships.
-3. Extract rules into a structured contract: conditions, outcomes, exceptions, scope, parties, variables, and test vectors.
-4. Run advisory validation without hiding findings.
-5. Merge rules and concepts into a knowledge graph.
-6. Normalize, deduplicate, and analyze dependencies.
-7. Test executable-readiness invariants.
-8. Remediate only the identified readiness gaps.
-9. Independently verify grounding at the claim level.
-10. Partition every rule into dependency DAGs.
-11. Generate standards-aligned decision, process, case, and vocabulary models.
-12. Produce a self-contained HTML report for business review.
+The system should support both directions of travel:
 
-The important part is not the number of agents. It is the **evidence spine** connecting every transformation.
-
-A reviewer should be able to move in both directions:
-
-**Source passage → Concept → Rule → Decision or process model**
+**Source passage → concept → rule → dependency → model → artifact**
 
 and
 
-**Model element → Rule → Claim → Exact supporting passage**
+**Artifact element → model → rule claim → exact supporting passage**
 
-Without that bidirectional trace, a beautiful diagram is just another hallucination surface.
+Without that reverse path, a polished decision table or process diagram is simply another place for unsupported meaning to hide.
 
-![A twelve-stage policy pipeline connected by a continuous evidence spine and selective human-review checkpoints](images/evidence-spine-architecture.png)
+## Our approach: separate extraction, reasoning, verification, and presentation
 
-## Why SBVR, DMN, BPMN, and CMMN belong together
+Policy Logic Forge is an open-source CLI and Python library built around a 13-stage pipeline. It is deliberately not one large prompt. Each stage has a narrower responsibility, a defined input/output contract, and a different opportunity to detect or contain error.
 
-Using only BPMN and DMN initially sounds sufficient: one models processes; the other models decisions.
+![The repository-backed 13-stage Policy Logic Forge architecture, grouped by responsibility and connected by evidence](images/04-policy-logic-forge-architecture.png)
 
-In practice, two pieces are missing.
+The stages form five architectural layers.
 
-**SBVR gives the domain a shared language.** It separates governed business concepts from the thousands of low-level variables used inside individual decisions. This matters because a decision variable is not automatically a business concept, and a repeated label is not automatically a new concept.
+### 1. Preserve the source before interpreting it — Stages 01–03
 
-One early report effectively presented more than 3,000 items as “concepts.” After separating semantic layers, the same snapshot showed **26 governed SBVR concepts** and **3,148 executable decision variables**. The volume had not disappeared; it had been classified honestly.
+The pipeline first inventories and chunks the corpus, preserving document and chunk identities. It then extracts a source-linked concept catalog and converts policy statements into structured rule candidates.
 
-**CMMN represents work that cannot be reduced to a fixed flow.** Evidence collection, exception resolution, investigations, and human judgment are often case-driven. Forcing them into BPMN invents an order the source never specified.
+A rule contract can carry:
 
-The resulting division of responsibility is much cleaner:
+- natural-language description;
+- conditions and logic trees;
+- outcomes and effects;
+- exceptions and scope;
+- responsible parties;
+- typed variables and predicates;
+- source references and field-level evidence; and
+- test vectors where the source supports them.
 
-- **SBVR:** What do the business terms mean?
-- **DMN:** What decision follows from these inputs?
-- **BPMN:** What explicitly ordered process does the source define?
-- **CMMN:** What case work unfolds according to evidence and judgment?
+The design choice is important: extraction produces **candidates with provenance**, not declarations of truth.
 
-The crucial phrase is **“when the source supports it.”**
+### 2. Normalize the knowledge without hiding uncertainty — Stages 04–06
 
-The exporter deliberately refuses to generate BPMN for an obvious one-step obligation or for a rule with no source-evidenced sequence. A dependency graph is not a process model. Two rules being related does not prove that one happens after the other.
+An advisory validator surfaces structural and source-pointer problems. Rules and concepts are then merged into a knowledge graph, normalized, and conservatively deduplicated. Deterministic logic derives relationships such as data flow, conflict candidates, and shared associations only where the available semantics justify them.
 
-Sometimes the most accurate diagram is no diagram.
+The system avoids using graph proximity as evidence of business order. Two rules can be connected without one happening before the other.
 
-## The bugs that taught us the most
+### 3. Repair contracts, then verify claims independently — Stages 07–10
 
-The hardest failures were rarely dramatic model hallucinations. They were contract mismatches between stages.
+Executable-readiness checks enforce four deterministic invariants:
 
-### 1. The prompt and validator disagreed
+- corpus integrity;
+- naming consistency;
+- schema consistency; and
+- referential integrity.
 
-During a live Anthropic smoke test, entity extraction repeatedly failed because five entity categories had no `source_evidence` field.
+A targeted remediator repairs only identified gaps, followed by a readiness recheck. The pipeline then builds fresh evidence packets from the raw corpus and independently evaluates rule claims such as description, condition, outcome, party, scope, and exception.
 
-At first, this looked like a provider-specific weakness.
+This separation is intentional. The component that wrote a rule should not be the only component judging whether the source supports it.
 
-The real cause was more embarrassing—and more valuable: the extraction prompt never requested the evidence field that the downstream validator required. One model had happened to volunteer it; another did not.
+Finally, the dependency stage assigns every rule to exactly one directed acyclic graph. Cycles are condensed and dangling or invalid edges are reported instead of silently discarded.
 
-Changing providers did not create the bug. It revealed a hidden dependency on model behavior.
+### 4. Generate the right representation—only when justified — Stages 11–12
 
-The fix was not “retry harder.” We corrected the shared prompt generator, regenerated every domain prompt pack, increased the output budget for the larger evidence-bearing contract, and added tests that pin the prompt to the validator schema.
+The pipeline produces different artifacts for different questions:
 
-### 2. Review flags became stale
+- **DMN 1.3** review projections for decision logic;
+- **BPMN 2.0** only when the source provides explicit, multi-step process semantics;
+- **CMMN 1.1** review cases for case-oriented or human-review work;
+- an **SBVR-aligned vocabulary profile** for governed concepts and verb relationships;
+- an internal, best-effort **LExec intermediate representation** with compilation and proof records; and
+- a validated **LinkML business information model**, plus JSON Schema and diagram views.
 
-Some rules were normalized successfully but retained old extraction-time errors. The pipeline was treating `requires_review` as permanent state instead of a derived result.
+Stage 12 separates the business information model from the rule graph. This matters because executable rules need stable data concepts, attributes, types, and relationships—not only prose and predicates.
 
-The fix was to recompute validation after normalization and remediation. Review status must describe the current artifact, not its history.
+### 5. Make the knowledge explorable — Stage 13
 
-### 3. We almost invented workflows
+The final stage generates a self-contained HTML business knowledge report. It brings together the vocabulary, rule explorer, dependency graph, inline models, information model, review signals, metrics, and source chunks.
 
-An early BPMN rule used broad categories and dependency order as a proxy for process semantics. That produced plausible diagrams—but plausibility is exactly the danger.
+This is a presentation and review artifact, not a full collaborative workflow application. Its purpose is to let a subject-matter expert move through the knowledge without reconstructing the pipeline's internal files.
 
-Now BPMN requires a grounded trigger, an actor, direct evidence, and at least two explicitly ordered steps. Otherwise, the rule remains available in DMN or the knowledge graph, and the report records why BPMN was omitted.
+## Why use SBVR, DMN, BPMN, CMMN, LinkML, and LExec together?
 
-### 4. Operational failures looked like quality failures
+No single notation answers every business question.
 
-Long-running stages encountered empty responses, token-limit truncation, connection-pool pressure, and provider outages. If those failures are silently converted into “unsupported,” the quality metric becomes meaningless.
+![Each standard and representation answers a distinct business question, with a refusal boundary when the source does not support the model](images/05-standards-by-question.png)
 
-The pipeline now distinguishes:
+| Representation | The question it answers | How Policy Logic Forge currently uses it |
+|---|---|---|
+| SBVR-aligned profile | What do the business terms mean, and how are they related? | A deterministic vocabulary profile linked to concepts and rules |
+| DMN | What decision follows from these inputs? | Decision-table review projections with traceability metadata |
+| BPMN | What explicitly ordered work must occur? | Selective generation for grounded, prescriptive, multi-step processes |
+| CMMN | What work unfolds as a case rather than a fixed sequence? | Simple review/case projections for case-oriented rules |
+| LinkML | What business data structure do the rules depend on? | A validated schema with JSON Schema and diagram projections |
+| LExec | Which compiled rule claims can be checked mechanically? | An internal best-effort IR and proof channel alongside standard artifacts |
 
-- provider or transport failure;
-- incomplete model response;
-- schema or contract failure;
-- insufficient source evidence;
-- contradiction requiring judgment; and
-- successful certification.
+The refusal boundary is as important as the export format.
 
-Checkpoints are bound to source and semantic fingerprints so a rerun can resume without reusing stale results from another corpus, model configuration, or contract version.
+Policy Logic Forge does not generate BPMN merely because two rules have a dependency. It requires an evidenced trigger, responsible actor, and at least two explicitly ordered steps. If those semantics are absent, omitting the diagram is more accurate than inventing one.
 
-## Five principles I would carry into any enterprise AI system
+The same principle applies to vocabulary. A low-level decision variable is not automatically a governed business concept. Separating those layers keeps the SBVR view meaningful instead of turning it into a catalog of every symbol in every rule.
 
-### 1. Measure at the smallest defensible unit
+## Traceability is the product, not a footnote
 
-“Rule accuracy” hides too much. Verify the condition, action, exception, scope, party, value, timing, and dependency claims independently.
+In this architecture, evidence is not attached at the end for audit. It is carried through the rule contract and checked again before artifacts are promoted.
 
-### 2. Separate automation holds from human judgment
+For a generated element, a reviewer should be able to ask:
 
-Missing evidence should block automatic execution. It should not automatically create a human-review ticket. Humans should receive ambiguity, contradiction, conflict, and explicit judgment work—not every mechanical defect.
+1. Which rule produced this decision row, process task, case item, or schema field?
+2. Which structured claim does that element represent?
+3. Which document and chunk were cited?
+4. Does the quoted text literally occur in the source packet?
+5. Did an independent verifier support, contradict, or find insufficient evidence for the claim?
+6. What remains a projection that still needs validation in its target engine or environment?
 
-### 3. Make uncertainty structural
+That final question prevents a dangerous category mistake: **machine-readable is not the same as production-ready**.
 
-Do not bury uncertainty in prose. Carry it through schemas, model exports, graphs, reports, and execution gates.
+## What exists today—and what does not
 
-### 4. Generate less when less is truer
+Technical credibility requires a clear boundary between implemented capability and aspiration.
 
-Do not create BPMN because the UI has a BPMN tab. Do not turn every variable into an SBVR concept. Do not infer a relationship merely to make the graph denser.
+| Implemented in the repository today | Current limitation or future work |
+|---|---|
+| A fixed 13-stage CLI pipeline with checkpointed stage outputs | It is not a hosted, multi-user governance platform |
+| Structured rule contracts with field-level source references | Extraction quality still depends on source quality and model behavior |
+| Deterministic readiness invariants and targeted remediation | Readiness does not prove legal correctness |
+| Independent claim-level grounding and literal quote checks | Literal support is stricter than pointer presence but is not full legal entailment |
+| Conservative relationship derivation and complete DAG partitioning | Cross-corpus semantic alignment is not inferred automatically |
+| DMN, selective BPMN, CMMN, and SBVR-aligned outputs | The SBVR artifact is a project profile, not full SBVR interchange conformance; CMMN is intentionally simple |
+| LinkML, JSON Schema, and diagram generation | Generated schemas still require environment-specific ownership and integration decisions |
+| Best-effort LExec compilation and proof records | LExec is an internal IR, and failure does not block the standard model artifacts |
+| A self-contained traceability and review report | It does not replace expert approval or target-engine validation |
+| RegDelta comparison, impact propagation, and scenario replay | Current alignment is exact-ID based, so independent-run semantic alignment remains future work |
 
-Precision is a feature.
+The repository does **not** yet establish a universal accuracy rate, complete concept recall, legal correctness, or automatic deployability. Those claims require curated expert benchmarks and target-environment validation. This article intentionally makes none of them.
 
-### 5. Treat the model as a component, not the architecture
+## What this architecture changes for the business
 
-Provider portability is useful, but only behind stable internal contracts. A provider switch should test your prompts, schemas, token assumptions, finish reasons, usage accounting, retries, and grounding behavior—not simply change a model name.
+The immediate value is not “remove every human.” It is to give humans and systems a more reliable object to work with.
 
-## What “good” looks like now
+- **Policy experts** can review a structured claim beside its evidence rather than search an entire corpus.
+- **Analysts** can see definitions, conditions, exceptions, and dependencies in one connected model.
+- **Developers** receive typed, code-ready schemas and decision/process projections instead of ambiguous prose alone.
+- **Testers** can connect scenarios and predicates back to the rule that motivated them.
+- **Auditors** can follow an operational artifact back to a document and source chunk.
+- **Change teams** can inspect graph impact before deciding what must be revalidated.
 
-The goal is not to force the review rate below 10% by relaxing thresholds.
+The aim is selective automation with explicit boundaries: automate what is sufficiently supported for a specific environment, route real ambiguity to people, and retain the evidence for both decisions.
 
-That would improve the dashboard and weaken the system.
+## The complete journey
 
-The goal is to reduce avoidable holds through:
+The infographic below summarizes the system as one continuous transformation: from policy text, through structured knowledge and independent verification, into selective executable and review artifacts—with traceability running in both directions.
 
-- better concept normalization;
-- smaller and more precise claims;
-- explicit field-level evidence;
-- bounded evidence packets;
-- deterministic validation before model judgment;
-- targeted remediation rather than full regeneration;
-- correct separation of decision, process, and case semantics; and
-- honest reporting of what remains unresolved.
+![Standalone infographic showing the complete Policy to Knowledge to Reasoning and Verification to Code-ready Artifacts journey](images/06-policy-to-code-infographic.png)
 
-A trustworthy pipeline should be allowed to say:
+## The larger lesson
 
-> “I found the rule, I can show you the passage, I understand most of its structure—and I still cannot prove this one part.”
+Generative AI makes it easy to produce something that **looks** like business knowledge.
 
-That is not failure.
+Regulated systems need something harder: knowledge with provenance, contracts, dependency semantics, verification, and refusal boundaries.
 
-That is the beginning of accountable automation.
+The most useful question is no longer “Can the model extract this policy?” It is:
 
-## The bigger lesson
+> Can every operational claim explain where it came from, how it was transformed, what checked it, and what the system refused to assume?
 
-Generative AI makes it easy to produce something that looks like knowledge.
+That is the standard Policy Logic Forge is designed to pursue.
 
-Enterprise systems need something harder: **knowledge with provenance, contracts, uncertainty, and refusal boundaries.**
+I am continuing to develop [Policy Logic Forge](https://github.com/rrahimi-uci/policy-logic-forge) as an open-source exploration of evidence-first policy intelligence.
 
-The most valuable moment in this project was not when the pipeline generated hundreds of rules, a knowledge graph, or polished DMN/BPMN/CMMN views.
-
-It was when the dashboard showed 83.1% and forced us to ask what that number actually meant.
-
-If your AI system cannot explain the difference between “found,” “supported,” “certified,” and “needs a human,” it is not ready to make business decisions—no matter how impressive its demo looks.
-
-I’m continuing to develop [Policy Logic Forge](https://github.com/rrahimi-uci/policy-logic-forge) as an experiment in source-grounded, standards-aligned policy intelligence.
-
-**What is the hardest trust problem you have encountered when moving an LLM prototype toward production?**
+**Where does policy meaning most often get lost in your organization: interpretation, implementation, testing, or change management?**
 
 ---
 
-*Measurement note: The mortgage figures in this article describe one dated pipeline/report snapshot, not a general benchmark or a claim about all compliance domains. “SBVR” refers to the project’s SBVR-aligned semantic vocabulary profile, not a claim of complete SBVR interchange conformance. Generated models remain review projections unless independently validated in their target engines.*
+## Technical grounding
+
+The architectural claims in this article map to implemented repository components:
+
+- [Canonical stages and names](https://github.com/rrahimi-uci/policy-logic-forge/blob/main/utils/agent_names.py)
+- [Structured rule contract](https://github.com/rrahimi-uci/policy-logic-forge/blob/main/utils/rule_contract.py)
+- [Dependency semantics](https://github.com/rrahimi-uci/policy-logic-forge/blob/main/utils/rule_dependencies.py)
+- [Readiness invariants](https://github.com/rrahimi-uci/policy-logic-forge/blob/main/utils/kg_readiness.py)
+- [Independent grounding verifier](https://github.com/rrahimi-uci/policy-logic-forge/blob/main/agents/agent_09_grounding_verifier.py)
+- [Complete DAG builder](https://github.com/rrahimi-uci/policy-logic-forge/blob/main/utils/dag_builder.py)
+- [DMN and selective BPMN generation](https://github.com/rrahimi-uci/policy-logic-forge/blob/main/utils/executable_models.py)
+- [CMMN and SBVR-aligned artifacts](https://github.com/rrahimi-uci/policy-logic-forge/blob/main/utils/semantic_artifacts.py)
+- [LinkML business information model](https://github.com/rrahimi-uci/policy-logic-forge/blob/main/utils/information_model.py)
+- [Self-contained HTML report](https://github.com/rrahimi-uci/policy-logic-forge/blob/main/agents/agent_13_business_knowledge_report.py)
+- [RegDelta change analysis](https://github.com/rrahimi-uci/policy-logic-forge/blob/main/utils/regdelta_engine.py)
+
+*Scope note: This article describes the architecture and contracts currently implemented in the repository as of September 2026. Generated models are review projections unless validated in their target engines and operating environment. “SBVR” refers to the project's SBVR-aligned vocabulary profile, not complete OMG SBVR interchange conformance. No numerical extraction-quality benchmark is claimed here.*

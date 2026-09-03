@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1350" viewBox="0 0 1080 1350" role="img" aria-labelledby="title desc">
+  <title id="title">Policy to knowledge to reasoning and verification to code-ready artifacts</title>
+  <desc id="desc">A standalone portrait infographic summarizes the problem, four-part transformation, 13-stage architecture, bidirectional traceability, selective outputs, refusal boundary, and business value of Policy Logic Forge.</desc>
+  <defs>
+    <linearGradient id="bg6" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#071426"/><stop offset="1" stop-color="#0d2037"/></linearGradient>
+    <linearGradient id="line6" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#ffbd66"/><stop offset=".35" stop-color="#31d6c6"/><stop offset=".7" stop-color="#54b8ff"/><stop offset="1" stop-color="#9b8cff"/></linearGradient>
+    <filter id="s6" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="8" stdDeviation="11" flood-color="#020914" flood-opacity=".42"/></filter>
+  </defs>
+  <rect width="1080" height="1350" fill="url(#bg6)"/>
+  <circle cx="960" cy="105" r="220" fill="#31d6c6" opacity=".045"/><circle cx="90" cy="1260" r="250" fill="#9b8cff" opacity=".05"/>
+
+  <text x="64" y="63" fill="#31d6c6" font-family="Inter,Arial,sans-serif" font-size="17" font-weight="750" letter-spacing="3">POLICY LOGIC FORGE</text>
+  <text x="64" y="117" fill="#f7fbff" font-family="Inter,Arial,sans-serif" font-size="40" font-weight="780">A policy is not an algorithm.</text>
+  <text x="64" y="155" fill="#b4c4d9" font-family="Inter,Arial,sans-serif" font-size="21">Make every transformation explicit, verifiable, and reversible.</text>
+
+  <rect x="64" y="190" width="952" height="98" rx="19" fill="#2d1830" stroke="#ff6577"/>
+  <text x="91" y="224" fill="#ff8795" font-family="Inter,Arial,sans-serif" font-size="15" font-weight="750" letter-spacing="2">THE PROBLEM</text>
+  <text x="91" y="258" fill="#f7fbff" font-family="Inter,Arial,sans-serif" font-size="21" font-weight="650">Manual handoffs lose actors, triggers, timing, exceptions, scope—and the path back to evidence.</text>
+
+  <text x="64" y="337" fill="#f7fbff" font-family="Inter,Arial,sans-serif" font-size="24" font-weight="750">The evidence-first journey</text>
+  <text x="1016" y="337" text-anchor="end" fill="#7186a1" font-family="Inter,Arial,sans-serif" font-size="15">13 repository stages</text>
+  <rect x="93" y="375" width="7" height="572" rx="3.5" fill="url(#line6)"/>
+
+  <g filter="url(#s6)" font-family="Inter,Arial,sans-serif">
+    <g transform="translate(64 365)">
+      <circle cx="33" cy="70" r="26" fill="#ffbd66"/><text x="33" y="78" text-anchor="middle" fill="#071426" font-size="22" font-weight="800">1</text>
+      <rect x="76" width="876" height="139" rx="20" fill="#17253a" stroke="#6d5430"/>
+      <text x="104" y="34" fill="#ffbd66" font-size="16" font-weight="750" letter-spacing="2">POLICY · STAGES 01–03</text>
+      <text x="104" y="70" fill="#f7fbff" font-size="25" font-weight="750">Preserve the source before interpreting it</text>
+      <text x="104" y="104" fill="#b4c4d9" font-size="18">Inventory + chunks  →  concepts + evidence  →  typed rule candidates</text>
+      <text x="104" y="127" fill="#8fa3bb" font-size="15">Output: document identity, source passages, vocabulary, rule contracts</text>
+    </g>
+    <g transform="translate(64 518)">
+      <circle cx="33" cy="70" r="26" fill="#31d6c6"/><text x="33" y="78" text-anchor="middle" fill="#071426" font-size="22" font-weight="800">2</text>
+      <rect x="76" width="876" height="139" rx="20" fill="#142b3d" stroke="#277268"/>
+      <text x="104" y="34" fill="#31d6c6" font-size="16" font-weight="750" letter-spacing="2">KNOWLEDGE · STAGES 04–06</text>
+      <text x="104" y="70" fill="#f7fbff" font-size="25" font-weight="750">Normalize meaning without hiding uncertainty</text>
+      <text x="104" y="104" fill="#b4c4d9" font-size="18">Advisory validation  →  merged graph  →  conservative edges</text>
+      <text x="104" y="127" fill="#8fa3bb" font-size="15">Output: unified concepts, normalized rules, data-flow and conflict relations</text>
+    </g>
+    <g transform="translate(64 671)">
+      <circle cx="33" cy="78" r="26" fill="#54b8ff"/><text x="33" y="86" text-anchor="middle" fill="#071426" font-size="22" font-weight="800">3</text>
+      <rect x="76" width="876" height="155" rx="20" fill="#142a43" stroke="#326b91"/>
+      <text x="104" y="34" fill="#54b8ff" font-size="16" font-weight="750" letter-spacing="2">REASON + VERIFY · STAGES 07–10</text>
+      <text x="104" y="70" fill="#f7fbff" font-size="25" font-weight="750">Repair contracts, then check claims independently</text>
+      <text x="104" y="104" fill="#b4c4d9" font-size="18">Readiness ⇄ targeted repair  →  grounding  →  complete dependency DAGs</text>
+      <text x="104" y="130" fill="#8fa3bb" font-size="15">Checks: corpus · naming · schema · references · claims · relationships</text>
+    </g>
+    <g transform="translate(64 840)">
+      <circle cx="33" cy="78" r="26" fill="#9b8cff"/><text x="33" y="86" text-anchor="middle" fill="#071426" font-size="22" font-weight="800">4</text>
+      <rect x="76" width="876" height="155" rx="20" fill="#24213e" stroke="#655a9a"/>
+      <text x="104" y="34" fill="#9b8cff" font-size="16" font-weight="750" letter-spacing="2">ARTIFACTS + EXPLORATION · STAGES 11–13</text>
+      <text x="104" y="70" fill="#f7fbff" font-size="25" font-weight="750">Generate the right representation—or refuse</text>
+      <text x="104" y="104" fill="#b4c4d9" font-size="18">DMN · selective BPMN · CMMN · SBVR profile · LinkML · LExec · HTML</text>
+      <text x="104" y="130" fill="#9e96c8" font-size="15">Machine-readable review artifacts; target-environment validation still required</text>
+    </g>
+  </g>
+
+  <rect x="64" y="1025" width="952" height="86" rx="18" fill="#0e2b43" stroke="#31d6c6"/>
+  <text x="540" y="1058" text-anchor="middle" fill="#31d6c6" font-family="Inter,Arial,sans-serif" font-size="15" font-weight="750" letter-spacing="2">BIDIRECTIONAL TRACEABILITY</text>
+  <text x="540" y="1088" text-anchor="middle" fill="#f7fbff" font-family="Inter,Arial,sans-serif" font-size="19" font-weight="700">Source passage ⇄ concept ⇄ claim ⇄ rule ⇄ dependency ⇄ model ⇄ artifact</text>
+
+  <text x="64" y="1161" fill="#f7fbff" font-family="Inter,Arial,sans-serif" font-size="21" font-weight="750">Business value</text>
+  <g font-family="Inter,Arial,sans-serif" font-size="16" font-weight="650">
+    <g transform="translate(64 1181)"><rect width="221" height="68" rx="14" fill="#10233d" stroke="#2c4563"/><text x="110" y="30" text-anchor="middle" fill="#31d6c6">FASTER REVIEW</text><text x="110" y="52" text-anchor="middle" fill="#b4c4d9">claim beside evidence</text></g>
+    <g transform="translate(307 1181)"><rect width="221" height="68" rx="14" fill="#10233d" stroke="#2c4563"/><text x="110" y="30" text-anchor="middle" fill="#54b8ff">SAFER AUTOMATION</text><text x="110" y="52" text-anchor="middle" fill="#b4c4d9">explicit boundaries</text></g>
+    <g transform="translate(550 1181)"><rect width="221" height="68" rx="14" fill="#10233d" stroke="#2c4563"/><text x="110" y="30" text-anchor="middle" fill="#ffbd66">AUDITABILITY</text><text x="110" y="52" text-anchor="middle" fill="#b4c4d9">artifact back to source</text></g>
+    <g transform="translate(793 1181)"><rect width="223" height="68" rx="14" fill="#10233d" stroke="#2c4563"/><text x="111" y="30" text-anchor="middle" fill="#9b8cff">CHANGE IMPACT</text><text x="111" y="52" text-anchor="middle" fill="#b4c4d9">dependencies made visible</text></g>
+  </g>
+
+  <text x="64" y="1292" fill="#f7fbff" font-family="Inter,Arial,sans-serif" font-size="18" font-weight="700">CORE PRINCIPLE</text>
+  <text x="230" y="1292" fill="#b4c4d9" font-family="Inter,Arial,sans-serif" font-size="18">Do not infer semantics merely to complete the diagram.</text>
+  <text x="64" y="1326" fill="#7186a1" font-family="Inter,Arial,sans-serif" font-size="14">github.com/rrahimi-uci/policy-logic-forge · repository-backed architecture · Sep 2026</text>
+</svg>

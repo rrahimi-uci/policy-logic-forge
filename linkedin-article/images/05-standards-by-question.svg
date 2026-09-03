@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="title desc">
+  <title id="title">One policy, different business questions</title>
+  <desc id="desc">A source-support gate routes semantics to SBVR, DMN, BPMN, CMMN, LinkML, or an internal LExec representation. Unsupported semantics are not invented.</desc>
+  <defs>
+    <linearGradient id="bg5" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#071426"/><stop offset="1" stop-color="#101a30"/></linearGradient>
+    <marker id="a5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0l10 5-10 5z" fill="#54b8ff"/></marker>
+  </defs>
+  <rect width="1600" height="900" fill="url(#bg5)"/>
+  <text x="80" y="90" fill="#31d6c6" font-family="Inter,Arial,sans-serif" font-size="22" font-weight="700" letter-spacing="3">SELECTIVE REPRESENTATION</text>
+  <text x="80" y="153" fill="#f7fbff" font-family="Inter,Arial,sans-serif" font-size="48" font-weight="750">One policy. Different business questions.</text>
+  <text x="80" y="198" fill="#b4c4d9" font-family="Inter,Arial,sans-serif" font-size="23">Use the representation that matches the source semantics—not the diagram the UI happens to offer.</text>
+
+  <g font-family="Inter,Arial,sans-serif">
+    <rect x="80" y="282" width="280" height="325" rx="24" fill="#17253a" stroke="#ffbd66" stroke-width="2"/>
+    <text x="112" y="333" fill="#ffbd66" font-size="18" font-weight="700" letter-spacing="2">POLICY EVIDENCE</text>
+    <text x="112" y="378" fill="#f7fbff" font-size="24" font-weight="700">What does the</text><text x="112" y="410" fill="#f7fbff" font-size="24" font-weight="700">source actually say?</text>
+    <g fill="#b4c4d9" font-size="18"><text x="112" y="463">• definitions</text><text x="112" y="495">• decisions</text><text x="112" y="527">• ordered work</text><text x="112" y="559">• case work</text><text x="112" y="591">• data structure</text></g>
+
+    <path d="M378 445h102" stroke="#54b8ff" stroke-width="4" marker-end="url(#a5)"/>
+    <path d="M595 300v-48M595 607v55M710 445h88" stroke="#54b8ff" stroke-width="4" fill="none" marker-end="url(#a5)"/>
+    <rect x="478" y="300" width="235" height="307" rx="117" fill="#0e2b43" stroke="#31d6c6" stroke-width="3"/>
+    <path d="M548 407l47 16 47-16v53c0 45-23 73-47 89-24-16-47-44-47-89z" fill="#31d6c6" opacity=".13" stroke="#31d6c6" stroke-width="3"/>
+    <path d="M571 464l17 17 33-39" fill="none" stroke="#31d6c6" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="595" y="347" text-anchor="middle" fill="#31d6c6" font-size="18" font-weight="700" letter-spacing="2">SOURCE-SUPPORT</text><text x="595" y="373" text-anchor="middle" fill="#31d6c6" font-size="18" font-weight="700" letter-spacing="2">GATE</text>
+    <text x="595" y="577" text-anchor="middle" fill="#f7fbff" font-size="18" font-weight="700">Route or refuse</text>
+    <rect x="452" y="676" width="286" height="72" rx="16" fill="#2d1830" stroke="#ff6577"/>
+    <text x="595" y="706" text-anchor="middle" fill="#ff8795" font-size="17" font-weight="700">SEMANTICS ABSENT?</text><text x="595" y="733" text-anchor="middle" fill="#f7fbff" font-size="18">Do not invent the model.</text>
+
+    <g transform="translate(800 260)">
+      <g><rect width="330" height="137" rx="20" fill="#10233d" stroke="#31d6c6"/><rect width="10" height="137" rx="5" fill="#31d6c6"/><text x="32" y="39" fill="#31d6c6" font-size="19" font-weight="800">SBVR-ALIGNED</text><text x="32" y="76" fill="#f7fbff" font-size="22" font-weight="700">What does it mean?</text><text x="32" y="108" fill="#b4c4d9" font-size="17">terms · definitions · verb relations</text></g>
+      <g transform="translate(352 0)"><rect width="330" height="137" rx="20" fill="#10233d" stroke="#54b8ff"/><rect width="10" height="137" rx="5" fill="#54b8ff"/><text x="32" y="39" fill="#54b8ff" font-size="19" font-weight="800">DMN</text><text x="32" y="76" fill="#f7fbff" font-size="22" font-weight="700">What decision follows?</text><text x="32" y="108" fill="#b4c4d9" font-size="17">inputs · conditions · outcomes</text></g>
+      <g transform="translate(0 159)"><rect width="330" height="137" rx="20" fill="#10233d" stroke="#ffbd66"/><rect width="10" height="137" rx="5" fill="#ffbd66"/><text x="32" y="39" fill="#ffbd66" font-size="19" font-weight="800">BPMN</text><text x="32" y="76" fill="#f7fbff" font-size="22" font-weight="700">What ordered flow exists?</text><text x="32" y="108" fill="#b4c4d9" font-size="17">trigger · actor · 2+ evidenced steps</text></g>
+      <g transform="translate(352 159)"><rect width="330" height="137" rx="20" fill="#10233d" stroke="#9b8cff"/><rect width="10" height="137" rx="5" fill="#9b8cff"/><text x="32" y="39" fill="#9b8cff" font-size="19" font-weight="800">CMMN</text><text x="32" y="76" fill="#f7fbff" font-size="22" font-weight="700">What case work unfolds?</text><text x="32" y="108" fill="#b4c4d9" font-size="17">review · evidence · human work</text></g>
+      <g transform="translate(0 318)"><rect width="330" height="137" rx="20" fill="#10233d" stroke="#31d6c6"/><rect width="10" height="137" rx="5" fill="#31d6c6"/><text x="32" y="39" fill="#31d6c6" font-size="19" font-weight="800">LinkML</text><text x="32" y="76" fill="#f7fbff" font-size="22" font-weight="700">What data is required?</text><text x="32" y="108" fill="#b4c4d9" font-size="17">classes · fields · types · relations</text></g>
+      <g transform="translate(352 318)"><rect width="330" height="137" rx="20" fill="#10233d" stroke="#54b8ff"/><rect width="10" height="137" rx="5" fill="#54b8ff"/><text x="32" y="39" fill="#54b8ff" font-size="19" font-weight="800">LExec · INTERNAL IR</text><text x="32" y="76" fill="#f7fbff" font-size="22" font-weight="700">What can be checked?</text><text x="32" y="108" fill="#b4c4d9" font-size="17">compile · prove · record failures</text></g>
+    </g>
+  </g>
+
+  <rect x="800" y="748" width="682" height="70" rx="17" fill="#14233a" stroke="#445f7d"/>
+  <text x="1141" y="792" text-anchor="middle" fill="#f7fbff" font-family="Inter,Arial,sans-serif" font-size="22" font-weight="650">Machine-readable ≠ production-ready. Validate in the target environment.</text>
+  <text x="80" y="861" fill="#7186a1" font-family="Inter,Arial,sans-serif" font-size="17">Policy Logic Forge · representation boundaries</text>
+</svg>

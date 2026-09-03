@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="title desc">
+  <title id="title">Policy Logic Forge 13-stage architecture</title>
+  <desc id="desc">Thirteen stages are grouped into source, knowledge, reasoning and verification, models and data, and exploration layers. Stage 4 is advisory, stages 7 and 8 form a repair loop, and stage 9 independently verifies grounding.</desc>
+  <defs>
+    <linearGradient id="bg4" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#071426"/><stop offset="1" stop-color="#0b1c31"/></linearGradient>
+    <linearGradient id="ev4" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#ffbd66"/><stop offset=".45" stop-color="#31d6c6"/><stop offset="1" stop-color="#9b8cff"/></linearGradient>
+    <marker id="ar4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0l10 5-10 5z" fill="#65809d"/></marker>
+  </defs>
+  <rect width="1600" height="900" fill="url(#bg4)"/>
+  <text x="75" y="76" fill="#31d6c6" font-family="Inter,Arial,sans-serif" font-size="21" font-weight="700" letter-spacing="3">OUR ARCHITECTURE</text>
+  <text x="75" y="132" fill="#f7fbff" font-family="Inter,Arial,sans-serif" font-size="44" font-weight="750">13 stages. Five responsibilities. One evidence spine.</text>
+  <text x="75" y="171" fill="#b4c4d9" font-family="Inter,Arial,sans-serif" font-size="21">Each boundary narrows responsibility and creates another opportunity to contain error.</text>
+
+  <rect x="74" y="218" width="168" height="580" rx="24" fill="#0e2b43" stroke="#2f6280"/>
+  <rect x="94" y="247" width="8" height="509" rx="4" fill="url(#ev4)"/>
+  <text x="128" y="283" fill="#31d6c6" font-family="Inter,Arial,sans-serif" font-size="18" font-weight="700" letter-spacing="2">EVIDENCE</text>
+  <text x="128" y="312" fill="#31d6c6" font-family="Inter,Arial,sans-serif" font-size="18" font-weight="700" letter-spacing="2">SPINE</text>
+  <text x="128" y="371" fill="#b4c4d9" font-family="Inter,Arial,sans-serif" font-size="17">document</text><text x="128" y="398" fill="#b4c4d9" font-family="Inter,Arial,sans-serif" font-size="17">chunk</text><text x="128" y="425" fill="#b4c4d9" font-family="Inter,Arial,sans-serif" font-size="17">concept</text><text x="128" y="452" fill="#b4c4d9" font-family="Inter,Arial,sans-serif" font-size="17">claim</text><text x="128" y="479" fill="#b4c4d9" font-family="Inter,Arial,sans-serif" font-size="17">rule</text><text x="128" y="506" fill="#b4c4d9" font-family="Inter,Arial,sans-serif" font-size="17">edge</text><text x="128" y="533" fill="#b4c4d9" font-family="Inter,Arial,sans-serif" font-size="17">model</text><text x="128" y="560" fill="#b4c4d9" font-family="Inter,Arial,sans-serif" font-size="17">artifact</text>
+  <text x="128" y="716" fill="#f7fbff" font-family="Inter,Arial,sans-serif" font-size="18" font-weight="700">trace forward</text><text x="128" y="744" fill="#f7fbff" font-family="Inter,Arial,sans-serif" font-size="18" font-weight="700">explain back</text>
+
+  <g font-family="Inter,Arial,sans-serif">
+    <g transform="translate(270 218)">
+      <rect width="1255" height="102" rx="18" fill="#17253a" stroke="#664f2f"/>
+      <text x="22" y="31" fill="#ffbd66" font-size="16" font-weight="700" letter-spacing="2">SOURCE + EXTRACTION</text>
+      <g transform="translate(255 18)"><rect width="280" height="66" rx="13" fill="#1b2c43" stroke="#ffbd66"/><text x="18" y="28" fill="#ffbd66" font-size="15" font-weight="700">01</text><text x="54" y="28" fill="#f7fbff" font-size="18" font-weight="700">Document Organizer</text><text x="18" y="51" fill="#9fb0c5" font-size="14">inventory · chunks · source IDs</text></g>
+      <g transform="translate(557 18)"><rect width="280" height="66" rx="13" fill="#1b2c43" stroke="#ffbd66"/><text x="18" y="28" fill="#ffbd66" font-size="15" font-weight="700">02</text><text x="54" y="28" fill="#f7fbff" font-size="18" font-weight="700">Entity Extractor</text><text x="18" y="51" fill="#9fb0c5" font-size="14">concepts · relations · evidence</text></g>
+      <g transform="translate(859 18)"><rect width="280" height="66" rx="13" fill="#1b2c43" stroke="#ffbd66"/><text x="18" y="28" fill="#ffbd66" font-size="15" font-weight="700">03</text><text x="54" y="28" fill="#f7fbff" font-size="18" font-weight="700">Rules Extractor</text><text x="18" y="51" fill="#9fb0c5" font-size="14">typed rule candidates + provenance</text></g>
+    </g>
+
+    <g transform="translate(270 334)">
+      <rect width="1255" height="102" rx="18" fill="#14283b" stroke="#27675f"/>
+      <text x="22" y="31" fill="#31d6c6" font-size="16" font-weight="700" letter-spacing="2">KNOWLEDGE INTEGRITY</text>
+      <g transform="translate(255 18)"><rect width="280" height="66" rx="13" fill="#173246" stroke="#31d6c6"/><text x="18" y="28" fill="#31d6c6" font-size="15" font-weight="700">04</text><text x="54" y="28" fill="#f7fbff" font-size="18" font-weight="700">Rule Validator</text><text x="18" y="51" fill="#9fb0c5" font-size="14">advisory findings · non-blocking</text></g>
+      <g transform="translate(557 18)"><rect width="280" height="66" rx="13" fill="#173246" stroke="#31d6c6"/><text x="18" y="28" fill="#31d6c6" font-size="15" font-weight="700">05</text><text x="54" y="28" fill="#f7fbff" font-size="18" font-weight="700">Rules + Entities Merger</text><text x="18" y="51" fill="#9fb0c5" font-size="14">unified knowledge graph</text></g>
+      <g transform="translate(859 18)"><rect width="280" height="66" rx="13" fill="#173246" stroke="#31d6c6"/><text x="18" y="28" fill="#31d6c6" font-size="15" font-weight="700">06</text><text x="54" y="28" fill="#f7fbff" font-size="18" font-weight="700">KG Optimizer</text><text x="18" y="51" fill="#9fb0c5" font-size="14">normalize · dedupe · derive edges</text></g>
+    </g>
+
+    <g transform="translate(270 450)">
+      <rect width="1255" height="132" rx="18" fill="#122a40" stroke="#2f6280"/>
+      <text x="22" y="31" fill="#54b8ff" font-size="16" font-weight="700" letter-spacing="2">REASONING + VERIFICATION</text>
+      <g transform="translate(226 18)"><rect width="224" height="82" rx="13" fill="#17334d" stroke="#54b8ff"/><text x="16" y="27" fill="#54b8ff" font-size="15" font-weight="700">07</text><text x="49" y="27" fill="#f7fbff" font-size="17" font-weight="700">Readiness</text><text x="16" y="51" fill="#9fb0c5" font-size="13">four invariants</text><text x="16" y="69" fill="#9fb0c5" font-size="13">recheck after repair</text></g>
+      <g transform="translate(466 18)"><rect width="224" height="82" rx="13" fill="#17334d" stroke="#54b8ff"/><text x="16" y="27" fill="#54b8ff" font-size="15" font-weight="700">08</text><text x="49" y="27" fill="#f7fbff" font-size="17" font-weight="700">Remediator</text><text x="16" y="51" fill="#9fb0c5" font-size="13">targeted field repair</text><text x="16" y="69" fill="#9fb0c5" font-size="13">not full regeneration</text></g>
+      <path d="M450 70h16M690 70h20v-42H450v20" fill="none" stroke="#54b8ff" stroke-width="2" marker-end="url(#ar4)"/>
+      <text x="577" y="119" text-anchor="middle" fill="#54b8ff" font-size="13" font-weight="700">07 → 08 → 07 RECHECK</text>
+      <g transform="translate(726 18)"><rect width="224" height="82" rx="13" fill="#17334d" stroke="#54b8ff" stroke-width="2"/><text x="16" y="27" fill="#54b8ff" font-size="15" font-weight="700">09</text><text x="49" y="27" fill="#f7fbff" font-size="17" font-weight="700">Grounding Verifier</text><text x="16" y="51" fill="#9fb0c5" font-size="13">independent claim checks</text><text x="16" y="69" fill="#9fb0c5" font-size="13">fresh evidence packets</text></g>
+      <g transform="translate(966 18)"><rect width="224" height="82" rx="13" fill="#17334d" stroke="#54b8ff"/><text x="16" y="27" fill="#54b8ff" font-size="15" font-weight="700">10</text><text x="49" y="27" fill="#f7fbff" font-size="17" font-weight="700">Dependency DAG</text><text x="16" y="51" fill="#9fb0c5" font-size="13">100% rule partition</text><text x="16" y="69" fill="#9fb0c5" font-size="13">cycle condensation</text></g>
+    </g>
+
+    <g transform="translate(270 596)">
+      <rect width="1255" height="102" rx="18" fill="#211f3b" stroke="#5d5294"/>
+      <text x="22" y="31" fill="#9b8cff" font-size="16" font-weight="700" letter-spacing="2">MODELS + DATA</text>
+      <g transform="translate(347 18)"><rect width="360" height="66" rx="13" fill="#282549" stroke="#9b8cff"/><text x="18" y="28" fill="#9b8cff" font-size="15" font-weight="700">11</text><text x="54" y="28" fill="#f7fbff" font-size="18" font-weight="700">Executable Model Generator</text><text x="18" y="51" fill="#b8b0df" font-size="14">DMN · selective BPMN · CMMN · SBVR · LExec</text></g>
+      <g transform="translate(729 18)"><rect width="360" height="66" rx="13" fill="#282549" stroke="#9b8cff"/><text x="18" y="28" fill="#9b8cff" font-size="15" font-weight="700">12</text><text x="54" y="28" fill="#f7fbff" font-size="18" font-weight="700">Business Information Model</text><text x="18" y="51" fill="#b8b0df" font-size="14">LinkML · JSON Schema · diagrams</text></g>
+    </g>
+
+    <g transform="translate(270 712)">
+      <rect width="1255" height="86" rx="18" fill="#252136" stroke="#8a6f3e"/>
+      <text x="22" y="31" fill="#ffbd66" font-size="16" font-weight="700" letter-spacing="2">HUMAN EXPLORATION</text>
+      <g transform="translate(510 10)"><rect width="555" height="66" rx="13" fill="#302b3c" stroke="#ffbd66"/><text x="20" y="28" fill="#ffbd66" font-size="15" font-weight="700">13</text><text x="58" y="28" fill="#f7fbff" font-size="18" font-weight="700">Business Knowledge Report</text><text x="20" y="51" fill="#c7bda9" font-size="14">self-contained HTML · rules · models · source traceability</text></g>
+    </g>
+  </g>
+
+  <text x="75" y="850" fill="#f7fbff" font-family="Inter,Arial,sans-serif" font-size="22" font-weight="650">Design principle: the writer, repairer, verifier, and presenter do not share one undifferentiated responsibility.</text>
+  <text x="1280" y="850" fill="#7186a1" font-family="Inter,Arial,sans-serif" font-size="16">Repository state · Sep 2026</text>
+</svg>
