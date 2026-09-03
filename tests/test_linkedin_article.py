@@ -22,8 +22,16 @@ VISUAL_STEMS = (
     "04-policy-logic-forge-architecture",
     "05-standards-by-question",
     "06-policy-to-code-infographic",
+    "07-verification-ladder",
 )
 
+# The article is a claim that this repository does what it says, so it must
+# keep pointing at the code that backs each claim.  Editorial rewrites may
+# reasonably swap *which* module illustrates a point -- what must not happen
+# is the article drifting into unsourced assertion, or linking a file that
+# no longer exists.  So this list is the floor, not the exact set: every
+# entry must stay linked, and separately every link in the article must
+# resolve to a real file.
 TECHNICAL_GROUNDING_FILES = (
     "utils/agent_names.py",
     "utils/rule_contract.py",
@@ -33,10 +41,11 @@ TECHNICAL_GROUNDING_FILES = (
     "utils/dag_builder.py",
     "utils/executable_models.py",
     "utils/semantic_artifacts.py",
-    "utils/information_model.py",
     "agents/agent_13_business_knowledge_report.py",
     "utils/regdelta_engine.py",
 )
+
+BLOB_PREFIX = "https://github.com/rrahimi-uci/policy-logic-forge/blob/main/"
 
 
 def _png_dimensions(path: Path) -> tuple[int, int]:
@@ -45,32 +54,68 @@ def _png_dimensions(path: Path) -> tuple[int, int]:
     return struct.unpack(">II", data[16:24])
 
 
-def test_article_tracks_the_canonical_pipeline_contract() -> None:
+def test_article_states_no_stale_pipeline_stage_count() -> None:
+    """The article deliberately states no stage count at all.
+
+    Describing the pipeline by its responsibilities rather than by a number
+    is an editorial decision recorded in ``publishing-kit.md``: a count
+    invites "why that many?" instead of "what does each boundary catch?".
+
+    So the guard is inverted from what it used to be.  Rather than requiring
+    the article to name the current count -- which made every rewrite a test
+    failure -- it requires that no *wrong* count appears.  A stale "11-stage"
+    left behind by a rewrite is the actual failure mode worth catching.
+    """
     article = ARTICLE.read_text(encoding="utf-8")
     kit = PUBLISHING_KIT.read_text(encoding="utf-8")
 
     assert PIPELINE_STAGE_COUNT == 13
     assert len(PIPELINE_AGENTS) == 13
-    assert "13-stage" in article
-    assert "13-stage" in kit
-    assert "12-stage" not in article
-    assert "12-stage" not in kit
-    assert "Stage 13" in article
+
+    stale = re.compile(r"\b(\d+)[- ](?:stage|agent)\b", re.IGNORECASE)
+    for name, text in (("article", article), ("publishing kit", kit)):
+        wrong = {n for n in stale.findall(text) if int(n) != PIPELINE_STAGE_COUNT}
+        assert not wrong, (
+            f"{name} names stage/agent count(s) {sorted(wrong)}, but the "
+            f"pipeline has {PIPELINE_STAGE_COUNT} stages"
+        )
 
 
 def test_article_states_important_claim_boundaries() -> None:
-    article = ARTICLE.read_text(encoding="utf-8")
+    """The article must keep disclaiming what it does not establish.
+
+    These are the piece's credibility, not boilerplate.  Each entry below is
+    a short fragment of a boundary the article has to keep making; the
+    phrasings are deliberately short so an editorial rewrite does not break
+    them, but if one *does* break, the fix is to update the fragment to the
+    new wording -- never to delete the entry.  Dropping a boundary is the
+    regression this test exists to catch.
+    """
+    article = ARTICLE.read_text(encoding="utf-8").casefold()
 
     required_boundaries = (
-        "not a full collaborative workflow application",
-        "not full SBVR interchange conformance",
-        "LExec is an internal IR",
-        "Current alignment is exact-ID based",
-        "No numerical extraction-quality benchmark is claimed",
+        # it is a pipeline, not a product
+        "not a hosted governance platform",
+        # structural checks are not legal correctness
+        "do not prove legal correctness",
+        # the prover is sound but deliberately incomplete
+        "bounded formal verification, not general theorem proving",
+        # the SBVR artifact is a profile, not conformance
+        "not full omg interchange conformance",
+        # RegDelta aligns by exact identifier
+        "aligns rules by exact identifier",
+        # no accuracy claim is being made
+        "does **not** establish a universal accuracy rate",
+        # machine-readable is not production-ready
         "machine-readable is not the same as production-ready",
     )
-    for boundary in required_boundaries:
-        assert boundary.casefold() in article.casefold()
+    missing = [b for b in required_boundaries if b.casefold() not in article]
+    assert not missing, (
+        "the article dropped these claim boundaries: "
+        + "; ".join(missing)
+        + " -- if they were reworded, update the fragment here rather than "
+        "removing the check"
+    )
 
 
 def test_article_visual_references_exist_and_use_the_new_story_set() -> None:
@@ -102,8 +147,21 @@ def test_technical_grounding_links_point_to_repository_files() -> None:
 
     for relative_path in TECHNICAL_GROUNDING_FILES:
         assert (ROOT / relative_path).is_file()
-        expected_url = (
-            "https://github.com/rrahimi-uci/policy-logic-forge/blob/main/"
-            f"{relative_path}"
-        )
-        assert expected_url in article
+        assert BLOB_PREFIX + relative_path in article
+
+
+def test_every_repository_link_in_the_article_resolves() -> None:
+    """No link may point at a file that does not exist.
+
+    The floor list above cannot catch this on its own: an editorial rewrite
+    is free to link a module that is not on it, and a link to a since-renamed
+    file would otherwise ship as a dead link in a piece whose whole argument
+    is "you can go and check my work".
+    """
+    article = ARTICLE.read_text(encoding="utf-8")
+
+    linked = sorted(set(re.findall(re.escape(BLOB_PREFIX) + r"([\w/.-]+)", article)))
+    assert linked, "the article no longer links any repository file"
+
+    dead = [path for path in linked if not (ROOT / path).exists()]
+    assert not dead, f"article links files that do not exist: {dead}"

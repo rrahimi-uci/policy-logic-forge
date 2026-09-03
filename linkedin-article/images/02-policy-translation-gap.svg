@@ -33,12 +33,12 @@
 
   <text x="82" y="535" fill="#f7fbff" font-family="Inter,Arial,sans-serif" font-size="27" font-weight="700">What can disappear across manual handoffs?</text>
   <g font-family="Inter,Arial,sans-serif">
-    <g transform="translate(82 575)"><rect width="218" height="110" rx="18" fill="#10233d" stroke="#2c4563"/><text x="24" y="42" fill="#31d6c6" font-size="17" font-weight="700">ACTOR</text><text x="24" y="75" fill="#f7fbff" font-size="21">Who is responsible?</text></g>
-    <g transform="translate(323 575)"><rect width="218" height="110" rx="18" fill="#10233d" stroke="#2c4563"/><text x="24" y="42" fill="#54b8ff" font-size="17" font-weight="700">TRIGGER</text><text x="24" y="75" fill="#f7fbff" font-size="21">What starts it?</text></g>
-    <g transform="translate(564 575)"><rect width="218" height="110" rx="18" fill="#10233d" stroke="#2c4563"/><text x="24" y="42" fill="#ffbd66" font-size="17" font-weight="700">TIMING</text><text x="24" y="75" fill="#f7fbff" font-size="21">When is it due?</text></g>
-    <g transform="translate(805 575)"><rect width="218" height="110" rx="18" fill="#10233d" stroke="#2c4563"/><text x="24" y="42" fill="#ff8795" font-size="17" font-weight="700">EXCEPTION</text><text x="24" y="75" fill="#f7fbff" font-size="19">What changes the rule?</text></g>
-    <g transform="translate(1046 575)"><rect width="218" height="110" rx="18" fill="#10233d" stroke="#2c4563"/><text x="24" y="42" fill="#9b8cff" font-size="17" font-weight="700">SCOPE</text><text x="24" y="75" fill="#f7fbff" font-size="21">Where does it apply?</text></g>
-    <g transform="translate(1287 575)"><rect width="231" height="110" rx="18" fill="#10233d" stroke="#2c4563"/><text x="24" y="42" fill="#31d6c6" font-size="17" font-weight="700">EVIDENCE</text><text x="24" y="75" fill="#f7fbff" font-size="19">Which passage proves it?</text></g>
+    <g transform="translate(82 575)"><rect width="218" height="110" rx="18" fill="#10233d" stroke="#2c4563"/><text x="24" y="42" fill="#31d6c6" font-size="17" font-weight="700">ACTOR</text><text x="24" y="75" fill="#f7fbff" font-size="19">Who is responsible?</text></g>
+    <g transform="translate(323 575)"><rect width="218" height="110" rx="18" fill="#10233d" stroke="#2c4563"/><text x="24" y="42" fill="#54b8ff" font-size="17" font-weight="700">TRIGGER</text><text x="24" y="75" fill="#f7fbff" font-size="19">What starts it?</text></g>
+    <g transform="translate(564 575)"><rect width="218" height="110" rx="18" fill="#10233d" stroke="#2c4563"/><text x="24" y="42" fill="#ffbd66" font-size="17" font-weight="700">TIMING</text><text x="24" y="75" fill="#f7fbff" font-size="19">When is it due?</text></g>
+    <g transform="translate(805 575)"><rect width="218" height="110" rx="18" fill="#10233d" stroke="#2c4563"/><text x="24" y="42" fill="#ff8795" font-size="17" font-weight="700">EXCEPTION</text><text x="24" y="75" fill="#f7fbff" font-size="19">What changes it?</text></g>
+    <g transform="translate(1046 575)"><rect width="218" height="110" rx="18" fill="#10233d" stroke="#2c4563"/><text x="24" y="42" fill="#9b8cff" font-size="17" font-weight="700">SCOPE</text><text x="24" y="75" fill="#f7fbff" font-size="19">Where does it apply?</text></g>
+    <g transform="translate(1287 575)"><rect width="231" height="110" rx="18" fill="#10233d" stroke="#2c4563"/><text x="24" y="42" fill="#31d6c6" font-size="17" font-weight="700">EVIDENCE</text><text x="24" y="75" fill="#f7fbff" font-size="19">What proves it?</text></g>
   </g>
 
   <rect x="82" y="738" width="1436" height="82" rx="18" fill="#10233d" stroke="#31d6c6" stroke-opacity=".55"/>

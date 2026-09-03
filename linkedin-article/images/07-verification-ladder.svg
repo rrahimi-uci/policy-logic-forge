@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="title desc">
+  <title id="title">Four kinds of verification, in order of strength</title>
+  <desc id="desc">Most verification questions are decided deterministically by string resolution, set membership, schema invariants and dataflow tests. A bounded prover discharges proof obligations such as pairwise disjointness for UNIQUE decision tables, returning proved only when the enumeration was exhaustive and unknown otherwise. A model is used only where judgment is irreducible, and it never sees the prior answer. Human expertise is reserved for legal correctness.</desc>
+  <defs>
+    <linearGradient id="bg7" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#071426"/><stop offset="1" stop-color="#101a30"/></linearGradient>
+  </defs>
+  <rect width="1600" height="900" fill="url(#bg7)"/>
+
+  <text x="80" y="90" fill="#31d6c6" font-family="Inter,Arial,sans-serif" font-size="22" font-weight="700" letter-spacing="3">HOW A CLAIM IS CHECKED</text>
+  <text x="80" y="153" fill="#f7fbff" font-family="Inter,Arial,sans-serif" font-size="46" font-weight="750">Most verification is not a matter of opinion.</text>
+  <text x="80" y="197" fill="#b4c4d9" font-family="Inter,Arial,sans-serif" font-size="22">Push every question down to the strongest check that can settle it — and judge only what is left.</text>
+
+  <g font-family="Inter,Arial,sans-serif">
+
+    <!-- 1. deterministic -->
+    <rect x="80" y="248" width="1440" height="138" rx="20" fill="#12291f" stroke="#31d6c6" stroke-width="2"/>
+    <rect x="80" y="248" width="9" height="138" rx="4" fill="#31d6c6"/>
+    <text x="118" y="288" fill="#31d6c6" font-size="16" font-weight="700" letter-spacing="2">1 · DETERMINISTIC · NO MODEL</text>
+    <text x="118" y="326" fill="#f7fbff" font-size="27" font-weight="750">Decided by code, reproducible by anyone</text>
+    <text x="118" y="360" fill="#b4c4d9" font-size="19">Does the quote occur in the cited chunk?  ·  Does this rule id exist?  ·  Does the schema hold?  ·  Does B read what A assigns?</text>
+    <rect x="1178" y="272" width="316" height="42" rx="12" fill="#31d6c6" opacity=".16"/>
+    <text x="1336" y="300" text-anchor="middle" fill="#7de4ce" font-size="17" font-weight="700">most claims land here</text>
+
+    <!-- 2. solver -->
+    <rect x="80" y="404" width="1440" height="118" rx="20" fill="#122a40" stroke="#54b8ff" stroke-width="2"/>
+    <rect x="80" y="404" width="9" height="118" rx="4" fill="#54b8ff"/>
+    <text x="118" y="444" fill="#54b8ff" font-size="16" font-weight="700" letter-spacing="2">2 · PROOF · BOUNDED, SOUND, INCOMPLETE BY DESIGN</text>
+    <text x="118" y="482" fill="#f7fbff" font-size="27" font-weight="750">Proved exhaustively — or returned as unknown</text>
+    <text x="118" y="510" fill="#b4c4d9" font-size="19">Does this UNIQUE table satisfy pairwise disjointness?  ·  Can this condition be satisfied at all?</text>
+
+    <!-- 3. model -->
+    <rect x="80" y="540" width="1440" height="138" rx="20" fill="#2a2440" stroke="#9b8cff" stroke-width="2"/>
+    <rect x="80" y="540" width="9" height="138" rx="4" fill="#9b8cff"/>
+    <text x="118" y="580" fill="#9b8cff" font-size="16" font-weight="700" letter-spacing="2">3 · MODEL · ONLY WHERE JUDGMENT IS IRREDUCIBLE</text>
+    <text x="118" y="618" fill="#f7fbff" font-size="27" font-weight="750">Judged — against fresh evidence, never the prior answer</text>
+    <text x="118" y="652" fill="#b4c4d9" font-size="19">Does this description faithfully state the obligation?  ·  Evidence is rebuilt from the raw corpus, so errors do not correlate.</text>
+
+    <!-- 4. human -->
+    <rect x="80" y="696" width="1440" height="118" rx="20" fill="#2d2318" stroke="#ffbd66" stroke-width="2"/>
+    <rect x="80" y="696" width="9" height="118" rx="4" fill="#ffbd66"/>
+    <text x="118" y="736" fill="#ffbd66" font-size="16" font-weight="700" letter-spacing="2">4 · HUMAN EXPERT · ROUTED, NOT REPLACED</text>
+    <text x="118" y="774" fill="#f7fbff" font-size="27" font-weight="750">Is this a correct reading of the regulation?</text>
+    <text x="118" y="802" fill="#b4c4d9" font-size="19">The one question no check above can answer — which is why it should not be spent on the ones they can.</text>
+  </g>
+
+  <text x="80" y="866" fill="#5d6f86" font-family="Inter,Arial,sans-serif" font-size="16">The difference is not a better judge. It is far fewer questions that need judging — and a proof where a proof is possible.</text>
+</svg>
