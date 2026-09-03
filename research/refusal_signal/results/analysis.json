@@ -1,0 +1,23 @@
+{
+  "n_total": 306,
+  "n_answered": 306,
+  "overall_accuracy": 0.8790849673202614,
+  "acc_covered": 0.8333333333333334,
+  "acc_refused": 0.9,
+  "acc_no_rule": 0.875,
+  "h1_fisher_p": 0.36760543564833015,
+  "h1_refused_minus_covered_pp": 6.666666666666665,
+  "h1_verdict": "NOT SUPPORTED - no significant difference",
+  "risk_answer_all": 0.12091503267973858,
+  "risk_refusal_selector": 0.16666666666666663,
+  "coverage_refusal_selector": 0.11764705882352941,
+  "risk_confidence_at_same_coverage": 0.027777777777777776,
+  "aurc_confidence": 0.05351673854176093,
+  "aurc_agreement": null,
+  "h2_refusal_beats_answer_all": false,
+  "confidence_auc": 0.7743896312669547,
+  "confidence_auc_p": 8.88565421242049e-09,
+  "acc_dollar_True": 0.8738738738738738,
+  "acc_dollar_False": 0.882051282051282,
+  "power_80_detectable_gap": 0.25
+}
