@@ -1065,11 +1065,182 @@ def _donut_chart_svg(data: Sequence[tuple[str, int]], *, size: int = 176, stroke
     return f'<div class="donut-wrap">{svg}<ul class="chart-legend">{"".join(legend)}</ul></div>'
 
 
+# ---------------------------------------------------------------------------
+# Information model (agent_12)
+# ---------------------------------------------------------------------------
+
+#: Colour per attribute category, so the same category reads the same way in the
+#: distribution bars, the class cards and the attribute tables.
+_CATEGORY_TINT = {
+    "identifier": "#4251bd", "quantity": "#27c2a5", "temporal": "#7c83fd",
+    "categorical": "#f3a94b", "flag": "#6f7d91", "descriptive": "#d85d69",
+}
+
+_CATEGORY_MEANING = {
+    "identifier": "Names or references something",
+    "quantity": "Measured or counted — amounts, rates, ratios",
+    "temporal": "Points in time and durations",
+    "categorical": "Drawn from a controlled vocabulary",
+    "flag": "Boolean state, usually a rule outcome",
+    "descriptive": "Free text with no further declared structure",
+}
+
+
+def _information_model(information_model_dir: Path | None) -> dict[str, Any]:
+    """Load agent_12's artifacts, or return an empty model if the stage did not run.
+
+    The report is presentation-only and must survive a partial pipeline, so a
+    missing information model produces an explanatory empty state rather than a
+    failure: agent_12 can legitimately be skipped with ``--stages``.
+    """
+    empty: dict[str, Any] = {"present": False, "rows": [], "validation": {}, "schema_text": ""}
+    if information_model_dir is None or not information_model_dir.exists():
+        return empty
+    catalog = information_model_dir / "class_attribute_catalog.json"
+    validation = information_model_dir / "information_model_validation.json"
+    if not catalog.exists():
+        return empty
+    try:
+        rows = json.loads(catalog.read_text(encoding="utf-8"))
+        report = json.loads(validation.read_text(encoding="utf-8")) if validation.exists() else {}
+    except (OSError, json.JSONDecodeError):
+        return empty
+    schema_path = information_model_dir / "business_information_model.yaml"
+    schema_text = ""
+    if schema_path.exists():
+        try:
+            schema_text = schema_path.read_text(encoding="utf-8")
+        except OSError:
+            schema_text = ""
+    return {
+        "present": True,
+        "rows": [row for row in rows if isinstance(row, Mapping)],
+        "validation": report if isinstance(report, Mapping) else {},
+        "schema_text": schema_text,
+    }
+
+
+def _category_bars(counts: Mapping[str, int], total: int) -> str:
+    """Horizontal distribution bars, one per attribute category."""
+    if not total:
+        return '<div class="empty">No attributes were modelled.</div>'
+    rows = []
+    for category, count in sorted(counts.items(), key=lambda item: (-item[1], item[0])):
+        if not count:
+            continue
+        share = count / total * 100
+        tint = _CATEGORY_TINT.get(category, "#9aa5b8")
+        rows.append(
+            f'<div class="insight-bar-row"><div class="insight-bar-label">'
+            f'<span><span class="im-swatch" style="background:{tint}"></span>{_safe(category)}</span>'
+            f'<span class="muted">{count} · {share:.1f}%</span></div>'
+            f'<div class="insight-bar-track"><span style="width:{share:.2f}%;background:{tint}"></span></div>'
+            f'<div class="muted">{_safe(_CATEGORY_MEANING.get(category, ""))}</div></div>'
+        )
+    return "".join(rows) or '<div class="empty">No attributes were modelled.</div>'
+
+
+def _attribute_row_html(row: Mapping[str, Any], rule_slugs: Mapping[str, str]) -> str:
+    """One attribute, with its type evidence and a link back to each source rule."""
+    category = str(row.get("category") or "")
+    tint = _CATEGORY_TINT.get(category, "#9aa5b8")
+    unit = str(row.get("unit") or "")
+    unit_html = f'<span class="im-unit">{_safe(unit)}</span>' if unit else ""
+    basis = str(row.get("type_basis") or "")
+    basis_html = (
+        f'<span class="im-basis im-basis-{_safe(basis)}">{_safe(basis)}</span>' if basis else ""
+    )
+    constraints = [str(item) for item in _list(row.get("constraints"))]
+    values = [str(item) for item in _list(row.get("allowed_values"))]
+    constraint_html = "".join(f'<code class="im-constraint">{_safe(item)}</code>' for item in constraints)
+    if values:
+        shown = values[:6]
+        constraint_html += "".join(f'<span class="im-value">{_safe(item)}</span>' for item in shown)
+        if len(values) > len(shown):
+            constraint_html += f'<span class="muted">+{len(values) - len(shown)} more</span>'
+    rules = [item.strip() for item in str(row.get("source_rules") or "").split(",") if item.strip()]
+    rule_html = "".join(
+        f'<a class="evidence-link" href="#rule-{_safe(rule_slugs[rule])}">{_safe(rule)}</a>'
+        if rule in rule_slugs else f'<span class="evidence-link">{_safe(rule)}</span>'
+        for rule in rules[:6]
+    )
+    if len(rules) > 6:
+        rule_html += f'<span class="muted">+{len(rules) - 6}</span>'
+    review = ""
+    if row.get("needs_review"):
+        review = f'<div class="muted im-review">⚠ {_safe(row.get("review_reasons") or "flagged for review")}</div>'
+    # Held in a name rather than inlined: an f-string expression may not contain
+    # a backslash before Python 3.12, and CI runs 3.11.
+    dash = '<span class="muted">—</span>'
+    return (
+        f'<tr><td><code>{_safe(row.get("attribute"))}</code>'
+        f'<div class="muted">{_safe(row.get("description") or "")}</div>{review}</td>'
+        f'<td><span class="im-type" style="border-color:{tint}">{_safe(row.get("type"))}</span>'
+        f'{unit_html}<div>{basis_html}</div></td>'
+        f'<td><code>{_safe(row.get("multiplicity"))}</code></td>'
+        f'<td class="im-constraints">{constraint_html or dash}</td>'
+        f'<td>{rule_html or dash}</td></tr>'
+    )
+
+
+def _class_card_html(class_name: str, rows: Sequence[Mapping[str, Any]],
+                     rule_slugs: Mapping[str, str]) -> str:
+    """One collapsible class, its category mix, and its full attribute table."""
+    stereotype = str((rows[0].get("class_stereotype") if rows else "") or "entity")
+    counts: dict[str, int] = defaultdict(int)
+    for row in rows:
+        counts[str(row.get("category") or "")] += 1
+    chips = "".join(
+        f'<span class="im-chip" style="--tint:{_CATEGORY_TINT.get(category, "#9aa5b8")}">'
+        f'{_safe(category)} · {count}</span>'
+        for category, count in sorted(counts.items(), key=lambda item: (-item[1], item[0])) if category
+    )
+    relationships = sum(1 for row in rows if row.get("element_kind") == "relationship")
+    required = sum(1 for row in rows if row.get("required"))
+    search = " ".join(
+        [class_name, stereotype] + [str(row.get("attribute") or "") for row in rows]
+        + [str(row.get("type") or "") for row in rows]
+    ).lower()
+    body = "".join(_attribute_row_html(row, rule_slugs) for row in rows)
+    return (
+        f'<article class="im-class-card" id="im-class-{_safe(_slug(class_name))}" '
+        f'data-search="{_safe(search)}" data-stereotype="{_safe(stereotype)}" '
+        f'data-categories="{_safe(" ".join(sorted(c for c in counts if c)))}">'
+        f'<div class="im-class-head"><div><div class="im-class-name">{_safe(class_name)}</div>'
+        f'<div class="muted">&laquo;{_safe(stereotype)}&raquo;</div></div>'
+        f'<div class="im-class-counts"><strong>{len(rows)}</strong><span class="muted">attributes</span></div></div>'
+        f'<div class="im-chip-row">{chips}</div>'
+        f'<div class="muted im-class-meta">{required} required · {relationships} relationship(s)</div>'
+        f'<details><summary>Attribute catalog</summary><div class="table-wrap im-table-wrap"><table>'
+        f'<thead><tr><th>Attribute</th><th>Type</th><th>Multiplicity</th>'
+        f'<th>Constraints &amp; allowed values</th><th>Declared by</th></tr></thead>'
+        f'<tbody>{body}</tbody></table></div></details></article>'
+    )
+
+
+def _validation_check_rows(validation: Mapping[str, Any]) -> str:
+    by_check = _mapping(_mapping(validation.get("counts")).get("by_check"))
+    if not by_check:
+        return '<tr><td colspan="3">No validation report was produced.</td></tr>'
+    rows = []
+    for check, count in by_check.items():
+        status = "pass" if not count else "review_required"
+        label = "clean" if not count else f"{count} finding(s)"
+        rows.append(
+            f'<tr><td>{_safe(_humanize(str(check)))}</td>'
+            f'<td><span class="status status-{status}">{"PASS" if not count else "REVIEW"}</span></td>'
+            f'<td class="muted">{_safe(label)}</td></tr>'
+        )
+    return "".join(rows)
+
+
 def _validate_report_html(document: str, rule_ids: Sequence[str], source_anchors: Sequence[str]) -> None:
     """Validate the non-network, single-document report contract."""
     required = (
         '<!doctype html>', 'id="report-data"',
-        'data-tab="overview"', 'data-tab="vocabulary"', 'data-tab="rules"', 'data-tab="dependencies"', 'data-tab="sources"',
+        'data-tab="overview"', 'data-tab="vocabulary"', 'data-tab="rules"', 'data-tab="dependencies"',
+        'data-tab="information-model"', 'data-tab="sources"',
+        'id="information-model"',
         'id="concept-search"', 'id="concept-grid"', 'id="fact-types"',
         'dependency-graph-shell', 'dependency-graph-scroll', 'id="dep-side-panel"',
         'model-badges', 'readiness-score', 'score-factors', 'score-definition', 'trace-path',
@@ -1224,6 +1395,7 @@ def generate(
     models_dir: Path | None,
     output_dir: Path,
     organized_dir: Path | None = None,
+    information_model_dir: Path | None = None,
 ) -> dict[str, Any]:
     """Generate the report and return its machine-readable manifest."""
     graph = json.loads(graph_file.read_text(encoding="utf-8"))
@@ -1403,9 +1575,35 @@ def generate(
         ),
         key=lambda item: (-item["rule_links"], -item["fact_links"], item["preferred_term"].casefold()),
     )[:8]
+    # Information model (agent_12). Grouped by class here so the tab can render
+    # a card per class; the catalog rows already carry everything else.
+    info_model = _information_model(information_model_dir)
+    rule_slugs = {str(rule.get("rule_id") or ""): _slug(rule.get("rule_id")) for rule in rules}
+    im_by_class: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
+    for row in info_model["rows"]:
+        im_by_class[str(row.get("class") or "Unassigned")].append(row)
+    im_validation = _mapping(info_model["validation"])
+    im_inventory = _mapping(im_validation.get("inventory"))
+    im_attributes = _mapping(im_inventory.get("attributes"))
+    im_categories = {str(k): int(v) for k, v in _mapping(im_attributes.get("by_category")).items()}
+    im_attribute_total = int(im_attributes.get("total") or 0) or len(info_model["rows"])
+    im_enums = _mapping(im_inventory.get("enumerations"))
+    im_unassigned = _mapping(im_inventory.get("unassigned_attributes"))
+    im_stereotypes = _mapping(_mapping(im_inventory.get("classes")).get("by_stereotype"))
+    im_schema_valid = _mapping(im_validation.get("schema_validation")).get("valid") is True
+    im_severity = _mapping(_mapping(im_validation.get("counts")).get("by_severity"))
+    im_dominant = max(im_categories.items(), key=lambda item: item[1], default=("", 0))
+
     report_data = {
         "title": "Policy Logic Forge · Business Knowledge Report",
         "rule_count": len(rules), "concept_count": concept_supported,
+        "information_model_present": info_model["present"],
+        "information_model_class_count": len(im_by_class),
+        "information_model_attribute_count": im_attribute_total,
+        "information_model_enumeration_count": int(im_enums.get("referenced_by_a_class") or 0),
+        "information_model_unassigned_count": int(im_unassigned.get("total") or 0),
+        "information_model_schema_valid": im_schema_valid,
+        "information_model_attribute_categories": im_categories,
         "automation_readiness_score_average": round(sum(readiness_scores) / max(1, len(readiness_scores)), 1),
         "automation_readiness_score_median": _percentile(readiness_scores, 0.5),
         "automation_readiness_score_p10": _percentile(readiness_scores, 0.1),
@@ -1568,11 +1766,69 @@ def generate(
     ) or '<li class="muted">No connected concepts were reported.</li>'
     fact_status_rows = "".join(f'<tr><td>{_safe(status)}</td><td>{count}</td><td>{_percent(count, len(fact_types)):.1f}%</td></tr>' for status, count in sorted(fact_status_counts.items(), key=lambda item: (-item[1], item[0]))) or '<tr><td>Not reported</td><td>0</td><td>0.0%</td></tr>'
 
+    # The information-model tab is assembled here rather than inline: it is the
+    # one section whose upstream stage may legitimately not have run, so it has
+    # two shapes and an inline conditional would be unreadable.
+    if not info_model["present"]:
+        information_model_section = (
+            '<div class="panel"><div class="eyebrow">Business information model</div>'
+            '<h2>Not generated for this run</h2>'
+            '<p class="muted">Stage 12 (<code>agent_12</code>) produces the LinkML business '
+            'information model — the typed picture of the business data these rules operate on. '
+            'It did not run for this batch, so there is nothing to show here.</p>'
+            '<div class="callout">Run <code>python3 cli/extract.py --stage 12</code> against this '
+            'batch, then regenerate this report.</div></div>'
+        )
+    else:
+        im_class_cards = "".join(
+            _class_card_html(class_name, rows, rule_slugs)
+            for class_name, rows in sorted(im_by_class.items(), key=lambda item: (-len(item[1]), item[0]))
+        )
+        im_stereotype_options = "".join(
+            f'<option value="{_safe(name)}">{_safe(name)}</option>' for name in sorted(im_stereotypes)
+        )
+        im_category_options = "".join(
+            f'<option value="{_safe(name)}">{_safe(name)}</option>'
+            for name in sorted(c for c, n in im_categories.items() if n)
+        )
+        schema_state = (
+            '<span class="status status-pass">VALID</span>' if im_schema_valid
+            else '<span class="status status-fail">INVALID</span>'
+        )
+        dominant_note = ""
+        if im_dominant[1] and im_attribute_total:
+            share = im_dominant[1] / im_attribute_total * 100
+            dominant_note = (
+                f'<div class="callout"><strong>{share:.0f}%</strong> of modelled attributes are '
+                f'<strong>{_safe(im_dominant[0])}</strong>. '
+                f'{_safe(_CATEGORY_MEANING.get(im_dominant[0], ""))}.'
+                + (' A model dominated by rule-outcome booleans describes what was decided, '
+                   'not what the business holds state about.' if im_dominant[0] == "flag" else "")
+                + '</div>'
+            )
+        schema_block = ""
+        if info_model["schema_text"]:
+            schema_block = (
+                '<div class="panel"><div class="eyebrow">Canonical artifact</div>'
+                '<h3>LinkML schema</h3><p class="muted">This is the model itself — every other '
+                'view on this tab, and the generated JSON Schema, SHACL, OWL and SQL DDL, are '
+                'projections of it. Embedded here so the schema travels with the report.</p>'
+                f'<details><summary>View <code>business_information_model.yaml</code> '
+                f'({len(info_model["schema_text"]):,} bytes)</summary>'
+                f'<pre class="im-schema">{_safe(info_model["schema_text"])}</pre></details></div>'
+            )
+        information_model_section = f'''<div class="panel"><div class="eyebrow">Business information model</div><h2>The data these rules operate on</h2><p>Every rule tests and sets business values. This is those values, modelled: classes with typed attributes, units, multiplicity, constraints and controlled vocabularies — derived from what the rules declare, not guessed from names. The canonical form is a <strong>LinkML schema</strong>, which is why it can be validated and generated from rather than merely read.</p>
+<div class="insight-grid"><div class="insight-card"><h3>Classes</h3><div class="metric-value">{len(im_by_class)}</div><div class="muted">{_safe(", ".join(f"{n} {k}" for k, n in sorted(im_stereotypes.items())) or "—")}</div></div><div class="insight-card"><h3>Attributes</h3><div class="metric-value">{im_attribute_total}</div><div class="muted">{report_data["information_model_unassigned_count"]} held for review, unplaced</div></div><div class="insight-card"><h3>Enumerations</h3><div class="metric-value">{report_data["information_model_enumeration_count"]}</div><div class="muted">{int(im_enums.get("total") or 0)} detected · {int(im_enums.get("single_valued") or 0)} single-valued</div></div><div class="insight-card"><h3>Schema validity</h3><div class="metric-value">{schema_state}</div><div class="muted">checked against LinkML's own metamodel</div></div></div>
+{dominant_note}
+<div class="grid-2"><div class="panel"><h3>What kind of values the model holds</h3><p class="muted">Every attribute falls into exactly one category, derived from its business type alone — so this reads the same way in any domain.</p>{_category_bars(im_categories, im_attribute_total)}</div><div class="panel"><h3>Model validation</h3><p class="muted">Ten domain checks plus the LinkML metamodel check. They report and repair nothing: a validator that silently fixes what it finds cannot also tell you how good the model was.</p><div class="table-wrap" style="max-height:340px"><table><thead><tr><th>Check</th><th>Result</th><th>Detail</th></tr></thead><tbody>{_validation_check_rows(im_validation)}</tbody></table></div><div class="muted" style="margin-top:10px">{int(im_severity.get("error") or 0)} error · {int(im_severity.get("review") or 0)} for review</div></div></div></div>
+<div class="panel"><div class="eyebrow">Class explorer</div><h3>Browse the domain by class</h3><p class="muted">Expand a class for its full attribute catalog: type, declared unit, multiplicity, constraints, allowed values, and the rules that declared each one. Attribute links land on the rule, which links on to its source text.</p><div class="vocabulary-toolbar"><input id="im-search" type="search" placeholder="Search classes, attributes, types…"><select id="im-stereotype"><option value="">All class kinds</option>{im_stereotype_options}</select><select id="im-category"><option value="">All value categories</option>{im_category_options}</select><output id="im-count" for="im-search"></output></div><div id="im-class-grid" class="im-class-grid">{im_class_cards or '<div class="empty">No classes were modelled.</div>'}</div></div>
+{schema_block}'''
+
     report_html = f'''<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Business Knowledge Report</title>
 <style>
 :root{{--ink:#17253d;--muted:#6f7d91;--line:#e4eaf2;--paper:#fff;--wash:#f5f8fc;--teal:#27c2a5;--violet:#7c83fd;--amber:#f3a94b;--red:#d85d69;--shadow:0 18px 50px rgba(23,37,61,.08)}}*{{box-sizing:border-box}}body{{margin:0;color:var(--ink);background:var(--wash);font:14px/1.5 Inter,ui-sans-serif,system-ui,-apple-system,sans-serif}}a{{color:#4251bd;text-decoration:none}}a:hover{{text-decoration:underline}}button,input,select{{font:inherit}}.shell{{max-width:1560px;margin:auto;padding:26px}}header.hero{{background:linear-gradient(125deg,#17253d,#2b4169 55%,#5165ce);border-radius:24px;color:#fff;padding:34px;box-shadow:var(--shadow);position:relative;overflow:hidden}}header.hero:after{{content:"";position:absolute;width:320px;height:320px;border-radius:50%;right:-90px;top:-130px;background:rgba(39,194,165,.22)}}.eyebrow{{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--teal);font-weight:800}}.hero h1{{font-size:clamp(28px,4vw,48px);line-height:1.05;max-width:800px;margin:10px 0}}.hero p{{max-width:800px;color:#dce7f7;font-size:16px}}.metric-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin:18px 0 26px}}.metric-card,.panel,.model-card{{background:var(--paper);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow)}}.metric-card{{padding:18px}}.metric-value{{font-size:27px;font-weight:800}}.metric-label{{font-weight:750;margin-top:2px}}.metric-detail,.muted{{color:var(--muted);font-size:12px}}nav.tabs{{display:flex;gap:8px;flex-wrap:wrap;margin:20px 0}}nav.tabs button{{border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:999px;padding:10px 16px;cursor:pointer;font-weight:700}}nav.tabs button.active{{background:var(--ink);color:#fff;border-color:var(--ink)}}section.tab{{display:none}}section.tab.active{{display:block}}.panel{{padding:22px;margin:14px 0}}.panel h2,.panel h3{{margin-top:0}}.grid-2{{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px}}table{{width:100%;border-collapse:collapse}}th,td{{padding:11px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}}th{{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);background:#f8fafd;position:sticky;top:0;z-index:1}}tr:hover td{{background:#fbfcff}}.table-wrap{{overflow:auto;max-height:720px;border:1px solid var(--line);border-radius:12px}}.toolbar{{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0}}.toolbar input,.toolbar select{{border:1px solid var(--line);border-radius:9px;padding:9px 11px;background:#fff;min-width:190px}}.status{{display:inline-block;border-radius:999px;padding:3px 8px;font-size:11px;font-weight:800;background:#e9f7f3;color:#087760}}.status-review_required,.status-unresolved{{background:#fff1df;color:#92570a}}.status-fail,.status-contradicted{{background:#ffe8eb;color:#9d2937}}details summary{{cursor:pointer;color:#4251bd;font-weight:650}}pre{{white-space:pre-wrap;word-break:break-word;background:#f7f9fc;border-radius:9px;padding:12px;font:12px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace;max-height:360px;overflow:auto}}.evidence-link{{display:inline-block;margin:2px 4px 2px 0;padding:2px 7px;border-radius:99px;background:#eef1ff;font-size:11px}}.model-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:14px}}.model-card{{padding:18px}}.model-svg{{width:100%;height:auto;background:#fbfcff;border-radius:12px;margin-top:10px}}.svg-title{{font-size:16px;font-weight:800;fill:var(--ink)}}.svg-label{{font-size:11px;fill:var(--ink)}}.svg-empty{{font-size:12px;fill:var(--muted)}}.source-card{{border:1px solid var(--line);background:#fff;border-radius:12px;padding:16px;margin:10px 0;scroll-margin-top:20px}}.source-card h4{{margin:0 0 4px;font-size:14px;word-break:break-all}}.source-meta{{color:var(--muted);font-size:11px;margin-bottom:8px}}.callout{{border-left:4px solid var(--teal);padding:12px 16px;background:#effaf7;border-radius:8px}}.empty{{padding:30px;text-align:center;color:var(--muted)}}footer{{padding:28px 0;color:var(--muted);font-size:12px}}@media(max-width:700px){{.shell{{padding:12px}}header.hero{{padding:24px 20px}}th,td{{min-width:130px}}}}
- .insight-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;margin:16px 0}}.insight-card{{background:linear-gradient(145deg,#f7fbff,#fff);border:1px solid var(--line);border-radius:14px;padding:16px}}.insight-card .metric-value{{font-size:24px}}.insight-card h3{{font-size:13px;margin:0 0 4px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}}.insight-bar-row{{margin:12px 0}}.insight-bar-label{{display:flex;justify-content:space-between;gap:12px;text-transform:capitalize}}.insight-bar-track{{height:8px;background:#edf1f7;border-radius:99px;overflow:hidden;margin:6px 0 3px}}.insight-bar-track span{{display:block;height:100%;border-radius:99px}}.insight-list{{margin:0;padding:0;list-style:none}}.insight-list li{{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid var(--line)}}.insight-list li:last-child{{border-bottom:0}}.concept-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(310px,1fr));gap:14px;margin-top:16px}}.concept-card{{background:#fff;border:1px solid var(--line);border-radius:16px;padding:18px;box-shadow:0 10px 28px rgba(23,37,61,.05);scroll-margin-top:20px}}.concept-card:hover{{border-color:#b9c4ff;box-shadow:0 14px 34px rgba(66,81,189,.12)}}.concept-card-head{{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}}.concept-term{{font-size:18px;font-weight:800;line-height:1.2}}.concept-card p{{color:#4e5e73;min-height:42px}}.concept-meta{{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0;color:var(--muted);font-size:12px}}.concept-meta span{{padding:5px 8px;background:#f5f7fb;border-radius:999px}}.concept-detail{{display:grid;gap:12px;padding-top:10px}}.concept-detail strong{{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}}.vocabulary-toolbar{{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:14px 0}}.vocabulary-toolbar input,.vocabulary-toolbar select{{border:1px solid var(--line);border-radius:9px;padding:9px 11px;background:#fff;min-width:190px}}.vocabulary-toolbar output{{color:var(--muted);font-size:12px}}.fact-table{{margin-top:18px}}.status-case_management{{background:#eef1ff;color:#4251bd}}.status-human_review{{background:#ffe8eb;color:#9d2937}}.status-machine_repair{{background:#e9f7f3;color:#087760}}.status-presented{{background:#e9f7f3;color:#087760}}.status-unverified{{background:#fff1df;color:#92570a}}.status-grounding-failed{{background:#ffe8eb;color:#9d2937}}.status-grounding-certified{{background:#e9f7f3;color:#087760}}.status-grounding-unknown{{background:#f0f2f6;color:#5d6b7e}}.status-stack{{display:flex;flex-wrap:wrap;gap:5px}}.confidence-score{{display:flex;align-items:baseline;gap:6px;margin-top:7px}}.logic-details{{min-width:250px}}.logic-details summary{{display:flex;align-items:center;justify-content:space-between;gap:8px}}.logic-summary{{font-weight:800;color:#4251bd}}.formal-logic{{padding:14px 0 4px}}.logic-expression{{padding:12px 14px;background:#17253d;color:#eef4ff;border-radius:10px;font:12px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;overflow:auto}}.logic-keyword{{color:#7de4ce;font-weight:900;margin:0 4px}}.logic-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;margin-top:14px}}.logic-grid h4{{margin:0 0 7px;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}}.logic-list{{border:1px solid var(--line);border-radius:10px;overflow:hidden}}.logic-row{{display:flex;align-items:flex-start;gap:8px;padding:8px 10px;border-bottom:1px solid var(--line);background:#fff}}.logic-row:last-child{{border-bottom:0}}.logic-index{{flex:0 0 auto;color:#4251bd;font:700 11px ui-monospace,SFMono-Regular,Menlo,monospace}}.logic-row code{{font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;overflow-wrap:anywhere}}.logic-type{{margin-left:auto;flex:0 0 auto;color:var(--muted);font-size:11px}}.logic-raw{{margin-top:12px}}.logic-raw pre{{max-height:260px}}.logic-if{{margin-bottom:10px}}.logic-then-row{{display:flex;align-items:flex-start;gap:8px;flex-wrap:wrap}}.logic-then{{display:flex;flex-wrap:wrap;gap:6px;flex:1}}.outcome-chip{{display:inline-flex;align-items:center;gap:5px;padding:4px 9px;border-radius:7px;background:rgba(124,131,253,.22);font:12px/1.3 ui-monospace,SFMono-Regular,Menlo,monospace}}.outcome-chip .ov-name{{color:#b9c4ff}}.outcome-chip .ov-eq{{color:#7de4ce;font-weight:900}}.outcome-chip .ov-val{{color:#eef4ff;font-weight:700}}.outcome-chip.ov-true{{background:rgba(39,194,165,.26)}}.outcome-chip.ov-true .ov-val{{color:#7de4ce}}.outcome-chip.ov-false{{background:rgba(111,125,145,.24)}}.outcome-chip.ov-false .ov-val{{color:#c3cbdb}}.outcome-grid{{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;border:1px solid var(--line);border-radius:10px;padding:10px;background:#fbfcff}}.outcome-card{{display:flex;flex-direction:column;gap:6px;padding:9px 11px;border-radius:9px;background:#fff;border:1px solid var(--line)}}.outcome-name{{font-size:11.5px;font-weight:700;color:var(--ink);word-break:break-word;display:flex;flex-direction:column;gap:2px}}.outcome-var{{font:11px ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--muted);font-weight:400;word-break:break-all}}.outcome-badge{{align-self:flex-start;display:inline-flex;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:800;max-width:100%;overflow-wrap:anywhere}}.outcome-badge.type-true{{background:#e9f7f3;color:#087760}}.outcome-badge.type-false{{background:#f0f2f6;color:#5d6b7e}}.outcome-badge.type-number{{background:#eef1ff;color:#4251bd}}.outcome-badge.type-text{{background:#fff1df;color:#92570a}}.outcome-badge.type-list{{background:transparent;padding:0;display:flex;flex-wrap:wrap;gap:4px}}.outcome-value-item{{background:#f5f7fb;border:1px solid var(--line);border-radius:999px;padding:3px 9px;font-size:11px;font-weight:700;color:var(--ink)}}.status-unclassified{{background:#f0f2f6;color:#5d6b7e}}.route-card{{border:1px solid var(--line);border-left:4px solid #c7ceda;border-radius:10px;padding:12px 14px;background:#fff;display:flex;flex-direction:column;gap:8px;min-width:230px}}.route-head{{display:flex;align-items:flex-start;gap:10px}}.route-icon{{font-size:18px;line-height:1;flex:0 0 auto}}.route-title{{font-weight:800;font-size:13px;margin-top:3px}}.route-desc{{margin:0;color:var(--muted);font-size:12px;line-height:1.45}}.route-hold{{align-self:flex-start;display:inline-flex;padding:3px 9px;border-radius:999px;font-size:11px;font-weight:800}}.route-hold-yes{{background:#fff1df;color:#92570a}}.route-hold-no{{background:#e9f7f3;color:#087760}}.route-reasons{{margin-top:2px}}.route-reasons summary{{font-size:12px}}.route-badge{{display:inline-flex;align-items:center;gap:5px}}.route-badge-label{{margin-top:3px}}.reason-list{{margin:6px 0 0;padding-left:18px;color:#4e5e73;font-size:12.5px;line-height:1.6}}.route-human_review{{border-left-color:#d85d69}}.route-case_management{{border-left-color:#7c83fd}}.route-machine_repair{{border-left-color:#27c2a5}}.route-none{{border-left-color:#27c2a5}}.route-unclassified{{border-left-color:#9aa5b8}}.model-diagram-empty{{padding:22px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:10px;margin-top:12px}}.status-dmn{{background:#eef1ff;color:#4251bd}}.dmn-table-wrap{{margin-top:2px}}.dmn-table-meta{{display:flex;align-items:center;gap:8px;margin-bottom:8px}}.dmn-table{{min-width:100%}}.dmn-table th,.dmn-table td{{border:1px solid var(--line)}}.dmn-table thead th.dmn-col-input{{background:#f4f7ff;color:#4251bd}}.dmn-table thead th.dmn-col-output{{background:#effaf7;color:#087760;border-left:3px solid var(--teal)}}.dmn-col-type{{display:block;font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted);font-size:10px}}.dmn-table td.dmn-col-output{{border-left:3px solid var(--teal);background:#fbfffd}}.dmn-table td code{{font:12px ui-monospace,SFMono-Regular,Menlo,monospace}}.bpmn-flow{{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-top:4px;padding:16px;background:#fbfcff;border:1px solid var(--line);border-radius:12px}}.bpmn-step{{display:flex;align-items:center;gap:6px}}.bpmn-node{{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-width:120px;min-height:64px;padding:8px 12px;text-align:center;font-size:12px;font-weight:700}}.bpmn-node-event{{border-radius:999px;background:#eef1ff;border:2px solid #7c83fd;color:#4251bd}}.bpmn-node-task{{border-radius:12px;background:#fff;border:1.5px solid var(--line);box-shadow:0 6px 16px rgba(23,37,61,.06)}}.bpmn-node-icon{{font-size:18px}}.bpmn-node-sub{{font-size:10px;font-weight:700;color:var(--teal);text-transform:uppercase;letter-spacing:.04em}}.bpmn-arrow{{color:#7c83fd;font-size:20px;font-weight:900}}.cmmn-plan{{display:flex;flex-wrap:wrap;gap:10px;margin-top:4px}}.cmmn-item{{display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:12px;background:#fff;border:1px solid var(--line);min-width:220px;box-shadow:0 6px 16px rgba(23,37,61,.05)}}.cmmn-item-icon{{font-size:20px}}.cmmn-item-kind{{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}}.cmmn-item-name{{font-weight:700}}.cmmn-human_task{{border-left:4px solid var(--violet)}}.cmmn-milestone{{border-left:4px solid var(--amber)}}@keyframes navHighlight{{0%{{box-shadow:0 0 0 3px rgba(66,81,189,.55)}}100%{{box-shadow:0 0 0 3px rgba(66,81,189,0)}}}}.nav-highlight{{animation:navHighlight 1.6s ease-out;border-radius:10px}}.dependency-graph-shell{{border:1px solid var(--line);border-radius:14px;background:#fbfcff;padding:16px;margin:16px 0}}.dependency-graph-toolbar{{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}}.dependency-graph-toolbar h3{{margin:0}}.dependency-graph-stats{{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}}.graph-layer-chip{{display:inline-flex;align-items:center;gap:4px;border-radius:999px;padding:6px 10px;background:#eef1ff;color:#4251bd;font-size:12px}}.dependency-graph-layout{{display:flex;gap:14px;align-items:flex-start}}.dependency-graph-scroll{{flex:1;min-width:0;overflow:auto;border:1px solid var(--line);border-radius:12px;background:#fff;max-height:760px}}.dependency-graph-svg{{display:block;max-width:none;background:#fff;cursor:grab}}.dependency-graph-svg.grabbing{{cursor:grabbing}}.dependency-lane{{fill:#f7f9fc;stroke:#e4eaf2}}.dependency-layer-label{{fill:#6f7d91;font:700 12px Inter,ui-sans-serif,system-ui,sans-serif}}.dependency-edge{{fill:none;stroke:#7c83fd;stroke-width:1.6;opacity:.62;vector-effect:non-scaling-stroke;transition:opacity .15s,stroke-width .15s}}.dependency-edge:hover,.dependency-edge.active{{stroke:#4251bd;stroke-width:2.8;opacity:1}}.dependency-edge.dimmed{{opacity:.12}}.dependency-node{{cursor:pointer;transition:opacity .15s}}.dependency-node rect{{transition:stroke-width .15s,filter .15s}}.dependency-node.selected rect{{stroke-width:3;filter:drop-shadow(0 0 6px rgba(66,81,189,.45))}}.dependency-node.neighbor rect{{stroke-width:2.4}}.dependency-node.dimmed{{opacity:.22}}.dependency-node-id{{fill:#17253d;font:700 12px ui-monospace,SFMono-Regular,Menlo,monospace}}.dependency-node-degree{{fill:#6f7d91;font:11px Inter,ui-sans-serif,system-ui,sans-serif}}.dependency-graph-empty{{padding:32px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:10px}}.dependency-graph-note{{margin:12px 0 0;color:var(--muted);font-size:12px}}.dep-side-panel{{flex:0 0 260px;border:1px solid var(--line);border-radius:12px;background:#fff;padding:14px;max-height:760px;overflow:auto}}.dep-panel-head{{display:flex;align-items:center;justify-content:space-between;gap:8px;font:700 13px ui-monospace,SFMono-Regular,Menlo,monospace}}.dep-panel-close{{border:0;background:none;font-size:18px;line-height:1;cursor:pointer;color:var(--muted)}}.dep-panel-meta{{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0;font-size:11px}}.dep-panel-meta span{{padding:3px 8px;border-radius:999px;background:#f5f7fb;color:var(--muted)}}.dep-panel-list{{list-style:none;margin:6px 0 0;padding:0}}.dep-panel-list li{{display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid var(--line);font-size:12.5px}}.dep-panel-list li:last-child{{border-bottom:0}}.dep-panel-head+*{{margin-top:2px}}
+ .insight-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;margin:16px 0}}.insight-card{{background:linear-gradient(145deg,#f7fbff,#fff);border:1px solid var(--line);border-radius:14px;padding:16px}}.insight-card .metric-value{{font-size:24px}}.insight-card h3{{font-size:13px;margin:0 0 4px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}}.insight-bar-row{{margin:12px 0}}.insight-bar-label{{display:flex;justify-content:space-between;gap:12px;text-transform:capitalize}}.insight-bar-track{{height:8px;background:#edf1f7;border-radius:99px;overflow:hidden;margin:6px 0 3px}}.insight-bar-track span{{display:block;height:100%;border-radius:99px}}.insight-list{{margin:0;padding:0;list-style:none}}.insight-list li{{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid var(--line)}}.insight-list li:last-child{{border-bottom:0}}.concept-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(310px,1fr));gap:14px;margin-top:16px}}.concept-card{{background:#fff;border:1px solid var(--line);border-radius:16px;padding:18px;box-shadow:0 10px 28px rgba(23,37,61,.05);scroll-margin-top:20px}}.concept-card:hover{{border-color:#b9c4ff;box-shadow:0 14px 34px rgba(66,81,189,.12)}}.concept-card-head{{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}}.concept-term{{font-size:18px;font-weight:800;line-height:1.2}}.concept-card p{{color:#4e5e73;min-height:42px}}.concept-meta{{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0;color:var(--muted);font-size:12px}}.concept-meta span{{padding:5px 8px;background:#f5f7fb;border-radius:999px}}.concept-detail{{display:grid;gap:12px;padding-top:10px}}.concept-detail strong{{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}}.vocabulary-toolbar{{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:14px 0}}.vocabulary-toolbar input,.vocabulary-toolbar select{{border:1px solid var(--line);border-radius:9px;padding:9px 11px;background:#fff;min-width:190px}}.vocabulary-toolbar output{{color:var(--muted);font-size:12px}}.fact-table{{margin-top:18px}}.status-case_management{{background:#eef1ff;color:#4251bd}}.status-human_review{{background:#ffe8eb;color:#9d2937}}.status-machine_repair{{background:#e9f7f3;color:#087760}}.status-presented{{background:#e9f7f3;color:#087760}}.status-unverified{{background:#fff1df;color:#92570a}}.status-grounding-failed{{background:#ffe8eb;color:#9d2937}}.status-grounding-certified{{background:#e9f7f3;color:#087760}}.status-grounding-unknown{{background:#f0f2f6;color:#5d6b7e}}.status-stack{{display:flex;flex-wrap:wrap;gap:5px}}.confidence-score{{display:flex;align-items:baseline;gap:6px;margin-top:7px}}.logic-details{{min-width:250px}}.logic-details summary{{display:flex;align-items:center;justify-content:space-between;gap:8px}}.logic-summary{{font-weight:800;color:#4251bd}}.formal-logic{{padding:14px 0 4px}}.logic-expression{{padding:12px 14px;background:#17253d;color:#eef4ff;border-radius:10px;font:12px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;overflow:auto}}.logic-keyword{{color:#7de4ce;font-weight:900;margin:0 4px}}.logic-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;margin-top:14px}}.logic-grid h4{{margin:0 0 7px;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}}.logic-list{{border:1px solid var(--line);border-radius:10px;overflow:hidden}}.logic-row{{display:flex;align-items:flex-start;gap:8px;padding:8px 10px;border-bottom:1px solid var(--line);background:#fff}}.logic-row:last-child{{border-bottom:0}}.logic-index{{flex:0 0 auto;color:#4251bd;font:700 11px ui-monospace,SFMono-Regular,Menlo,monospace}}.logic-row code{{font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;overflow-wrap:anywhere}}.logic-type{{margin-left:auto;flex:0 0 auto;color:var(--muted);font-size:11px}}.logic-raw{{margin-top:12px}}.logic-raw pre{{max-height:260px}}.logic-if{{margin-bottom:10px}}.logic-then-row{{display:flex;align-items:flex-start;gap:8px;flex-wrap:wrap}}.logic-then{{display:flex;flex-wrap:wrap;gap:6px;flex:1}}.outcome-chip{{display:inline-flex;align-items:center;gap:5px;padding:4px 9px;border-radius:7px;background:rgba(124,131,253,.22);font:12px/1.3 ui-monospace,SFMono-Regular,Menlo,monospace}}.outcome-chip .ov-name{{color:#b9c4ff}}.outcome-chip .ov-eq{{color:#7de4ce;font-weight:900}}.outcome-chip .ov-val{{color:#eef4ff;font-weight:700}}.outcome-chip.ov-true{{background:rgba(39,194,165,.26)}}.outcome-chip.ov-true .ov-val{{color:#7de4ce}}.outcome-chip.ov-false{{background:rgba(111,125,145,.24)}}.outcome-chip.ov-false .ov-val{{color:#c3cbdb}}.outcome-grid{{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;border:1px solid var(--line);border-radius:10px;padding:10px;background:#fbfcff}}.outcome-card{{display:flex;flex-direction:column;gap:6px;padding:9px 11px;border-radius:9px;background:#fff;border:1px solid var(--line)}}.outcome-name{{font-size:11.5px;font-weight:700;color:var(--ink);word-break:break-word;display:flex;flex-direction:column;gap:2px}}.outcome-var{{font:11px ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--muted);font-weight:400;word-break:break-all}}.outcome-badge{{align-self:flex-start;display:inline-flex;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:800;max-width:100%;overflow-wrap:anywhere}}.outcome-badge.type-true{{background:#e9f7f3;color:#087760}}.outcome-badge.type-false{{background:#f0f2f6;color:#5d6b7e}}.outcome-badge.type-number{{background:#eef1ff;color:#4251bd}}.outcome-badge.type-text{{background:#fff1df;color:#92570a}}.outcome-badge.type-list{{background:transparent;padding:0;display:flex;flex-wrap:wrap;gap:4px}}.outcome-value-item{{background:#f5f7fb;border:1px solid var(--line);border-radius:999px;padding:3px 9px;font-size:11px;font-weight:700;color:var(--ink)}}.status-unclassified{{background:#f0f2f6;color:#5d6b7e}}.route-card{{border:1px solid var(--line);border-left:4px solid #c7ceda;border-radius:10px;padding:12px 14px;background:#fff;display:flex;flex-direction:column;gap:8px;min-width:230px}}.route-head{{display:flex;align-items:flex-start;gap:10px}}.route-icon{{font-size:18px;line-height:1;flex:0 0 auto}}.route-title{{font-weight:800;font-size:13px;margin-top:3px}}.route-desc{{margin:0;color:var(--muted);font-size:12px;line-height:1.45}}.route-hold{{align-self:flex-start;display:inline-flex;padding:3px 9px;border-radius:999px;font-size:11px;font-weight:800}}.route-hold-yes{{background:#fff1df;color:#92570a}}.route-hold-no{{background:#e9f7f3;color:#087760}}.route-reasons{{margin-top:2px}}.route-reasons summary{{font-size:12px}}.route-badge{{display:inline-flex;align-items:center;gap:5px}}.route-badge-label{{margin-top:3px}}.reason-list{{margin:6px 0 0;padding-left:18px;color:#4e5e73;font-size:12.5px;line-height:1.6}}.route-human_review{{border-left-color:#d85d69}}.route-case_management{{border-left-color:#7c83fd}}.route-machine_repair{{border-left-color:#27c2a5}}.route-none{{border-left-color:#27c2a5}}.route-unclassified{{border-left-color:#9aa5b8}}.model-diagram-empty{{padding:22px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:10px;margin-top:12px}}.status-dmn{{background:#eef1ff;color:#4251bd}}.dmn-table-wrap{{margin-top:2px}}.dmn-table-meta{{display:flex;align-items:center;gap:8px;margin-bottom:8px}}.dmn-table{{min-width:100%}}.dmn-table th,.dmn-table td{{border:1px solid var(--line)}}.dmn-table thead th.dmn-col-input{{background:#f4f7ff;color:#4251bd}}.dmn-table thead th.dmn-col-output{{background:#effaf7;color:#087760;border-left:3px solid var(--teal)}}.dmn-col-type{{display:block;font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted);font-size:10px}}.dmn-table td.dmn-col-output{{border-left:3px solid var(--teal);background:#fbfffd}}.dmn-table td code{{font:12px ui-monospace,SFMono-Regular,Menlo,monospace}}.bpmn-flow{{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-top:4px;padding:16px;background:#fbfcff;border:1px solid var(--line);border-radius:12px}}.bpmn-step{{display:flex;align-items:center;gap:6px}}.bpmn-node{{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-width:120px;min-height:64px;padding:8px 12px;text-align:center;font-size:12px;font-weight:700}}.bpmn-node-event{{border-radius:999px;background:#eef1ff;border:2px solid #7c83fd;color:#4251bd}}.bpmn-node-task{{border-radius:12px;background:#fff;border:1.5px solid var(--line);box-shadow:0 6px 16px rgba(23,37,61,.06)}}.bpmn-node-icon{{font-size:18px}}.bpmn-node-sub{{font-size:10px;font-weight:700;color:var(--teal);text-transform:uppercase;letter-spacing:.04em}}.bpmn-arrow{{color:#7c83fd;font-size:20px;font-weight:900}}.cmmn-plan{{display:flex;flex-wrap:wrap;gap:10px;margin-top:4px}}.cmmn-item{{display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:12px;background:#fff;border:1px solid var(--line);min-width:220px;box-shadow:0 6px 16px rgba(23,37,61,.05)}}.cmmn-item-icon{{font-size:20px}}.cmmn-item-kind{{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}}.cmmn-item-name{{font-weight:700}}.cmmn-human_task{{border-left:4px solid var(--violet)}}.cmmn-milestone{{border-left:4px solid var(--amber)}}@keyframes navHighlight{{0%{{box-shadow:0 0 0 3px rgba(66,81,189,.55)}}100%{{box-shadow:0 0 0 3px rgba(66,81,189,0)}}}}.nav-highlight{{animation:navHighlight 1.6s ease-out;border-radius:10px}}.dependency-graph-shell{{border:1px solid var(--line);border-radius:14px;background:#fbfcff;padding:16px;margin:16px 0}}.dependency-graph-toolbar{{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}}.dependency-graph-toolbar h3{{margin:0}}.dependency-graph-stats{{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}}.graph-layer-chip{{display:inline-flex;align-items:center;gap:4px;border-radius:999px;padding:6px 10px;background:#eef1ff;color:#4251bd;font-size:12px}}.dependency-graph-layout{{display:flex;gap:14px;align-items:flex-start}}.dependency-graph-scroll{{flex:1;min-width:0;overflow:auto;border:1px solid var(--line);border-radius:12px;background:#fff;max-height:760px}}.dependency-graph-svg{{display:block;max-width:none;background:#fff;cursor:grab}}.dependency-graph-svg.grabbing{{cursor:grabbing}}.dependency-lane{{fill:#f7f9fc;stroke:#e4eaf2}}.dependency-layer-label{{fill:#6f7d91;font:700 12px Inter,ui-sans-serif,system-ui,sans-serif}}.dependency-edge{{fill:none;stroke:#7c83fd;stroke-width:1.6;opacity:.62;vector-effect:non-scaling-stroke;transition:opacity .15s,stroke-width .15s}}.dependency-edge:hover,.dependency-edge.active{{stroke:#4251bd;stroke-width:2.8;opacity:1}}.dependency-edge.dimmed{{opacity:.12}}.dependency-node{{cursor:pointer;transition:opacity .15s}}.dependency-node rect{{transition:stroke-width .15s,filter .15s}}.dependency-node.selected rect{{stroke-width:3;filter:drop-shadow(0 0 6px rgba(66,81,189,.45))}}.dependency-node.neighbor rect{{stroke-width:2.4}}.dependency-node.dimmed{{opacity:.22}}.dependency-node-id{{fill:#17253d;font:700 12px ui-monospace,SFMono-Regular,Menlo,monospace}}.dependency-node-degree{{fill:#6f7d91;font:11px Inter,ui-sans-serif,system-ui,sans-serif}}.dependency-graph-empty{{padding:32px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:10px}}.dependency-graph-note{{margin:12px 0 0;color:var(--muted);font-size:12px}}.dep-side-panel{{flex:0 0 260px;border:1px solid var(--line);border-radius:12px;background:#fff;padding:14px;max-height:760px;overflow:auto}}.dep-panel-head{{display:flex;align-items:center;justify-content:space-between;gap:8px;font:700 13px ui-monospace,SFMono-Regular,Menlo,monospace}}.dep-panel-close{{border:0;background:none;font-size:18px;line-height:1;cursor:pointer;color:var(--muted)}}.dep-panel-meta{{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0;font-size:11px}}.dep-panel-meta span{{padding:3px 8px;border-radius:999px;background:#f5f7fb;color:var(--muted)}}.dep-panel-list{{list-style:none;margin:6px 0 0;padding:0}}.dep-panel-list li{{display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid var(--line);font-size:12.5px}}.dep-panel-list li:last-child{{border-bottom:0}}.dep-panel-head+*{{margin-top:2px}}.im-swatch{{display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:7px;vertical-align:baseline}}.im-class-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:14px;margin-top:16px}}.im-class-card{{background:#fff;border:1px solid var(--line);border-radius:16px;padding:18px;box-shadow:0 10px 28px rgba(23,37,61,.05);scroll-margin-top:20px}}.im-class-card:hover{{border-color:#b9c4ff;box-shadow:0 14px 34px rgba(66,81,189,.12)}}.im-class-head{{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}}.im-class-name{{font-size:18px;font-weight:800;line-height:1.2}}.im-class-counts{{text-align:right;line-height:1.2}}.im-class-counts strong{{font-size:22px;display:block}}.im-class-counts span{{font-size:11px}}.im-chip-row{{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0 6px}}.im-chip{{display:inline-flex;align-items:center;gap:5px;padding:4px 9px;border-radius:999px;font-size:11px;font-weight:700;background:color-mix(in srgb,var(--tint) 14%,#fff);color:var(--tint);border:1px solid color-mix(in srgb,var(--tint) 32%,#fff)}}.im-class-meta{{margin-bottom:10px}}.im-class-card details summary{{font-size:13px}}.im-table-wrap{{max-height:420px;margin-top:10px}}.im-type{{display:inline-block;padding:3px 9px;border-radius:7px;border:1.5px solid #9aa5b8;background:#fbfcff;font:12px ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:700}}.im-unit{{display:inline-block;margin-left:6px;padding:2px 7px;border-radius:999px;background:#eef1ff;color:#4251bd;font-size:11px;font-weight:700}}.im-basis{{display:inline-block;margin-top:5px;font-size:10px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;padding:2px 7px;border-radius:999px;background:#f0f2f6;color:#5d6b7e}}.im-basis-declared{{background:#e9f7f3;color:#087760}}.im-basis-derived{{background:#eef1ff;color:#4251bd}}.im-basis-heuristic{{background:#fff1df;color:#92570a}}.im-basis-fallback{{background:#ffe8eb;color:#9d2937}}.im-constraints{{max-width:280px}}.im-constraint{{display:inline-block;margin:2px 4px 2px 0;padding:2px 7px;border-radius:6px;background:#f7f9fc;border:1px solid var(--line);font:11px ui-monospace,SFMono-Regular,Menlo,monospace}}.im-value{{display:inline-block;margin:2px 4px 2px 0;padding:2px 8px;border-radius:999px;background:#fff6ea;border:1px solid #f3d9b4;font-size:11px;font-weight:600;color:#92570a}}.im-review{{margin-top:4px;color:#92570a}}.im-schema{{max-height:520px}}.status-pass{{background:#e9f7f3;color:#087760}}@media(max-width:900px){{.im-class-grid{{grid-template-columns:1fr}}}}
 .model-badges{{margin-top:6px;display:flex;gap:4px}}.model-badge{{font-size:10px;font-weight:800;letter-spacing:.03em;padding:2px 7px;border-radius:6px}}.model-badge-yes{{background:#eef7f3;color:#087760}}.model-badge-no{{background:#f0f2f6;color:#a9b3c3}}
 .rule-model-diagrams{{margin-top:14px;display:grid;gap:12px}}.rule-model-block{{border:1px solid var(--line);border-radius:10px;padding:12px;background:#fbfcff}}.rule-model-kind{{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:6px}}
 .trace-path{{display:flex;flex-wrap:wrap;align-items:stretch;gap:0;margin-bottom:16px;padding:14px;background:#f7f9fc;border:1px solid var(--line);border-radius:12px}}.trace-step{{display:flex;align-items:center}}.trace-arrow{{display:flex;align-items:center;padding:0 8px;color:#9aa5b8;font-weight:900;font-size:15px}}.trace-node{{display:flex;flex-direction:column;gap:4px;min-width:120px;max-width:230px}}a.trace-node{{color:inherit}}a.trace-node:hover{{text-decoration:none}}a.trace-node .trace-node-label{{text-decoration:underline}}.trace-node-kind{{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}}.trace-node-label{{font-weight:700;font-size:12.5px;word-break:break-word}}.trace-node-excerpt{{font-size:11px;color:var(--muted);font-style:italic;line-height:1.4}}.trace-node.trace-empty{{color:var(--muted);font-style:italic;justify-content:center}}.trace-chip-row{{display:flex;flex-wrap:wrap;gap:4px;margin-top:2px}}.trace-chip{{display:inline-flex;padding:3px 8px;border-radius:999px;background:#eef1ff;color:#4251bd;font-size:11px;font-weight:700}}.trace-chip-link{{background:#eef1ff}}.trace-chip-model{{background:#eef7f3;color:#087760}}.trace-chip-empty{{background:#f0f2f6;color:#a9b3c3;font-weight:400}}.trace-more{{align-self:center;font-size:11px}}
@@ -1581,7 +1837,7 @@ def generate(
  </style></head><body><div class="shell">
 <header class="hero"><div class="eyebrow">Presentation &amp; Knowledge Exploration</div><h1>Business knowledge, made transparent.</h1><p>A self-contained, source-traceable view of the extracted domain knowledge. Every rule is linked to its source and assigned a neutral <strong>0–100 Automation Readiness Score</strong>, providing a consistent measure of its suitability for automation. Your environment, risk tolerance, and domain policies determine the appropriate acceptance threshold.</p><a class="hero-score-link" href="#scoring-definition">View scoring definition ↓</a><div class="muted" style="color:#cbd9ee">Generated from {_safe(graph_file.name)} · no external assets or network calls required</div></header>
 <div class="metric-grid">{_metric_card('Total business rules', len(rules), 'All extracted rules shown')}{_metric_card('Average readiness score', f'{report_data["automation_readiness_score_average"]:.1f}/100', 'Mean across all rules')}{_metric_card('Median readiness score', f'{report_data["automation_readiness_score_median"]:.1f}/100', 'Half of rules score at or above this value')}{_metric_card('10th-percentile readiness score', f'{report_data["automation_readiness_score_p10"]:.1f}/100', '90% of rules score at or above this value')}{_metric_card('Grounding claim support', f'{report_data["grounding_claim_support_rate"]:.1f}%', f'{grounding_claim_counts.get("supported", 0)} of {grounding_claim_total} claims supported')}{_metric_card('Contract integrity', f'{grounding_dimension_metrics["contract"]["support_rate"]:.1f}%', 'Rules with certified contract projections')}{_metric_card('Relationship support', f'{grounding_dimension_metrics["relationship"]["support_rate"]:.1f}%', 'Rules with supported graph relationships')}{_metric_card('Contradicted and insufficient-evidence claims', grounding_claim_counts.get('contradicted', 0) + grounding_claim_counts.get('insufficient_evidence', 0), f'{grounding_claim_counts.get("contradicted", 0)} contradicted · {grounding_claim_counts.get("insufficient_evidence", 0)} insufficient evidence')}</div>
-<nav class="tabs" aria-label="Report sections"><button class="active" data-tab="overview">Overview</button><button data-tab="vocabulary">SBVR vocabulary</button><button data-tab="rules">Rule explorer</button><button data-tab="dependencies">Relationships</button><button data-tab="sources">Source traceability</button></nav>
+<nav class="tabs" aria-label="Report sections"><button class="active" data-tab="overview">Overview</button><button data-tab="vocabulary">SBVR vocabulary</button><button data-tab="rules">Rule explorer</button><button data-tab="dependencies">Relationships</button><button data-tab="information-model">Information model</button><button data-tab="sources">Source traceability</button></nav>
 <section id="overview" class="tab active"><div class="grid-2"><div class="panel"><div class="eyebrow">Executive summary</div><h2>What this domain contains</h2><p>The report presents <strong>{len(rules)}</strong> rules across <strong>{len(categories)}</strong> categories, <strong>{concept_supported}</strong> governed SBVR concepts, and <strong>{len(decision_variables)}</strong> separately managed decision variables.</p><div class="callout">The readiness score measures observed grounding, contract, evidence, execution, and relationship signals. It is not an accuracy probability and does not authorize automation. A score of 100 means every measured component is complete; this report applies no acceptance threshold.</div></div><div class="panel"><div class="eyebrow">Coverage and quality</div><h2>At a glance</h2><table><tr><td>Average automation-readiness score</td><td><strong>{report_data["automation_readiness_score_average"]:.1f}/100</strong></td></tr><tr><td>Concept evidence coverage</td><td><strong>{vocabulary_coverage:.1f}%</strong></td></tr><tr><td>Rule source-pointer coverage</td><td><strong>{report_data["source_pointer_coverage_rate"]:.1f}%</strong></td></tr><tr><td>Rules grounding-certified</td><td><strong>{report_data["grounding_coverage_rate"]:.1f}%</strong> ({grounded_count} rules)</td></tr><tr><td>Grounding claims supported</td><td><strong>{grounding_claim_counts.get("supported", 0)}/{grounding_claim_total}</strong> ({report_data["grounding_claim_support_rate"]:.1f}%)</td></tr></table></div></div>
 {_readiness_definition_html()}
 <div class="grid-2"><div class="panel"><h3>Rule categories</h3><p class="muted">How the extracted rules are distributed across business categories.</p>{category_chart}</div>{confidence_panel}</div>
@@ -1592,8 +1848,9 @@ def generate(
 <section id="vocabulary" class="tab"><div class="panel"><div class="eyebrow">SBVR-aligned business vocabulary</div><h2>Vocabulary workbench</h2><p>Explore the domain lexicon as typed concepts and fact types. The view is grounded in the input graph: definitions, usage counts, relationships, and evidence links are shown only when the upstream artifacts provide them.</p><div class="insight-grid"><div class="insight-card"><h3>Supported concepts</h3><div class="metric-value">{concept_supported}</div><div class="muted">{report_data["concept_coverage_rate"]:.1f}% graph-supported coverage</div></div><div class="insight-card"><h3>Evidence coverage</h3><div class="metric-value">{report_data["concept_evidence_coverage_rate"]:.1f}%</div><div class="muted">{concept_evidence_count} concepts have source evidence</div></div><div class="insight-card"><h3>Fact types</h3><div class="metric-value">{len(fact_types)}</div><div class="muted">{fact_grounded_count} grounded · {report_data["fact_type_grounding_rate"]:.1f}%</div></div><div class="insight-card"><h3>Unresolved / orphaned</h3><div class="metric-value">{report_data["concept_review_count"]} / {concept_orphan_count}</div><div class="muted">Unresolved kinds / no rule or fact links</div></div></div><div class="grid-2"><div class="panel"><h3>Concept type mix</h3><p class="muted">How the vocabulary is distributed across SBVR-aligned concept kinds.</p>{kind_bars}</div><div class="panel"><h3>Most connected concepts</h3><p class="muted">Concepts with the strongest links into rules and fact types.</p><ul class="insight-list">{top_concept_rows}</ul></div></div><div class="panel"><div class="eyebrow">Concept explorer</div><h3>Find a term, definition, or concept kind</h3><div class="vocabulary-toolbar"><input id="concept-search" type="search" placeholder="Search concepts and definitions…"><select id="concept-kind"><option value="">All kinds</option>{''.join(f'<option value="{_safe(kind)}">{_safe(kind.replace("_", " "))}</option>' for kind in sorted(concept_kind_counts, key=str.casefold))}</select><select id="concept-evidence"><option value="">All evidence states</option><option value="grounded">With source evidence</option><option value="unresolved">Evidence unresolved</option></select><output id="concept-count" for="concept-search"></output></div><div id="concept-grid" class="concept-grid">{''.join(concept_rows) or '<div class="empty">No concepts were reported.</div>'}</div></div><div id="fact-types" class="panel fact-table"><div class="eyebrow">SBVR fact types</div><h3>Relationships and grounding status</h3><p class="muted">Each endpoint links back to its concept card; evidence links land on the embedded source block.</p><div class="grid-2"><div class="table-wrap"><table><thead><tr><th>Grounding status</th><th>Fact types</th><th>Share</th></tr></thead><tbody>{fact_status_rows}</tbody></table></div><div class="callout"><strong>{len(fact_types)}</strong> fact types connect <strong>{len(concept_ids)}</strong> concepts. A fact type is a vocabulary relationship, not a workflow sequence.</div></div><div class="table-wrap" style="margin-top:14px"><table><thead><tr><th>Fact type</th><th>Subject</th><th>Verb</th><th>Object</th><th>Grounding and evidence</th></tr></thead><tbody>{''.join(fact_rows) or '<tr><td colspan="5">No fact types were reported.</td></tr>'}</tbody></table></div></div></div></section>
 <section id="rules" class="tab"><div class="panel"><div class="eyebrow">Structured rule explorer</div><h2>Business rules</h2><p class="muted">The score is a transparent measurement, separate from extraction confidence. Choose a minimum and maximum score based on your operating environment, risk tolerance, and domain policy. Expand <strong>IF / THEN</strong> to inspect the typed contract, traceability path, score factors, and generated models.</p><div class="toolbar"><input id="rule-search" type="search" placeholder="Search ID, title, statement, category…"><select id="rule-category"><option value="">All categories</option>{''.join(f'<option>{_safe(category)}</option>' for category in sorted(categories, key=str.casefold))}</select><input id="rule-score-min" type="number" min="0" max="100" step="1" value="0" aria-label="Minimum readiness score" placeholder="Minimum score"><input id="rule-score-max" type="number" min="0" max="100" step="1" value="100" aria-label="Maximum readiness score" placeholder="Maximum score"><label class="muted" style="padding:9px 0"><input id="filter-has-dmn" type="checkbox"> has DMN</label><label class="muted" style="padding:9px 0"><input id="filter-has-bpmn" type="checkbox"> has BPMN</label><label class="muted" style="padding:9px 0"><input id="filter-has-cmmn" type="checkbox"> has CMMN</label><span id="rule-count" class="muted" style="padding:9px 0"></span></div><div class="table-wrap"><table id="rules-table"><thead><tr><th>Rule</th><th>Category</th><th>Natural-language statement</th><th>Contract, traceability & models</th><th>Automation readiness & confidence</th><th>Source evidence</th></tr></thead><tbody>{''.join(rule_rows) or '<tr><td colspan="6">No rules were reported.</td></tr>'}</tbody></table></div></div></section>
 <section id="dependencies" class="tab"><div class="panel"><div class="eyebrow">Relationship and dependency view</div><h2>Directed rule relationship graph</h2><p>These are the dependency edges emitted by the knowledge-graph optimizer and DAG generator. They are not treated as BPMN sequence flows. The graph preserves the emitted direction and groups nodes into degree layers for readable traversal. <strong>Click a rule</strong> to highlight it and its direct connections; everything else dims. Scroll to zoom, drag to pan.</p><div class="dependency-graph-shell"><div class="dependency-graph-toolbar"><h3>Dependency topology</h3><span class="muted">{len(dependency_layout["nodes"])} nodes · {len(dependency_layout["edges"])} unique directed edges · {len(dependency_layers)} degree layers</span></div><div class="dependency-graph-stats">{dependency_layer_chips}<span class="graph-layer-chip"><strong>isolated</strong> · {len(dependency_layout["isolated_nodes"])} nodes</span></div><div class="dependency-graph-layout"><div class="dependency-graph-scroll">{dependency_graph}</div><aside id="dep-side-panel" class="dep-side-panel" hidden></aside></div><p class="dependency-graph-note">{_safe(dependency_graph_note)} Hover an edge for its dependency type and full source → target direction.</p></div><div class="table-wrap"><table><thead><tr><th>Source rule</th><th>Target rule</th><th>Type</th></tr></thead><tbody>{edge_rows}</tbody></table></div></div></section>
+<section id="information-model" class="tab">{information_model_section}</section>
 <section id="sources" class="tab"><div class="panel"><div class="eyebrow">Source traceability</div><h2>Embedded source chunks</h2><p>These source blocks are embedded in this HTML file. Links from concepts, rules, and score details land on the exact referenced chunk/section without requiring filesystem access.</p>{''.join(source_blocks.values()) or '<div class="empty">No source references were present in the graph.</div>'}</div></section>
-<footer>Policy Logic Forge Agent 12 · presentation-only artifact · source graph SHA-256: {_safe(hashlib.sha256(graph_file.read_bytes()).hexdigest())}</footer></div>
+<footer>Policy Logic Forge Agent 13 · presentation-only artifact · source graph SHA-256: {_safe(hashlib.sha256(graph_file.read_bytes()).hexdigest())}</footer></div>
 <script type="application/json" id="report-data">{_json_for_script(report_data)}</script><script>
 const tabs=[...document.querySelectorAll('[data-tab]')], sections=[...document.querySelectorAll('section.tab')];
 function activateTab(tabId){{tabs.forEach(item=>item.classList.toggle('active',item.dataset.tab===tabId));sections.forEach(section=>section.classList.toggle('active',section.id===tabId));}}
@@ -1604,6 +1861,9 @@ function applyFilters(){{const query=(search.value||'').toLowerCase(), cat=categ
 const conceptCards=[...document.querySelectorAll('#concept-grid .concept-card')], conceptSearch=document.getElementById('concept-search'), conceptKind=document.getElementById('concept-kind'), conceptEvidence=document.getElementById('concept-evidence'), conceptCount=document.getElementById('concept-count');
 function applyConceptFilters(){{const query=(conceptSearch.value||'').toLowerCase(), kind=conceptKind.value, evidence=conceptEvidence.value;let visible=0;conceptCards.forEach(card=>{{const matches=(!query||card.dataset.search.includes(query))&&(!kind||card.dataset.kind===kind)&&(!evidence||card.dataset.evidence===evidence);card.hidden=!matches;if(matches)visible++;}});conceptCount.textContent=visible+' of '+conceptCards.length+' concepts shown';}}
 [conceptSearch,conceptKind,conceptEvidence].forEach(control=>control&&control.addEventListener('input',applyConceptFilters));applyConceptFilters();
+const imCards=[...document.querySelectorAll('#im-class-grid .im-class-card')], imSearch=document.getElementById('im-search'), imStereotype=document.getElementById('im-stereotype'), imCategory=document.getElementById('im-category'), imCount=document.getElementById('im-count');
+function applyInformationModelFilters(){{if(!imCount)return;const query=(imSearch.value||'').toLowerCase(), stereotype=imStereotype.value, category=imCategory.value;let visible=0;imCards.forEach(card=>{{const matches=(!query||card.dataset.search.includes(query))&&(!stereotype||card.dataset.stereotype===stereotype)&&(!category||card.dataset.categories.split(' ').includes(category));card.hidden=!matches;if(matches)visible++;}});imCount.textContent=visible+' of '+imCards.length+' classes shown';}}
+[imSearch,imStereotype,imCategory].forEach(control=>control&&control.addEventListener('input',applyInformationModelFilters));applyInformationModelFilters();
 function revealTarget(id){{const el=document.getElementById(id);if(!el)return false;const tabSection=el.closest('section.tab');if(tabSection)activateTab(tabSection.id);let node=el.parentElement;while(node){{if(node.tagName==='DETAILS'&&!node.open)node.open=true;node=node.parentElement;}}el.scrollIntoView({{behavior:'smooth',block:'start'}});el.classList.add('nav-highlight');setTimeout(()=>el.classList.remove('nav-highlight'),1600);return true;}}
 document.addEventListener('click',event=>{{const anchor=event.target.closest('a[href^="#"]');if(!anchor)return;const id=anchor.getAttribute('href').slice(1);if(!id||!document.getElementById(id))return;event.preventDefault();revealTarget(id);history.replaceState(null,'','#'+id);}});
 if(location.hash)revealTarget(location.hash.slice(1));
@@ -1662,6 +1922,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--graph", type=Path)
     parser.add_argument("--dags", type=Path)
     parser.add_argument("--models-dir", type=Path)
+    parser.add_argument("--information-model-dir", type=Path,
+                        help="agent_12 output directory (default: the configured one)")
     parser.add_argument("--organized-dir", type=Path)
     parser.add_argument("--output-dir", type=Path)
     parser.add_argument("--batch-name", help="Read the configured pipeline-output/<batch-name> bundle")
@@ -1676,6 +1938,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     dags = args.dags or (config.get_dag_dir() / "dependency_dags.json")
     models = args.models_dir or config.get_executable_models_dir()
     organized = args.organized_dir or config.get_organized_dir()
+    configured_information_model = getattr(config, "get_information_model_dir", None)
+    information_model = args.information_model_dir or (
+        configured_information_model() if configured_information_model else None)
     configured_output = getattr(config, "get_business_report_dir", None)
     output = args.output_dir or (configured_output() if configured_output else config.get_pipeline_base_path() / REPORT_DIR_NAME)
     missing = [str(path) for path in (graph,) if not path.exists()]
@@ -1683,7 +1948,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         print("ERROR: required upstream artifact(s) missing: " + ", ".join(missing), flush=True)
         return 2
     try:
-        report = generate(graph, dags if dags.exists() else None, models, output, organized)
+        report = generate(graph, dags if dags.exists() else None, models, output, organized,
+                          information_model_dir=information_model)
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         print(f"ERROR: business knowledge report generation failed: {exc}", flush=True)
         return 2

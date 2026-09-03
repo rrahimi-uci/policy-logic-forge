@@ -61,8 +61,10 @@ against `Percentage`) are errors.
 **Agent 13 report layer** — after Agent 11 has produced its model bundle,
 `agents/agent_13_business_knowledge_report.py` creates one self-contained
 `business_knowledge_report.html`. The report provides tabbed SBVR vocabulary,
-rule and score exploration, DMN/BPMN/CMMN coverage, dependency views, embedded
-source chunks, search/filter controls, and inline SVG visualizations. Each rule
+rule and score exploration, DMN/BPMN/CMMN coverage, dependency views, the
+Agent 12 information model (class explorer, value-category distribution,
+validation results and the embedded LinkML schema), embedded source chunks,
+search/filter controls, and inline SVG visualizations. Each rule
 receives a transparent 0–100 automation-readiness score derived from grounding,
 contract, evidence, execution, and relationship signals. Agent 13 assigns no
 pass/fail label or universal threshold; deployment owners interpret the score

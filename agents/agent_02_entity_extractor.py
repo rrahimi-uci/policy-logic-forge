@@ -217,10 +217,15 @@ class ComplianceEntityRelationshipAgent:
         self.entity_types = {}
         self.relationships = {}
         
-    def read_text_files(self, directory: str, max_files: int = None) -> List[Dict[str, str]]:
+    @staticmethod
+    def read_text_files(directory: str, max_files: int = None) -> List[Dict[str, str]]:
         """
         Read all text files from the directory.
-        
+
+        Static because it needs nothing from the instance, which lets ``main``
+        check whether there is any work before resolving provider credentials.
+        Existing ``self.read_text_files(...)`` calls are unaffected.
+
         Args:
             directory: Path to directory containing text files
             max_files: Maximum number of files to process (None for all)
@@ -725,40 +730,15 @@ def main() -> int:
     from utils.config import get_config
     
     config = get_config()
-    
-    # Configuration from config file
-    OPENAI_API_KEY = config.get_api_key()
-    EXTRACTION_MODEL = config.get_reasoning_model()
-    REASONING_EFFORT = config.get_reasoning_effort()
-    OPTIMIZER_MODEL = config.get_optimizer_model()
+
     TEXT_DIR = str(config.get_organized_dir())
     OUTPUT_DIR = str(config.get_entity_relationship_dir())
-    N_ITERATIONS = config.get_n_iterations()
-    os.environ.setdefault(
-        "KG_ENTITY_CHECKPOINT_FILE",
-        str(Path(OUTPUT_DIR) / "entity_iteration_checkpoint.json"),
-    )
-    
-    print("""
-╔══════════════════════════════════════════════════════════════════════╗
-║   Compliance Entity & Relationship Extraction Agent                 ║
-║   With Integrated Meta-Agent Prompt Optimization                    ║
-║   Powered by OpenAI GPT-5                                           ║
-╚══════════════════════════════════════════════════════════════════════╝
-    """)
-    
-    # Initialize enhanced agent
-    agent = ComplianceEntityRelationshipAgent(
-        api_key=OPENAI_API_KEY,
-        extraction_model=EXTRACTION_MODEL,
-        optimizer_model=OPTIMIZER_MODEL,
-        reasoning_effort=REASONING_EFFORT
-    )
-    
-    # Load documents
-    print("Loading documents...")
-    documents = agent.read_text_files(TEXT_DIR)
-    
+
+    # Check for work before asking for credentials. Resolving the API key first
+    # meant a run over an empty corpus failed with "OpenAI API key not found",
+    # which names the wrong problem entirely -- the corpus is what is missing,
+    # and this stage needs no provider at all to determine that.
+    documents = ComplianceEntityRelationshipAgent.read_text_files(TEXT_DIR)
     if not documents:
         # Exiting 0 here reported success for a stage that did nothing: the
         # orchestrator ran agent_03 and agent_04 against no entities at all, and
@@ -767,6 +747,33 @@ def main() -> int:
         print(f"❌ agent_02: no organized documents found in {TEXT_DIR}", flush=True)
         print("   Run agent_01 first, or check that it produced chunk files.", flush=True)
         return 2
+
+    # Configuration from config file
+    OPENAI_API_KEY = config.get_api_key()
+    EXTRACTION_MODEL = config.get_reasoning_model()
+    REASONING_EFFORT = config.get_reasoning_effort()
+    OPTIMIZER_MODEL = config.get_optimizer_model()
+    N_ITERATIONS = config.get_n_iterations()
+    os.environ.setdefault(
+        "KG_ENTITY_CHECKPOINT_FILE",
+        str(Path(OUTPUT_DIR) / "entity_iteration_checkpoint.json"),
+    )
+
+    print("""
+╔══════════════════════════════════════════════════════════════════════╗
+║   Compliance Entity & Relationship Extraction Agent                 ║
+║   With Integrated Meta-Agent Prompt Optimization                    ║
+║   Powered by OpenAI GPT-5                                           ║
+╚══════════════════════════════════════════════════════════════════════╝
+    """)
+
+    # Initialize enhanced agent
+    agent = ComplianceEntityRelationshipAgent(
+        api_key=OPENAI_API_KEY,
+        extraction_model=EXTRACTION_MODEL,
+        optimizer_model=OPTIMIZER_MODEL,
+        reasoning_effort=REASONING_EFFORT
+    )
 
     # Run iterative extraction with optimization
     results = agent.run_iterations_with_optimization(documents, n_iterations=N_ITERATIONS)

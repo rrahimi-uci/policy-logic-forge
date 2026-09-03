@@ -659,3 +659,185 @@ def test_agent_12_main_reports_missing_graph(tmp_path, monkeypatch):
 
     monkeypatch.setattr("agents.agent_13_business_knowledge_report.get_config", lambda: Config())
     assert main([]) == 2
+
+
+# ---------------------------------------------------------------------------
+# Information model tab (agent_12 → agent_13)
+#
+# Stage 12 used to write seven artifacts that nothing consumed: the final
+# report never mentioned the information model at all. These pin the wiring,
+# the empty state when stage 12 did not run, and that the tab keeps the
+# evidence spine intact by linking attributes back to the rules that declared
+# them.
+# ---------------------------------------------------------------------------
+
+def _information_model_dir(root: Path, *, rows=None, schema="id: x\nname: x\n") -> Path:
+    directory = root / "agent_12-business-information-model"
+    directory.mkdir(parents=True)
+    rows = rows if rows is not None else [
+        {"class": "Account", "class_stereotype": "entity", "attribute": "balanceAmount",
+         "element_kind": "attribute", "category": "quantity", "type": "Money",
+         "type_basis": "declared", "multiplicity": "1", "required": True, "unit": "USD",
+         "default": "", "description": "Declared unit 'usd'.", "constraints": [">= 0"],
+         "allowed_values": [], "source_rules": "R-1", "source_passages": "policy/001.txt#s1",
+         "needs_review": False, "review_reasons": ""},
+        {"class": "Account", "class_stereotype": "entity", "attribute": "openedOn",
+         "element_kind": "attribute", "category": "temporal", "type": "Date",
+         "type_basis": "declared", "multiplicity": "0..1", "required": False, "unit": "",
+         "default": "", "description": "Declared date.", "constraints": [],
+         "allowed_values": [], "source_rules": "R-1", "source_passages": "",
+         "needs_review": False, "review_reasons": ""},
+        {"class": "Consent", "class_stereotype": "process", "attribute": "consentGiven",
+         "element_kind": "attribute", "category": "flag", "type": "Boolean",
+         "type_basis": "fallback", "multiplicity": "0..1", "required": False, "unit": "",
+         "default": "", "description": "No declared evidence.", "constraints": [],
+         "allowed_values": [], "source_rules": "R-1", "source_passages": "",
+         "needs_review": True, "review_reasons": "type rests on no declared evidence"},
+    ]
+    (directory / "class_attribute_catalog.json").write_text(json.dumps(rows), encoding="utf-8")
+    (directory / "information_model_validation.json").write_text(json.dumps({
+        "checks": ["type_consistency", "enumeration_usage"],
+        "counts": {"by_check": {"type_consistency": 0, "enumeration_usage": 2},
+                   "by_severity": {"error": 0, "warning": 0, "review": 2}},
+        "inventory": {
+            "classes": {"total": 2, "by_stereotype": {"entity": 1, "process": 1}},
+            "attributes": {"total": 3, "by_category": {"quantity": 1, "temporal": 1, "flag": 1}},
+            "unassigned_attributes": {"total": 4, "by_category": {}},
+            "enumerations": {"total": 5, "referenced_by_a_class": 2, "single_valued": 3},
+            "relationships": {"total": 0, "by_kind": {}},
+        },
+        "schema_validation": {"valid": True, "problems": []},
+    }), encoding="utf-8")
+    (directory / "business_information_model.yaml").write_text(schema, encoding="utf-8")
+    return directory
+
+
+def _report_with_model(tmp_path: Path, **kwargs) -> tuple[dict, str]:
+    graph_file = tmp_path / "graph.json"
+    graph_file.write_text(json.dumps(_graph()), encoding="utf-8")
+    manifest = generate(graph_file, None, tmp_path / "models", tmp_path / "report", None, **kwargs)
+    return manifest, (tmp_path / "report" / "business_knowledge_report.html").read_text(encoding="utf-8")
+
+
+def test_the_report_gains_an_information_model_tab(tmp_path: Path):
+    _manifest, report = _report_with_model(
+        tmp_path, information_model_dir=_information_model_dir(tmp_path))
+    assert 'data-tab="information-model"' in report
+    assert 'id="information-model"' in report
+    assert "Information model" in report
+
+
+def test_the_tab_reports_the_model_inventory(tmp_path: Path):
+    manifest, report = _report_with_model(
+        tmp_path, information_model_dir=_information_model_dir(tmp_path))
+    assert manifest["information_model_present"] is True
+    assert manifest["information_model_class_count"] == 2
+    assert manifest["information_model_attribute_count"] == 3
+    assert manifest["information_model_enumeration_count"] == 2   # referenced, not detected
+    assert manifest["information_model_unassigned_count"] == 4
+    assert manifest["information_model_schema_valid"] is True
+    assert manifest["information_model_attribute_categories"]["flag"] == 1
+
+
+def test_every_class_becomes_a_filterable_card(tmp_path: Path):
+    _manifest, report = _report_with_model(
+        tmp_path, information_model_dir=_information_model_dir(tmp_path))
+    assert 'id="im-class-Account"' in report
+    assert 'id="im-class-Consent"' in report
+    assert 'data-stereotype="entity"' in report and 'data-stereotype="process"' in report
+    assert 'id="im-search"' in report and 'id="im-category"' in report
+
+
+def test_an_attribute_links_back_to_the_rule_that_declared_it(tmp_path: Path):
+    """The tab has to keep the evidence spine intact: attribute → rule →
+    source passage, not a table that dead-ends."""
+    _manifest, report = _report_with_model(
+        tmp_path, information_model_dir=_information_model_dir(tmp_path))
+    assert 'href="#rule-R-1"' in report
+
+
+def test_declared_units_constraints_and_type_basis_survive_into_the_tab(tmp_path: Path):
+    _manifest, report = _report_with_model(
+        tmp_path, information_model_dir=_information_model_dir(tmp_path))
+    assert "balanceAmount" in report
+    assert "&gt;= 0" in report          # constraints are escaped, not injected raw
+    assert "im-basis-declared" in report
+    assert "im-basis-fallback" in report        # weak evidence stays visible
+    assert "USD" in report
+
+
+def test_an_attribute_flagged_for_review_says_why(tmp_path: Path):
+    _manifest, report = _report_with_model(
+        tmp_path, information_model_dir=_information_model_dir(tmp_path))
+    assert "type rests on no declared evidence" in report
+
+
+def test_the_dominant_category_is_called_out(tmp_path: Path):
+    """A model that is mostly rule-outcome booleans is the single most useful
+    thing to notice about it, so it is stated rather than left to be counted."""
+    rows = [
+        {"class": "Thing", "class_stereotype": "entity", "attribute": f"flag{i}",
+         "element_kind": "attribute", "category": "flag", "type": "Boolean",
+         "type_basis": "declared", "multiplicity": "0..1", "required": False, "unit": "",
+         "default": "", "description": "", "constraints": [], "allowed_values": [],
+         "source_rules": "R-1", "source_passages": "", "needs_review": False,
+         "review_reasons": ""}
+        for i in range(9)
+    ]
+    directory = tmp_path / "im"
+    directory.mkdir()
+    (directory / "class_attribute_catalog.json").write_text(json.dumps(rows), encoding="utf-8")
+    (directory / "information_model_validation.json").write_text(json.dumps({
+        "counts": {"by_check": {}, "by_severity": {}},
+        "inventory": {"classes": {"total": 1, "by_stereotype": {"entity": 1}},
+                      "attributes": {"total": 9, "by_category": {"flag": 9}},
+                      "unassigned_attributes": {"total": 0, "by_category": {}},
+                      "enumerations": {"total": 0, "referenced_by_a_class": 0, "single_valued": 0},
+                      "relationships": {"total": 0, "by_kind": {}}},
+        "schema_validation": {"valid": True, "problems": []},
+    }), encoding="utf-8")
+    _manifest, report = _report_with_model(tmp_path, information_model_dir=directory)
+    assert "<strong>100%</strong> of modelled attributes are" in report
+    assert "<strong>flag</strong>" in report
+    assert "describes what was decided" in report
+
+
+def test_the_canonical_schema_travels_with_the_report(tmp_path: Path):
+    _manifest, report = _report_with_model(
+        tmp_path,
+        information_model_dir=_information_model_dir(tmp_path, schema="id: marker-schema\nname: demo\n"))
+    assert "marker-schema" in report
+    assert "business_information_model.yaml" in report
+
+
+def test_the_tab_explains_itself_when_stage_12_did_not_run(tmp_path: Path):
+    """The report is presentation-only and must survive a partial pipeline;
+    agent_12 can legitimately be skipped with --stages."""
+    manifest, report = _report_with_model(tmp_path, information_model_dir=tmp_path / "absent")
+    assert manifest["information_model_present"] is False
+    assert manifest["information_model_class_count"] == 0
+    assert 'data-tab="information-model"' in report      # the tab still exists
+    assert "Not generated for this run" in report
+    assert "--stage 12" in report
+
+
+def test_a_missing_information_model_never_breaks_the_report(tmp_path: Path):
+    manifest, _report = _report_with_model(tmp_path)      # argument omitted entirely
+    assert manifest["information_model_present"] is False
+    assert manifest["validation"] == "pass"
+
+
+def test_a_corrupt_catalog_degrades_to_the_empty_state(tmp_path: Path):
+    directory = tmp_path / "broken"
+    directory.mkdir()
+    (directory / "class_attribute_catalog.json").write_text("{not json", encoding="utf-8")
+    manifest, report = _report_with_model(tmp_path, information_model_dir=directory)
+    assert manifest["information_model_present"] is False
+    assert "Not generated for this run" in report
+
+
+def test_the_tab_adds_no_external_asset_reference(tmp_path: Path):
+    """The report is opened offline; the whole contract is one file."""
+    _manifest, report = _report_with_model(
+        tmp_path, information_model_dir=_information_model_dir(tmp_path))
+    assert "<script src=\"http" not in report and "<link href=\"http" not in report
