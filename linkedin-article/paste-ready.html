@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>AI Can Write the Rule. Where&#x27;s the Proof?</title><style>
+:root { color-scheme: light dark; }
+body {
+  max-width: 42rem; margin: 0 auto; padding: 3rem 1.5rem 6rem;
+  font: 17px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  color: #1a1a1a; background: #fff;
+}
+@media (prefers-color-scheme: dark) {
+  body { color: #e8e8e8; background: #16181c; }
+  .banner { background: #1f2933 !important; border-color: #38434f !important; }
+  .ph { background: #221d33 !important; border-color: #6d5bb5 !important; }
+  blockquote { border-color: #4a5568 !important; color: #b8c2cc !important; }
+  code { background: #262b33 !important; }
+}
+h1 { font-size: 2rem; line-height: 1.2; margin: 0 0 .4em; }
+h2 { font-size: 1.4rem; margin: 2.2em 0 .5em; }
+h3 { font-size: 1.15rem; margin: 1.8em 0 .4em; }
+p, li { margin: 0 0 .85em; }
+blockquote {
+  border-left: 3px solid #cbd5e0; margin: 1.2em 0; padding: .1em 0 .1em 1.1em;
+  color: #4a5568;
+}
+code {
+  background: #f1f3f5; padding: .1em .35em; border-radius: 3px;
+  font-size: .92em;
+}
+pre { background: #f1f3f5; padding: 1em; border-radius: 6px; overflow-x: auto; }
+pre code { background: none; padding: 0; }
+hr { border: 0; border-top: 1px solid #dfe3e8; margin: 2.5em 0; }
+.banner {
+  background: #eef2f6; border: 1px solid #cfd8e0; border-radius: 8px;
+  padding: 1rem 1.25rem; margin-bottom: 2.5rem; font-size: .92rem;
+}
+.banner b { display: block; margin-bottom: .35rem; }
+.ph {
+  background: #f3f0ff; border: 1px dashed #8b7fd4; border-radius: 8px;
+  padding: .85rem 1.1rem; margin: 1.6em 0; font-size: .88rem;
+}
+.ph b { display: block; margin-bottom: .25rem; letter-spacing: .04em; }
+.ph .f { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.meta { font-size: .95rem; color: #52606d; margin: 0 0 2rem; }
+</style></head><body>
+<div class="banner">
+<b>How to use this file</b>
+Select all (&#8984;A), copy (&#8984;C), then paste into the LinkedIn article
+editor. Headings, bold, italics, lists, quotes and links all survive the
+paste. Then replace each dashed block below by uploading that image, and
+delete this banner. The title and subtitle above go in LinkedIn's own title
+field, not the body.
+</div>
+<h1>AI Can Write the Rule. Where&#x27;s the Proof?</h1>
+<p class="meta"><i>Turning policy into business logic, models, and code — deterministic where it can be, formally proved where that is possible, and judged only where it must be.</i></p>
+<p><div class="ph"><b>&#9650; INSERT IMAGE 1</b><span class="f">images/01-policy-logic-forge-hero.png</span><br><i>Alt text:</i> Policy Logic Forge carries evidence through four phases: policy, structured knowledge, reasoning and verification, and code-ready artifacts</div></p>
+<p>For most of the history of enterprise software, the expensive part was <strong>producing</strong> things. Writing the rule. Drawing the decision model. Designing the schema. Scarce experts, long timelines, and a queue.</p>
+<p>That constraint is dissolving. Hand a regulation to a model today and it will return all three in seconds — clean, structured, confident.</p>
+<p>Which makes the interesting question no longer <em>can it write the rule?</em></p>
+<p>It is: <strong>where's the proof?</strong></p>
+<p>That is a different problem, and most organisations have not planned for it. When anything can be generated, the artifact stops being the valuable thing. What becomes scarce is the ability to say where a claim came from, what independently checked it, and what the system refused to assume.</p>
+<p>In regulated industries that is not a philosophical observation. It is the difference between a system you can deploy and one you cannot.</p>
+<p>Here is the mechanism, and it is worth being precise about it. The dangerous failure in this work has never been output that is obviously wrong — you catch that in review. It is output that is <strong>plausible</strong>. A rule with the right action and the wrong trigger. A condition that reads perfectly and cites a passage that does not actually support it. On the page, fluency and correctness look identical.</p>
+<p>Underneath that sits an older problem the same shift now exposes. Most business systems do not implement a policy.</p>
+<p>They implement <strong>someone's interpretation</strong> of a policy.</p>
+<p>Between a paragraph written by a regulator and a decision made by software, a chain of people must identify the governed concepts, separate obligations from exceptions, resolve dependencies, translate prose into logic, and decide what is safe to automate. Every handoff is a chance to lose meaning — quietly, and without anyone noticing until an audit.</p>
+<p>I built a system to close that gap. The most interesting thing I learned was not how well it extracts. It was how easily a pipeline like this can look like it is working while producing confident nonsense — and what it takes to catch that.</p>
+<p>This article is about the architecture, the refusals, and the failure that changed how I think about the whole problem.</p>
+<h2 id="the-problem-meaning-is-lost-in-translation">The problem: meaning is lost in translation</h2>
+<p>Take a clause of the kind that appears in almost every regulated domain:</p>
+<blockquote>
+<p>When a customer submits a complete request, the institution must respond within 30 days unless identity verification remains unresolved.</p>
+</blockquote>
+<p>A person reads that in seconds. A system has to make eight things explicit before it can act on it:</p>
+<ul>
+<li><strong>Who</strong> is responsible — the institution, or a specific role inside it?</li>
+<li><strong>What starts the clock</strong> — submission, receipt, or confirmation of completeness?</li>
+<li><strong>What counts</strong> as a "complete request"?</li>
+<li><strong>Which days</strong> — 30 calendar or 30 business?</li>
+<li><strong>What does the exception do</strong> — pause the clock, or remove the obligation entirely?</li>
+<li><strong>What response</strong> is actually required?</li>
+<li><strong>What scope</strong> applies — which products, customers, regions, effective dates?</li>
+<li><strong>Which exact passage</strong> supports each of those answers?</li>
+</ul>
+<p>Drop any one and the rule still reads correctly to a human. A rule with the right action and the wrong trigger is not "mostly correct" once software executes it.</p>
+<p><div class="ph"><b>&#9650; INSERT IMAGE 2</b><span class="f">images/02-policy-translation-gap.png</span><br><i>Alt text:</i> A policy clause passes through expert, analyst, architect, developer, tester, and auditor handoffs where actor, trigger, timing, exception, scope, and evidence can be lost</div></p>
+<h3 id="why-the-manual-approach-does-not-scale">Why the manual approach does not scale</h3>
+<p>Traditional policy implementation is a relay race:</p>
+<p><strong>Policy author → subject-matter expert → analyst → architect → developer → tester → auditor</strong></p>
+<p>Each runner produces a new representation — notes, spreadsheets, requirements, diagrams, tickets, code, test cases. Each is useful. Each is one more step away from the sentence that started it.</p>
+<p>The consequences are familiar to anyone who has worked in a regulated organisation. A revised clause triggers another full round of analysis. Scarce experts re-explain the same policy in different formats. Two teams encode the same rule differently. Reconstructing why a system behaved a certain way becomes forensic work. And when a rule changes, teams know <em>that</em> it changed but not which decisions, processes, data fields, or tests depend on it.</p>
+<p>These are not documentation inconveniences. In regulated domains they are operational and governance risk.</p>
+<h2 id="why-just-use-an-llm-is-not-the-answer">Why "just use an LLM" is not the answer</h2>
+<p>An LLM that emits a list of plausible rules solves the first ten minutes of this problem and none of the rest.</p>
+<p>The reason follows directly from the failure mode above. If a model produces the same clean output whether or not the source supports it, then <strong>no amount of prompting makes the output self-certifying.</strong> You cannot ask the thing that wrote the rule whether the rule is true; you will get another fluent answer. The check has to come from somewhere the generation cannot reach.</p>
+<p>In practice that means somewhere <strong>deterministic</strong> — a check that returns the same verdict every time, for reasons you can inspect, whoever runs it. Or, better still, somewhere <strong>formal</strong>: a property stated precisely enough that it can be proved rather than assessed.</p>
+<p>So the question is not "can a model read a policy?" It is:</p>
+<blockquote>
+<p>Can a system transform policy into operational knowledge without breaking the chain of evidence — and can it show exactly where it is uncertain?</p>
+</blockquote>
+<p>That requires a set of connected capabilities, not one clever prompt:</p>
+<ul>
+<li><strong>Source integrity</strong> — did we ingest and preserve the complete corpus? <em>Prevents: missing pages, tables, attachments.</em></li>
+<li><strong>Shared business vocabulary</strong> — what do the governed concepts mean? <em>Prevents: duplicate terms, inconsistent interpretation.</em></li>
+<li><strong>Structured rule contracts</strong> — what is the actor, trigger, condition, action, exception, scope, outcome? <em>Prevents: attractive prose that cannot be tested.</em></li>
+<li><strong>Dependency semantics</strong> — which rules use, produce, constrain, or conflict over the same facts? <em>Prevents: hidden downstream impact and invented sequence.</em></li>
+<li><strong>Independent verification</strong> — does the cited evidence actually support the claim? <em>Prevents: treating a nearby citation as proof.</em></li>
+<li><strong>Selective model generation</strong> — is this a decision, an ordered process, a case, or only a rule? <em>Prevents: forcing every requirement into the wrong notation.</em></li>
+<li><strong>Human review and explainability</strong> — what is uncertain, why, and where is the evidence? <em>Prevents: review queues with no actionable context.</em></li>
+<li><strong>Change awareness</strong> — what could a revision affect? <em>Prevents: revalidating everything, or missing impact entirely.</em></li>
+</ul>
+<p>Those capabilities need a shared backbone: an <strong>evidence spine</strong> that survives every transformation.</p>
+<p><div class="ph"><b>&#9650; INSERT IMAGE 3</b><span class="f">images/03-capabilities-evidence-spine.png</span><br><i>Alt text:</i> Eight policy-transformation capabilities connect to a central bidirectional evidence spine</div></p>
+<p>It has to run both ways:</p>
+<p><strong>Source passage → concept → rule → dependency → model → artifact</strong></p>
+<p>and</p>
+<p><strong>Artifact element → model → rule claim → the exact supporting passage</strong></p>
+<p>Without that reverse path, a polished decision table is just a more convincing place for unsupported meaning to hide.</p>
+<h2 id="the-approach-determinism-first-proof-where-possible-judgment-last">The approach: determinism first, proof where possible, judgment last</h2>
+<p>Policy Logic Forge is an open-source CLI and Python library. The important design decision is not that it is a pipeline rather than one large prompt. It is the rule that pipeline follows:</p>
+<blockquote>
+<p><strong>Decide as much as possible with code. Prove what can be proved. Ask a model only what genuinely requires judgment. Send a human only what survives all three.</strong></p>
+</blockquote>
+<p>That ordering is not a performance optimisation. It is the difference between a system whose output you can <strong>re-derive</strong> and one whose output you can only <strong>re-read</strong>.</p>
+<p>It also inverts the usual instinct. The reflex in this space is to reach for the model first and add guardrails afterwards. Here the model is the <em>last</em> resort before a human, and every stage is an attempt to make its job smaller — because every claim moved from judgment into a decidable check is a claim that stops depending on anyone's confidence, including the model's.</p>
+<p>Structurally that means narrow stages with defined contracts, grouped into five responsibilities, each boundary another chance to catch an error before it becomes an artifact.</p>
+<p><div class="ph"><b>&#9650; INSERT IMAGE 4</b><span class="f">images/04-policy-logic-forge-architecture.png</span><br><i>Alt text:</i> The stages of Policy Logic Forge grouped into source, knowledge, verification, model, and exploration responsibilities</div></p>
+<p><strong>Preserve the source before interpreting it.</strong> Inventory and chunk the corpus with stable document identity. Extract a source-linked concept catalog. Convert policy statements into structured rule candidates carrying conditions, outcomes, exceptions, scope, typed variables, and field-level source references. The design choice that matters: extraction produces <em>candidates with provenance</em>, never declarations of truth.</p>
+<p><strong>Normalise the knowledge without hiding uncertainty.</strong> Rules and concepts merge into a knowledge graph, normalised and conservatively deduplicated. Relationships are derived deterministically, and only where the semantics justify them. Graph proximity is never treated as business order — two rules can be connected without one happening before the other.</p>
+<p><strong>Repair contracts, then verify claims independently.</strong> Deterministic invariants gate readiness: corpus integrity, naming consistency, schema consistency, referential integrity. A targeted remediator repairs only what failed, then readiness runs again.</p>
+<p>Then the part that matters most. The system builds <em>fresh</em> evidence packets from the raw corpus and re-checks every claim — description, condition, outcome, party, scope, exception — without trusting the citation the rule already carries.</p>
+<p><strong>The component that wrote a rule is never the only component judging whether the source supports it.</strong> That single separation is what turns the pipeline from a generator into something closer to an instrument.</p>
+<h3 id="isnt-this-just-llm-as-a-judge">"Isn't this just LLM-as-a-judge?"</h3>
+<p>It is the first question anyone technical asks, and it deserves a direct answer, because the two familiar options both have real problems.</p>
+<p><strong>LLM-as-a-judge</strong> puts a second model in front of the first one's output. It scales, but the judge inherits the same blind spots as the generator, has no ground truth to check against, and is grading the same quality the generator optimised for: plausibility. Two models from the same family agreeing tells you less than it appears to.</p>
+<p><strong>SME review</strong> is the actual gold standard for correctness — and it does not scale. Nobody is reading several hundred extracted rules by hand, repeatedly, every time a policy changes.</p>
+<p>This architecture takes a third position, and it rests on one observation: <strong>most verification questions are not matters of opinion at all.</strong></p>
+<p><div class="ph"><b>&#9650; INSERT IMAGE 5</b><span class="f">images/07-verification-ladder.png</span><br><i>Alt text:</i> Four kinds of verification in order of strength: deterministic checks with no model, a solver, a model used only where judgment is irreducible, and the human expert reserved for legal correctness</div></p>
+<ul>
+<li><em>Does this quoted sentence literally occur in the cited chunk?</em> That is string resolution against the raw corpus. Exact offsets, independently reproducible, no model.</li>
+<li><em>Does every rule reference point at a rule that exists?</em> Set membership.</li>
+<li><em>Does this rule's schema, naming, and corpus coverage hold?</em> Deterministic invariants.</li>
+<li><em>Does rule B actually read a symbol that rule A assigns?</em> A mechanical dataflow test, not an impression of relatedness.</li>
+<li><em>Can this rule's condition be satisfied at all, or does it contradict itself?</em> A solver question, answered by proof search.</li>
+</ul>
+<p>And one that is genuinely a proof rather than a check. Every decision table this system emits declares a <strong>hit policy</strong> — <code>UNIQUE</code> means no two rules may ever match the same input. That is not a style preference; overlapping rules in a table declared <code>UNIQUE</code> is a live production bug, and it is exactly the kind of thing that survives human review because you cannot see it by reading.</p>
+<p>So the table carries a <strong>proof obligation</strong>. <code>UNIQUE</code> becomes <em>pairwise disjointness</em>, discharged by exhaustive enumeration over the finite domain, and the result is recorded with its method, its solver, and a hash of the exact query — so anyone can re-run it and get the same answer. On a real corpus the overwhelming majority of tables came back <strong>proved</strong>; a handful were refused, and one returned <em>unknown</em>.</p>
+<p>That last outcome is the important one. The prover returns "proved" <strong>only when the search was exhaustive</strong>. Where the domain is unbounded — open intervals, free text — it returns <code>unknown</code> rather than a comfortable green tick. It is sound and deliberately incomplete, which is the opposite of the usual trade in this space.</p>
+<p>On a real corpus, <strong>the overwhelming majority of relationship claims were settled by these checks alone</strong> — the model was needed for only a small minority. That is the actual claim: not a better judge, but <em>far fewer questions that need judging.</em></p>
+<p>Where a model genuinely is required — does this prose faithfully describe that obligation? — two things change its character:</p>
+<ol type="1">
+<li><strong>It never sees the prior answer.</strong> Evidence packets are rebuilt from the raw corpus, so the verifier is not reviewing the generator's reasoning. Its mistakes are not correlated with the generator's mistakes, which is precisely the failure mode that makes naive LLM-as-a-judge weak.</li>
+<li><strong>Its verdict is labelled as a model verdict</strong>, distinct from a deterministic one. You can always ask <em>what kind of check produced this answer</em> and get a straight response.</li>
+</ol>
+<p><strong>And the SME does not disappear — they get routed.</strong> The point is not to replace expert review. It is to stop spending expert attention on claims a string comparison could have settled, and to deliver the remaining ones with the evidence already attached. Reviewing everything and reviewing what actually needs judgment are very different jobs.</p>
+<p>To be explicit about the limit: none of this establishes <em>legal</em> correctness. A deterministic check can prove a quote exists in the source. It cannot tell you the rule is a correct reading of the regulation. That judgment is still human, and always will be — which is exactly why it should not be squandered on questions that were mechanically decidable.</p>
+<p><strong>Generate the right representation, when justified.</strong> Decision tables, process models only where the source shows explicit multi-step semantics, case models for case-oriented work, a governed vocabulary profile, and a validated business information model.</p>
+<p><strong>Make the knowledge explorable.</strong> One self-contained HTML report: vocabulary, rule explorer, dependency graph, inline models, information model, review signals, and the source text itself. A subject-matter expert can move through all of it without ever opening the system's internal files.</p>
+<h3 id="proved-not-tested">Proved, not tested</h3>
+<p>There is a fair follow-up to all of this: <em>how do I know your verifier is any good?</em></p>
+<p>A test checks that one example behaved. A <strong>proof</strong> checks that no example can misbehave. Six properties of this system are proved rather than tested — discharged by exhaustive enumeration over their finite domains, which means checked for every case, not a sample.</p>
+<p>The most legible one: <strong><code>Money</code> and <code>Percentage</code> are incomparable.</strong></p>
+<p>Both are decimal numbers. A system that quietly reconciles them will eventually read a 3% rate as $3. That cannot happen here — and <em>cannot</em> is the operative word. It is not a test that passed on the inputs someone thought of. It is a property that holds for every pair of types in the system: the type relation is proved to be a strict partial order, and neither of those two is a special case of the other — so there is no narrowest reading to pick, and the system refuses rather than choosing one.</p>
+<p>The others are of the same kind. Type reconciliation always returns the unique narrowest reading or explicitly refuses, never a coercion. The prover reports a proof only when its search was exhaustive — it never converts <em>"I could not find a counterexample"</em> into <em>"there is none."</em> On fully bounded inputs it is a genuine decision procedure — it does not fall back on <code>unknown</code> to avoid committing. And the dependency graphs form a <strong>partition</strong> of the rule set: every rule in exactly one, none lost, none counted twice.</p>
+<p>The proofs live in the repository and run in a couple of seconds:</p>
+<pre><code>$ python proofs/check_properties.py
+ALL PROPERTIES HOLD</code></pre>
+<p>I mention this less as a feature than as a standard. If a system's whole argument is <em>"you can check my work,"</em> that has to include checking the checker.</p>
+<h2 id="one-quality-score-hides-several-different-questions">One quality score hides several different questions</h2>
+<p>Running this on a real corpus of public privacy policies taught me something I did not expect about measurement itself.</p>
+<p>Ask <em>"is the extraction good?"</em> and there is no single honest answer, because that question is really three:</p>
+<ul>
+<li><strong>Does every rule point at a source?</strong> Nearly always. Pointers are easy.</li>
+<li><strong>Is each individual claim supported by the source it points at?</strong> Usually — but this is a much stricter test, and it is where independent verification starts earning its place.</li>
+<li><strong>Does the whole rule pass every check, end to end?</strong> Far less often. A rule fails this if <em>any</em> of its claims falls short.</li>
+</ul>
+<p>Same corpus. Same run. Three very different pictures of quality.</p>
+<p>Lead with the first and the system looks finished. Lead with the third and it looks broken. Both are true, which is exactly why the system reports each of them separately instead of averaging them into one reassuring score.</p>
+<p>If you take one thing from this article, make it that: <strong>"accuracy" is close to meaningless for evidence-critical AI unless you say which question you are answering.</strong></p>
+<h3 id="the-failure-that-changed-my-mind">The failure that changed my mind</h3>
+<p>While auditing the system against its own output, I found something I was not looking for.</p>
+<p>The knowledge graph carried per-rule "related rules" lists — dependency references written by the extraction model. Nothing validated them. Some pointed at rules that deduplication had removed and never cleaned up after. Others pointed at rules that had <strong>never existed in any version of the graph at all.</strong> The model had invented rule identifiers, and every stage downstream passed them along unexamined.</p>
+<p>The dependency builder quietly discarded them and reported nothing dropped. The loss was invisible.</p>
+<p>It is worth being precise about why this matters: nothing crashed, no output looked wrong, and every artifact still rendered beautifully. A pipeline like this can be <em>confidently, quietly incorrect</em> — and unless something is built specifically to look for that, you will ship it.</p>
+<p>There is now an integrity check that validates those references and records every drop with a reason. But the lesson generalises well past this project: <strong>in evidence-critical systems, the checks you do not write are the failures you do not see.</strong></p>
+<h2 id="why-sbvr-dmn-bpmn-cmmn-linkml-and-a-compiler--together">Why SBVR, DMN, BPMN, CMMN, LinkML, and a compiler — together?</h2>
+<p>Because no single notation answers every business question.</p>
+<p><div class="ph"><b>&#9650; INSERT IMAGE 6</b><span class="f">images/05-standards-by-question.png</span><br><i>Alt text:</i> SBVR, DMN, BPMN, CMMN, LinkML, and a compiled representation each answer a different business question, behind a source-support gate</div></p>
+<ul>
+<li><strong>SBVR-aligned profile</strong> — <em>What do the business terms mean, and how do they relate?</em> A vocabulary derived deterministically from the graph, linked to concepts and rules.</li>
+<li><strong>DMN 1.3</strong> — <em>What decision follows from these inputs?</em> Decision-table review projections with traceability metadata.</li>
+<li><strong>BPMN 2.0</strong> — <em>What explicitly ordered work must occur?</em> Generated only for grounded, prescriptive, multi-step processes.</li>
+<li><strong>CMMN 1.1</strong> — <em>What work unfolds as a case rather than a fixed sequence?</em> Review and case projections.</li>
+<li><strong>LinkML</strong> — <em>What business data do the rules depend on?</em> A validated schema, with JSON Schema and diagrams generated from it.</li>
+<li><strong>Compiled intermediate representation</strong> — <em>Which properties can be proved rather than assessed?</em> A frozen formal semantics the rules lower into, so obligations like decision-table disjointness become machine-checkable — and unprovable ones come back as <code>unknown</code>.</li>
+</ul>
+<p><strong>The refusal boundary matters as much as the export format.</strong> The pipeline does not emit a process model because two rules share a dependency. It requires an evidenced trigger, a responsible actor, and at least two explicitly ordered steps in the source.</p>
+<p>On a corpus of privacy policies, that test withholds the process diagram for the overwhelming majority of rules — and that is the correct outcome, not a shortfall. A privacy policy states obligations; it rarely describes ordered workflows. Generating a diagram for every rule would have looked like far more progress and meant considerably less.</p>
+<p>Sometimes the most accurate diagram is no diagram.</p>
+<p>The same discipline applies to vocabulary: a low-level decision variable is not automatically a governed business concept. Keeping those layers separate is what stops an SBVR view from degenerating into a dump of every symbol in every rule.</p>
+<h2 id="traceability-is-the-product-not-a-footnote">Traceability is the product, not a footnote</h2>
+<p>Evidence is not attached at the end for the auditor. It is carried through the rule contract and re-checked before any artifact is promoted.</p>
+<p>For any generated element, a reviewer can ask:</p>
+<ol type="1">
+<li>Which rule produced this decision row, process task, case item, or schema field?</li>
+<li>Which structured claim does it represent?</li>
+<li>Which document and chunk were cited?</li>
+<li>Does the quoted text literally occur in the source packet?</li>
+<li>Did an independent verifier support it, contradict it, or find the evidence insufficient?</li>
+<li>What is still a projection that needs validation in its target engine?</li>
+</ol>
+<p>That last question guards against the most expensive category error in this whole space:</p>
+<blockquote>
+<p><strong>Machine-readable is not the same as production-ready.</strong></p>
+</blockquote>
+<h2 id="what-exists-today--and-what-does-not">What exists today — and what does not</h2>
+<p>Credibility here depends on drawing the line clearly. So:</p>
+<p><strong>Implemented and running in the repository:</strong></p>
+<ul>
+<li>A staged CLI pipeline with checkpointed output at every step</li>
+<li>Structured rule contracts with field-level source references</li>
+<li>Deterministic readiness invariants and targeted remediation</li>
+<li>Independent, claim-level grounding verification, with literal quote resolution against the raw corpus</li>
+<li>A frozen IR semantics and a bounded proof layer that discharges decision-table obligations, or returns <code>unknown</code></li>
+<li>Deterministic relationship derivation with stated acceptance conditions, and complete DAG partitioning</li>
+<li>DMN, selective BPMN, CMMN, and SBVR-aligned outputs</li>
+<li>A validated LinkML information model, with JSON Schema and diagrams generated from it</li>
+<li>A self-contained traceability and review report</li>
+<li>Version-to-version change analysis with impact propagation and scenario replay</li>
+</ul>
+<p><strong>Honest limitations:</strong></p>
+<ul>
+<li>It is a pipeline and a library, <strong>not a hosted governance platform</strong>.</li>
+<li>Extraction quality still depends on source quality and model behaviour.</li>
+<li>Readiness invariants check structure. <strong>They do not prove legal correctness.</strong></li>
+<li>Literal quote support is stricter than pointer presence, but it is not full legal entailment.</li>
+<li>The proof layer is <strong>bounded formal verification, not general theorem proving</strong>. It enumerates finite domains exhaustively rather than calling an industrial SMT backend, so it is sound but deliberately incomplete — and it verifies <em>internal logical properties</em> such as hit-policy disjointness, never that a rule is a correct reading of the regulation.</li>
+<li>The mechanically checkable path does not cover every rule. Those it cannot lower are reported as refusals with stated reasons rather than quietly dropped.</li>
+<li>The SBVR artifact is a project-aligned profile, not full OMG interchange conformance. CMMN output is intentionally simple.</li>
+<li>Generated schemas still require environment-specific ownership decisions.</li>
+<li>Change analysis aligns rules by exact identifier today, so a renamed rule reads as a removal plus an addition.</li>
+</ul>
+<p>The repository does <strong>not</strong> establish a universal accuracy rate, complete concept recall, legal correctness, or automatic deployability. Those claims need curated expert benchmarks and target-environment validation. I am not making them here.</p>
+<h2 id="what-this-changes-for-the-people-doing-the-work">What this changes for the people doing the work</h2>
+<p>The goal was never "remove the human." It was to give humans and systems a more reliable object to work with.</p>
+<ul>
+<li><strong>Policy experts</strong> review a structured claim beside its evidence, instead of searching a corpus.</li>
+<li><strong>Analysts</strong> see definitions, conditions, exceptions, and dependencies in one connected model.</li>
+<li><strong>Developers</strong> receive typed, code-ready schemas and decision projections instead of prose.</li>
+<li><strong>Testers</strong> connect scenarios and predicates back to the rule that motivated them.</li>
+<li><strong>Auditors</strong> follow an operational artifact back to a document and a source chunk.</li>
+<li><strong>Change teams</strong> inspect graph impact before deciding what to revalidate.</li>
+</ul>
+<p>There is a quieter benefit that matters most in regulated work: <strong>a deterministic check gives the same answer next quarter that it gave today.</strong> Re-run the pipeline on the same corpus and the same claims resolve the same way, for the same stated reasons. That is not true of a model verdict, and it is the property an audit actually depends on.</p>
+<p>Selective automation with explicit boundaries: automate what is sufficiently supported for a specific environment, route genuine ambiguity to people, and keep the evidence for both decisions.</p>
+<p><div class="ph"><b>&#9650; INSERT IMAGE 7</b><span class="f">images/06-policy-to-code-infographic.png</span><br><i>Alt text:</i> A portrait infographic showing the complete Policy to Knowledge to Reasoning and Verification to Code-ready Artifacts journey, with bidirectional traceability and business outcomes</div></p>
+<h2 id="where-this-goes">Where this goes</h2>
+<p>Generative AI has made it trivially easy to produce something that <strong>looks</strong> like business knowledge. That capability is only going to get cheaper and more convincing.</p>
+<p>Which is why I think the competitive question in regulated AI is about to invert. For the last few years it has been <em>how much can we generate?</em> The next few years will be about the question this article opened with — <strong>where's the proof?</strong> — which unpacks into:</p>
+<blockquote>
+<p>Can every operational claim explain where it came from, how it was transformed, what checked it, and what the system refused to assume?</p>
+</blockquote>
+<p>Organisations that can answer that will be able to deploy. Organisations that cannot will keep producing impressive artifacts that never leave the review queue — not because the models were not good enough, but because nobody could defend the output.</p>
+<p><strong>Provenance is not documentation you add at the end. It is the thing you are actually building.</strong></p>
+<p>And the way you build it is unglamorous: by moving claims out of judgment and into decision, one at a time. Every question you can turn into a string comparison, a set membership, a dataflow test, or a proof obligation is a question that no longer depends on anyone's confidence — not the model's, not the reviewer's, not yours. What is left after that is the part that genuinely needed a human, which is where the expertise should have been going all along.</p>
+<p>And for this project, the most honest answer I can give to my own title is that directory of proofs. Not a benchmark. Not a score. A handful of properties that either hold or do not, and a command that tells you which.</p>
+<p>That is a far smaller claim than <em>"the extraction is accurate."</em> It is also one I can hand you instead of asking you to believe it.</p>
+<p>The invented rule references are the part of this project I think about most. Not because the bug was hard to fix — the check that catches it is a few dozen lines — but because nothing about the system's output suggested anything was wrong. That is the shape of the risk, and it is why I now trust an architecture that reports its own refusals — and publishes properties you can re-derive — far more than one that reports a high score.</p>
+<p><strong>If generation really is becoming free, what becomes the scarce thing in your part of the business — provenance, judgment, or accountability?</strong></p>
+<p>And the concrete version of the same question, because I would genuinely like to know: where does policy meaning most often get lost for you — interpretation, implementation, testing, or change management? That answer is the part I would build next.</p>
+<p><a href="https://github.com/rrahimi-uci/policy-logic-forge">Policy Logic Forge</a> is open source and still developing. Issues and disagreement both welcome.</p>
+<hr />
+<h2 id="technical-grounding">Technical grounding</h2>
+<p>Architectural claims map to implemented components:</p>
+<ul>
+<li><a href="https://github.com/rrahimi-uci/policy-logic-forge/blob/main/utils/agent_names.py">Canonical stages and names</a></li>
+<li><a href="https://github.com/rrahimi-uci/policy-logic-forge/blob/main/utils/rule_contract.py">Structured rule contract</a></li>
+<li><a href="https://github.com/rrahimi-uci/policy-logic-forge/blob/main/utils/rule_dependencies.py">Dependency semantics and reference integrity</a></li>
+<li><a href="https://github.com/rrahimi-uci/policy-logic-forge/blob/main/utils/kg_readiness.py">Readiness invariants</a></li>
+<li><a href="https://github.com/rrahimi-uci/policy-logic-forge/blob/main/agents/agent_09_grounding_verifier.py">Independent grounding verifier</a></li>
+<li><a href="https://github.com/rrahimi-uci/policy-logic-forge/blob/main/utils/dag_builder.py">Complete DAG builder</a></li>
+<li><a href="https://github.com/rrahimi-uci/policy-logic-forge/blob/main/utils/executable_models.py">DMN and selective BPMN generation</a></li>
+<li><a href="https://github.com/rrahimi-uci/policy-logic-forge/blob/main/utils/semantic_artifacts.py">CMMN and SBVR-aligned artifacts</a></li>
+<li><a href="https://github.com/rrahimi-uci/policy-logic-forge/blob/main/utils/linkml_schema.py">LinkML business information model</a></li>
+<li><a href="https://github.com/rrahimi-uci/policy-logic-forge/blob/main/agents/agent_13_business_knowledge_report.py">Self-contained HTML report</a></li>
+<li><a href="https://github.com/rrahimi-uci/policy-logic-forge/blob/main/utils/regdelta_engine.py">Change analysis engine</a></li>
+<li><a href="https://github.com/rrahimi-uci/policy-logic-forge/tree/main/proofs">Machine-checked properties</a> — the six theorems above, runnable</li>
+</ul>
+<p><em>Scope note: This describes the architecture and contracts implemented as of September 2026. All figures come from a single documented run over 109 public privacy policies and are pipeline observations — coverage, support, and refusal counts — not an extraction-accuracy benchmark against expert labels. Generated models are review projections until validated in their target engines. "SBVR" refers to the project's SBVR-aligned vocabulary profile, not complete OMG SBVR interchange conformance.</em></p>
+
+</body></html>
