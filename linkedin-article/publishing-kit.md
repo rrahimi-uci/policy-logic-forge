@@ -2,6 +2,35 @@
 
 Companion material for [`policy-logic-forge-linkedin-article.md`](policy-logic-forge-linkedin-article.md).
 
+## Pasting into LinkedIn
+
+LinkedIn has no public API for creating draft articles — that surface is
+partner-gated — so publishing is a manual paste. Pasting the Markdown source
+loses all formatting: this draft carries 81 bold spans, 67 bullets, 5 block
+quotes and 10 inline-code spans, well over 150 operations to reapply by hand.
+
+Pasting *rendered* HTML keeps them. Generate the paste-ready file:
+
+```bash
+python linkedin-article/make_paste_ready.py
+```
+
+Then open `linkedin-article/paste-ready.html` in a browser, select all, copy,
+and paste into the LinkedIn article editor. Headings, bold, italics, lists,
+quotes and links all survive.
+
+Two things are deliberately not rendered:
+
+- **Images become labelled placeholders.** LinkedIn images must be uploaded
+  through the editor, so an `<img>` would paste broken. Each placeholder names
+  the file to upload and its alt text — delete the block, upload the image
+  there. The seven are listed under *Image sequence and alt text* below.
+- **The title and subtitle are shown separately**, because they belong in
+  LinkedIn's own title field rather than in the body.
+
+Regenerate the file after any edit to the article; it is committed so it can
+be opened without running anything.
+
 ## Format constraint, read this first
 
 **LinkedIn's article editor does not render Markdown tables.** Pasting one produces a run-on paragraph or drops the content entirely. The article previously carried four tables; all four are written as headed bullet lists that survive paste-in unchanged. Do not reintroduce tables when editing.
