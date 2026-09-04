@@ -179,14 +179,34 @@ Both are decimal numbers. A system that quietly reconciles them will eventually 
 
 The others are of the same kind. Type reconciliation always returns the unique narrowest reading or explicitly refuses, never a coercion. The prover reports a proof only when its search was exhaustive — it never converts *"I could not find a counterexample"* into *"there is none."* On fully bounded inputs it is a genuine decision procedure — it does not fall back on `unknown` to avoid committing. And the dependency graphs form a **partition** of the rule set: every rule in exactly one, none lost, none counted twice.
 
-The proofs live in the repository and run in a couple of seconds:
+The distinction is easier to state formally than in prose.
 
 ```
-$ python proofs/check_properties.py
-ALL PROPERTIES HOLD
+Let (T, ⊑) be the refinement order on types. For a set of
+observations S ⊆ T, write
+
+    N(S)  =  { t ∈ T  |  ∀s ∈ S .  t ⊑ s }        the common refinements
+
+CLAIM.   ∀ S ⊆ T :
+
+    reconcile(S)  =  min N(S),   if that ⊑-least element exists
+                     ⊥,          otherwise
+
+A test fixes one S and checks one equation:
+
+    reconcile({ Money, Percentage })  =  ⊥
+
+A proof quantifies over S — all 1,940 of them — and must
+discharge the ⊥ case as carefully as the other:
+
+    ∀ S .  reconcile(S) = ⊥   ⟹   N(S) has no ⊑-least element
 ```
+
+That last implication is the one that is easy to forget, and it is the one that carries the weight. A checker that returns ⊥ for everything satisfies the first line trivially and is worthless. Proving the system correct means proving that every ⊥ was *earned* — that there genuinely was no least element to return, rather than one the search failed to find.
 
 I mention this less as a feature than as a standard. If a system's whole argument is *"you can check my work,"* that has to include checking the checker.
+
+One boundary, because it matters more than anything else here: **none of this proves legal correctness.** The checks establish structure, provenance, and internal logical properties — never that a rule is a correct reading of the regulation. That judgment stays with a person, which is the whole point of spending so much effort making their queue smaller.
 
 ## One quality score hides several different questions
 
@@ -254,37 +274,6 @@ That last question guards against the most expensive category error in this whol
 
 > **Machine-readable is not the same as production-ready.**
 
-## What exists today — and what does not
-
-Credibility here depends on drawing the line clearly. So:
-
-**Implemented and running in the repository:**
-
-- A staged CLI pipeline with checkpointed output at every step
-- Structured rule contracts with field-level source references
-- Deterministic readiness invariants and targeted remediation
-- Independent, claim-level grounding verification, with literal quote resolution against the raw corpus
-- A frozen IR semantics and a bounded proof layer that discharges decision-table obligations, or returns `unknown`
-- Deterministic relationship derivation with stated acceptance conditions, and complete DAG partitioning
-- DMN, selective BPMN, CMMN, and SBVR-aligned outputs
-- A validated LinkML information model, with JSON Schema and diagrams generated from it
-- A self-contained traceability and review report
-- Version-to-version change analysis with impact propagation and scenario replay
-
-**Honest limitations:**
-
-- It is a pipeline and a library, **not a hosted governance platform**.
-- Extraction quality still depends on source quality and model behaviour.
-- Readiness invariants check structure. **They do not prove legal correctness.**
-- Literal quote support is stricter than pointer presence, but it is not full legal entailment.
-- The proof layer is **bounded formal verification, not general theorem proving**. It enumerates finite domains exhaustively rather than calling an industrial SMT backend, so it is sound but deliberately incomplete — and it verifies *internal logical properties* such as hit-policy disjointness, never that a rule is a correct reading of the regulation.
-- The mechanically checkable path does not cover every rule. Those it cannot lower are reported as refusals with stated reasons rather than quietly dropped.
-- The SBVR artifact is a project-aligned profile, not full OMG interchange conformance. CMMN output is intentionally simple.
-- Generated schemas still require environment-specific ownership decisions.
-- Change analysis aligns rules by exact identifier today, so a renamed rule reads as a removal plus an addition.
-
-The repository does **not** establish a universal accuracy rate, complete concept recall, legal correctness, or automatic deployability. Those claims need curated expert benchmarks and target-environment validation. I am not making them here.
-
 ## What this changes for the people doing the work
 
 The goal was never "remove the human." It was to give humans and systems a more reliable object to work with.
@@ -316,35 +305,10 @@ Organisations that can answer that will be able to deploy. Organisations that ca
 
 And the way you build it is unglamorous: by moving claims out of judgment and into decision, one at a time. Every question you can turn into a string comparison, a set membership, a dataflow test, or a proof obligation is a question that no longer depends on anyone's confidence — not the model's, not the reviewer's, not yours. What is left after that is the part that genuinely needed a human, which is where the expertise should have been going all along.
 
-And for this project, the most honest answer I can give to my own title is that directory of proofs. Not a benchmark. Not a score. A handful of properties that either hold or do not, and a command that tells you which.
+And for this project, the most honest answer I can give to my own title is a handful of properties that either hold or do not. Not a benchmark. Not a score.
 
 That is a far smaller claim than *"the extraction is accurate."* It is also one I can hand you instead of asking you to believe it.
 
 The invented rule references are the part of this project I think about most. Not because the bug was hard to fix — the check that catches it is a few dozen lines — but because nothing about the system's output suggested anything was wrong. That is the shape of the risk, and it is why I now trust an architecture that reports its own refusals — and publishes properties you can re-derive — far more than one that reports a high score.
 
-**If generation really is becoming free, what becomes the scarce thing in your part of the business — provenance, judgment, or accountability?**
-
 And the concrete version of the same question, because I would genuinely like to know: where does policy meaning most often get lost for you — interpretation, implementation, testing, or change management? That answer is the part I would build next.
-
-[Policy Logic Forge](https://github.com/rrahimi-uci/policy-logic-forge) is open source and still developing. Issues and disagreement both welcome.
-
----
-
-## Technical grounding
-
-Architectural claims map to implemented components:
-
-- [Canonical stages and names](https://github.com/rrahimi-uci/policy-logic-forge/blob/main/utils/agent_names.py)
-- [Structured rule contract](https://github.com/rrahimi-uci/policy-logic-forge/blob/main/utils/rule_contract.py)
-- [Dependency semantics and reference integrity](https://github.com/rrahimi-uci/policy-logic-forge/blob/main/utils/rule_dependencies.py)
-- [Readiness invariants](https://github.com/rrahimi-uci/policy-logic-forge/blob/main/utils/kg_readiness.py)
-- [Independent grounding verifier](https://github.com/rrahimi-uci/policy-logic-forge/blob/main/agents/agent_09_grounding_verifier.py)
-- [Complete DAG builder](https://github.com/rrahimi-uci/policy-logic-forge/blob/main/utils/dag_builder.py)
-- [DMN and selective BPMN generation](https://github.com/rrahimi-uci/policy-logic-forge/blob/main/utils/executable_models.py)
-- [CMMN and SBVR-aligned artifacts](https://github.com/rrahimi-uci/policy-logic-forge/blob/main/utils/semantic_artifacts.py)
-- [LinkML business information model](https://github.com/rrahimi-uci/policy-logic-forge/blob/main/utils/linkml_schema.py)
-- [Self-contained HTML report](https://github.com/rrahimi-uci/policy-logic-forge/blob/main/agents/agent_13_business_knowledge_report.py)
-- [Change analysis engine](https://github.com/rrahimi-uci/policy-logic-forge/blob/main/utils/regdelta_engine.py)
-- [Machine-checked properties](https://github.com/rrahimi-uci/policy-logic-forge/tree/main/proofs) — the six theorems above, runnable
-
-*Scope note: This describes the architecture and contracts implemented as of September 2026. All figures come from a single documented run over 109 public privacy policies and are pipeline observations — coverage, support, and refusal counts — not an extraction-accuracy benchmark against expert labels. Generated models are review projections until validated in their target engines. "SBVR" refers to the project's SBVR-aligned vocabulary profile, not complete OMG SBVR interchange conformance.*

@@ -1031,6 +1031,27 @@ Key design choices, since they're easy to get wrong by assumption:
 See [`plan/regdelta-product-plan.md`](plan/regdelta-product-plan.md) for the
 full rollout plan and acceptance criteria.
 
+### 5.1 Known limitation: the IR's scope vocabulary is domain-specific
+
+`_SCOPE_DIMENSION_SYMBOLS` in `utils/lexec_ir.py` is a five-name allowlist —
+`loan_types`, `transaction_types`, `occupancy_types` (mortgage) and
+`user_categories`, `information_types` (privacy). A scope field outside that
+list is never lowered into `scope.predicate`; the rule is refused with
+`UNREPRESENTABLE_SCOPE`.
+
+This is a portability limit, not a semantic one. The IR can express such
+dimensions perfectly well — it simply does not know their names. Measured on
+an open statutory benchmark whose rules scope by `case_types` and
+`configurations`, **every rule refused for this reason alone**, and adding
+those two names to the allowlist, changing nothing else, moved the compile
+rate from 0% to 33.3% (see [`research/pilot/`](research/pilot/)).
+
+The consequence worth stating plainly: **the compile rates measured on the
+mortgage and privacy corpora are partly a product of having tuned this
+allowlist to those two domains.** Any cross-domain claim has to fix this
+first. The right shape is a declared scope ontology per domain pack, or an
+open string-symbol dimension, rather than a literal in the IR.
+
 ## 6. Executable model formats
 
 `agent_11` emits four standards-based artifacts per run. The examples below
@@ -1340,6 +1361,11 @@ fixtures/regdelta/           hand-labeled fixtures for RegDelta's acceptance tes
 results/aggregates/          retained run-evidence manifests (metadata only)
 docs/                        compiler/semantics notes + retained validation records
 plan/                        RegDelta product plan + LExec IR schema
+proofs/                      six machine-checked properties, discharged by
+                             exhaustive enumeration (check_properties.py)
+research/pilot/              compile-rate ladder over an open statutory benchmark
+research/refusal_signal/     does an IR refusal predict model error? (it does not)
+technical-report/            LaTeX architecture report; `make` rebuilds report.pdf
 pipeline-output/<batch>/     run output (gitignored, regenerable)
 tests/                       pytest suite
 ```

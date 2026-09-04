@@ -71,7 +71,7 @@ cli/extract.py --dir DIR --domain DOMAIN [options] [selector]
 | `--step ALIAS` | no* | Deprecated legacy selector (`1`, `3.5`, `5.7`, ...) from a prior ten-stage numbering. Prints the canonical stage it maps to. Prefer `--stage`/`--agent`. |
 
 \* `--agent`, `--stage`, `--stages`, and `--step` are mutually exclusive. Omit
-all four to run the full 11-stage pipeline (`run_all`).
+all four to run the full thirteen-stage pipeline (`run_all`).
 
 Run `python3 cli/extract.py --help` for the same reference from the tool
 itself, including the full per-stage summary table baked into its
