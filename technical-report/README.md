@@ -7,11 +7,16 @@ RegDelta, and what the evaluation actually found — including a pre-registered
 hypothesis that failed.
 
 ```bash
-make          # build _build/report.pdf
+make          # build technical-report/report.pdf
 make data     # regenerate every plot coordinate from the result files
-make check    # fail if the committed figure data is stale
+make check    # fail if the committed PDF or figure data is stale
 make clean
 ```
+
+**[`report.pdf`](report.pdf) is committed**, so the report can be read
+without a TeX toolchain. Intermediates go to `_build/`, which is ignored.
+If you change any source, run `make` and commit the regenerated PDF --
+`make check` fails if you forget.
 
 ## Why `tectonic`
 
@@ -34,8 +39,9 @@ coordinate the plots use:
 | `data/code_size.tex` | the repository tree |
 
 So a number in the PDF cannot drift from the run that produced it. `make
-check` fails if regenerating changes anything, which makes staleness a build
-error rather than a proofreading miss.
+check` regenerates the data, rebuilds the PDF, and fails if either differs
+from what is committed -- which makes staleness a build error rather than a
+proofreading miss.
 
 The prose figures — the pipeline, the evidence spine, the verification
 ladder, the exit-code contract, the module graph, RegDelta — are TikZ, drawn

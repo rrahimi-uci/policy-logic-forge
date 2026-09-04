@@ -17,9 +17,14 @@ DATA     := $(wildcard data/*.tex) $(wildcard data/*.csv)
 
 .PHONY: all data clean distclean check
 
-all: $(OUT)/report.pdf
+all: report.pdf
 
-## report.pdf -- the report, rebuilt whenever a source or datum changes
+## report.pdf -- the deliverable, checked in so it can be read without a
+## TeX toolchain. Intermediates stay in $(OUT), which is ignored.
+report.pdf: $(OUT)/report.pdf
+	@cp $< $@
+	@echo "report.pdf updated -- commit it if the sources changed"
+
 $(OUT)/report.pdf: $(SOURCES) $(DATA) | $(OUT)
 	$(TECTONIC) -X compile report.tex --outdir $(OUT)
 
@@ -30,13 +35,13 @@ $(OUT):
 data:
 	$(PYTHON) make_data.py
 
-## check -- fail if any figure coordinate is stale relative to the results
-check: data
-	@if git diff --quiet -- data; then \
-	  echo "figure data is current"; \
+## check -- fail if the committed figure data or PDF is stale
+check: data all
+	@if git diff --quiet -- data report.pdf; then \
+	  echo "figure data and report.pdf are current"; \
 	else \
-	  echo "ERROR: regenerating data/ changed it -- the PDF is stale."; \
-	  git --no-pager diff --stat -- data; exit 1; \
+	  echo "ERROR: rebuilding changed committed files -- commit the result."; \
+	  git --no-pager diff --stat -- data report.pdf; exit 1; \
 	fi
 
 clean:
