@@ -84,3 +84,51 @@ def test_grounding_verify_splits_an_incomplete_large_response() -> None:
 
     assert {item["claim_id"] for item in results} == {"c1", "c2"}
     assert len(resolver.client.calls) == 3
+
+
+def test_grounding_verify_splits_empty_response_before_retrying_same_batch() -> None:
+    class _Client:
+        def __init__(self) -> None:
+            self.calls = []
+
+        def chat_completion(self, **kwargs):
+            self.calls.append(kwargs)
+            packets = json.loads(kwargs["messages"][0]["content"])
+            claims = [
+                {"rule_id": packet["rule_id"], "claim_id": claim["claim_id"]}
+                for packet in packets for claim in packet["claims"]
+            ]
+            # Simulate Anthropic consuming the complete reasoning budget before
+            # emitting visible JSON.  Once split to one claim, return a valid
+            # response so the verifier can complete without losing coverage.
+            content = "" if len(claims) > 1 else json.dumps({"verifications": claims})
+            return SimpleNamespace(
+                choices=[SimpleNamespace(message=SimpleNamespace(content=content))],
+            )
+
+    resolver = object.__new__(OpenAIGroundingResolver)
+    resolver.client = _Client()
+    resolver.prompts = SimpleNamespace(format_prompt=lambda _name, packets_json: packets_json)
+    resolver.reasoning_effort = "medium"
+    packets = [{"rule_id": "r1", "claims": [{"claim_id": "c1"}, {"claim_id": "c2"}]}]
+
+    results = resolver.verify(packets)
+
+    assert {item["claim_id"] for item in results} == {"c1", "c2"}
+    assert len(resolver.client.calls) == 3
+
+
+def test_grounding_verify_single_empty_claim_fails_closed() -> None:
+    class _Client:
+        def chat_completion(self, **_kwargs):
+            return SimpleNamespace(
+                choices=[SimpleNamespace(message=SimpleNamespace(content=""))],
+            )
+
+    resolver = object.__new__(OpenAIGroundingResolver)
+    resolver.client = _Client()
+    resolver.prompts = SimpleNamespace(format_prompt=lambda *_args, **_kwargs: "return JSON")
+    resolver.reasoning_effort = "medium"
+    packets = [{"rule_id": "r1", "claims": [{"claim_id": "c1"}]}]
+
+    assert resolver.verify(packets) == []
