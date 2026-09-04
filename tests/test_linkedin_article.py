@@ -32,18 +32,11 @@ VISUAL_STEMS = (
 # no longer exists.  So this list is the floor, not the exact set: every
 # entry must stay linked, and separately every link in the article must
 # resolve to a real file.
-TECHNICAL_GROUNDING_FILES = (
-    "utils/agent_names.py",
-    "utils/rule_contract.py",
-    "utils/rule_dependencies.py",
-    "utils/kg_readiness.py",
-    "agents/agent_09_grounding_verifier.py",
-    "utils/dag_builder.py",
-    "utils/executable_models.py",
-    "utils/semantic_artifacts.py",
-    "agents/agent_13_business_knowledge_report.py",
-    "utils/regdelta_engine.py",
-)
+# The published article deliberately carries no repository links: it is
+# written for readers who will never open the code, and pointing at files
+# invited them to. The guard is now the inverse - if a link comes back, it
+# still has to resolve, but none is required.
+TECHNICAL_GROUNDING_FILES: tuple[str, ...] = ()
 
 BLOB_PREFIX = "https://github.com/rrahimi-uci/policy-logic-forge/blob/main/"
 
@@ -94,18 +87,12 @@ def test_article_states_important_claim_boundaries() -> None:
     article = ARTICLE.read_text(encoding="utf-8").casefold()
 
     required_boundaries = (
-        # it is a pipeline, not a product
-        "not a hosted governance platform",
-        # structural checks are not legal correctness
-        "do not prove legal correctness",
-        # the prover is sound but deliberately incomplete
-        "bounded formal verification, not general theorem proving",
-        # the SBVR artifact is a profile, not conformance
-        "not full omg interchange conformance",
-        # RegDelta aligns by exact identifier
-        "aligns rules by exact identifier",
-        # no accuracy claim is being made
-        "does **not** establish a universal accuracy rate",
+        # the claim that carries real risk if it goes missing: the article
+        # argues hard for verification, so it must say what verification is
+        # NOT. The long "what exists / what does not" section was cut for
+        # length; this sentence carries what mattered in it.
+        "none of this proves legal correctness",
+        "never that a rule is a correct reading of the regulation",
         # machine-readable is not production-ready
         "machine-readable is not the same as production-ready",
     )
@@ -143,6 +130,12 @@ def test_visual_masters_are_valid_and_pngs_are_publication_resolution() -> None:
 
 
 def test_technical_grounding_links_point_to_repository_files() -> None:
+    """Any repository file the article names must exist.
+
+    The list is empty by choice - see the note on TECHNICAL_GROUNDING_FILES.
+    If links are ever reintroduced, add them here and this starts guarding
+    them again.
+    """
     article = ARTICLE.read_text(encoding="utf-8")
 
     for relative_path in TECHNICAL_GROUNDING_FILES:
@@ -161,7 +154,7 @@ def test_every_repository_link_in_the_article_resolves() -> None:
     article = ARTICLE.read_text(encoding="utf-8")
 
     linked = sorted(set(re.findall(re.escape(BLOB_PREFIX) + r"([\w/.-]+)", article)))
-    assert linked, "the article no longer links any repository file"
-
+    # an empty set is the current, intended state - the assertion below is
+    # about dead links, not about requiring links to exist
     dead = [path for path in linked if not (ROOT / path).exists()]
     assert not dead, f"article links files that do not exist: {dead}"

@@ -39,6 +39,24 @@ The editor supports: headings (H1–H3), bold, italic, bulleted and numbered lis
 
 ## Editorial position
 
+Four deliberate choices shape the published version. The first two are
+long-standing; the last two were made when the draft was cut for LinkedIn.
+
+- **No repository references.** The article names no files, links no code, and
+  does not mention that a repository exists. It is written for readers who will
+  never open it, and pointing at source invited them to do the wrong thing with
+  their attention.
+- **One formal statement, not a code listing.** The proof example is stated in
+  set-theoretic notation rather than Python, because the difference between a
+  test and a proof *is* the quantifier — and notation shows that where a
+  function body hides it. It also drops the language barrier.
+- **The "what exists / what does not" section was cut.** It ran ~400 words. The
+  one boundary that carried real risk — that none of this proves legal
+  correctness — was kept as a single sentence in the proofs section.
+- **One closing question, not two.** The draft ended with an abstract question
+  and a concrete one; two dilutes the response rate. The concrete one survives.
+
+
 Two deliberate choices shape this draft:
 
 - **No stage count.** The pipeline is described by its five responsibilities, not by how many stages it has. A reader does not need to hold a number in their head to follow the argument, and a count invites the wrong question ("why that many?") instead of the right one ("what does each boundary catch?").
@@ -75,7 +93,7 @@ Why it works:
 1. **Your AI Passed Every Test. Would It Survive a Proof?** — carries the tested-versus-proved axis, the most differentiated idea in the piece, and challenges the reader's own system. Drops the policy anchor and the payoff arrives late, so **use it as the headline for the standalone proofs post**, not the article.
 2. **AI Can Write the Rule. It Can't Vouch for It.** — the sharpest logic of the set, compressing *"you cannot ask the thing that wrote the rule whether the rule is true."* Loses the word *proof*, which is the asset worth spending.
 3. **Verifying AI Shouldn't Need Another Opinion** — kills the LLM-as-a-judge frame in the headline itself. Best paired with the verification-ladder image as a standalone post.
-4. **Generation Is Cheap. Proof Is the Product.** — the quotable aphorism, now backed by a real `proofs/` directory. Least domain-anchored of the set.
+4. **Generation Is Cheap. Proof Is the Product.** — the quotable aphorism, backed by properties that are proved rather than asserted. Least domain-anchored of the set.
 
 **Pairing note:** the cover image says *"A policy is not an algorithm."* That is deliberate. The title asks the question; the cover states the principle behind it. Keep them different — a headline and a thesis card doing the same job wastes one of them.
 
@@ -214,7 +232,7 @@ rsvg-convert -w 2160 -h 2700 06-policy-to-code-infographic.svg -o 06-policy-to-c
 - **Do not convert any list back into a table.** See the format constraint above.
 - **Do not add performance figures.** See the editorial position above; if you want them, they belong in a follow-up post with the run context attached.
 - Keep short paragraphs and descriptive headings for mobile.
-- Preserve the "What exists today — and what does not" section and the scope note. They are the article's credibility, not boilerplate.
+- **Preserve the legal-correctness boundary** — the sentence beginning *"One boundary, because it matters more than anything else here…"*. The long "what exists / what does not" section was cut for length; that sentence is what carried its weight, and `tests/test_linkedin_article.py` fails if it goes missing.
 - Put the repository link in the article *and* the first comment.
 - Reply to early comments within the first hour; it materially affects distribution.
 - Use image 05 or 06 as a follow-up post rather than repeating the cover.

@@ -71,6 +71,24 @@ top: compile old and new versions of a policy to LExec IR, align rules,
 classify semantic changes, and propagate impact through the dependency
 graph. See [`plan/regdelta-product-plan.md`](plan/regdelta-product-plan.md).
 
+**Machine-checked properties** — six properties of the type lattice, the
+bounded prover, and the dependency partition are discharged by exhaustive
+enumeration rather than by example, so they hold for every input in the
+bounded signature. `python proofs/check_properties.py` runs them in a couple
+of seconds and prints the counterexample if one exists.
+
+**Research harnesses** — [`research/pilot/`](research/pilot/) measures how
+often extracted rules lower to the checkable IR, as a raw → normalised →
+repaired ladder with typed refusal codes.
+[`research/refusal_signal/`](research/refusal_signal/) tested whether those
+refusals predict where a language model errs; **they do not**, and the
+negative result is written up in full alongside its power analysis.
+
+**Technical report** — [`technical-report/report.pdf`](technical-report/report.pdf)
+is a fifteen-page LaTeX report on the architecture, built from the sources
+beside it. Its figures are generated from the committed result files, so a
+stale number is a build error rather than a proofreading miss.
+
 **No UI.** This is a CLI-and-library tool; there is currently no web
 frontend or backend service.
 
@@ -341,6 +359,13 @@ scripts/generate_benchmark_domain_prompts.py
                             regenerate after editing a template, don't hand-edit
                             the committed .txt files
 fixtures/regdelta/          hand-labeled fixtures for RegDelta's acceptance tests
+proofs/                     six machine-checked properties + the runner that
+                            discharges them by exhaustive enumeration
+research/pilot/             compile-rate ladder over an open statutory benchmark
+research/refusal_signal/    does a refusal predict model error? (it does not)
+technical-report/           LaTeX architecture report; `make` rebuilds report.pdf
+docs/                       compiler/semantics notes + retained validation records
+plan/                       RegDelta product plan + LExec IR schema
 tests/                      pytest suite
 ```
 
