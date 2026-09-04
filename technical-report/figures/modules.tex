@@ -1,0 +1,56 @@
+% The compiler layer is the only part of utils/ with real internal
+% structure: lexec_ir.py is a genuine hub, imported both by the stage-11
+% proof-checked compile path and by every RegDelta module.
+%
+% Module names are set in mono, which is wide. Box width is chosen from the
+% longest name (impact_propagation, 18 characters), not guessed.
+\begin{tikzpicture}[font=\plexsans\scriptsize, x=3.60cm, y=-1.36cm]
+
+  \newcommand{\mname}[1]{{\plexmono\tiny #1}}
+  \newcommand{\msub}[1]{{\plexsanslight\tiny #1}}
+  \tikzset{m/.style={box, text width=2.62cm, minimum height=0.94cm,
+                     inner sep=4pt}}
+
+  % pipeline entry points
+  \node[m, src] (a11) at (0,0) {\mname{agent\_11}\\\msub{executable models}};
+  \node[m, src] (a12) at (0,1) {\mname{agent\_12}\\\msub{information model}};
+  \node[m, src] (a13) at (0,2) {\mname{agent\_13}\\\msub{knowledge report}};
+
+  % emitters and typing
+  \node[m] (em) at (1,0) {\mname{executable\_models}\\\msub{DMN + BPMN}};
+  \node[m] (sa) at (1,1) {\mname{semantic\_artifacts}\\\msub{CMMN + SBVR}};
+  \node[m] (im) at (1,2) {\mname{information\_model}\\\msub{typing + validation}};
+  \node[m] (lk) at (1,3) {\mname{linkml\_schema}\\\msub{canonical schema}};
+
+  % proof-checked path
+  \node[m]      (lc)  at (2,0) {\mname{lexec\_compile}};
+  \node[m, hub] (ir)  at (2,1) {\mname{lexec\_ir}\\\msub{frozen semantics}};
+  \node[m]      (smt) at (2,2) {\mname{smt}\\\msub{bounded prover}};
+
+  % regdelta
+  \node[m, stop] (re)   at (3,0) {\mname{regdelta\_engine}};
+  \node[m, stop] (feel) at (3,1) {\mname{feel}\\\msub{bounded evaluator}};
+  \node[m, stop] (rest) at (3,2) {\mname{rule\_alignment}\\\mname{semantic\_diff}\\%
+                                  \mname{impact\_propagation}};
+
+  \draw[flow] (a11) -- (em);
+  \draw[flow] (a11.east) -- ++(0.05,0) |- (sa.west);
+  \draw[flow] (a13.east) -- ++(0.05,0) |- (sa.west);
+  \draw[flow] (a12) -- (im);
+  \draw[flow] (im) -- (lk);
+  \draw[flow] (a11.east) -- ++(0.05,0) |- (lc.west);
+  \draw[flow] (lc) -- (ir);
+  \draw[flow] (lc.east) -- ++(0.05,0) |- (smt.west);
+
+  \draw[flow] (re) -- (feel);
+  \draw[flow] (re.east) -- ++(0.05,0) |- (rest.east);
+  \draw[flow, draw=forge, line width=1pt] (re.west)   -- (ir.east);
+  \draw[flow, draw=forge, line width=1pt] (feel.west) -- (ir.east);
+
+  \begin{scope}[on background layer]
+    \node[phaseband, fit=(re)(feel)(rest), inner sep=7pt] (rd) {};
+  \end{scope}
+  \node[phaselabel, anchor=south, font=\plexsans\bfseries\tiny]
+        at (rd.north) {REGDELTA};
+
+\end{tikzpicture}

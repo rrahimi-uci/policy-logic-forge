@@ -1,0 +1,29 @@
+% RegDelta: what changed, for whom, and what else it affects -- computed
+% from two completed runs without re-running extraction.
+\begin{tikzpicture}[font=\plexsans\scriptsize, x=2.60cm, y=-1.40cm]
+
+  \tikzset{rg/.style={box, text width=1.85cm, minimum height=1.06cm}}
+
+  \node[rg, src] (old) at (0,0) {\textbf{old run}\\{\plexsanslight optimised graph}};
+  \node[rg, src] (new) at (0,1) {\textbf{new run}\\{\plexsanslight optimised graph}};
+
+  \node[rg] (comp)  at (1,0.5) {\textbf{Compile}\\{\plexsanslight both to LExec IR}};
+  \node[rg] (align) at (2,0.5) {\textbf{Align}\\{\plexsanslight exact ID today}};
+  \node[rg] (class) at (3,0.5) {\textbf{Classify}\\{\plexsanslight added · removed\\changed · unchanged}};
+  \node[rg] (prop)  at (4,0.5) {\textbf{Propagate}\\{\plexsanslight direct → potential\\→ recompute}};
+  \node[rg] (rep)   at (5,0.5) {\textbf{Replay}\\{\plexsanslight old vs new\\outcome}};
+
+  \node[box, fill=mist, draw=forge, line width=1pt, text width=11.0cm,
+        minimum height=0.80cm, align=center]
+        (out) at (2.5,2.05)
+        {\code{regdelta-impact/1.0}\quad
+         {\plexsanslight rule\_alignments · semantic\_changes · affected\_cases ·
+          witnesses · downstream\_impacts · refusals}};
+
+  \draw[flow] (old.east) -- ++(0.08,0) |- (comp.west);
+  \draw[flow] (new.east) -- ++(0.08,0) |- (comp.west);
+  \foreach \a/\b in {comp/align, align/class, class/prop, prop/rep}
+    \draw[flow] (\a) -- (\b);
+  \draw[flow] (rep.south) |- (out.east);
+
+\end{tikzpicture}

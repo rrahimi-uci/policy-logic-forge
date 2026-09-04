@@ -1,0 +1,43 @@
+% Four kinds of check, in order of strength. Every question is pushed down
+% to the strongest instrument that can settle it; only what survives all
+% four reaches a person.
+\begin{tikzpicture}[font=\plexsans\scriptsize, y=-1.62cm]
+
+  \tikzset{rung/.style={box, text width=12.4cm, minimum height=1.34cm,
+                        align=left, inner sep=8pt}}
+
+  \node[rung, pass]  (r1) at (0,0) {%
+    \lbl{1 · deterministic · no model}\\[3pt]
+    \textbf{Decided by code, reproducible by anyone.}
+    {\plexsanslight Does the quote occur in the cited chunk?\ ·\ Does this
+     rule id exist?\ ·\ Does the schema hold?\ ·\ Does B read what A assigns?}};
+
+  \node[rung, src]   (r2) at (0,1) {%
+    \lbl{2 · proof · bounded, sound, incomplete by design}\\[3pt]
+    \textbf{Proved exhaustively --- or returned as \code{unknown}.}
+    {\plexsanslight Does this \code{UNIQUE} table satisfy pairwise
+     disjointness?\ ·\ Is this condition satisfiable at all?}};
+
+  \node[rung]        (r3) at (0,2) {%
+    \lbl{3 · model · only where judgment is irreducible}\\[3pt]
+    \textbf{Judged against fresh evidence, never the prior answer.}
+    {\plexsanslight Does this description faithfully state the obligation?
+     Evidence is rebuilt from the raw corpus, so errors do not correlate.}};
+
+  \node[rung, gate]  (r4) at (0,3) {%
+    \lbl{4 · human expert · routed, not replaced}\\[3pt]
+    \textbf{Is this a correct reading of the regulation?}
+    {\plexsanslight The one question no check above can answer --- which is
+     why it should not be spent on the ones they can.}};
+
+  \foreach \a/\b in {r1/r2, r2/r3, r3/r4}
+    \draw[flow] (\a.south) -- (\b.north);
+
+  % strength axis
+  \draw[draw=hairline, line width=.8pt]
+        ($(r1.north west)+(-0.30,0)$) -- ($(r4.south west)+(-0.30,0)$);
+  \node[rotate=90, anchor=south, font=\plexsans\tiny, text=slate]
+        at ($(r1.west)!0.5!(r4.west)+(-0.42,0)$)
+        {decreasing strength\ \ ·\ \ increasing cost};
+
+\end{tikzpicture}

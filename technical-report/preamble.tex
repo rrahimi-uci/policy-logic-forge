@@ -1,0 +1,174 @@
+% ============================================================
+%  Policy Logic Forge -- technical report style
+% ------------------------------------------------------------
+%  Type   Libertinus Serif for prose, IBM Plex Sans for every
+%         structural element (heads, labels, captions, figure
+%         text), IBM Plex Mono for identifiers.  A humanist
+%         serif carrying the argument with a technical grotesque
+%         carrying the scaffolding: it should read as an
+%         engineering report, not a paper template.
+%  Colour Neutrals are biased toward the teal accent rather than
+%         being pure greys, so the palette resolves as one set.
+% ============================================================
+
+\usepackage[letterpaper,top=1.05in,bottom=1.05in,left=1.15in,right=1.15in]{geometry}
+\usepackage{libertinus-otf}
+\usepackage{fontspec}
+\usepackage[english]{babel}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,shapes.geometric,fit,backgrounds,calc,
+                decorations.pathreplacing}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{longtable}
+\usepackage{tabularx}
+\usepackage{caption}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage{tcolorbox}
+\tcbuselibrary{skins,breakable}
+\usepackage[hidelinks]{hyperref}
+
+% ---------------------------------------------------------------- palette
+\definecolor{inkwell}{HTML}{14243A}   % body + heads
+\definecolor{forge}{HTML}{0B6E75}     % primary accent
+\definecolor{forgelight}{HTML}{D6E8E9}
+\definecolor{slate}{HTML}{64748B}     % secondary text
+\definecolor{amberdeep}{HTML}{A45309} % review / gate
+\definecolor{amberpale}{HTML}{FBF0DF}
+\definecolor{rosedeep}{HTML}{A3123A}  % stop / refusal
+\definecolor{rosepale}{HTML}{FBE7EC}
+\definecolor{mossdeep}{HTML}{14652F}  % pass / proved
+\definecolor{mosspale}{HTML}{E4F1E6}
+\definecolor{mist}{HTML}{F1F5F4}      % panel fill
+\definecolor{hairline}{HTML}{C8D4D5}
+
+% ---------------------------------------------------------------- fonts
+\newfontfamily\plexsans{IBMPlexSans}[
+  Extension=.otf, UprightFont=*-Regular, BoldFont=*-SemiBold,
+  ItalicFont=*-Italic, BoldItalicFont=*-SemiBoldItalic,
+  Ligatures=TeX, Scale=MatchLowercase]
+\newfontfamily\plexsanslight{IBMPlexSans}[
+  Extension=.otf, UprightFont=*-Light, BoldFont=*-Regular,
+  Ligatures=TeX, Scale=MatchLowercase]
+\newfontfamily\plexmono{IBMPlexMono}[
+  Extension=.otf, UprightFont=*-Regular, BoldFont=*-SemiBold,
+  ItalicFont=*-Italic, Ligatures=TeX, Scale=MatchLowercase]
+
+\newcommand{\lbl}[1]{{\plexsans\bfseries\footnotesize\textcolor{forge}{\MakeUppercase{#1}}}}
+\newcommand{\code}[1]{{\plexmono #1}}
+\newcommand{\stage}[1]{{\plexmono\textcolor{inkwell}{#1}}}
+
+\color{inkwell}
+
+% ---------------------------------------------------------------- headings
+\titleformat{\section}
+  {\plexsans\bfseries\Large\color{inkwell}}
+  {\textcolor{forge}{\thesection}}{0.7em}{}
+  [\vspace{2pt}{\color{forge}\titlerule[1.2pt]}]
+\titlespacing*{\section}{0pt}{2.4em plus .4em minus .2em}{1.1em}
+
+\titleformat{\subsection}
+  {\plexsans\bfseries\large\color{inkwell}}
+  {\textcolor{forge}{\thesubsection}}{0.6em}{}
+\titlespacing*{\subsection}{0pt}{1.7em plus .3em minus .2em}{0.6em}
+
+\titleformat{\subsubsection}
+  {\plexsans\bfseries\normalsize\color{slate}}
+  {}{0pt}{}
+\titlespacing*{\subsubsection}{0pt}{1.2em plus .2em}{0.4em}
+
+% ---------------------------------------------------------------- captions
+\captionsetup{
+  font={small,color=slate},
+  labelfont={color=forge},
+  labelsep=period,
+  justification=raggedright,
+  singlelinecheck=false,
+  skip=7pt}
+\renewcommand{\figurename}{\textsc{Figure}}
+\renewcommand{\tablename}{\textsc{Table}}
+
+% ---------------------------------------------------------------- running heads
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\headrule}{\hbox to\headwidth{\color{hairline}\leaders\hrule height \headrulewidth\hfill}}
+\fancyhead[L]{\plexsans\scriptsize\textcolor{slate}{\MakeUppercase{Policy Logic Forge}}}
+\fancyhead[R]{\plexsans\scriptsize\textcolor{slate}{\nouppercase{\leftmark}}}
+\fancyfoot[C]{\plexsans\small\textcolor{slate}{\thepage}}
+\renewcommand{\sectionmark}[1]{\markboth{#1}{}}
+
+% ---------------------------------------------------------------- tables
+\renewcommand{\arraystretch}{1.28}
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
+\newcolumntype{C}[1]{>{\centering\arraybackslash}p{#1}}
+\newcommand{\thead}[1]{{\plexsans\bfseries\small\textcolor{forge}{#1}}}
+
+% ---------------------------------------------------------------- callouts
+\newtcolorbox{keypoint}[1][]{
+  enhanced, breakable, sharp corners,
+  colback=mist, colbacktitle=mist, colframe=forge,
+  boxrule=0pt, leftrule=2.5pt,
+  left=11pt, right=11pt, top=9pt, bottom=9pt,
+  fonttitle=\plexsans\bfseries\small,
+  coltitle=forge, #1}
+
+\newtcolorbox{caution}[1][]{
+  enhanced, breakable, sharp corners,
+  colback=amberpale, colbacktitle=amberpale, colframe=amberdeep,
+  boxrule=0pt, leftrule=2.5pt,
+  left=11pt, right=11pt, top=9pt, bottom=9pt,
+  fonttitle=\plexsans\bfseries\small,
+  coltitle=amberdeep, #1}
+
+\newtcolorbox{negative}[1][]{
+  enhanced, breakable, sharp corners,
+  colback=rosepale, colbacktitle=rosepale, colframe=rosedeep,
+  boxrule=0pt, leftrule=2.5pt,
+  left=11pt, right=11pt, top=9pt, bottom=9pt,
+  fonttitle=\plexsans\bfseries\small,
+  coltitle=rosedeep, #1}
+
+% ---------------------------------------------------------------- lists
+\setlist[itemize]{leftmargin=1.25em,itemsep=3pt,topsep=5pt,parsep=0pt}
+\setlist[enumerate]{leftmargin=1.5em,itemsep=3pt,topsep=5pt,parsep=0pt}
+
+% ---------------------------------------------------------------- tikz styles
+\tikzset{
+  node distance=7mm and 9mm,
+  box/.style={
+    draw=hairline, fill=white, rounded corners=2pt, line width=.7pt,
+    inner sep=5pt, align=center, font=\plexsans\scriptsize,
+    text=inkwell, minimum height=8mm},
+  src/.style={box, fill=forgelight, draw=forge},
+  gate/.style={box, fill=amberpale, draw=amberdeep, line width=1pt},
+  stop/.style={box, fill=rosepale, draw=rosedeep},
+  pass/.style={box, fill=mosspale, draw=mossdeep},
+  hub/.style={box, fill=mist, draw=forge, line width=1.1pt},
+  flow/.style={-{Stealth[length=2.2mm,width=1.6mm]}, draw=slate, line width=.7pt},
+  backflow/.style={-{Stealth[length=2.2mm,width=1.6mm]}, draw=forge,
+                   line width=1.1pt, dashed},
+  phaseband/.style={rounded corners=3pt, draw=none, fill=mist},
+  phaselabel/.style={font=\plexsans\bfseries\scriptsize, text=forge},
+  edgelabel/.style={font=\plexsans\scriptsize, text=slate, inner sep=2pt,
+                    fill=white, rounded corners=1pt},
+}
+
+\pgfplotsset{
+  reportaxis/.style={
+    width=\linewidth, height=6.2cm,
+    axis line style={draw=hairline},
+    tick label style={font=\plexsans\scriptsize, text=slate},
+    label style={font=\plexsans\small, text=inkwell},
+    title style={font=\plexsans\bfseries\small, text=inkwell},
+    legend style={font=\plexsans\scriptsize, draw=hairline, fill=white},
+    grid=major, grid style={draw=hairline, dashed, line width=.4pt},
+    tick align=outside, tickpos=left,
+  }
+}
