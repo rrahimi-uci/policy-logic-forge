@@ -328,11 +328,34 @@ class OpenAIGroundingResolver:
                         f"received {sum(returned.values())}"
                     )
                 return results
+            except (json.JSONDecodeError, TypeError, ValueError) as exc:
+                # A reasoning-budget cutoff can return an empty or malformed
+                # JSON object even though the provider call itself succeeded.
+                # Retrying the identical, oversized packet merely reproduces
+                # the cutoff.  Split before retrying so each child request has
+                # a bounded response contract; this is independent of domain
+                # content and preserves every claim for fail-closed finalization.
+                split = self._split_packets(packets)
+                if split is not None:
+                    print(
+                        "⚠️ agent_09 malformed/empty response; splitting the claim batch",
+                        flush=True,
+                    )
+                    return self.verify(split[0]) + self.verify(split[1])
+                last_error = exc
+                prompt += "\n\nReturn complete valid JSON only, with every requested rule_id and claim_id exactly once."
+                print(f"⚠️ agent_09 request retry {attempt}/{attempts}: {exc}", flush=True)
             except Exception as exc:
                 last_error = exc
                 prompt += "\n\nReturn complete valid JSON only, with every requested rule_id and claim_id exactly once."
                 print(f"⚠️ agent_09 request retry {attempt}/{attempts}: {exc}", flush=True)
         assert last_error is not None
+        # A single claim that remains malformed after bounded retries is
+        # intentionally returned without a verifier result.  The finalizer
+        # records it as insufficient_evidence rather than aborting the entire
+        # corpus run, preserving the fail-closed grounding contract.
+        if sum(len(packet.get("claims", []) or []) for packet in packets) <= 1:
+            return []
         raise last_error
 
 
