@@ -733,7 +733,7 @@ At minimum, each work package runs its focused tests, then:
 ```bash
 .venv/bin/python -m pytest -q
 .venv/bin/python proofs/check_properties.py
-.venv/bin/python scripts/validate_config.py --config config.example.json
+.venv/bin/python scripts/validate_config.py
 git diff --check
 ```
 
