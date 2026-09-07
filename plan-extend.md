@@ -4,7 +4,7 @@
 **Decision:** proceed, but adapt the comparison concepts rather than porting the Policy-to-Knowledge implementation  
 **Policy Logic Forge baseline:** `1964c00` (`main`, inspected 2026-09-07)  
 **Policy-to-Knowledge reference baseline:** `f6185bef` (`main`, inspected 2026-09-07)
-**Review pass:** revision 2, 2026-09-07 — 31 defects found and corrected against
+**Review pass:** revision 2, 2026-09-07 — 46 defects found and corrected against
 the code; each correction states its reason inline, and Section 13 is the ledger.
 **Intended location:** this file belongs at `plan/regdelta-comparison-plan.md`
 alongside `plan/regdelta-product-plan.md`, indexed from `plan/README.md`. It sits
@@ -560,7 +560,7 @@ Equivalent   = accepted pairs whose relation is identical or behaviorally_equiva
 
 Modified     = accepted pairs whose relation is modified     (version mode only)
 Divergent    = accepted pairs whose relation is divergent    (peer mode only)
-Conflicting  = accepted pairs whose relation is conflicting
+Conflicting  = accepted pairs whose relation is conflicting  (peer mode only)
 
 Corresponded = Equivalent + Modified + Divergent + Conflicting
                (every accepted one-to-one pair, by the Section 4.3 legality matrix)
@@ -605,6 +605,27 @@ Five defects in the first draft's definitions and why each fix is required:
    definitions. `UnresolvedLeft`/`LeftOnly` now key off *live unresolved or
    proposed* candidates.
 5. **Peer mode had nowhere to put a divergent pair.** See Section 1.
+
+**Relations are mode-scoped, and the schema must enforce it.** Section 1 lists
+different result sets per mode and Section 3.5 requires that version-mode
+modification and peer-mode conflict never be conflated, but nothing constrained
+`relation` by `mode`, so a version comparison could emit `conflicting` and a
+peer comparison could emit `modified`:
+
+| `relation` | version mode | peer mode |
+| --- | --- | --- |
+| `identical`, `behaviorally_equivalent` | yes | yes |
+| `modified` | yes | **no** — "modified" asserts one rule became the other, which requires a lineage |
+| `divergent` | **no** | yes |
+| `conflicting` | **no** — a revision replaces its predecessor, so two editions of one rule cannot contradict each other | yes |
+| `unrelated`, `unknown` | yes | yes |
+
+The version-mode counterparts of a peer conflict are already covered by
+`classify_change`: an inverted exception is `exception_added` /
+`exception_removed`, and an incompatible output is `output_effect_change`. Both
+are `modified` with a differential witness, which is the honest label — the
+change is real, and calling it a contradiction would misdescribe a replacement
+as a coexistence.
 
 **Precedence, corrected.** The draft's order was "refused, then unresolved, then
 an accepted relation, then directional-only", which demotes an accepted pair to
@@ -1723,30 +1744,31 @@ should not be read as distrust of the whole document.
 | 29 | 6.2, WP5 | The CLI wrote its retained report under `pipeline-output/`, which is gitignored, leaving WP5's "recreates a validated report from checked-in fixtures" with nothing checked in | `.gitignore:24`; `.github/CONTRIBUTING.md`; every retained RegDelta claim lives in the tracked `results/aggregates/regdelta/` | Run output under `pipeline-output/_comparisons/`, retained result under `results/aggregates/regdelta/` |
 | 30 | 4.1, 6.2 | Version mode reports Added/Removed and a direction label with no declared temporal order, and peer mode compares "different issuers" with no issuer field — so argument order silently determined every direction label | Draft `GraphSnapshot` had `domain`, `lineage_id`, and nothing else identifying | `issuer_id`, `effective_date`, `snapshot_role` added; `--baseline-batch`/`--candidate-batch` in version mode; peer mode forbidden from emitting direction labels |
 | 31 | 6.2 | Every failure collapsed to "nonzero", so a coverage-gate miss was indistinguishable from a crash in CI; and there was no flag for the "caller-specified coverage gate" the prose promised | Draft exit behavior | Exit-code table 0-6; flags enumerated for every `policy` value |
+| 32 | 4.4 | `relation` was unconstrained by `mode`, so a version comparison could emit `conflicting` and a peer comparison `modified` | Section 3.5 forbids conflating the two, and Section 1's per-mode result lists already imply the constraint, but the enum was flat with mode noted only in prose | Mode-legality table in 4.4: `conflicting` and `divergent` are peer-mode only, `modified` is version-mode only |
+| 33 | 4.4.1.1 | The comparison artifact reports 43 equivalent where `regdelta-impact/1.0` reports 40 `unchanged` plus 3 `unresolved-review`, with nothing explaining that these answer different questions — a reviewer would read one of the two as a bug | Found by working the corrected conservation equations against `results/aggregates/regdelta/mortgage_tier1_full_report.json`; `resolve_statuses` overrides an `unchanged` comparison precisely because the rule was not edited | New Section 4.4.1.1: comparison bucket answers "did the logic change", impact status answers "can the result be trusted"; `impact_status` carried on every alignment and cross-tabulated in coverage |
 
 ### 13.3 Corrections that are process, not contract
 
 | # | Section | Defect | Correction |
 | --- | --- | --- | --- |
-| 32 | 2.3 | The plan of record already owns Phase 6 (review UI) and Phase 7 (product gate), and §6.4 already specifies the alignment ladder — unreconciled, so each document's gates could be satisfied against the other's fixtures | Section 2.3 maps every gate to a phase; WP6 is declared to *be* Phase 6 |
-| 33 | 2.2 | The 13/371/358/12/742 comparison output is cited as a "retained artifact" but exists nowhere in the sibling checkout, committed or gitignored; only the 384 and 371 graph sizes are sourceable | Stated as reconstructed, not retained; Section 3's criticisms rest on code instead |
-| 34 | 7, 9 | Peer mode's labeled cohort needs a second issuer's publication, but `compliance-files/` is gitignored "regardless of content or license" and the plan of record scopes exactly one external acquisition | Version mode ships first; peer mode specified but un-gated; acquisition becomes Section 12 decision 4 |
-| 35 | 7 (WP0) | No work package touched `ARCHITECTURE.md`, which renders `regdelta-impact/1.0` and its fields, or `docs/architecture.html`, which is generated from it | Both added to WP0, with `scripts/build_architecture_page.py` named in Section 8 |
-| 36 | 7 (WP1) | "Identical graph versus itself yields full strict intersection" is unachievable: 20 of 65 mortgage Tier 1 rules never compile, so they can never carry `canonical` or `bounded_proof` evidence | Restated as every **non-refused** rule, with the reachable ceiling (45 of 65) stated |
-| 37 | 9, 12 | "Freeze the labeled evaluation before selecting thresholds" (Section 9) versus "selected on a frozen development split" (Section 12) meant tuning on the data the 0.98 gate is measured against | Disjoint development and held-out test splits, with test-split consultations reported |
-| 38 | 7 (WP6) | An append-only review log and an immutable hashed artifact were both promised, with counts that "update" — mutually exclusive as stated | Immutable content-addressed artifact plus a separate review log, with derived revisions recomputed on read |
-| 39 | 4.5 | "Exception changes that invert behavior" was listed as a conflict rule, conflating version-mode modification with peer-mode conflict — which Section 3.5 explicitly forbids | Removed from the conflict list; it is a `modified` pair with a witness |
-| 40 | 6.3 | The report had no Divergent tab and no Proposed tab, so the peer-mode bucket had nowhere to render and model proposals were invisible while their rules sat in the directional lists | Both tabs added, with the reason stated |
-| 41 | 4.1 | `readiness_stage` had no closed enum, and `agent_10_complete` reads ambiguously two sections after a diagram labelling the *upstream* repository's "Agent 10" as HTML reports | Closed to `agent_09_complete` / `agent_10_complete`, tied to `utils/agent_names.py`; upstream agents always named "Policy-to-Knowledge Agent N" |
-| 42 | 4.1 | "Record absent DAGs as `impact_unavailable`" contradicts requiring `agent_10_complete`, under which the DAG file always exists | `impact_unavailable` is reachable only at `agent_09_complete`; a missing DAG at `agent_10_complete` is a corrupt snapshot and exits nonzero |
-| 43 | 8 | `pytest -q` duplicates `pytest.ini`'s `addopts = -q` | Canonical command is plain `pytest` |
-| 44 | header | The document sits at the repository root while `plan/README.md` is the documented index of plans | Intended location recorded in the header |
-| 45 | 4.4.1.1 | Found by working the corrected conservation equations against the fixture: the comparison artifact reports 43 equivalent where `regdelta-impact/1.0` reports 40 `unchanged` plus 3 `unresolved-review`, with nothing in the plan explaining that these answer different questions — a reviewer would read one of the two as a bug | New Section 4.4.1.1: comparison bucket answers "did the logic change", impact status answers "can the result be trusted"; `impact_status` carried on every alignment and cross-tabulated in coverage |
+| 34 | 2.3 | The plan of record already owns Phase 6 (review UI) and Phase 7 (product gate), and §6.4 already specifies the alignment ladder — unreconciled, so each document's gates could be satisfied against the other's fixtures | Section 2.3 maps every gate to a phase; WP6 is declared to *be* Phase 6 |
+| 35 | 2.2 | The 13/371/358/12/742 comparison output is cited as a "retained artifact" but exists nowhere in the sibling checkout, committed or gitignored; only the 384 and 371 graph sizes are sourceable | Stated as reconstructed, not retained; Section 3's criticisms rest on code instead |
+| 36 | 7, 9 | Peer mode's labeled cohort needs a second issuer's publication, but `compliance-files/` is gitignored "regardless of content or license" and the plan of record scopes exactly one external acquisition | Version mode ships first; peer mode specified but un-gated; acquisition becomes Section 12 decision 4 |
+| 37 | 7 (WP0) | No work package touched `ARCHITECTURE.md`, which renders `regdelta-impact/1.0` and its fields, or `docs/architecture.html`, which is generated from it | Both added to WP0, with `scripts/build_architecture_page.py` named in Section 8 |
+| 38 | 7 (WP1) | "Identical graph versus itself yields full strict intersection" is unachievable: 20 of 65 mortgage Tier 1 rules never compile, so they can never carry `canonical` or `bounded_proof` evidence | Restated as every **non-refused** rule, with the reachable ceiling (45 of 65) stated |
+| 39 | 9, 12 | "Freeze the labeled evaluation before selecting thresholds" (Section 9) versus "selected on a frozen development split" (Section 12) meant tuning on the data the 0.98 gate is measured against | Disjoint development and held-out test splits, with test-split consultations reported |
+| 40 | 7 (WP6) | An append-only review log and an immutable hashed artifact were both promised, with counts that "update" — mutually exclusive as stated | Immutable content-addressed artifact plus a separate review log, with derived revisions recomputed on read |
+| 41 | 4.5 | "Exception changes that invert behavior" was listed as a conflict rule, conflating version-mode modification with peer-mode conflict — which Section 3.5 explicitly forbids | Removed from the conflict list; it is a `modified` pair with a witness |
+| 42 | 6.3 | The report had no Divergent tab and no Proposed tab, so the peer-mode bucket had nowhere to render and model proposals were invisible while their rules sat in the directional lists | Both tabs added, with the reason stated |
+| 43 | 4.1 | `readiness_stage` had no closed enum, and `agent_10_complete` reads ambiguously two sections after a diagram labelling the *upstream* repository's "Agent 10" as HTML reports | Closed to `agent_09_complete` / `agent_10_complete`, tied to `utils/agent_names.py`; upstream agents always named "Policy-to-Knowledge Agent N" |
+| 44 | 4.1 | "Record absent DAGs as `impact_unavailable`" contradicts requiring `agent_10_complete`, under which the DAG file always exists | `impact_unavailable` is reachable only at `agent_09_complete`; a missing DAG at `agent_10_complete` is a corrupt snapshot and exits nonzero |
+| 45 | 8 | `pytest -q` duplicates `pytest.ini`'s `addopts = -q` | Canonical command is plain `pytest` |
+| 46 | header | The document sits at the repository root while `plan/README.md` is the documented index of plans | Intended location recorded in the header |
 
 ### 13.4 What revision 2 does not claim
 
 - No implementation exists. Every number in Sections 8 and 9 remains a target.
-- Three of these corrections (FIX-A, FIX-B, and entry 45) are defects revision 2
+- Three of these corrections (FIX-A, FIX-B, and entry 33) are defects revision 2
   introduced and then caught in its own second pass: a refused rule placed in
   two disjoint buckets, a readiness gate that still contradicted WP1's exit
   criterion after being narrowed once, and the 43-versus-40 reconciliation. They
