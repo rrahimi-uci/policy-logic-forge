@@ -1,7 +1,30 @@
 from concurrent.futures import ThreadPoolExecutor
 import time
+from unittest.mock import patch
 
 from utils.adaptive_limiter import AdaptiveRequestLimiter
+
+
+class _TrackingConnection:
+    def __init__(self):
+        self.closed = False
+
+    def execute(self, *_args, **_kwargs):
+        return self
+
+    def close(self):
+        self.closed = True
+
+
+def test_connect_closes_sqlite_connection_after_context(tmp_path):
+    limiter = AdaptiveRequestLimiter.__new__(AdaptiveRequestLimiter)
+    limiter.state_file = tmp_path / "limiter.sqlite3"
+    connection = _TrackingConnection()
+
+    with patch("utils.adaptive_limiter.sqlite3.connect", return_value=connection):
+        with limiter._connect() as active:
+            assert active is connection
+        assert connection.closed is True
 
 
 def test_shared_limiter_blocks_until_a_lease_is_released(tmp_path):

@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from contextlib import contextmanager
 import json
 import os
 from pathlib import Path
 import sqlite3
 import time
 import uuid
-from typing import Any
+from typing import Any, Iterator
 
 
 @dataclass(frozen=True)
@@ -58,15 +59,23 @@ class AdaptiveRequestLimiter:
             poll_seconds=float(os.getenv("KG_GLOBAL_LLM_POLL_SECONDS", "0.1")),
         )
 
-    def _connect(self) -> sqlite3.Connection:
+    @contextmanager
+    def _connect(self) -> Iterator[sqlite3.Connection]:
         connection = sqlite3.connect(self.state_file, timeout=30, isolation_level=None)
-        # Multiple worker processes can briefly contend on BEGIN IMMEDIATE;
-        # let SQLite wait inside the connection before surfacing a transient
-        # lock instead of failing an otherwise healthy pipeline stage.
-        connection.execute("PRAGMA busy_timeout=120000")
-        connection.execute("PRAGMA journal_mode=WAL")
-        connection.execute("PRAGMA synchronous=NORMAL")
-        return connection
+        try:
+            # Multiple worker processes can briefly contend on BEGIN IMMEDIATE;
+            # let SQLite wait inside the connection before surfacing a transient
+            # lock instead of failing an otherwise healthy pipeline stage.
+            connection.execute("PRAGMA busy_timeout=120000")
+            connection.execute("PRAGMA journal_mode=WAL")
+            connection.execute("PRAGMA synchronous=NORMAL")
+            yield connection
+        finally:
+            # sqlite3.Connection.__exit__ commits or rolls back, but does not
+            # close the connection.  The limiter opens one connection per
+            # acquire/release/snapshot operation, so leaving close to the
+            # connection context manager leaks descriptors during large runs.
+            connection.close()
 
     def _initialize(self) -> None:
         with self._connect() as connection:
