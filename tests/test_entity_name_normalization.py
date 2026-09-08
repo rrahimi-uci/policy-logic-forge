@@ -232,6 +232,34 @@ def test_a_collision_between_two_distinct_names_raises_rather_than_silently_merg
         assert "CREDIT_SCORE" in str(exc)
 
 
+def test_referenced_entity_placeholder_merges_with_richer_definition():
+    """Agent 05's placeholder must not block a real alias-normalization pass."""
+    graph = {
+        "entity_types": {
+            "Freddie Mac": {
+                "definition": "The secondary mortgage market institution.",
+                "business_rules": [{"rule_id": "R1"}],
+            },
+            "FREDDIE_MAC": {
+                "name": "FREDDIE_MAC",
+                "type": "REFERENCED_ENTITY",
+                "description": "Referenced by an extracted rule.",
+                "key_attributes": [],
+                "examples": [],
+                "provenance": {"basis": "rule_reference", "source": "agent_03"},
+            },
+        }
+    }
+
+    fixed = _normalise_graph_entity_names(graph)
+
+    assert set(fixed["entity_types"]) == {"FREDDIE_MAC"}
+    merged = fixed["entity_types"]["FREDDIE_MAC"]
+    assert merged["definition"].startswith("The secondary")
+    assert merged["business_rules"] == [{"rule_id": "R1"}]
+    assert merged["provenance"]["basis"] == "rule_reference"
+
+
 def test_real_graph_naming_violations_drop_from_380_to_at_most_a_handful(tmp_path):
     """Integration check against a graph shaped like the real one that
     surfaced this bug: many PascalCase entities, a few already-canonical
