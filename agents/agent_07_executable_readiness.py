@@ -587,10 +587,59 @@ def _build_entity_name_map(graph: Any) -> dict[str, str]:
     return mapping
 
 
+def _is_referenced_entity_placeholder(value: Any) -> bool:
+    """Identify the placeholder Agent 05 creates for an unlisted party.
+
+    A placeholder is deliberately weaker than a real entity definition.  It
+    is safe to fold it into a richer definition when both names normalize to
+    the same canonical key, while arbitrary colliding definitions must still
+    fail closed below.
+    """
+    if not isinstance(value, Mapping):
+        return False
+    provenance = value.get("provenance")
+    return (
+        value.get("type") == "REFERENCED_ENTITY"
+        and isinstance(provenance, Mapping)
+        and provenance.get("basis") == "rule_reference"
+    )
+
+
+def _merge_referenced_entity_placeholder(existing: Any, incoming: Any) -> Any | None:
+    """Merge one explicit Agent 05 placeholder into a richer entity value.
+
+    Return ``None`` for a genuine collision so callers retain the existing
+    fail-closed behavior.  List fields are unioned to preserve provenance and
+    rule records; non-empty values from the real definition remain authoritative.
+    """
+    existing_placeholder = _is_referenced_entity_placeholder(existing)
+    incoming_placeholder = _is_referenced_entity_placeholder(incoming)
+    if existing_placeholder == incoming_placeholder:
+        return None
+
+    richer, placeholder = (
+        (incoming, existing) if existing_placeholder else (existing, incoming)
+    )
+    if not isinstance(richer, Mapping) or not isinstance(placeholder, Mapping):
+        return None
+
+    merged = deepcopy(dict(richer))
+    for key, value in placeholder.items():
+        if key not in merged or merged[key] in (None, "", [], {}):
+            merged[key] = deepcopy(value)
+        elif isinstance(merged[key], list) and isinstance(value, list):
+            for item in value:
+                if item not in merged[key]:
+                    merged[key].append(deepcopy(item))
+    return merged
+
+
 def _normalise_graph_entity_names(value: Any, mapping: Mapping[str, str] | None = None) -> Any:
     """Replace exact entity identifiers — the fixed legacy list plus any
     non-canonical entity_types key found in *value* itself — including
-    dictionary keys.
+    dictionary keys.  An explicit Agent 05 referenced-entity placeholder may
+    be merged with a richer definition when both keys normalize to the same
+    canonical identifier; other collisions remain errors.
 
     `mapping` is computed once from the top-level graph on the outermost call
     and threaded through the recursion; callers normally pass only `value`.
@@ -603,7 +652,13 @@ def _normalise_graph_entity_names(value: Any, mapping: Mapping[str, str] | None 
             normalised_key = mapping.get(str(key), key)
             normalised_item = _normalise_graph_entity_names(item, mapping)
             if normalised_key in result and result[normalised_key] != normalised_item:
-                raise ValueError(f"entity-name normalization collision at {normalised_key!r}")
+                merged = _merge_referenced_entity_placeholder(
+                    result[normalised_key], normalised_item
+                )
+                if merged is None:
+                    raise ValueError(f"entity-name normalization collision at {normalised_key!r}")
+                result[normalised_key] = merged
+                continue
             result[normalised_key] = normalised_item
         return result
     if isinstance(value, list):
