@@ -84,6 +84,27 @@ section citation uniquely identifies one unmatched rule on each side; duplicate
 citations and all semantic-only candidates remain unmatched for review. See
 [`plan/regdelta-product-plan.md`](plan/regdelta-product-plan.md).
 
+Add `--semantic` to request bounded LLM comparison of unmatched rules with the
+same declared rule type. Each result includes `relationship`,
+`equivalency_score` (0–100), confidence, and rationale in
+`semantic_candidates`; it is always marked `review_required` and never changes
+deterministic alignment. Use `--semantic-max-pairs` to control cost. Define
+the meaning and weights of the score with `--semantic-rubric-file rubric.json`
+and optionally replace the complete matcher template with
+`--semantic-prompt-file matcher.txt`. Both the exact prompt and rubric SHA-256
+are recorded in `semantic_comparison` for auditability. For example:
+
+```json
+{
+  "equivalency_score": {
+    "same_outcome": 50,
+    "compatible_conditions": 30,
+    "overlapping_scope": 20
+  },
+  "contradiction": "Require incompatible outcomes under a shared scope."
+}
+```
+
 **Machine-checked properties** — six properties of the type lattice, the
 bounded prover, and the dependency partition are discharged by exhaustive
 enumeration rather than by example, so they hold for every input in the
