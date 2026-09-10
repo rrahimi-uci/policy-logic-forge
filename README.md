@@ -105,6 +105,11 @@ are recorded in `semantic_comparison` for auditability. For example:
 }
 ```
 
+Candidates classified as `CONTRADICTORY` also require structured evidence:
+the shared subject and scope, each policy's requirement, and why they cannot
+both be satisfied. They are collected in `semantic_contradictions`, still for
+human review rather than automatic resolution.
+
 **Machine-checked properties** — six properties of the type lattice, the
 bounded prover, and the dependency partition are discharged by exhaustive
 enumeration rather than by example, so they hold for every input in the

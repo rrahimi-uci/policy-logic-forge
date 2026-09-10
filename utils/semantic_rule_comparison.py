@@ -55,6 +55,22 @@ def _content(response: Any) -> str:
     return content
 
 
+def _contradiction(value: Any, relationship: str) -> dict[str, str] | None:
+    """Validate a contradiction explanation rather than accepting a label alone."""
+    if relationship != "CONTRADICTORY":
+        return None
+    if not isinstance(value, Mapping):
+        raise ValueError("CONTRADICTORY results must include a contradiction object")
+    required = (
+        "shared_subject", "shared_scope", "old_requirement",
+        "new_requirement", "incompatibility",
+    )
+    result = {key: str(value.get(key) or "").strip()[:400] for key in required}
+    if any(not item for item in result.values()):
+        raise ValueError("contradiction object is missing required evidence")
+    return result
+
+
 def _result(value: Any, expected_pair_ids: set[int]) -> dict[int, dict[str, Any]]:
     if not isinstance(value, list) or len(value) != len(expected_pair_ids):
         raise ValueError("semantic comparison must return exactly one JSON result per requested pair")
@@ -80,6 +96,7 @@ def _result(value: Any, expected_pair_ids: set[int]) -> dict[int, dict[str, Any]
             "similarity_score": similarity_score,
             "confidence": confidence,
             "reasoning": str(item.get("reasoning") or "").strip()[:400],
+            "contradiction": _contradiction(item.get("contradiction"), relationship),
         }
     return results
 
@@ -128,6 +145,7 @@ def score_rule_pairs(
                 "equivalency_score": result["similarity_score"],
                 "confidence": result["confidence"],
                 "reasoning": result["reasoning"],
+                "contradiction": result["contradiction"],
                 "method": "llm_semantic_candidate",
                 "review_required": True,
             })

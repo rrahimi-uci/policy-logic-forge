@@ -53,7 +53,8 @@ Return ONLY a valid JSON array with one result per pair:
     "relationship": "IDENTICAL|EQUIVALENT|CONTRADICTORY|UNRELATED",
     "confidence": 0.85,
     "similarity_score": 92,
-    "reasoning": "Brief explanation"
+    "reasoning": "Brief explanation",
+    "contradiction": null
   }},
   {{
     "pair_id": 1,
@@ -65,12 +66,26 @@ Return ONLY a valid JSON array with one result per pair:
 ]
 ```
 
+For every `CONTRADICTORY` result, replace `null` with this object. Do not
+classify a pair as contradictory when any field is unknown:
+```json
+{
+  "shared_subject": "The same loan or transaction population",
+  "shared_scope": "The overlapping applicability conditions",
+  "old_requirement": "What the old rule requires",
+  "new_requirement": "What the new rule requires",
+  "incompatibility": "Why both requirements cannot be satisfied together"
+}
+```
+
 ## IMPORTANT GUIDELINES
 
 1. **Return exactly {num_pairs} results** - one for each input pair, in order
 2. **Threshold Precision**: 43% vs 45% is a CONTRADICTORY conflict
 3. **Be Conservative**: When uncertain, classify as UNRELATED
 4. **Conflict Detection**: CONTRADICTORY is critical - never miss threshold conflicts
-5. **Keep reasoning brief** - max 50 words per pair
+5. **Contradiction evidence**: different thresholds are not automatically a
+  contradiction; identify a shared scope and incompatible requirements
+6. **Keep reasoning brief** - max 50 words per pair
 
 ## Process each pair independently and return the results array.

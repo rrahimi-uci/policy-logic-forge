@@ -109,6 +109,10 @@ def main() -> int:
     else:
         report["semantic_candidates"] = []
         report["semantic_comparison"] = {"enabled": False, "alignment_effect": "none"}
+    report["semantic_contradictions"] = [
+        candidate for candidate in report["semantic_candidates"]
+        if candidate["relationship"] == "CONTRADICTORY"
+    ]
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     print(f"Wrote {args.out}: {len(report['rule_alignments'])} alignments, {report['metrics']['direct_count']} direct changes")

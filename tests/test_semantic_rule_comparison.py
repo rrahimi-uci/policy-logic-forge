@@ -36,7 +36,8 @@ def test_semantic_comparison_returns_review_required_equivalency_candidate():
     assert candidates == [{
         "old_rule_id": "old", "new_rule_id": "new", "relationship": "EQUIVALENT",
         "equivalency_score": 89.0, "confidence": 0.82,
-        "reasoning": "Same eligibility outcome.", "method": "llm_semantic_candidate",
+        "reasoning": "Same eligibility outcome.", "contradiction": None,
+        "method": "llm_semantic_candidate",
         "review_required": True,
     }]
     assert client.calls[0]["temperature"] == 0
@@ -70,3 +71,32 @@ def test_semantic_comparison_rejects_empty_operator_rubric():
     client = _Client("[]")
     with pytest.raises(ValueError, match="must not be empty"):
         score_rule_pairs([], client=client, prompt="{rule_pairs_json}", scoring_rubric={})
+
+
+def test_semantic_comparison_returns_structured_contradiction():
+    contradiction = {
+        "shared_subject": "Conventional first mortgages",
+        "shared_scope": "Loans with LTV greater than 80 percent",
+        "old_requirement": "Mortgage insurance is required.",
+        "new_requirement": "Mortgage insurance is prohibited.",
+        "incompatibility": "A policy cannot be both required and prohibited.",
+    }
+    client = _Client(json.dumps([{
+        "pair_id": 0, "relationship": "CONTRADICTORY", "similarity_score": 94,
+        "confidence": 0.88, "reasoning": "Opposite outcomes.", "contradiction": contradiction,
+    }]))
+
+    candidate, = score_rule_pairs([(_rule("old"), _rule("new"))], client=client, prompt="{rule_pairs_json}")
+
+    assert candidate["relationship"] == "CONTRADICTORY"
+    assert candidate["contradiction"] == contradiction
+
+
+def test_semantic_comparison_rejects_contradiction_without_evidence():
+    client = _Client(json.dumps([{
+        "pair_id": 0, "relationship": "CONTRADICTORY", "similarity_score": 90,
+        "confidence": 0.8, "reasoning": "Conflicting.",
+    }]))
+
+    with pytest.raises(ValueError, match="contradiction object"):
+        score_rule_pairs([(_rule("old"), _rule("new"))], client=client, prompt="{rule_pairs_json}")
