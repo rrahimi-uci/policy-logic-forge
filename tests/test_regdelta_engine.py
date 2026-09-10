@@ -103,6 +103,15 @@ def test_align_rules_refuses_ambiguous_citation_matches():
     assert {item["kind"] for item in alignments} == {"added", "removed"}
 
 
+def test_align_rules_uses_all_citations_and_rejects_generic_section_ids():
+    old, new = _ltv_rule("old"), _ltv_rule("new")
+    old["source_reference"] = [{"section_id": "B7-1-01"}, {"section_id": "B8-1-01"}]
+    new["source_reference"] = [{"section_id": "B8-1-01"}, {"section_id": "B7-1-01"}]
+    assert align_rules([old], [new])[0]["method"] == "source_citation"
+    old["source_reference"] = {"section_id": "s1"}; new["source_reference"] = {"section_id": "S1"}
+    assert {item["kind"] for item in align_rules([old], [new])} == {"added", "removed"}
+
+
 # --- utils.semantic_diff ------------------------------------------------------
 
 def test_classify_change_identifies_threshold_change_with_direction():

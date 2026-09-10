@@ -49,6 +49,40 @@ def _semantic_pairs(
     return pairs[:maximum]
 
 
+def _canonical_comparison_context(
+    old_rules: list[dict[str, Any]], new_rules: list[dict[str, Any]], alignments: list[dict[str, Any]],
+) -> tuple[list[str], dict[str, bool], list[tuple[str, str]]]:
+    """Use old IDs for aligned pairs and union old/new dependency edges.
+
+    The union is conservative: a downstream rule reachable in either document
+    version is reviewed. New graph IDs are translated to their aligned old ID.
+    """
+    new_to_canonical = {
+        item["new_rule_ids"][0]: item["old_rule_ids"][0]
+        for item in alignments if item["kind"] == "one_to_one"
+    }
+    canonical_new = lambda rule_id: new_to_canonical.get(str(rule_id), str(rule_id))
+    universe = {str(rule["rule_id"]) for rule in old_rules if rule.get("rule_id")}
+    universe.update(canonical_new(rule["rule_id"]) for rule in new_rules if rule.get("rule_id") and rule.get("rule_id") not in new_to_canonical)
+    review_status: dict[str, bool] = {}
+    for rule in old_rules:
+        if rule.get("rule_id"):
+            rule_id = str(rule["rule_id"])
+            review_status[rule_id] = review_status.get(rule_id, False) or bool(rule.get("requires_review"))
+    for rule in new_rules:
+        if rule.get("rule_id"):
+            rule_id = canonical_new(rule["rule_id"])
+            review_status[rule_id] = review_status.get(rule_id, False) or bool(rule.get("requires_review"))
+    return sorted(universe), review_status, new_to_canonical
+
+
+def _union_edges(old_graph: dict[str, Any], new_graph: dict[str, Any], new_to_canonical: dict[str, str]) -> list[tuple[str, str]]:
+    translate = lambda rule_id: new_to_canonical.get(str(rule_id), str(rule_id))
+    old_edges = {(str(edge["source_rule_id"]), str(edge["target_rule_id"])) for edge in dependency_edges(old_graph)}
+    new_edges = {(translate(edge["source_rule_id"]), translate(edge["target_rule_id"])) for edge in dependency_edges(new_graph)}
+    return sorted(old_edges | new_edges)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--old-graph", required=True, type=Path)
@@ -66,19 +100,18 @@ def main() -> int:
     old_graph, new_graph = _load(args.old_graph), _load(args.new_graph)
     old_rules = [rule for rule in old_graph.get("business_rules", []) if isinstance(rule, dict)]
     new_rules = [rule for rule in new_graph.get("business_rules", []) if isinstance(rule, dict)]
-    universe = sorted({str(rule.get("rule_id")) for rule in old_rules + new_rules if rule.get("rule_id")})
-    review_status = {
-        str(rule["rule_id"]): bool(rule.get("requires_review"))
-        for rule in old_rules + new_rules if rule.get("rule_id")
-    }
+    from utils.rule_alignment import align_rules
+    alignments = align_rules(old_rules, new_rules)
+    universe, review_status, new_to_canonical = _canonical_comparison_context(old_rules, new_rules, alignments)
     report = diff_graphs(
         old_graph,
         new_graph,
         universe_rule_ids=universe,
-        dag_edges=[(edge["source_rule_id"], edge["target_rule_id"]) for edge in dependency_edges(old_graph)],
+        dag_edges=_union_edges(old_graph, new_graph, new_to_canonical),
         review_status=review_status,
         pair_id=args.pair_id,
     )
+    report["dependency_edge_policy"] = "union of old and new graph edges; new endpoints translated through accepted alignments"
     if args.semantic:
         if args.semantic_max_pairs < 1:
             parser.error("--semantic-max-pairs must be positive")

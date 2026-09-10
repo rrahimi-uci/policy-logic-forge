@@ -559,4 +559,11 @@ def test_env_propagates_provider_selected_via_kg_provider_env(tmp_path, monkeypa
         skip_optimize=True, batch_name="provider-env-test",
     )
     assert pipeline._env()["KG_PROVIDER"] == "anthropic"
+
+
+def test_env_exports_exact_source_directory(tmp_path, monkeypatch):
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    pipeline = ExtractionPipeline(source_dir, "mortgage", 30, None, False, "source-test")
+    assert pipeline._env()["KG_SOURCE_DIR"] == str(source_dir)
     _reset_config_singleton()  # leave a clean singleton for tests that run after this one

@@ -125,10 +125,6 @@ def build_changes(
             old_id, new_id = alignment["old_rule_ids"][0], alignment["new_rule_ids"][0]
             if old_id in old_rules and new_id in new_rules:
                 changes[old_id] = classify_change(old_rules[old_id], new_rules[new_id])
-            elif old_id in old_rules:
-                changes[old_id] = {"taxonomy": "removed", "detail": "rule did not compile in new graph"}
-            elif new_id in new_rules:
-                changes[new_id] = {"taxonomy": "added", "detail": "rule did not compile in old graph"}
     return alignments, changes
 
 

@@ -17,7 +17,7 @@ from typing import Any, Mapping, Sequence
 
 ALIGNMENT_KINDS = {"one_to_one", "added", "removed"}
 
-_CITATION = re.compile(r"\b([A-Z][0-9]+(?:-[0-9]+)*(?:\.[0-9]+)*-?[0-9]*)\b")
+_CITATION = re.compile(r"\b([A-Z][0-9]+(?:-[0-9]+)+(?:\.[0-9]+)*)\b")
 
 
 def citation_code(value: Any) -> str | None:
@@ -26,15 +26,16 @@ def citation_code(value: Any) -> str | None:
     return match.group(1) if match else None
 
 
-def _citation(rule: Mapping[str, Any]) -> str | None:
+def _citations(rule: Mapping[str, Any]) -> set[str]:
     references = rule.get("source_reference")
     records = references if isinstance(references, list) else [references]
+    codes: set[str] = set()
     for reference in records:
         if isinstance(reference, Mapping):
             code = citation_code(reference.get("section_id") or reference.get("section"))
             if code:
-                return code
-    return None
+                codes.add(code)
+    return codes
 
 
 def align_rules(
@@ -56,16 +57,16 @@ def align_rules(
     old_by_citation: dict[str, list[str]] = defaultdict(list)
     new_by_citation: dict[str, list[str]] = defaultdict(list)
     for rule_id, rule in old_by_id.items():
-        if rule_id not in shared_ids and (code := _citation(rule)):
+        for code in _citations(rule) if rule_id not in shared_ids else ():
             old_by_citation[code].append(rule_id)
     for rule_id, rule in new_by_id.items():
-        if rule_id not in shared_ids and (code := _citation(rule)):
+        for code in _citations(rule) if rule_id not in shared_ids else ():
             new_by_citation[code].append(rule_id)
 
     aligned_old, aligned_new = set(shared_ids), set(shared_ids)
     for code in sorted(set(old_by_citation) & set(new_by_citation)):
         old_ids, new_ids = sorted(old_by_citation[code]), sorted(new_by_citation[code])
-        if len(old_ids) == len(new_ids) == 1:
+        if len(old_ids) == len(new_ids) == 1 and old_ids[0] not in aligned_old and new_ids[0] not in aligned_new:
             old_id, new_id = old_ids[0], new_ids[0]
             alignments.append({
                 "kind": "one_to_one", "old_rule_ids": [old_id], "new_rule_ids": [new_id],
