@@ -29,7 +29,7 @@ from typing import Any, Mapping, Sequence
 from utils.feel import UNKNOWN, evaluate_formula
 from utils.impact_propagation import direct_set, potential_set, recompute_set, resolve_statuses
 from utils.lexec_ir import lower_graph
-from utils.rule_alignment import align_by_id, rules_by_id
+from utils.rule_alignment import align_rules, rules_by_id
 from utils.semantic_diff import classify_change
 
 
@@ -94,8 +94,11 @@ def _refusal_reasons(ir: Mapping[str, Any]) -> dict[str, str]:
     return {str(refusal.get("rule_id")): str(refusal.get("code")) for refusal in ir.get("refusals", []) if refusal.get("rule_id")}
 
 
-def build_changes(old_ir: Mapping[str, Any], new_ir: Mapping[str, Any]) -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]]]:
-    """Align two compiled IR documents by rule ID and classify each pair.
+def build_changes(
+    old_ir: Mapping[str, Any], new_ir: Mapping[str, Any], *,
+    alignments: Sequence[Mapping[str, Any]] | None = None,
+) -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]]]:
+    """Classify already-aligned compiled rules.
 
     Returns ``(alignments, changes)``. ``changes`` covers every rule ID
     compiled on at least one side: ``added``/``removed`` for rules compiled
@@ -104,16 +107,24 @@ def build_changes(old_ir: Mapping[str, Any], new_ir: Mapping[str, Any]) -> tuple
     """
 
     old_rules, new_rules = rules_by_id(old_ir), rules_by_id(new_ir)
-    alignments = align_by_id(list(old_rules), list(new_rules))
+    alignments = list(alignments) if alignments is not None else align_rules(
+        [{"rule_id": rule_id} for rule_id in old_rules],
+        [{"rule_id": rule_id} for rule_id in new_rules],
+    )
     changes: dict[str, dict[str, Any]] = {}
     for alignment in alignments:
         if alignment["kind"] == "added":
-            changes[alignment["new_rule_ids"][0]] = {"taxonomy": "added", "detail": None}
+            rule_id = alignment["new_rule_ids"][0]
+            if rule_id in new_rules:
+                changes[rule_id] = {"taxonomy": "added", "detail": None}
         elif alignment["kind"] == "removed":
-            changes[alignment["old_rule_ids"][0]] = {"taxonomy": "removed", "detail": None}
-        else:
             rule_id = alignment["old_rule_ids"][0]
-            changes[rule_id] = classify_change(old_rules[rule_id], new_rules[rule_id])
+            if rule_id in old_rules:
+                changes[rule_id] = {"taxonomy": "removed", "detail": None}
+        else:
+            old_id, new_id = alignment["old_rule_ids"][0], alignment["new_rule_ids"][0]
+            if old_id in old_rules and new_id in new_rules:
+                changes[old_id] = classify_change(old_rules[old_id], new_rules[new_id])
     return alignments, changes
 
 
@@ -137,9 +148,12 @@ def diff_graphs(
     ``utils.lexec_ir.IGNORED_FIELD_REASONS``).
     """
 
+    raw_old_rules = [rule for rule in old_graph.get("business_rules", []) if isinstance(rule, Mapping)]
+    raw_new_rules = [rule for rule in new_graph.get("business_rules", []) if isinstance(rule, Mapping)]
+    alignments = align_rules(raw_old_rules, raw_new_rules)
     old_ir = _compile(old_graph, document_id=f"{pair_id}-old")
     new_ir = _compile(new_graph, document_id=f"{pair_id}-new")
-    alignments, changes = build_changes(old_ir, new_ir)
+    alignments, changes = build_changes(old_ir, new_ir, alignments=alignments)
 
     direct = direct_set(changes)
     potential = potential_set(direct, dag_edges)

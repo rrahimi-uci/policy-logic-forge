@@ -256,6 +256,7 @@ class ExtractionPipeline:
         env["KG_PROVIDER"] = self.config.get_model_provider()
         env["KG_DOMAIN"] = self.domain
         env["KG_BATCH_NAME"] = self.batch_name
+        env["KG_SOURCE_DIR"] = str(self.source_dir)
         if self.max_workers:
             env["MAX_WORKERS"] = str(self.max_workers)
         env["TARGET_RULES"] = str(self.target_rules)

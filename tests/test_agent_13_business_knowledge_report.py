@@ -208,10 +208,14 @@ def test_agent_12_generates_self_contained_report_with_traceability(tmp_path: Pa
     (models / "compliance_workflows.bpmn").write_bytes(b'<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL/" xmlns:ctc="https://github.com/rrahimi-uci/policy-logic-forge/executable/1"><process ctc:ruleId="R-1"/></definitions>')
     (models / "compliance_reviews.cmmn").write_bytes(b'<definitions xmlns="http://www.omg.org/spec/CMMN/20151109/MODEL" xmlns:ctc="https://github.com/rrahimi-uci/policy-logic-forge/executable/1"><case ctc:ruleId="R-1"/></definitions>')
 
-    manifest = generate(graph_file, dags_file, models, tmp_path / "report", organized)
+    source_folder = tmp_path / "compliance-files" / "fannie-mae-selling-guide-2026-09-02"
+    manifest = generate(graph_file, dags_file, models, tmp_path / "report", organized, source_folder=source_folder)
     report = (tmp_path / "report" / "business_knowledge_report.html").read_text(encoding="utf-8")
 
     assert manifest["rule_count"] == 1
+    assert manifest["source_folder"] == str(source_folder)
+    assert "<title>Business Knowledge Report - fannie-mae-selling-guide-2026-09-02</title>" in report
+    assert f"Source folder: {source_folder}" in report
     assert manifest["concept_count"] == 2  # governed concepts only: CUSTOMER and ACCOUNT
     assert manifest["decision_variable_count"] == 2
     assert manifest["rule_local_decision_variable_count"] == 2
@@ -247,7 +251,7 @@ def test_agent_12_generates_self_contained_report_with_traceability(tmp_path: Pa
     assert "rule_summary" in manifest and 0 <= manifest["rule_summary"]["R-1"]["automation_readiness_score"] <= 100
     assert manifest["dependency_edges"]
     assert "Presentation &amp; Knowledge Exploration" in report
-    assert "Business knowledge, made transparent." in report
+    assert "Business knowledge: fannie-mae-selling-guide-2026-09-02" in report
     assert "A self-contained, source-traceable view of the extracted domain knowledge." in report
     assert "Every rule is linked to its source and assigned a neutral <strong>0–100 Automation Readiness Score</strong>" in report
     assert "Your environment, risk tolerance, and domain policies determine the appropriate acceptance threshold." in report

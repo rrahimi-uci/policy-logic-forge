@@ -69,7 +69,46 @@ orchestrator (`cli/extract.py`) runs them in order.
 **RegDelta** — a rule-change/version differential-execution engine layered on
 top: compile old and new versions of a policy to LExec IR, align rules,
 classify semantic changes, and propagate impact through the dependency
-graph. See [`plan/regdelta-product-plan.md`](plan/regdelta-product-plan.md).
+graph. Use it with two optimized graphs:
+
+```bash
+.venv/bin/python cli/compare_policies.py \
+  --old-graph pipeline-output/<old-run>/agent_06-07-08-09-optimized/optimized_compliance_knowledge_graph.json \
+  --new-graph pipeline-output/<new-run>/agent_06-07-08-09-optimized/optimized_compliance_knowledge_graph.json \
+  --out pipeline-output/regdelta-comparison.json \
+  --pair-id <policy-version-pair>
+```
+
+Rule IDs align first. Independently extracted rules also align when a source
+section citation uniquely identifies one unmatched rule on each side; duplicate
+citations and all semantic-only candidates remain unmatched for review. See
+[`plan/regdelta-product-plan.md`](plan/regdelta-product-plan.md).
+
+Add `--semantic` to request bounded LLM comparison of unmatched rules with the
+same declared rule type. Each result includes `relationship`,
+`equivalency_score` (0–100), confidence, and rationale in
+`semantic_candidates`; it is always marked `review_required` and never changes
+deterministic alignment. Use `--semantic-max-pairs` to control cost. Define
+the meaning and weights of the score with `--semantic-rubric-file rubric.json`
+and optionally replace the complete matcher template with
+`--semantic-prompt-file matcher.txt`. Both the exact prompt and rubric SHA-256
+are recorded in `semantic_comparison` for auditability. For example:
+
+```json
+{
+  "equivalency_score": {
+    "same_outcome": 50,
+    "compatible_conditions": 30,
+    "overlapping_scope": 20
+  },
+  "contradiction": "Require incompatible outcomes under a shared scope."
+}
+```
+
+Candidates classified as `CONTRADICTORY` also require structured evidence:
+the shared subject and scope, each policy's requirement, and why they cannot
+both be satisfied. They are collected in `semantic_contradictions`, still for
+human review rather than automatic resolution.
 
 **Machine-checked properties** — six properties of the type lattice, the
 bounded prover, and the dependency partition are discharged by exhaustive

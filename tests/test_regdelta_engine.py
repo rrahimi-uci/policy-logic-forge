@@ -9,7 +9,7 @@ from copy import deepcopy
 
 from utils.impact_propagation import direct_set, potential_set, recompute_set, resolve_statuses
 from utils.regdelta_engine import build_changes, diff_graphs, evaluate_rule_for_diff
-from utils.rule_alignment import align_by_id
+from utils.rule_alignment import align_by_id, align_rules
 from utils.semantic_diff import classify_change
 
 
@@ -77,6 +77,39 @@ def test_align_by_id_reports_one_to_one_added_and_removed():
     assert ones == ["b", "c"]
     assert [a["new_rule_ids"] for a in alignments if a["kind"] == "added"] == [["d"]]
     assert [a["old_rule_ids"] for a in alignments if a["kind"] == "removed"] == [["a"]]
+
+
+def test_align_rules_uses_unique_source_citation_for_independent_ids():
+    old = _ltv_rule("old-id")
+    new = _ltv_rule("new-id", threshold=78)
+    old["source_reference"]["section_id"] = "B7-1-01, Provision of Mortgage Insurance"
+    new["source_reference"]["section_id"] = "Mortgage Insurance (B7-1-01)"
+
+    alignment, = align_rules([old], [new])
+    assert alignment == {
+        "kind": "one_to_one", "old_rule_ids": ["old-id"], "new_rule_ids": ["new-id"],
+        "method": "source_citation", "evidence": {"citation_code": "B7-1-01"},
+    }
+
+
+def test_align_rules_refuses_ambiguous_citation_matches():
+    old = [_ltv_rule("old-1"), _ltv_rule("old-2")]
+    new = [_ltv_rule("new-1"), _ltv_rule("new-2")]
+    for rule in old + new:
+        rule["source_reference"]["section_id"] = "B7-1-01"
+
+    alignments = align_rules(old, new)
+    assert not [item for item in alignments if item["kind"] == "one_to_one"]
+    assert {item["kind"] for item in alignments} == {"added", "removed"}
+
+
+def test_align_rules_uses_all_citations_and_rejects_generic_section_ids():
+    old, new = _ltv_rule("old"), _ltv_rule("new")
+    old["source_reference"] = [{"section_id": "B7-1-01"}, {"section_id": "B8-1-01"}]
+    new["source_reference"] = [{"section_id": "B8-1-01"}, {"section_id": "B7-1-01"}]
+    assert align_rules([old], [new])[0]["method"] == "source_citation"
+    old["source_reference"] = {"section_id": "s1"}; new["source_reference"] = {"section_id": "S1"}
+    assert {item["kind"] for item in align_rules([old], [new])} == {"added", "removed"}
 
 
 # --- utils.semantic_diff ------------------------------------------------------
@@ -176,6 +209,52 @@ def test_build_changes_covers_added_removed_and_one_to_one():
     assert changes["R-1"]["taxonomy"] == "threshold_or_constant_change"
     assert changes["R-2"] == {"taxonomy": "removed", "detail": None}
     assert changes["R-3"] == {"taxonomy": "added", "detail": None}
+
+
+def test_diff_graphs_compares_independent_ids_at_unique_source_citation():
+    old = _ltv_rule("old-id", threshold=80)
+    new = _ltv_rule("new-id", threshold=78)
+    for rule in (old, new):
+        rule["source_reference"]["section_id"] = "B7-1-01"
+
+    report = diff_graphs(
+        {"business_rules": [old]},
+        {"business_rules": [new]},
+        universe_rule_ids=["old-id"],
+        dag_edges=[],
+        review_status={"old-id": False},
+        pair_id="independent-ids",
+    )
+
+    assert report["rule_alignments"] == [{
+        "kind": "one_to_one", "old_rule_ids": ["old-id"], "new_rule_ids": ["new-id"],
+        "method": "source_citation", "evidence": {"citation_code": "B7-1-01"},
+    }]
+    assert report["semantic_changes"] == [{
+        "rule_id": "old-id", "taxonomy": "threshold_or_constant_change",
+        "detail": {"op": "gt", "symbol": "ltv_ratio_percent", "old_literal": 80,
+                   "new_literal": 78, "direction": "weakening"},
+    }]
+
+
+def test_citation_aligned_uncompileable_rule_remains_refused():
+    old = _ltv_rule("old-id")
+    new = _ltv_rule("new-id")
+    for rule in (old, new):
+        rule["source_reference"]["section_id"] = "B7-1-01"
+        rule["unsupported_contract_field"] = True
+
+    report = diff_graphs(
+        {"business_rules": [old]},
+        {"business_rules": [new]},
+        universe_rule_ids=["old-id"],
+        dag_edges=[],
+        review_status={"old-id": False},
+        pair_id="citation-refusal",
+    )
+
+    assert report["semantic_changes"] == []
+    assert report["downstream_impacts"]["statuses"]["old-id"]["status"] == "refused-unsupported-construct"
 
 
 def test_diff_graphs_end_to_end_reproduces_the_r120004_r120003_shape():
