@@ -69,7 +69,20 @@ orchestrator (`cli/extract.py`) runs them in order.
 **RegDelta** — a rule-change/version differential-execution engine layered on
 top: compile old and new versions of a policy to LExec IR, align rules,
 classify semantic changes, and propagate impact through the dependency
-graph. See [`plan/regdelta-product-plan.md`](plan/regdelta-product-plan.md).
+graph. Use it with two optimized graphs:
+
+```bash
+.venv/bin/python cli/compare_policies.py \
+  --old-graph pipeline-output/<old-run>/agent_06-07-08-09-optimized/optimized_compliance_knowledge_graph.json \
+  --new-graph pipeline-output/<new-run>/agent_06-07-08-09-optimized/optimized_compliance_knowledge_graph.json \
+  --out pipeline-output/regdelta-comparison.json \
+  --pair-id <policy-version-pair>
+```
+
+Rule IDs align first. Independently extracted rules also align when a source
+section citation uniquely identifies one unmatched rule on each side; duplicate
+citations and all semantic-only candidates remain unmatched for review. See
+[`plan/regdelta-product-plan.md`](plan/regdelta-product-plan.md).
 
 **Machine-checked properties** — six properties of the type lattice, the
 bounded prover, and the dependency partition are discharged by exhaustive
