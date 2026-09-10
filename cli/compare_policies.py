@@ -83,6 +83,19 @@ def _union_edges(old_graph: dict[str, Any], new_graph: dict[str, Any], new_to_ca
     return sorted(old_edges | new_edges)
 
 
+def _semantic_prompt(path: Path | None) -> tuple[str, str]:
+    """Load an override or the shared prompt matching this scorer's schema."""
+    if path is not None:
+        return path.read_text(encoding="utf-8"), str(path)
+    manager = get_prompt_manager()
+    shared_path = manager.fallback_dir / "rule_matcher_batch.txt"
+    try:
+        source = str(shared_path.relative_to(Path.cwd()))
+    except ValueError:
+        source = str(shared_path)
+    return shared_path.read_text(encoding="utf-8"), source
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--old-graph", required=True, type=Path)
@@ -115,9 +128,10 @@ def main() -> int:
     if args.semantic:
         if args.semantic_max_pairs < 1:
             parser.error("--semantic-max-pairs must be positive")
+        if args.semantic_batch_size < 1:
+            parser.error("--semantic-batch-size must be positive")
         pairs = _semantic_pairs(old_rules, new_rules, report["rule_alignments"], args.semantic_max_pairs)
-        prompt_path = args.semantic_prompt_file
-        prompt = prompt_path.read_text(encoding="utf-8") if prompt_path else get_prompt_manager().load_prompt("rule_matcher_batch")
+        prompt, prompt_source = _semantic_prompt(args.semantic_prompt_file)
         rubric = _load_rubric(args.semantic_rubric_file) if args.semantic_rubric_file else None
         report["semantic_candidates"] = score_rule_pairs(
             pairs,
@@ -131,7 +145,7 @@ def main() -> int:
             "candidate_pair_count": len(pairs),
             "candidate_limit": args.semantic_max_pairs,
             "alignment_effect": "none; all candidates require review",
-            "prompt_source": str(prompt_path) if prompt_path else "prompts/rule_matcher_batch.txt",
+            "prompt_source": prompt_source,
             "prompt_sha256": hashlib.sha256(prompt.encode("utf-8")).hexdigest(),
             "scoring_rubric": rubric,
             "scoring_rubric_sha256": (

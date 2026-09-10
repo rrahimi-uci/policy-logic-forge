@@ -1,6 +1,8 @@
 import json
 
-from cli.compare_policies import _canonical_comparison_context, _semantic_pairs, _union_edges, main
+import pytest
+
+from cli.compare_policies import _canonical_comparison_context, _semantic_pairs, _semantic_prompt, _union_edges, main
 
 
 def _rule(rule_id: str, rule_type: str) -> dict:
@@ -54,3 +56,26 @@ def test_cli_writes_comparison_report(tmp_path, monkeypatch):
     report = json.loads(out.read_text())
     assert report["schema_version"] == "regdelta-impact/1.0"
     assert report["dependency_edge_policy"].startswith("union of old and new")
+
+
+def test_semantic_prompt_uses_shared_schema_not_domain_override(tmp_path, monkeypatch):
+    class PromptManager:
+        fallback_dir = tmp_path / "prompts"
+    (PromptManager.fallback_dir).mkdir()
+    (PromptManager.fallback_dir / "rule_matcher_batch.txt").write_text("shared {num_pairs}")
+    monkeypatch.setattr("cli.compare_policies.get_prompt_manager", lambda: PromptManager())
+
+    prompt, source = _semantic_prompt(None)
+
+    assert prompt == "shared {num_pairs}"
+    assert source.endswith("prompts/rule_matcher_batch.txt")
+
+
+def test_cli_rejects_nonpositive_semantic_batch_size(tmp_path, monkeypatch):
+    graph = {"business_rules": []}
+    old_path, new_path, out = tmp_path / "old.json", tmp_path / "new.json", tmp_path / "report.json"
+    old_path.write_text(json.dumps(graph)); new_path.write_text(json.dumps(graph))
+    monkeypatch.setattr("sys.argv", ["compare_policies.py", "--old-graph", str(old_path), "--new-graph", str(new_path), "--out", str(out), "--semantic", "--semantic-batch-size", "0"])
+    with pytest.raises(SystemExit) as exc:
+        main()
+    assert exc.value.code == 2
