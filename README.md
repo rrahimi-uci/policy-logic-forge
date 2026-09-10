@@ -76,8 +76,13 @@ graph. Use it with two optimized graphs:
   --old-graph pipeline-output/<old-run>/agent_06-07-08-09-optimized/optimized_compliance_knowledge_graph.json \
   --new-graph pipeline-output/<new-run>/agent_06-07-08-09-optimized/optimized_compliance_knowledge_graph.json \
   --out pipeline-output/regdelta-comparison.json \
+  --html-out pipeline-output/regdelta-comparison.html \
   --pair-id <policy-version-pair>
 ```
+
+The optional self-contained HTML report presents alignment evidence, semantic
+changes, downstream impact, LLM equivalency candidates, and structured
+contradiction candidates for review.
 
 Rule IDs align first. Independently extracted rules also align when a source
 section citation uniquely identifies one unmatched rule on each side; duplicate

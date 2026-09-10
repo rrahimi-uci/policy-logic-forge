@@ -13,6 +13,7 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from utils.kg_readiness import dependency_edges
+from utils.comparison_report import write_comparison_report
 from utils.llm_client import create_llm_client
 from utils.prompt_manager import get_prompt_manager
 from utils.regdelta_engine import diff_graphs
@@ -101,6 +102,7 @@ def main() -> int:
     parser.add_argument("--old-graph", required=True, type=Path)
     parser.add_argument("--new-graph", required=True, type=Path)
     parser.add_argument("--out", required=True, type=Path)
+    parser.add_argument("--html-out", type=Path, help="Optional self-contained HTML comparison report")
     parser.add_argument("--pair-id", default="policy-comparison")
     parser.add_argument("--semantic", action="store_true", help="Add review-only LLM semantic candidates for unmatched same-type rules")
     parser.add_argument("--semantic-max-pairs", type=int, default=100, help="Maximum unmatched pairs to score when --semantic is set")
@@ -162,6 +164,8 @@ def main() -> int:
     ]
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    if args.html_out:
+        write_comparison_report(report, args.html_out)
     print(f"Wrote {args.out}: {len(report['rule_alignments'])} alignments, {report['metrics']['direct_count']} direct changes")
     return 0
 

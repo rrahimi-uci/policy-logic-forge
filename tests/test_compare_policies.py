@@ -49,13 +49,14 @@ def test_cli_writes_comparison_report(tmp_path, monkeypatch):
             "exceptions": [], "applicability_scope": {}, "scope_basis": "genuinely_unscoped",
             "source_reference": {"section_id": "B7-1-01"},
         })
-    old_path, new_path, out = tmp_path / "old.json", tmp_path / "new.json", tmp_path / "report.json"
+    old_path, new_path, out, html_out = tmp_path / "old.json", tmp_path / "new.json", tmp_path / "report.json", tmp_path / "report.html"
     old_path.write_text(json.dumps(old_graph)); new_path.write_text(json.dumps(new_graph))
-    monkeypatch.setattr("sys.argv", ["compare_policies.py", "--old-graph", str(old_path), "--new-graph", str(new_path), "--out", str(out)])
+    monkeypatch.setattr("sys.argv", ["compare_policies.py", "--old-graph", str(old_path), "--new-graph", str(new_path), "--out", str(out), "--html-out", str(html_out)])
     assert main() == 0
     report = json.loads(out.read_text())
     assert report["schema_version"] == "regdelta-impact/1.0"
     assert report["dependency_edge_policy"].startswith("union of old and new")
+    assert "Semantic equivalency candidates" in html_out.read_text()
 
 
 def test_semantic_prompt_uses_shared_schema_not_domain_override(tmp_path, monkeypatch):
