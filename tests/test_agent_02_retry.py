@@ -1,5 +1,6 @@
 """Regression coverage for transient entity-extraction transport retries."""
 
+import json
 from types import SimpleNamespace
 
 from agents.agent_02_entity_extractor import ComplianceEntityRelationshipAgent
@@ -223,3 +224,32 @@ def test_catalog_evidence_does_not_repair_ambiguous_or_cross_document_match():
     assert all("chunk_path not found" in issue for issue in issues)
     assert ambiguous["chunk_path"] == "policy/access/missing.txt"
     assert cross_document["chunk_path"] == "policy/access/also_missing.txt"
+
+
+def test_entity_extraction_resumes_only_a_validated_checkpoint(tmp_path, monkeypatch):
+    document = {"path": "policy/one.txt", "content": "A customer owns an account."}
+    checkpoint = tmp_path / "checkpoint.json"
+    checkpoint.write_text(json.dumps({
+        "iteration": 1,
+        "entity_types": {"CUSTOMER": {"source_evidence": [{"chunk_path": "policy/one.txt", "source_text": "A customer owns an account"}]}},
+        "relationships": {},
+        "final_quality_analysis": {"overall_score": 100},
+    }))
+    agent = object.__new__(ComplianceEntityRelationshipAgent)
+    agent.extraction_model = "test-model"
+    agent.optimizer_model = "test-model"
+    agent.meta_agent = SimpleNamespace(
+        generate_optimized_prompt=lambda **_kwargs: "prompt",
+        analyze_extraction_quality=lambda **_kwargs: {"overall_score": 100},
+        record_extraction_results=lambda **_kwargs: None,
+        get_optimization_summary=lambda: {},
+    )
+    agent.extract_entities_and_relationships = lambda _prompt: {"entity_types": {}, "relationships": {}}
+    monkeypatch.setenv("KG_ENTITY_CHECKPOINT_FILE", str(checkpoint))
+    monkeypatch.setenv("KG_ENTITY_RESUME_CHECKPOINT", "true")
+    monkeypatch.setenv("KG_ENTITY_EARLY_STOP", "false")
+
+    result = agent.run_iterations_with_optimization([document], n_iterations=2)
+
+    assert result["iteration"] == 2
+    assert "CUSTOMER" in result["entity_types"]

@@ -518,8 +518,35 @@ class ComplianceEntityRelationshipAgent:
         min_new_items = max(0, int(os.getenv("KG_ENTITY_MIN_NEW_ITEMS", "0")))
         checkpoint_value = os.getenv("KG_ENTITY_CHECKPOINT_FILE", "").strip()
         checkpoint_path = Path(checkpoint_value) if checkpoint_value else None
+        start_iteration = 1
+        if (
+            checkpoint_path is not None
+            and os.getenv("KG_ENTITY_RESUME_CHECKPOINT", "").lower() in {"1", "true", "yes"}
+            and checkpoint_path.exists()
+        ):
+            checkpoint = json.loads(checkpoint_path.read_text(encoding="utf-8"))
+            checkpoint_issues = self.validate_catalog_evidence(checkpoint, documents)
+            checkpoint_iteration = checkpoint.get("iteration")
+            if not isinstance(checkpoint_iteration, int) or checkpoint_iteration < 1:
+                raise ValueError("entity checkpoint has no valid iteration")
+            if checkpoint_issues:
+                raise RuntimeError(
+                    "Entity checkpoint is not fully source-grounded: "
+                    + "; ".join(checkpoint_issues[:5])
+                )
+            accumulated_catalog = {
+                "entity_types": deepcopy(checkpoint.get("entity_types") or {}),
+                "relationships": deepcopy(checkpoint.get("relationships") or {}),
+            }
+            findings = deepcopy(accumulated_catalog)
+            quality_analysis = checkpoint.get("final_quality_analysis")
+            start_iteration = checkpoint_iteration + 1
+            print(
+                f"  ↻ Resuming validated entity checkpoint after iteration {checkpoint_iteration}",
+                flush=True,
+            )
 
-        for iteration in range(1, n_iterations + 1):
+        for iteration in range(start_iteration, n_iterations + 1):
             iterations_run = iteration
             before_entities = len(accumulated_catalog.get("entity_types", {}))
             before_relationships = len(accumulated_catalog.get("relationships", {}))
