@@ -15,10 +15,15 @@ ARTICLE_DIR = ROOT / "linkedin-article"
 ARTICLE = ARTICLE_DIR / "policy-logic-forge-linkedin-article.md"
 PUBLISHING_KIT = ARTICLE_DIR / "publishing-kit.md"
 
+# Six visuals, not seven.  The capability-model diagram
+# (``03-capabilities-evidence-spine``) was retired with the ~2,250-word
+# rewrite: the eight-capability list it illustrated was cut, and the
+# evidence-spine idea it carried is stated in prose and drawn again in the
+# architecture and journey visuals.  Its masters were deleted rather than
+# left orphaned -- see ``publishing-kit.md``.
 VISUAL_STEMS = (
     "01-policy-logic-forge-hero",
     "02-policy-translation-gap",
-    "03-capabilities-evidence-spine",
     "04-policy-logic-forge-architecture",
     "05-standards-by-question",
     "06-policy-to-code-infographic",
