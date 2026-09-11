@@ -69,13 +69,13 @@ Return ONLY a valid JSON array with one result per pair:
 For every `CONTRADICTORY` result, replace `null` with this object. Do not
 classify a pair as contradictory when any field is unknown:
 ```json
-{
+{{
   "shared_subject": "The same loan or transaction population",
   "shared_scope": "The overlapping applicability conditions",
   "old_requirement": "What the old rule requires",
   "new_requirement": "What the new rule requires",
   "incompatibility": "Why both requirements cannot be satisfied together"
-}
+}}
 ```
 
 ## IMPORTANT GUIDELINES

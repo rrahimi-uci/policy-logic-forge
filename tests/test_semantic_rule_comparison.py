@@ -4,6 +4,7 @@ from types import SimpleNamespace
 import pytest
 
 from utils.semantic_rule_comparison import score_rule_pairs
+from utils.prompt_manager import get_prompt_manager
 
 
 def _rule(rule_id: str) -> dict:
@@ -100,3 +101,12 @@ def test_semantic_comparison_rejects_contradiction_without_evidence():
 
     with pytest.raises(ValueError, match="contradiction object"):
         score_rule_pairs([(_rule("old"), _rule("new"))], client=client, prompt="{rule_pairs_json}")
+
+
+def test_shared_semantic_prompt_formats_its_contradiction_example():
+    prompt = (get_prompt_manager().fallback_dir / "rule_matcher_batch.txt").read_text()
+    rendered = prompt.format(
+        g1_name="old", g2_name="new", rule_pairs_json="[]", num_pairs=0,
+    )
+
+    assert '"shared_subject"' in rendered
