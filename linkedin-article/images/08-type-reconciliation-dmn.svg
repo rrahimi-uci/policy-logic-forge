@@ -1,0 +1,141 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="title desc">
+  <title id="title">Type reconciliation as a DMN decision table</title>
+  <desc id="desc">A DMN decision table titled Type Reconciliation answers the question: what type should the system use when sources disagree? The hit policy is F, first match wins, and rules 1 to 5 are concrete instances of the general rules 6 and 7. Inputs are the types observed, whether exactly one safe common type exists, and whether the case is ambiguous; the output is either the safe type or REFUSE. Money with Money resolves to Money and Percentage with Percentage to Percentage, both trivially safe. Integer with Decimal resolves to Decimal, because widening is lossless in one direction only. Money with Percentage is refused, because the units differ and no coercion preserves meaning. Date with Money is refused, because the domains are disjoint. The two general rules state the property that is proved rather than tested: where exactly one safe common type exists it is used, and where there is none or more than one the ambiguity is returned rather than resolved by convention.</desc>
+  <defs>
+    <style>
+      .sans { font-family: Inter, "Helvetica Neue", Arial, sans-serif; }
+      .mono { font-family: "DejaVu Sans Mono", Menlo, Consolas, monospace; }
+    </style>
+  </defs>
+
+  <rect width="1600" height="900" fill="#eceff1"/>
+
+  <!-- header -->
+  <text x="34" y="40" class="sans" fill="#5a6b7d" font-size="15" font-weight="700" letter-spacing="3">DMN &#183; DECISION TABLE</text>
+  <text x="32" y="96" class="sans" fill="#12141a" font-size="46" font-weight="750">Type Reconciliation</text>
+  <text x="34" y="136" class="sans" fill="#12141a" font-size="21" font-weight="700">Question:</text>
+  <text x="140" y="136" class="sans" fill="#5a6b7d" font-size="21">what type should the system use when sources disagree?</text>
+
+  <text x="1096" y="44" class="sans" fill="#7b8794" font-size="13" font-weight="700" letter-spacing="2">HIT POLICY</text>
+  <text x="1096" y="70" class="sans" fill="#12141a" font-size="15" font-weight="750">F</text>
+  <text x="1112" y="70" class="sans" fill="#3d4a57" font-size="15">&#8212; first match wins.</text>
+  <text x="1096" y="92" class="sans" fill="#3d4a57" font-size="15">Rules 1&#8211;5 are instances of 6&#8211;7.</text>
+
+  <text x="1368" y="44" class="sans" fill="#7b8794" font-size="13" font-weight="700" letter-spacing="2">NOTATION</text>
+  <text x="1368" y="70" class="mono" fill="#12141a" font-size="15" font-weight="700">&#8211;</text>
+  <text x="1382" y="70" class="sans" fill="#3d4a57" font-size="15">means the input is</text>
+  <text x="1368" y="92" class="sans" fill="#3d4a57" font-size="15">irrelevant to that rule.</text>
+
+  <!-- table body -->
+  <g class="sans">
+    <!-- header band -->
+    <rect x="30" y="168" width="1540" height="124" fill="#f7f9fa"/>
+    <rect x="30" y="168" width="180" height="124" fill="#26305e"/>
+    <rect x="46" y="184" width="34" height="34" rx="7" fill="none" stroke="#9aa4c8" stroke-width="1.6"/>
+    <text x="63" y="208" text-anchor="middle" fill="#ffffff" font-size="17" font-weight="750">F</text>
+    <text x="46" y="243" fill="#ffffff" font-size="17" font-weight="750">Type</text>
+    <text x="46" y="264" fill="#ffffff" font-size="17" font-weight="750">Reconciliation</text>
+    <text x="46" y="282" fill="#9aa4c8" font-size="11" font-weight="700" letter-spacing="2">DECISION</text>
+
+    <text x="228" y="192" fill="#7b8794" font-size="12" font-weight="700" letter-spacing="2">INPUT</text>
+    <text x="228" y="220" fill="#12141a" font-size="19" font-weight="750">Types observed</text>
+    <text x="228" y="250" class="mono" fill="#5a6b7d" font-size="13">Money, Percentage,</text>
+    <text x="228" y="270" class="mono" fill="#5a6b7d" font-size="13">Decimal, Integer, Date, &#8230;</text>
+
+    <text x="512" y="220" fill="#12141a" font-size="19" font-weight="750">One safe common type?</text>
+    <text x="512" y="250" class="mono" fill="#5a6b7d" font-size="13">exactly one, none,</text>
+    <text x="512" y="270" class="mono" fill="#5a6b7d" font-size="13">more than one</text>
+
+    <text x="846" y="220" fill="#12141a" font-size="19" font-weight="750">Ambiguous?</text>
+    <text x="846" y="250" class="mono" fill="#5a6b7d" font-size="13">yes, no</text>
+
+    <text x="1006" y="192" fill="#7b8794" font-size="12" font-weight="700" letter-spacing="2">OUTPUT</text>
+    <text x="1006" y="220" fill="#12141a" font-size="19" font-weight="750">Decision</text>
+    <text x="1006" y="250" class="mono" fill="#5a6b7d" font-size="12">&lt;the safe type&gt;, REFUSE</text>
+
+    <text x="1206" y="192" fill="#7b8794" font-size="12" font-weight="700" letter-spacing="2">ANNOTATION</text>
+
+    <!-- rule rows -->
+    <!-- 1 -->
+    <rect x="30" y="292" width="1540" height="76" fill="#f4f6f7"/>
+    <text x="120" y="337" text-anchor="middle" fill="#8a94a0" font-size="17">1</text>
+    <text x="228" y="337" class="mono" fill="#12141a" font-size="17">Money <tspan fill="#8a94a0">+</tspan> Money</text>
+    <text x="512" y="337" fill="#12141a" font-size="17" font-weight="750">exactly one</text>
+    <text x="846" y="337" fill="#5a6b7d" font-size="17">no</text>
+    <rect x="1006" y="316" width="98" height="34" rx="6" fill="#e4f2ec" stroke="#1a7a5a" stroke-width="1.4"/>
+    <text x="1055" y="339" text-anchor="middle" class="mono" fill="#125843" font-size="15" font-weight="700">Money</text>
+    <text x="1206" y="337" fill="#3d4a57" font-size="15">Identical types &#8212; trivially safe.</text>
+
+    <!-- 2 -->
+    <rect x="30" y="368" width="1540" height="76" fill="#ffffff"/>
+    <text x="120" y="413" text-anchor="middle" fill="#8a94a0" font-size="17">2</text>
+    <text x="228" y="413" class="mono" fill="#12141a" font-size="17">Percentage <tspan fill="#8a94a0">+</tspan> Percentage</text>
+    <text x="512" y="413" fill="#12141a" font-size="17" font-weight="750">exactly one</text>
+    <text x="846" y="413" fill="#5a6b7d" font-size="17">no</text>
+    <rect x="1006" y="392" width="132" height="34" rx="6" fill="#e4f2ec" stroke="#1a7a5a" stroke-width="1.4"/>
+    <text x="1072" y="415" text-anchor="middle" class="mono" fill="#125843" font-size="15" font-weight="700">Percentage</text>
+    <text x="1206" y="413" fill="#3d4a57" font-size="15">Identical types &#8212; trivially safe.</text>
+
+    <!-- 3 -->
+    <rect x="30" y="444" width="1540" height="76" fill="#f4f6f7"/>
+    <text x="120" y="489" text-anchor="middle" fill="#8a94a0" font-size="17">3</text>
+    <text x="228" y="489" class="mono" fill="#12141a" font-size="17">Integer <tspan fill="#8a94a0">+</tspan> Decimal</text>
+    <text x="512" y="489" fill="#12141a" font-size="17" font-weight="750">exactly one</text>
+    <text x="846" y="489" fill="#5a6b7d" font-size="17">no</text>
+    <rect x="1006" y="468" width="110" height="34" rx="6" fill="#e4f2ec" stroke="#1a7a5a" stroke-width="1.4"/>
+    <text x="1061" y="491" text-anchor="middle" class="mono" fill="#125843" font-size="15" font-weight="700">Decimal</text>
+    <text x="1206" y="489" fill="#3d4a57" font-size="15">Widening is lossless in one direction only.</text>
+
+    <!-- 4 -->
+    <rect x="30" y="520" width="1540" height="76" fill="#ffffff"/>
+    <text x="120" y="565" text-anchor="middle" fill="#8a94a0" font-size="17">4</text>
+    <text x="228" y="565" class="mono" fill="#12141a" font-size="17">Money <tspan fill="#8a94a0">+</tspan> Percentage</text>
+    <text x="512" y="565" fill="#12141a" font-size="17" font-weight="750">none</text>
+    <text x="846" y="565" fill="#12141a" font-size="17" font-weight="750">yes</text>
+    <rect x="1006" y="544" width="110" height="34" rx="6" fill="#fdeaea" stroke="#c0392b" stroke-width="1.4"/>
+    <text x="1061" y="567" text-anchor="middle" class="mono" fill="#a3291c" font-size="15" font-weight="700">REFUSE</text>
+    <text x="1206" y="565" fill="#3d4a57" font-size="15">Different units; no coercion preserves meaning.</text>
+
+    <!-- 5 -->
+    <rect x="30" y="596" width="1540" height="76" fill="#f4f6f7"/>
+    <text x="120" y="641" text-anchor="middle" fill="#8a94a0" font-size="17">5</text>
+    <text x="228" y="641" class="mono" fill="#12141a" font-size="17">Date <tspan fill="#8a94a0">+</tspan> Money</text>
+    <text x="512" y="641" fill="#12141a" font-size="17" font-weight="750">none</text>
+    <text x="846" y="641" fill="#12141a" font-size="17" font-weight="750">yes</text>
+    <rect x="1006" y="620" width="110" height="34" rx="6" fill="#fdeaea" stroke="#c0392b" stroke-width="1.4"/>
+    <text x="1061" y="643" text-anchor="middle" class="mono" fill="#a3291c" font-size="15" font-weight="700">REFUSE</text>
+    <text x="1206" y="641" fill="#3d4a57" font-size="15">Disjoint domains; nothing to reconcile.</text>
+
+    <!-- 6 (general) -->
+    <rect x="30" y="672" width="1540" height="100" fill="#e7eaed"/>
+    <text x="120" y="728" text-anchor="middle" fill="#8a94a0" font-size="17">6</text>
+    <text x="228" y="728" class="mono" fill="#8a94a0" font-size="17">&#8212;</text>
+    <text x="512" y="728" fill="#12141a" font-size="17" font-weight="750">exactly one</text>
+    <text x="846" y="728" fill="#5a6b7d" font-size="17">no</text>
+    <rect x="1006" y="707" width="168" height="34" rx="6" fill="#e4f2ec" stroke="#1a7a5a" stroke-width="1.4"/>
+    <text x="1090" y="730" text-anchor="middle" class="mono" fill="#125843" font-size="15" font-weight="700">use that type</text>
+    <text x="1206" y="718" fill="#12141a" font-size="15" font-weight="750">General rule.</text>
+    <text x="1308" y="718" fill="#3d4a57" font-size="15">Covers every combination in</text>
+    <text x="1206" y="742" fill="#3d4a57" font-size="15">the domain.</text>
+
+    <!-- 7 (general) -->
+    <rect x="30" y="772" width="1540" height="100" fill="#e7eaed"/>
+    <text x="120" y="828" text-anchor="middle" fill="#8a94a0" font-size="17">7</text>
+    <text x="228" y="828" class="mono" fill="#8a94a0" font-size="17">&#8212;</text>
+    <text x="512" y="828" fill="#12141a" font-size="17" font-weight="750">none, or more than one</text>
+    <text x="846" y="828" fill="#12141a" font-size="17" font-weight="750">yes</text>
+    <rect x="1006" y="807" width="110" height="34" rx="6" fill="#fdeaea" stroke="#c0392b" stroke-width="1.4"/>
+    <text x="1061" y="830" text-anchor="middle" class="mono" fill="#a3291c" font-size="15" font-weight="700">REFUSE</text>
+    <text x="1206" y="818" fill="#12141a" font-size="15" font-weight="750">General rule.</text>
+    <text x="1308" y="818" fill="#3d4a57" font-size="15">Ambiguity is returned, never</text>
+    <text x="1206" y="842" fill="#3d4a57" font-size="15">resolved by convention.</text>
+
+    <!-- grid -->
+    <g fill="none" stroke="#c3cbd3" stroke-width="1.4">
+      <path d="M30 292h1540M30 368h1540M30 444h1540M30 520h1540M30 596h1540M30 672h1540M30 772h1540"/>
+      <path d="M210 168v704M490 292v580M820 292v580M1190 168v704"/>
+      <rect x="30" y="168" width="1540" height="704" stroke="#8fa0b0" stroke-width="2"/>
+    </g>
+    <path d="M993 168v704" fill="none" stroke="#26305e" stroke-width="3"/>
+  </g>
+</svg>

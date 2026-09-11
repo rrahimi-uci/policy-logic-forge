@@ -25,7 +25,7 @@ Two things are deliberately not rendered:
 - **Images become labelled placeholders.** LinkedIn images must be uploaded
   through the editor, so an `<img>` would paste broken. Each placeholder names
   the file to upload and its alt text — delete the block, upload the image
-  there. The six are listed under *Image sequence and alt text* below.
+  there. The seven are listed under *Image sequence and alt text* below.
 - **The title and subtitle are shown separately**, because they belong in
   LinkedIn's own title field rather than in the body.
 
@@ -40,32 +40,53 @@ The editor supports: headings (H1–H3), bold, italic, bulleted and numbered lis
 
 ## Editorial position
 
-### The 2,250-word cut
+### The cut to under 1,900 words
 
-The article was roughly 4,400 words. It now runs about 2,250 — a little over
+The article was roughly 4,400 words. It now runs **under 1,900** — well under
 half — because the piece is written for a LinkedIn feed, where a reader decides
 in the first screen whether to stay. Nothing in the argument was traded away;
-the cuts were repetition, throat-clearing, and one section that a visual
-already carried. What changed:
+the cuts were repetition, throat-clearing, and two sections the visuals already
+carried. Seven headings became seven, then eight, then the seven below. What
+changed:
 
 - **The eight-capability list was cut**, and with it
   `03-capabilities-evidence-spine.png`. The one idea it carried that the
-  argument needs — the bidirectional evidence spine — is now a single paragraph
-  in *Why "just use an LLM" is not the answer*, and it is drawn twice more in
-  the architecture and journey visuals. The image masters were deleted rather
-  than left orphaned in the repository.
-- **The set-theoretic proof listing was cut.** It was the single most expensive
-  block for a general reader, and the claim it formalised —
-  `Money` and `Percentage` are incomparable, proved for every pair of types —
-  survives in prose. If a reader wants the notation, it belongs in the
-  standalone proofs post, where the audience has opted in.
+  argument needs — the bidirectional evidence spine — is now a single sentence
+  closing *Most systems implement an interpretation, not a policy*, and it is
+  drawn twice more in the architecture and journey visuals. The image masters
+  were deleted rather than left orphaned in the repository.
+- **The set-theoretic proof listing became a DMN decision table**
+  (`08-type-reconciliation-dmn.png`). It was the single most expensive block in
+  the piece for a general reader, and quantifier notation asked an audience to
+  parse mathematics before it would part with the point. The table says the
+  same thing — rules 1-5 are instances, rules 6 and 7 are the property, and
+  `Money` with `Percentage` is refused rather than coerced — in the notation
+  the system itself emits, which is also the article's own argument made
+  visible. If a reader wants the notation, it belongs in the standalone proofs
+  post, where the audience has opted in.
+
+  Two things to know about that visual. It is **light-themed**, unlike the
+  other six: it is a document, not a diagram, and it reads as the artefact the
+  system would hand a reviewer. And its hit policy is **F**, not `UNIQUE` —
+  rules 1-5 are worked instances of the general rules below them, so first-match
+  is the correct policy and the table says so. That is not in tension with the
+  `UNIQUE` argument earlier in the article, which is about the tables the
+  pipeline emits for policy rules; the image states its own policy so a reader
+  cannot conflate the two.
+- **"Why 'just use an LLM' is not the answer" lost its heading.** Its argument —
+  that a generator cannot certify itself, so the check must come from a
+  deterministic or formal place the generation cannot reach — is now the closing
+  paragraph of the problem section, where it reads as the consequence of the
+  problem rather than a new topic.
+- **"What this changes for the people doing the work" was cut entirely.** Image
+  06 states the business value as a four-panel row directly above the close, so
+  the section was narrating a visual. The one claim the image does not make —
+  that a deterministic check returns the same answer next quarter — moved into
+  *Where this goes*.
 - **"Proved, not tested" became a subsection** of the LLM-as-a-judge section
   rather than a peer heading. It answers a follow-up to that argument; it does
   not open a new one.
-- **The role-by-role benefits list became one sentence.** Image 06 already
-  states the business value as a four-panel row, so the prose was duplicating a
-  visual that says it better.
-- **Comparison prose was compressed, not deleted.** Every claim boundary, the
+- **Everything else was compressed, not deleted.** Every claim boundary, the
   refusal argument, the invented-identifier failure, and the closing question
   are intact.
 
@@ -228,17 +249,18 @@ Five to seven, not a block:
 
 ## Image sequence and alt text
 
-Six images, all rendered from the SVG masters beside them. Edit the SVG, never
-the PNG, and re-render with:
+Seven images, all rendered from the SVG masters beside them. Edit the SVG,
+never the PNG, and re-render with:
 
 ```bash
 rsvg-convert -w 3200 -h 1800 <name>.svg -o <name>.png          # landscape
 rsvg-convert -w 2160 -h 2700 06-policy-to-code-infographic.svg -o 06-policy-to-code-infographic.png
 ```
 
-The file numbering is historical and deliberately not resequenced — `03` was
-retired in the 2,250-word cut, and renaming the rest would invalidate every
-link and note that already points at them. Insert them in the order below.
+The file numbering is historical and deliberately not resequenced: `03` was
+retired in the cut, and `08` was added later, so the numbers no longer match
+reading order. Renaming the rest would invalidate every link and note that
+already points at them. Insert them in the order below.
 
 1. `images/01-policy-logic-forge-hero.png` — **article cover.**
    Alt: "Policy Logic Forge carries evidence through four phases: policy, structured knowledge, reasoning and verification, and code-ready artifacts."
@@ -250,7 +272,9 @@ link and note that already points at them. Insert them in the order below.
    Alt: "Four kinds of verification in order of strength: deterministic checks with no model; a bounded prover that discharges obligations such as pairwise disjointness and returns unknown rather than guessing; a model used only where judgment is irreducible; and the human expert reserved for legal correctness."
 5. `images/05-standards-by-question.png` — opening *The right representation — or none at all*. **Also a strong standalone post.**
    Alt: "SBVR, DMN, BPMN, CMMN, LinkML, and a compiled representation each answer a different business question, behind a source-support gate."
-6. `images/06-policy-to-code-infographic.png` — before *Where this goes*, and reused as an independent feed post. Its business-value row is why the article no longer lists benefits role by role.
+6. `images/08-type-reconciliation-dmn.png` — inside *Proved, not tested*, in place of the set-theoretic listing. The only light-themed visual in the set, by design: it is the document a reviewer would be handed, not a diagram about the system.
+   Alt: "A DMN decision table for type reconciliation: identical types and safe widenings resolve to a single type, while Money with Percentage and Date with Money are refused, and two general rules state that where exactly one safe common type exists it is used and where there is none or more than one the ambiguity is returned rather than resolved by convention."
+7. `images/06-policy-to-code-infographic.png` — before *Where this goes*, and reused as an independent feed post. Its business-value row is why the article no longer lists benefits role by role.
    Alt: "A portrait infographic showing the complete Policy to Knowledge to Reasoning and Verification to Code-ready Artifacts journey, with bidirectional traceability and business outcomes."
 
 ## Publishing checklist
