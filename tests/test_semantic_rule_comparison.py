@@ -42,6 +42,7 @@ def test_semantic_comparison_returns_review_required_equivalency_candidate():
         "review_required": True,
     }]
     assert client.calls[0]["temperature"] == 0
+    assert "reasoning_effort" not in client.calls[0]
 
 
 def test_semantic_comparison_rejects_invalid_relationship_and_score():

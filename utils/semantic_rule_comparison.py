@@ -126,15 +126,17 @@ def score_rule_pairs(
             {"pair_id": pair_id, "old_rule": _summary(old), "new_rule": _summary(new)}
             for pair_id, (old, new) in enumerate(batch)
         ]
-        response = client.chat_completion(
-            messages=[{"role": "user", "content": prompt.format(
+        request = {
+            "messages": [{"role": "user", "content": prompt.format(
                 g1_name="old policy graph", g2_name="new policy graph",
                 rule_pairs_json=json.dumps(packets, ensure_ascii=False), num_pairs=len(packets),
             ) + rubric_text}],
-            temperature=0,
-            max_tokens=max_tokens,
-            reasoning_effort=reasoning_effort,
-        )
+            "temperature": 0,
+            "max_tokens": max_tokens,
+        }
+        if reasoning_effort is not None:
+            request["reasoning_effort"] = reasoning_effort
+        response = client.chat_completion(**request)
         results = _result(json.loads(_content(response)), set(range(len(batch))))
         for pair_id, (old, new) in enumerate(batch):
             result = results[pair_id]
