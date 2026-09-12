@@ -3,9 +3,9 @@
 
 LinkedIn has no public API for creating draft *articles* -- that surface is
 partner-gated -- so publishing is a manual paste. Pasting the Markdown
-source loses every bit of formatting: this draft carries 81 bold spans, 67
-bullets, 5 block quotes and 11 inline-code spans, which is well over 150
-manual operations to reapply by hand.
+source loses every bit of formatting: this draft carries dozens of bold
+spans, bullets, block quotes and inline-code spans, which is well over a
+hundred manual operations to reapply by hand.
 
 Pasting *rendered* HTML does not lose them. Open the generated file in a
 browser, select all, copy, and paste into the LinkedIn article editor:

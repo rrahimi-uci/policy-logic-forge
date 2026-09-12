@@ -6,8 +6,9 @@ Companion material for [`policy-logic-forge-linkedin-article.md`](policy-logic-f
 
 LinkedIn has no public API for creating draft articles — that surface is
 partner-gated — so publishing is a manual paste. Pasting the Markdown source
-loses all formatting: this draft carries 81 bold spans, 67 bullets, 5 block
-quotes and 10 inline-code spans, well over 150 operations to reapply by hand.
+loses all formatting: this draft carries dozens of bold spans, bullets, block
+quotes and inline-code spans, well over a hundred operations to reapply by
+hand.
 
 Pasting *rendered* HTML keeps them. Generate the paste-ready file:
 
@@ -39,25 +40,69 @@ The editor supports: headings (H1–H3), bold, italic, bulleted and numbered lis
 
 ## Editorial position
 
-Four deliberate choices shape the published version. The first two are
-long-standing; the last two were made when the draft was cut for LinkedIn.
+### The cut to under 1,900 words
+
+The article was roughly 4,400 words. It now runs **under 1,900** — well under
+half — because the piece is written for a LinkedIn feed, where a reader decides
+in the first screen whether to stay. Nothing in the argument was traded away;
+the cuts were repetition, throat-clearing, and two sections the visuals already
+carried. Seven headings became seven, then eight, then the seven below. What
+changed:
+
+- **The eight-capability list was cut**, and with it
+  `03-capabilities-evidence-spine.png`. The one idea it carried that the
+  argument needs — the bidirectional evidence spine — is now a single sentence
+  closing *Most systems implement an interpretation, not a policy*, and it is
+  drawn twice more in the architecture and journey visuals. The image masters
+  were deleted rather than left orphaned in the repository.
+- **The set-theoretic proof listing became a DMN decision table**
+  (`08-type-reconciliation-dmn.png`). It was the single most expensive block in
+  the piece for a general reader, and quantifier notation asked an audience to
+  parse mathematics before it would part with the point. The table says the
+  same thing — rules 1-5 are instances, rules 6 and 7 are the property, and
+  `Money` with `Percentage` is refused rather than coerced — in the notation
+  the system itself emits, which is also the article's own argument made
+  visible. If a reader wants the notation, it belongs in the standalone proofs
+  post, where the audience has opted in.
+
+  Two things to know about that visual. It is **light-themed**, unlike the
+  other six: it is a document, not a diagram, and it reads as the artefact the
+  system would hand a reviewer. And its hit policy is **F**, not `UNIQUE` —
+  rules 1-5 are worked instances of the general rules below them, so first-match
+  is the correct policy and the table says so. That is not in tension with the
+  `UNIQUE` argument earlier in the article, which is about the tables the
+  pipeline emits for policy rules; the image states its own policy so a reader
+  cannot conflate the two.
+- **"Why 'just use an LLM' is not the answer" lost its heading.** Its argument —
+  that a generator cannot certify itself, so the check must come from a
+  deterministic or formal place the generation cannot reach — is now the closing
+  paragraph of the problem section, where it reads as the consequence of the
+  problem rather than a new topic.
+- **"What this changes for the people doing the work" was cut entirely.** Image
+  06 states the business value as a four-panel row directly above the close, so
+  the section was narrating a visual. The one claim the image does not make —
+  that a deterministic check returns the same answer next quarter — moved into
+  *Where this goes*.
+- **"Proved, not tested" became a subsection** of the LLM-as-a-judge section
+  rather than a peer heading. It answers a follow-up to that argument; it does
+  not open a new one.
+- **Everything else was compressed, not deleted.** Every claim boundary, the
+  refusal argument, the invented-identifier failure, and the closing question
+  are intact.
+
+### Long-standing choices
 
 - **No repository references.** The article names no files, links no code, and
   does not mention that a repository exists. It is written for readers who will
   never open it, and pointing at source invited them to do the wrong thing with
   their attention.
-- **One formal statement, not a code listing.** The proof example is stated in
-  set-theoretic notation rather than Python, because the difference between a
-  test and a proof *is* the quantifier — and notation shows that where a
-  function body hides it. It also drops the language barrier.
 - **The "what exists / what does not" section was cut.** It ran ~400 words. The
   one boundary that carried real risk — that none of this proves legal
-  correctness — was kept as a single sentence in the proofs section.
+  correctness — was kept as a single sentence in the verification section.
 - **One closing question, not two.** The draft ended with an abstract question
   and a concrete one; two dilutes the response rate. The concrete one survives.
 
-
-Two deliberate choices shape this draft:
+Two further deliberate choices shape this draft:
 
 - **No stage count.** The pipeline is described by its five responsibilities, not by how many stages it has. A reader does not need to hold a number in their head to follow the argument, and a count invites the wrong question ("why that many?") instead of the right one ("what does each boundary catch?").
 - **No performance figures.** The article makes its case through architecture and one concrete failure, not through metrics. This keeps the piece durable — figures age, get quoted out of context, and invite benchmark arguments the project is not trying to have. The qualitative claims stand on their own.
@@ -204,26 +249,32 @@ Five to seven, not a block:
 
 ## Image sequence and alt text
 
-Seven images, all rendered from the SVG masters beside them. Edit the SVG, never the PNG, and re-render with:
+Seven images, all rendered from the SVG masters beside them. Edit the SVG,
+never the PNG, and re-render with:
 
 ```bash
 rsvg-convert -w 3200 -h 1800 <name>.svg -o <name>.png          # landscape
 rsvg-convert -w 2160 -h 2700 06-policy-to-code-infographic.svg -o 06-policy-to-code-infographic.png
 ```
 
+The file numbering is historical and deliberately not resequenced: `03` was
+retired in the cut, and `08` was added later, so the numbers no longer match
+reading order. Renaming the rest would invalidate every link and note that
+already points at them. Insert them in the order below.
+
 1. `images/01-policy-logic-forge-hero.png` — **article cover.**
    Alt: "Policy Logic Forge carries evidence through four phases: policy, structured knowledge, reasoning and verification, and code-ready artifacts."
-2. `images/02-policy-translation-gap.png` — after the eight-questions list.
+2. `images/02-policy-translation-gap.png` — after the six-questions list, closing *Most systems implement an interpretation, not a policy*.
    Alt: "A policy clause passes through expert, analyst, architect, developer, tester, and auditor handoffs where actor, trigger, timing, exception, scope, and evidence can be lost."
-3. `images/03-capabilities-evidence-spine.png` — after the capabilities list.
-   Alt: "Eight policy-transformation capabilities connect to a central bidirectional evidence spine."
-4. `images/04-policy-logic-forge-architecture.png` — opening the architecture section.
+3. `images/04-policy-logic-forge-architecture.png` — opening *The operating rule*. Carries the five responsibilities, so the prose under it stays a short list rather than a walkthrough.
    Alt: "The stages of Policy Logic Forge grouped into source, knowledge, verification, model, and exploration responsibilities."
-5. `images/07-verification-ladder.png` — in the *"Isn't this just LLM-as-a-judge?"* section. **The single most important visual in the piece:** it answers the objection every technical reader will raise, and it is the clearest statement of what is actually different here.
+4. `images/07-verification-ladder.png` — in the *"Isn't this just LLM-as-a-judge?"* section. **The single most important visual in the piece:** it answers the objection every technical reader will raise, and it is the clearest statement of what is actually different here.
    Alt: "Four kinds of verification in order of strength: deterministic checks with no model; a bounded prover that discharges obligations such as pairwise disjointness and returns unknown rather than guessing; a model used only where judgment is irreducible; and the human expert reserved for legal correctness."
-6. `images/05-standards-by-question.png` — in the standards section. **Also a strong standalone post.**
+5. `images/05-standards-by-question.png` — opening *The right representation — or none at all*. **Also a strong standalone post.**
    Alt: "SBVR, DMN, BPMN, CMMN, LinkML, and a compiled representation each answer a different business question, behind a source-support gate."
-7. `images/06-policy-to-code-infographic.png` — near the close, and reused as an independent feed post.
+6. `images/08-type-reconciliation-dmn.png` — inside *Proved, not tested*, in place of the set-theoretic listing. The only light-themed visual in the set, by design: it is the document a reviewer would be handed, not a diagram about the system.
+   Alt: "A DMN decision table for type reconciliation: identical types and safe widenings resolve to a single type, while Money with Percentage and Date with Money are refused, and two general rules state that where exactly one safe common type exists it is used and where there is none or more than one the ambiguity is returned rather than resolved by convention."
+7. `images/06-policy-to-code-infographic.png` — before *Where this goes*, and reused as an independent feed post. Its business-value row is why the article no longer lists benefits role by role.
    Alt: "A portrait infographic showing the complete Policy to Knowledge to Reasoning and Verification to Code-ready Artifacts journey, with bidirectional traceability and business outcomes."
 
 ## Publishing checklist
@@ -232,7 +283,7 @@ rsvg-convert -w 2160 -h 2700 06-policy-to-code-infographic.svg -o 06-policy-to-c
 - **Do not convert any list back into a table.** See the format constraint above.
 - **Do not add performance figures.** See the editorial position above; if you want them, they belong in a follow-up post with the run context attached.
 - Keep short paragraphs and descriptive headings for mobile.
-- **Preserve the legal-correctness boundary** — the sentence beginning *"One boundary, because it matters more than anything else here…"*. The long "what exists / what does not" section was cut for length; that sentence is what carried its weight, and `tests/test_linkedin_article.py` fails if it goes missing.
+- **Preserve the legal-correctness boundary** — the sentence beginning *"One boundary matters more than any other…"*. The long "what exists / what does not" section was cut for length; that sentence is what carried its weight, and `tests/test_linkedin_article.py` fails if it, or the machine-readable/production-ready boundary, goes missing.
 - Put the repository link in the article *and* the first comment.
 - Reply to early comments within the first hour; it materially affects distribution.
 - Use image 05 or 06 as a follow-up post rather than repeating the cover.
