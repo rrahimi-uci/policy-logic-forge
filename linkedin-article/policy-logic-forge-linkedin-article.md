@@ -49,7 +49,7 @@ A trustworthy pipeline also needs an **evidence spine** running both ways — fo
 
 ## The operating rule: decide, prove, judge, escalate
 
-![The stages of Policy Logic Forge grouped into source, knowledge, verification, model, and exploration responsibilities](images/04-policy-logic-forge-architecture.png)
+![The stages of Policy Logic Forge grouped into source, knowledge, verification, model, and exploration responsibilities](images/03-policy-logic-forge-architecture.png)
 
 What matters is not the pipeline, but the rule it follows:
 
@@ -73,7 +73,7 @@ Both familiar answers have problems. **LLM-as-a-judge** inherits the generator's
 
 The third position rests on one observation: **most verification questions are not matters of opinion.**
 
-![Four kinds of verification in order of strength: deterministic checks with no model, a solver, a model used only where judgment is irreducible, and the human expert reserved for legal correctness](images/07-verification-ladder.png)
+![Four kinds of verification in order of strength: deterministic checks with no model, a solver, a model used only where judgment is irreducible, and the human expert reserved for legal correctness](images/04-verification-ladder.png)
 
 - *Does this quoted sentence literally occur in the cited chunk?* String resolution against the raw corpus — exact offsets, reproducible, no model.
 - *Does every rule reference point at a rule that exists?* Set membership.
@@ -92,7 +92,7 @@ One boundary matters more than any other: **none of this proves legal correctnes
 
 A test checks that one example behaved; a **proof** checks that no example can misbehave. Six properties here are proved by checking every case in a finite domain, not a sample — and the most legible one reads better as a decision table than as notation.
 
-![A DMN decision table for type reconciliation: identical types and safe widenings resolve to a single type, while Money with Percentage and Date with Money are refused, and two general rules state that where exactly one safe common type exists it is used and where there is none or more than one the ambiguity is returned rather than resolved by convention](images/08-type-reconciliation-dmn.png)
+![A DMN decision table for type reconciliation: identical types and safe widenings resolve to a single type, while Money with Percentage and Date with Money are refused, and two general rules state that where exactly one safe common type exists it is used and where there is none or more than one the ambiguity is returned rather than resolved by convention](images/05-type-reconciliation-dmn.png)
 
 Rules 1–5 are instances; rules 6 and 7 are the property. **`Money` and `Percentage` are incomparable**: both are decimals, and a system that quietly reconciles them will eventually read a 3% rate as $3. That *cannot* happen here: the refusal is proved for every pair of types, not tested on the pairs someone thought of. If a system's whole argument is *"you can check my work,"* that has to include checking the checker.
 
@@ -118,7 +118,7 @@ An integrity check now validates those references and records every drop with a 
 
 ## The right representation — or none at all
 
-![SBVR, DMN, BPMN, CMMN, LinkML, and a compiled representation each answer a different business question, behind a source-support gate](images/05-standards-by-question.png)
+![SBVR, DMN, BPMN, CMMN, LinkML, and a compiled representation each answer a different business question, behind a source-support gate](images/06-standards-by-question.png)
 
 No single notation answers every business question, so the system picks the one the source can actually support: SBVR vocabulary for what terms mean, DMN for what decision follows, BPMN for explicitly ordered work, CMMN for case work, LinkML for the data behind the rules, and a compiled formal representation for what can be proved.
 
@@ -128,7 +128,7 @@ On privacy policies that withholds the diagram for most rules — the correct ou
 
 One more boundary: **machine-readable is not the same as production-ready.** A generated decision table is a reviewable projection, not a deployed artifact; it still has to be validated in its target engine.
 
-![A portrait infographic showing the complete Policy to Knowledge to Reasoning and Verification to Code-ready Artifacts journey, with bidirectional traceability and business outcomes](images/06-policy-to-code-infographic.png)
+![A portrait infographic showing the complete Policy to Knowledge to Reasoning and Verification to Code-ready Artifacts journey, with bidirectional traceability and business outcomes](images/07-policy-to-code-infographic.png)
 
 ## Where this goes
 
