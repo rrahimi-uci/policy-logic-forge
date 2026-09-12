@@ -131,6 +131,49 @@ def test_article_visual_references_exist_and_use_the_new_story_set() -> None:
         assert (ARTICLE_DIR / relative_path).is_file()
 
 
+def test_publishing_kit_image_sequence_matches_the_article() -> None:
+    """The kit's numbered image sequence must be the article's actual order.
+
+    The kit is the *publishing* instruction: someone pastes the article into
+    LinkedIn and then uploads images into the placeholders one by one, in the
+    order the kit lists them.  So a kit that lists the images in a different
+    order than the article renders them is not a documentation nit -- it puts
+    the wrong picture under the wrong heading in the published piece, and the
+    person doing the pasting has no way to notice.
+
+    This drifted once already: the DMN table sits in *Proved, not tested*,
+    which comes before *The right representation*, but an edit left it listed
+    after.  File numbers are historical and deliberately non-contiguous (03 is
+    retired, 08 was added late), so reading order cannot be recovered by
+    sorting the names -- it has to be asserted.
+    """
+    article_order = re.findall(
+        r"!\[[^]]*]\(images/([\w.-]+)\.png\)", ARTICLE.read_text(encoding="utf-8")
+    )
+    kit_entries = re.findall(
+        r"^(\d+)\. `images/([\w.-]+)\.png`",
+        PUBLISHING_KIT.read_text(encoding="utf-8"),
+        re.M,
+    )
+    kit_numbers = [int(n) for n, _ in kit_entries]
+    kit_order = [stem for _, stem in kit_entries]
+
+    assert kit_order == article_order, (
+        "publishing-kit.md lists the images in a different order than the "
+        f"article renders them.\n  article: {article_order}\n  kit:     {kit_order}\n"
+        "Renumber the kit's 'Image sequence and alt text' list to match the "
+        "article -- never the other way round."
+    )
+    # The printed numbers are what the person pasting actually follows, so a
+    # correctly ordered list with a gap or a repeat in its numbering is still
+    # a broken instruction.
+    assert kit_numbers == list(range(1, len(kit_order) + 1)), (
+        f"the kit's image list is numbered {kit_numbers}, but it must count "
+        f"1..{len(kit_order)} with no gaps or repeats -- the file numbers "
+        "(01, 02, 04, 05, 06, 07, 08) are historical and never the list position"
+    )
+
+
 def test_visual_masters_are_valid_and_pngs_are_publication_resolution() -> None:
     for stem in VISUAL_STEMS:
         svg_path = ARTICLE_DIR / "images" / f"{stem}.svg"
