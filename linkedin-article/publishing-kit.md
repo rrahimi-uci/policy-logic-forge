@@ -270,10 +270,10 @@ already points at them. Insert them in the order below.
    Alt: "The stages of Policy Logic Forge grouped into source, knowledge, verification, model, and exploration responsibilities."
 4. `images/07-verification-ladder.png` — in the *"Isn't this just LLM-as-a-judge?"* section. **The single most important visual in the piece:** it answers the objection every technical reader will raise, and it is the clearest statement of what is actually different here.
    Alt: "Four kinds of verification in order of strength: deterministic checks with no model; a bounded prover that discharges obligations such as pairwise disjointness and returns unknown rather than guessing; a model used only where judgment is irreducible; and the human expert reserved for legal correctness."
-5. `images/05-standards-by-question.png` — opening *The right representation — or none at all*. **Also a strong standalone post.**
-   Alt: "SBVR, DMN, BPMN, CMMN, LinkML, and a compiled representation each answer a different business question, behind a source-support gate."
-6. `images/08-type-reconciliation-dmn.png` — inside *Proved, not tested*, in place of the set-theoretic listing. The only light-themed visual in the set, by design: it is the document a reviewer would be handed, not a diagram about the system.
+5. `images/08-type-reconciliation-dmn.png` — inside *Proved, not tested*, in place of the set-theoretic listing. The only light-themed visual in the set, by design: it is the document a reviewer would be handed, not a diagram about the system.
    Alt: "A DMN decision table for type reconciliation: identical types and safe widenings resolve to a single type, while Money with Percentage and Date with Money are refused, and two general rules state that where exactly one safe common type exists it is used and where there is none or more than one the ambiguity is returned rather than resolved by convention."
+6. `images/05-standards-by-question.png` — opening *The right representation — or none at all*. **Also a strong standalone post.**
+   Alt: "SBVR, DMN, BPMN, CMMN, LinkML, and a compiled representation each answer a different business question, behind a source-support gate."
 7. `images/06-policy-to-code-infographic.png` — before *Where this goes*, and reused as an independent feed post. Its business-value row is why the article no longer lists benefits role by role.
    Alt: "A portrait infographic showing the complete Policy to Knowledge to Reasoning and Verification to Code-ready Artifacts journey, with bidirectional traceability and business outcomes."
 
