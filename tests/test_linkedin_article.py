@@ -15,30 +15,34 @@ ARTICLE_DIR = ROOT / "linkedin-article"
 ARTICLE = ARTICLE_DIR / "policy-logic-forge-linkedin-article.md"
 PUBLISHING_KIT = ARTICLE_DIR / "publishing-kit.md"
 
-# Seven visuals, and the numbering is deliberately not contiguous.
+# Seven visuals, numbered in the order the article renders them.
 #
-# ``03-capabilities-evidence-spine`` was retired when the article was cut to
-# under 1,900 words: the eight-capability list it illustrated went, and the
-# evidence-spine idea it carried is stated in prose and drawn again in the
-# architecture and journey visuals.  Its masters were deleted rather than left
-# orphaned.
+# The numbering is contiguous and is the reading order: a gap reads as a
+# missing file to anyone opening the directory, and a number that disagrees
+# with reading order is worse than no number at all -- the kit's numbered
+# sequence is a publishing instruction someone follows top to bottom.
 #
-# ``08-type-reconciliation-dmn`` replaced the set-theoretic proof listing.  The
-# claim is the same one -- reconciliation returns the unique narrowest reading
-# or refuses -- expressed in the notation the system itself emits rather than
-# in quantifier notation, which is both truer to the project and far easier to
-# read in a feed.  It took a new number rather than reusing ``03`` so that
-# existing references keep pointing at what they always pointed at.
+# Two files that existed earlier are gone from the set.  The capability-model
+# diagram was retired when the article was cut to under 1,900 words: the
+# eight-capability list it illustrated went, and the evidence-spine idea it
+# carried is stated in prose and drawn again in the architecture and journey
+# visuals.  Its masters were deleted rather than left orphaned.  The
+# set-theoretic proof listing became ``05-type-reconciliation-dmn``: the same
+# claim -- reconciliation returns the unique narrowest reading or refuses --
+# expressed in the notation the system itself emits rather than in quantifier
+# notation, which is both truer to the project and far easier to read in a
+# feed.
 #
-# See ``publishing-kit.md`` for both decisions.
+# So this tuple is in reading order, and the renumbering that made the files
+# agree with it is recorded in ``publishing-kit.md``.
 VISUAL_STEMS = (
     "01-policy-logic-forge-hero",
     "02-policy-translation-gap",
-    "04-policy-logic-forge-architecture",
-    "05-standards-by-question",
-    "06-policy-to-code-infographic",
-    "07-verification-ladder",
-    "08-type-reconciliation-dmn",
+    "03-policy-logic-forge-architecture",
+    "04-verification-ladder",
+    "05-type-reconciliation-dmn",
+    "06-standards-by-question",
+    "07-policy-to-code-infographic",
 )
 
 # The article is a claim that this repository does what it says, so it must
@@ -143,9 +147,9 @@ def test_publishing_kit_image_sequence_matches_the_article() -> None:
 
     This drifted once already: the DMN table sits in *Proved, not tested*,
     which comes before *The right representation*, but an edit left it listed
-    after.  File numbers are historical and deliberately non-contiguous (03 is
-    retired, 08 was added late), so reading order cannot be recovered by
-    sorting the names -- it has to be asserted.
+    after.  The files have since been renumbered so that filename order *is*
+    reading order, which makes the drift visible to a human -- but a filename
+    is a convention and this is the assertion, so both are kept.
     """
     article_order = re.findall(
         r"!\[[^]]*]\(images/([\w.-]+)\.png\)", ARTICLE.read_text(encoding="utf-8")
@@ -169,8 +173,8 @@ def test_publishing_kit_image_sequence_matches_the_article() -> None:
     # a broken instruction.
     assert kit_numbers == list(range(1, len(kit_order) + 1)), (
         f"the kit's image list is numbered {kit_numbers}, but it must count "
-        f"1..{len(kit_order)} with no gaps or repeats -- the file numbers "
-        "(01, 02, 04, 05, 06, 07, 08) are historical and never the list position"
+        f"1..{len(kit_order)} with no gaps or repeats -- it is the sequence "
+        "someone follows while uploading images one at a time"
     )
 
 
@@ -184,7 +188,7 @@ def test_visual_masters_are_valid_and_pngs_are_publication_resolution() -> None:
         assert root.find("{http://www.w3.org/2000/svg}title") is not None
         assert root.find("{http://www.w3.org/2000/svg}desc") is not None
 
-        expected_dimensions = (2160, 2700) if stem.startswith("06-") else (3200, 1800)
+        expected_dimensions = (2160, 2700) if "infographic" in stem else (3200, 1800)
         assert _png_dimensions(png_path) == expected_dimensions
 
 

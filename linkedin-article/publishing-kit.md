@@ -49,14 +49,14 @@ the cuts were repetition, throat-clearing, and two sections the visuals already
 carried. Seven headings became seven, then eight, then the seven below. What
 changed:
 
-- **The eight-capability list was cut**, and with it
-  `03-capabilities-evidence-spine.png`. The one idea it carried that the
+- **The eight-capability list was cut**, and with it the capability-model
+  diagram, `capabilities-evidence-spine`. The one idea it carried that the
   argument needs — the bidirectional evidence spine — is now a single sentence
   closing *Most systems implement an interpretation, not a policy*, and it is
   drawn twice more in the architecture and journey visuals. The image masters
   were deleted rather than left orphaned in the repository.
 - **The set-theoretic proof listing became a DMN decision table**
-  (`08-type-reconciliation-dmn.png`). It was the single most expensive block in
+  (`05-type-reconciliation-dmn.png`). It was the single most expensive block in
   the piece for a general reader, and quantifier notation asked an audience to
   parse mathematics before it would part with the point. The table says the
   same thing — rules 1-5 are instances, rules 6 and 7 are the property, and
@@ -172,7 +172,7 @@ Where does policy meaning most often get lost in your organisation — interpret
 
 ## Standalone infographic post
 
-Use `images/06-policy-to-code-infographic.png` as the media.
+Use `images/07-policy-to-code-infographic.png` as the media.
 
 > Turning policy into code is not one transformation. It is a chain of semantic commitments.
 >
@@ -184,7 +184,7 @@ Use `images/06-policy-to-code-infographic.png` as the media.
 
 ## Standalone refusal post
 
-Use `images/05-standards-by-question.png`. The refusal idea is the most shareable single point in the whole piece.
+Use `images/06-standards-by-question.png`. The refusal idea is the most shareable single point in the whole piece.
 
 > We built a system that turns policy documents into decision models, process models, and data schemas.
 >
@@ -200,7 +200,7 @@ Use `images/05-standards-by-question.png`. The refusal idea is the most shareabl
 
 **Headline: Verifying AI Shouldn't Need Another Opinion**
 
-Use `images/07-verification-ladder.png`. This is the argument most likely to be challenged, so it is worth making on its own.
+Use `images/04-verification-ladder.png`. This is the argument most likely to be challenged, so it is worth making on its own.
 
 > "Isn't that just LLM-as-a-judge?"
 >
@@ -254,27 +254,34 @@ never the PNG, and re-render with:
 
 ```bash
 rsvg-convert -w 3200 -h 1800 <name>.svg -o <name>.png          # landscape
-rsvg-convert -w 2160 -h 2700 06-policy-to-code-infographic.svg -o 06-policy-to-code-infographic.png
+rsvg-convert -w 2160 -h 2700 07-policy-to-code-infographic.svg -o 07-policy-to-code-infographic.png
 ```
 
-The file numbering is historical and deliberately not resequenced: `03` was
-retired in the cut, and `08` was added later, so the numbers no longer match
-reading order. Renaming the rest would invalidate every link and note that
-already points at them. Insert them in the order below.
+**The file numbers are the reading order.** They were resequenced once the
+article was final: retiring the capability diagram left a hole at `03`, and the
+DMN table arrived as `08`, so the filenames had stopped describing the piece —
+a gap reads as a missing file, and a number that disagrees with reading order is
+worse than no number at all. Nothing outside this directory referenced them, so
+they were renamed and every reference updated in the same commit.
+
+Keep that property. If an image is added, inserted, or dropped, renumber the
+set, update the article, this list, and `VISUAL_STEMS`, and re-run the tests —
+`test_publishing_kit_image_sequence_matches_the_article` asserts this list is
+the article's actual order and is numbered 1..N without gaps.
 
 1. `images/01-policy-logic-forge-hero.png` — **article cover.**
    Alt: "Policy Logic Forge carries evidence through four phases: policy, structured knowledge, reasoning and verification, and code-ready artifacts."
 2. `images/02-policy-translation-gap.png` — after the six-questions list, closing *Most systems implement an interpretation, not a policy*.
    Alt: "A policy clause passes through expert, analyst, architect, developer, tester, and auditor handoffs where actor, trigger, timing, exception, scope, and evidence can be lost."
-3. `images/04-policy-logic-forge-architecture.png` — opening *The operating rule*. Carries the five responsibilities, so the prose under it stays a short list rather than a walkthrough.
+3. `images/03-policy-logic-forge-architecture.png` — opening *The operating rule*. Carries the five responsibilities, so the prose under it stays a short list rather than a walkthrough.
    Alt: "The stages of Policy Logic Forge grouped into source, knowledge, verification, model, and exploration responsibilities."
-4. `images/07-verification-ladder.png` — in the *"Isn't this just LLM-as-a-judge?"* section. **The single most important visual in the piece:** it answers the objection every technical reader will raise, and it is the clearest statement of what is actually different here.
+4. `images/04-verification-ladder.png` — in the *"Isn't this just LLM-as-a-judge?"* section. **The single most important visual in the piece:** it answers the objection every technical reader will raise, and it is the clearest statement of what is actually different here.
    Alt: "Four kinds of verification in order of strength: deterministic checks with no model; a bounded prover that discharges obligations such as pairwise disjointness and returns unknown rather than guessing; a model used only where judgment is irreducible; and the human expert reserved for legal correctness."
-5. `images/08-type-reconciliation-dmn.png` — inside *Proved, not tested*, in place of the set-theoretic listing. The only light-themed visual in the set, by design: it is the document a reviewer would be handed, not a diagram about the system.
+5. `images/05-type-reconciliation-dmn.png` — inside *Proved, not tested*, in place of the set-theoretic listing. The only light-themed visual in the set, by design: it is the document a reviewer would be handed, not a diagram about the system.
    Alt: "A DMN decision table for type reconciliation: identical types and safe widenings resolve to a single type, while Money with Percentage and Date with Money are refused, and two general rules state that where exactly one safe common type exists it is used and where there is none or more than one the ambiguity is returned rather than resolved by convention."
-6. `images/05-standards-by-question.png` — opening *The right representation — or none at all*. **Also a strong standalone post.**
+6. `images/06-standards-by-question.png` — opening *The right representation — or none at all*. **Also a strong standalone post.**
    Alt: "SBVR, DMN, BPMN, CMMN, LinkML, and a compiled representation each answer a different business question, behind a source-support gate."
-7. `images/06-policy-to-code-infographic.png` — before *Where this goes*, and reused as an independent feed post. Its business-value row is why the article no longer lists benefits role by role.
+7. `images/07-policy-to-code-infographic.png` — before *Where this goes*, and reused as an independent feed post. Its business-value row is why the article no longer lists benefits role by role.
    Alt: "A portrait infographic showing the complete Policy to Knowledge to Reasoning and Verification to Code-ready Artifacts journey, with bidirectional traceability and business outcomes."
 
 ## Publishing checklist
